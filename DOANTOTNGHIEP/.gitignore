@@ -1,0 +1,52 @@
+# ============================= Bi mat ================================
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# ============================= Backend ===============================
+backend_webtro/target/
+backend_webtro/storage/
+backend_webtro/logs/
+backend_webtro/!**/src/main/**/target/
+backend_webtro/!**/src/test/**/target/
+*.jar
+*.war
+*.class
+
+# ============================ Frontend ===============================
+frontend_webtro/node_modules/
+frontend_webtro/dist/
+frontend_webtro/dist-ssr/
+frontend_webtro/.vite/
+frontend_webtro/coverage/
+frontend_webtro/*.local
+.npm
+.eslintcache
+
+# ============================== IDE ==================================
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/*
+!.vscode/extensions.json
+.settings/
+.project
+.classpath
+*.swp
+*.swo
+
+# ============================== OS ===================================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ============================= Logs ==================================
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ============================ Docker =================================
+# Du lieu chay that nam trong named volume, khong nam trong repo.

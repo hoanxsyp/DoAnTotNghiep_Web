@@ -1,0 +1,310 @@
+﻿# =====================================================================
+#  Website quang cao va tim kiem phong tro - Backend configuration
+# ---------------------------------------------------------------------
+#  FILE CAU HINH DUY NHAT. Moi thu (code / fixbug / deploy) deu o day.
+#  KHONG dung profile (application-dev/docker/prod). Moi gia tri ha tang
+#  (host / user / password / secret / bat-tat tinh nang) doc tu BIEN
+#  MOI TRUONG; gia tri sau dau ":" la mac dinh chay duoc ngay. docker-
+#  compose.yml truyen bien moi truong vao de deploy. Muon doi hanh vi
+#  (bat/tat Swagger, seed, log...) chi can doi bien moi truong, KHONG
+#  can sua file nay. Bi mat (JWT_SECRET) KHONG co mac dinh -> fail-fast.
+# =====================================================================
+
+spring:
+  application:
+    name: webtro-api
+
+  # ------------------------------- Datasource -------------------------
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:webtro}?useSSL=${DB_USE_SSL:false}&allowPublicKeyRetrieval=true&serverTimezone=UTC&characterEncoding=UTF-8&useUnicode=true&rewriteBatchedStatements=true&connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:root}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      pool-name: WebtroHikariPool
+      maximum-pool-size: ${DB_POOL_MAX:20}
+      minimum-idle: ${DB_POOL_MIN:5}
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      auto-commit: false
+
+  # ---------------------------------- JPA -----------------------------
+  jpa:
+    # Schema thuoc quyen Flyway. 'validate' bat loi lech entity <-> migration
+    # ngay luc khoi dong thay vi am tham lam hong du lieu.
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: false
+        jdbc:
+          batch_size: 50
+          time_zone: UTC
+        order_inserts: true
+        order_updates: true
+        query:
+          in_clause_parameter_padding: true
+          fail_on_pagination_over_collection_fetch: true
+        connection:
+          provider_disables_autocommit: true
+
+  # -------------------------------- Flyway ----------------------------
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: 0
+    validate-on-migrate: true
+    out-of-order: false
+    # Khong dat placeholder mat khau admin o day: bcrypt hash khong the sinh ra
+    # trong SQL, va nhung mot hash co dinh vao migration la hardcode bi mat.
+    # Tai khoan admin duoc seed boi AdminAccountInitializer luc khoi dong, doc
+    # ADMIN_EMAIL + ADMIN_PASSWORD tu bien moi truong roi hash bang BCrypt.
+
+  # --------------------------------- Redis ----------------------------
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 3000ms
+      connect-timeout: 3000ms
+      lettuce:
+        pool:
+          enabled: true
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
+          max-wait: 2000ms
+
+  # ---------------------------------- Mail ----------------------------
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    default-encoding: UTF-8
+    properties:
+      mail:
+        smtp:
+          auth: ${MAIL_SMTP_AUTH:false}
+          starttls:
+            enable: ${MAIL_SMTP_STARTTLS:false}
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+        mime:
+          charset: UTF-8
+
+  # ------------------------------ Thymeleaf ---------------------------
+  # Chi dung cho template email HTML (khong render web).
+  thymeleaf:
+    prefix: classpath:/templates/
+    suffix: .html
+    mode: HTML
+    encoding: UTF-8
+    cache: ${THYMELEAF_CACHE:true}
+
+  # ------------------------------- Multipart --------------------------
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: ${UPLOAD_MAX_FILE_SIZE:5MB}
+      max-request-size: ${UPLOAD_MAX_REQUEST_SIZE:60MB}
+      file-size-threshold: 1MB
+
+  # -------------------------------- Jackson ---------------------------
+  jackson:
+    default-property-inclusion: non_null
+    time-zone: UTC
+    serialization:
+      write-dates-as-timestamps: false
+      fail-on-empty-beans: false
+    deserialization:
+      fail-on-unknown-properties: false
+
+  # ----------------------- Async executor (AI, mail) ------------------
+  task:
+    execution:
+      thread-name-prefix: webtro-async-
+      pool:
+        core-size: ${ASYNC_CORE_SIZE:4}
+        max-size: ${ASYNC_MAX_SIZE:16}
+        queue-capacity: ${ASYNC_QUEUE_CAPACITY:500}
+        keep-alive: 60s
+      shutdown:
+        await-termination: true
+        await-termination-period: 30s
+    scheduling:
+      thread-name-prefix: webtro-sched-
+      pool:
+        size: ${SCHEDULER_POOL_SIZE:4}
+      shutdown:
+        await-termination: true
+        await-termination-period: 30s
+
+  web:
+    resources:
+      add-mappings: false
+
+  mvc:
+    problemdetails:
+      enabled: false
+    throw-exception-if-no-handler-found: true
+
+# ---------------------------------- Server ----------------------------
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+  compression:
+    enabled: true
+    mime-types: application/json,application/xml,text/html,text/plain,text/css,application/javascript
+    min-response-size: 1024
+  error:
+    include-message: never
+    include-stacktrace: never
+    include-binding-errors: never
+    whitelabel:
+      enabled: false
+  tomcat:
+    max-swallow-size: 60MB
+    threads:
+      max: ${TOMCAT_MAX_THREADS:200}
+    accesslog:
+      enabled: false
+  forward-headers-strategy: framework
+
+# --------------------------------- Actuator ---------------------------
+management:
+  endpoints:
+    web:
+      base-path: /actuator
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+  health:
+    redis:
+      enabled: true
+    mail:
+      enabled: false
+  info:
+    env:
+      enabled: true
+
+# --------------------------------- OpenAPI ----------------------------
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+    enabled: ${SWAGGER_ENABLED:true}
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: ${SWAGGER_ENABLED:true}
+    operations-sorter: alpha
+    tags-sorter: alpha
+    display-request-duration: true
+    doc-expansion: none
+    persist-authorization: true
+  default-produces-media-type: application/json
+  writer-with-order-by-keys: true
+
+# --------------------------------- Logging ----------------------------
+logging:
+  charset:
+    console: UTF-8
+    file: UTF-8
+  pattern:
+    console: "%clr(%d{yyyy-MM-dd HH:mm:ss.SSS}){faint} %clr(%5p) %clr([%X{traceId:-}]){faint} %clr(%-40.40logger{39}){cyan} : %m%n%wEx"
+  level:
+    root: ${LOG_LEVEL_ROOT:INFO}
+    com.webtro: ${LOG_LEVEL_APP:INFO}
+    org.springframework.security: ${LOG_LEVEL_SECURITY:WARN}
+    org.hibernate.SQL: ${LOG_LEVEL_SQL:WARN}
+    org.hibernate.orm.jdbc.bind: ${LOG_LEVEL_SQL_BIND:WARN}
+
+# =====================================================================
+#  Cau hinh rieng cua ung dung (binh vao @ConfigurationProperties)
+#  Luu y: cac NGUONG NGHIEP VU (thoi han tin, ngoai le AI, diem uy tin...)
+#  KHONG nam o day - chung nam trong bang `system_configs` de Admin sua
+#  duoc luc runtime qua giao dien (tai lieu nghiep vu muc 5, 10.10).
+#  Phan duoi day chi la cau hinh HA TANG / KY THUAT.
+# =====================================================================
+app:
+  # --------------------------------- JWT ------------------------------
+  jwt:
+    # BAT BUOC dat qua bien moi truong. Khong co gia tri mac dinh: ung dung
+    # se fail-fast khi khoi dong neu thieu hoac ngan hon 32 byte.
+    secret: ${JWT_SECRET:}
+    issuer: ${JWT_ISSUER:webtro-api}
+    access-token-ttl: ${JWT_ACCESS_TTL:PT15M}
+    refresh-token-ttl: ${JWT_REFRESH_TTL:P7D}
+
+  # --------------------------------- CORS -----------------------------
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000,http://localhost}
+    allowed-methods: GET,POST,PUT,PATCH,DELETE,OPTIONS
+    allowed-headers: "*"
+    exposed-headers: Location,Retry-After,X-Total-Count,X-Trace-Id
+    allow-credentials: true
+    max-age: 3600
+
+  # -------------------------------- Storage ---------------------------
+  storage:
+    # Thu muc goc luu anh. Nam NGOAI webroot, duoc phuc vu qua controller
+    # co kiem soat quyen chu khong phuc vu tinh (tai lieu nghiep vu 11.1).
+    root: ${STORAGE_ROOT:./storage}
+    public-base-url: ${STORAGE_PUBLIC_BASE_URL:http://localhost:8080/api/files}
+    thumbnail-width: ${STORAGE_THUMB_WIDTH:400}
+    thumbnail-height: ${STORAGE_THUMB_HEIGHT:300}
+
+  # ------------------------------ Frontend ----------------------------
+  frontend:
+    base-url: ${FRONTEND_BASE_URL:http://localhost:5173}
+    verify-email-path: /xac-thuc-email
+    reset-password-path: /dat-lai-mat-khau
+    listing-detail-path: /tin
+
+  # --------------------------------- Mail -----------------------------
+  mail:
+    enabled: ${MAIL_ENABLED:true}
+    from-address: ${MAIL_FROM_ADDRESS:no-reply@webtro.local}
+    from-name: ${MAIL_FROM_NAME:Webtro}
+
+  # ------------------------------ Rate limit --------------------------
+  # Bat/tat toan cuc. Gia tri gioi han cu the doc tu `system_configs`.
+  rate-limit:
+    enabled: ${RATE_LIMIT_ENABLED:true}
+
+  # ------------------------------- Payment ----------------------------
+  payment:
+    # Cong thanh toan mac dinh o che do SANDBOX (tai lieu nghiep vu 13.2:
+    # "co the dung sandbox hoac mo phong de tranh phu thuoc phap ly").
+    provider: ${PAYMENT_PROVIDER:SANDBOX}
+    return-url: ${PAYMENT_RETURN_URL:http://localhost:5173/quan-ly/thanh-toan/ket-qua}
+    callback-secret: ${PAYMENT_CALLBACK_SECRET:}
+    pending-timeout: ${PAYMENT_PENDING_TIMEOUT:PT30M}
+
+  # ---------------------------- Scheduler ON/OFF ----------------------
+  scheduler:
+    enabled: ${SCHEDULER_ENABLED:true}
+
+  # -------------------------- Dữ liệu mẫu -----------------------------
+  # Gieo dữ liệu THẬT vào DB lúc khởi động (idempotent). Tắt ở prod.
+  seed:
+    demo-enabled: ${SEED_DEMO_ENABLED:true}
+
+  # --------------------------------- Admin ----------------------------
+  # Tai khoan quan tri khoi tao. Neu `password` rong, AdminAccountInitializer
+  # se BO QUA viec tao tai khoan (khong bao gio tao tai khoan mat khau rong).
+  admin:
+    seed-enabled: ${ADMIN_SEED_ENABLED:true}
+    email: ${ADMIN_EMAIL:admin@webtro.local}
+    password: ${ADMIN_PASSWORD:}
+    full-name: ${ADMIN_FULL_NAME:Quan tri he thong}
+    phone: ${ADMIN_PHONE:0900000000}

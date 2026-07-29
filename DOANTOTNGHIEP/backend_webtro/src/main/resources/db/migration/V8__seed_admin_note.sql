@@ -1,0 +1,28 @@
+-- =============================================================================
+-- V8__seed_admin_note.sql
+-- Ghi chú: KHÔNG seed tài khoản admin bằng SQL.
+-- =============================================================================
+--
+-- Tài khoản admin CỐ TÌNH không được seed trong migration này vì:
+--
+--   1. Mật khẩu phải được băm bằng bcrypt (BCryptPasswordEncoder). MySQL không
+--      có hàm sinh bcrypt hash, nên không thể tạo hash hợp lệ ngay trong SQL.
+--
+--   2. Nhúng cứng (hardcode) một bcrypt hash vào file migration đồng nghĩa với
+--      việc đưa bí mật (secret) vào mã nguồn / version control — vi phạm bảo mật.
+--
+-- Thay vào đó, tài khoản admin được khởi tạo bởi AdminAccountInitializer lúc
+-- ứng dụng khởi động (ApplicationRunner / @PostConstruct), đọc thông tin từ
+-- biến môi trường:
+--
+--   ADMIN_EMAIL      -- email đăng nhập của admin
+--   ADMIN_PASSWORD   -- mật khẩu thô, sẽ được băm bcrypt trước khi lưu vào cột password_hash
+--
+-- AdminAccountInitializer là idempotent: nếu admin đã tồn tại (theo email) thì
+-- không tạo lại, tránh trùng lặp và tránh vi phạm ràng buộc UNIQUE trên users.
+--
+-- Do đó file migration này KHÔNG chèn dữ liệu vào bất kỳ bảng nào.
+-- Câu lệnh vô hại dưới đây chỉ để file có nội dung hợp lệ cho Flyway.
+-- =============================================================================
+
+SELECT 1;

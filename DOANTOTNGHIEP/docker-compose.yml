@@ -1,0 +1,208 @@
+# =====================================================================
+#  Website quang cao va tim kiem phong tro - toan bo he thong
+# ---------------------------------------------------------------------
+#  Chay:      docker compose up --build
+#  Dung:      docker compose down
+#  Xoa sach:  docker compose down -v      (xoa ca du lieu MySQL/Redis/anh)
+#
+#  KHONG HARDCODE: moi gia tri deu doc tu file .env o cung thu muc.
+#  Copy .env.example -> .env roi sua truoc khi chay.
+# =====================================================================
+
+name: doantotnghiep-webtro
+
+services:
+
+  # ------------------------------- MySQL ------------------------------
+  mysql:
+    image: mysql:8.4
+    container_name: webtro-mysql
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+00:00
+      - --max_connections=300
+      - --innodb_buffer_pool_size=512M
+      # Bat FULLTEXT ngram cho tieng Viet (tim kiem theo tu khoa).
+      - --ngram_token_size=2
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Thieu MYSQL_ROOT_PASSWORD trong .env}
+      MYSQL_DATABASE:      ${DB_NAME:-webtro}
+      MYSQL_USER:          ${DB_USERNAME:?Thieu DB_USERNAME trong .env}
+      MYSQL_PASSWORD:      ${DB_PASSWORD:?Thieu DB_PASSWORD trong .env}
+      TZ: UTC
+    ports:
+      - "${MYSQL_EXPOSED_PORT:-3307}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      # Container chi healthy khi MySQL that su nhan ket noi, khong phai khi
+      # tien trinh vua khoi dong -> backend khong bao gio khoi dong qua som.
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 40s
+    networks:
+      - webtro-net
+
+  # ------------------------------- Redis ------------------------------
+  redis:
+    image: redis:7.4-alpine
+    container_name: webtro-redis
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --maxmemory
+      - "256mb"
+      - --maxmemory-policy
+      - "allkeys-lru"
+      - --requirepass
+      - ${REDIS_PASSWORD:?Thieu REDIS_PASSWORD trong .env}
+    environment:
+      # Can co bien nay BEN TRONG container thi healthcheck ben duoi moi
+      # xac thuc duoc voi Redis (server dang bat requirepass).
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      TZ: UTC
+    ports:
+      - "${REDIS_EXPOSED_PORT:-6380}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - webtro-net
+
+  # ------------------------------ MailHog -----------------------------
+  # SMTP gia lap: backend gui mail that, xem duoc tai http://localhost:8025
+  # Nho vay chuc nang xac thuc email / canh bao chay duoc ngay, khong can
+  # tai khoan SMTP ben ngoai.
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    container_name: webtro-mailhog
+    restart: unless-stopped
+    environment:
+      MH_STORAGE: memory
+      TZ: UTC
+    ports:
+      - "${MAILHOG_SMTP_PORT:-1025}:1025"
+      - "${MAILHOG_UI_PORT:-8025}:8025"
+    networks:
+      - webtro-net
+
+  # ------------------------------ Backend -----------------------------
+  backend:
+    build:
+      context: ./backend_webtro
+      dockerfile: Dockerfile
+    container_name: webtro-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mailhog:
+        condition: service_started
+    environment:
+      # Chi 1 file cau hinh application.yml (khong dung profile). Deploy = truyen bien moi truong.
+
+      # --- Database (ten service `mysql`, khong phai IP) ---
+      DB_HOST:     mysql
+      DB_PORT:     3306
+      DB_NAME:     ${DB_NAME:-webtro}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+
+      # --- Redis ---
+      REDIS_HOST:     redis
+      REDIS_PORT:     6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+
+      # --- Mail (MailHog khong can auth) ---
+      MAIL_HOST:          mailhog
+      MAIL_PORT:          1025
+      MAIL_SMTP_AUTH:     "false"
+      MAIL_SMTP_STARTTLS: "false"
+      MAIL_ENABLED:       ${MAIL_ENABLED:-true}
+      MAIL_FROM_ADDRESS:  ${MAIL_FROM_ADDRESS:-no-reply@webtro.local}
+      MAIL_FROM_NAME:     ${MAIL_FROM_NAME:-Webtro}
+
+      # --- JWT (BAT BUOC) ---
+      JWT_SECRET:      "${JWT_SECRET:?Thieu JWT_SECRET trong .env - sinh bang lenh openssl rand -base64 48}"
+      JWT_ISSUER:      ${JWT_ISSUER:-webtro-api}
+      JWT_ACCESS_TTL:  ${JWT_ACCESS_TTL:-PT15M}
+      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-P7D}
+
+      # --- CORS / Frontend ---
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost,http://localhost:5173}
+      FRONTEND_BASE_URL:    ${FRONTEND_BASE_URL:-http://localhost}
+
+      # --- Storage anh ---
+      STORAGE_ROOT:            /app/storage
+      STORAGE_PUBLIC_BASE_URL: ${STORAGE_PUBLIC_BASE_URL:-http://localhost/api/files}
+
+      # --- Thanh toan ---
+      PAYMENT_PROVIDER:        ${PAYMENT_PROVIDER:-SANDBOX}
+      PAYMENT_RETURN_URL:      ${PAYMENT_RETURN_URL:-http://localhost/quan-ly/thanh-toan/ket-qua}
+      PAYMENT_CALLBACK_SECRET: ${PAYMENT_CALLBACK_SECRET:?Thieu PAYMENT_CALLBACK_SECRET trong .env}
+
+      # --- Tai khoan quan tri khoi tao ---
+      ADMIN_SEED_ENABLED: ${ADMIN_SEED_ENABLED:-true}
+      ADMIN_EMAIL:        ${ADMIN_EMAIL:-admin@webtro.local}
+      ADMIN_PASSWORD:     ${ADMIN_PASSWORD:?Thieu ADMIN_PASSWORD trong .env}
+      ADMIN_FULL_NAME:    ${ADMIN_FULL_NAME:-Quan tri he thong}
+      ADMIN_PHONE:        ${ADMIN_PHONE:-0900000000}
+
+      # --- Khac ---
+      SWAGGER_ENABLED:    ${SWAGGER_ENABLED:-true}
+      RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+      SCHEDULER_ENABLED:  ${SCHEDULER_ENABLED:-true}
+      TZ: UTC
+    ports:
+      - "${BACKEND_EXPOSED_PORT:-8080}:8080"
+    volumes:
+      - webtro_storage:/app/storage
+    networks:
+      - webtro-net
+
+  # ------------------------------ Frontend ----------------------------
+  frontend:
+    build:
+      context: ./frontend_webtro
+      dockerfile: Dockerfile
+      args:
+        # "/api" -> goi qua reverse proxy cua chinh Nginx, nho vay khong
+        # nhung host backend vao bundle va khong dinh CORS o production.
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api}
+        VITE_APP_NAME:     ${VITE_APP_NAME:-Webtro}
+    container_name: webtro-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_EXPOSED_PORT:-80}:80"
+    environment:
+      TZ: UTC
+    networks:
+      - webtro-net
+
+networks:
+  webtro-net:
+    driver: bridge
+
+volumes:
+  mysql_data:
+    driver: local
+  redis_data:
+    driver: local
+  webtro_storage:
+    driver: local
