@@ -3,7 +3,6 @@ package com.webtro.modules.payment.controller;
 import com.webtro.common.ApiResponse;
 import com.webtro.common.enums.PaymentMethod;
 import com.webtro.common.enums.PaymentStatus;
-import com.webtro.constant.PermissionCode;
 import com.webtro.modules.payment.dto.request.RefundPaymentRequest;
 import com.webtro.modules.payment.dto.response.PaymentCallbackResponse;
 import com.webtro.modules.payment.dto.response.PaymentHistoryResponse;
@@ -40,7 +39,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/admin/payments")
 @RequiredArgsConstructor
-@PreAuthorize("hasAuthority('" + PermissionCode.PAYMENT_MANAGE + "')")
+@PreAuthorize("hasRole('ADMIN')")
 @Tag(name = "18. Admin - Payment", description = "Quản trị gói dịch vụ, thanh toán, coupon")
 public class AdminPaymentController {
 

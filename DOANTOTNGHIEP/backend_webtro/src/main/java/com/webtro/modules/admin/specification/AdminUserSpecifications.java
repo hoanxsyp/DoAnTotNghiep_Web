@@ -2,9 +2,7 @@ package com.webtro.modules.admin.specification;
 
 import com.webtro.common.enums.UserStatus;
 import com.webtro.modules.user.entity.User;
-import com.webtro.modules.user.entity.UserRole;
 import jakarta.persistence.criteria.Predicate;
-import jakarta.persistence.criteria.Subquery;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.time.Instant;
@@ -14,8 +12,9 @@ import java.util.List;
 /**
  * JPA Specification lọc động cho màn quản trị người dùng (canonical 4.13.1).
  *
- * <p>Lọc vai trò dùng subquery trên {@link UserRole} (quan hệ nhiều-nhiều) — không nạp cả cụm
- * entity của module user vào truy vấn chính.
+ * <p>Tham số {@code roleCodes} là BỘ LỌC nhiều vai trò (admin muốn xem cùng lúc chủ trọ và người
+ * thuê), không phải "một người nhiều vai trò": mỗi người dùng vẫn chỉ mang đúng một vai trò
+ * ({@code users.role_id}), nên chỉ cần so khớp trực tiếp, không cần subquery.
  */
 public final class AdminUserSpecifications {
 
@@ -60,13 +59,7 @@ public final class AdminUserSpecifications {
             }
 
             if (roleCodes != null && !roleCodes.isEmpty()) {
-                Subquery<Long> sub = query.subquery(Long.class);
-                var ur = sub.from(UserRole.class);
-                sub.select(ur.get("user").get("id"))
-                        .where(cb.and(
-                                ur.get("role").get("code").in(roleCodes),
-                                cb.isNull(ur.get("deletedAt"))));
-                ps.add(root.get("id").in(sub));
+                ps.add(root.get("role").get("code").in(roleCodes));
             }
 
             return cb.and(ps.toArray(new Predicate[0]));

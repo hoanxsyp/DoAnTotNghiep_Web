@@ -32,7 +32,7 @@ public class AdminSystemConfigController {
     private final AdminSystemConfigService adminSystemConfigService;
 
     @GetMapping
-    @PreAuthorize("hasAuthority('SYSTEM_CONFIG_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Xem cấu hình hệ thống", description = "Toàn bộ cấu hình (trừ nhóm ai.*/trust.*), gom nhóm.")
     public ResponseEntity<ApiResponse<SystemConfigResponse>> getConfigs(
             @RequestParam(required = false) String group) {
@@ -41,7 +41,7 @@ public class AdminSystemConfigController {
     }
 
     @PutMapping
-    @PreAuthorize("hasAuthority('SYSTEM_CONFIG_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Cập nhật cấu hình hệ thống", description = "Đổi một hoặc nhiều khóa cấu hình; ghi audit bắt buộc.")
     public ResponseEntity<ApiResponse<UpdateConfigResponse>> updateConfigs(
             @Valid @RequestBody UpdateConfigRequest request,

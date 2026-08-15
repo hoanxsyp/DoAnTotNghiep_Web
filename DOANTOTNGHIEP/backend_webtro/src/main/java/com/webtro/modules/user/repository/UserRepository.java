@@ -5,6 +5,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -32,4 +34,10 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
 
     /** Kiểm tra số điện thoại đã tồn tại. */
     boolean existsByPhoneAndDeletedAtIsNull(String phone);
+
+    /**
+     * Người dùng còn sống mang một trong các vai trò cho trước — dùng để gửi thông báo cho toàn
+     * bộ nhân sự vận hành (ADMIN + MODERATOR) mà không phải quét cả bảng.
+     */
+    List<User> findByRole_CodeInAndDeletedAtIsNull(Collection<String> roleCodes);
 }

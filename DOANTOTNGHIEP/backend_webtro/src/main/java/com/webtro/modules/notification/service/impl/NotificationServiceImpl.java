@@ -11,15 +11,13 @@ import com.webtro.modules.notification.repository.NotificationPreferenceReposito
 import com.webtro.modules.notification.repository.NotificationRepository;
 import com.webtro.modules.notification.service.NotificationDefaults;
 import com.webtro.modules.notification.service.NotificationService;
-import com.webtro.modules.user.repository.RoleRepository;
+import com.webtro.modules.user.entity.User;
 import com.webtro.modules.user.repository.UserRepository;
-import com.webtro.modules.user.repository.UserRoleRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -39,8 +37,6 @@ public class NotificationServiceImpl implements NotificationService {
     private final NotificationRepository notificationRepository;
     private final NotificationPreferenceRepository preferenceRepository;
     private final UserRepository userRepository;
-    private final UserRoleRepository userRoleRepository;
-    private final RoleRepository roleRepository;
     private final MailService mailService;
     private final AppProperties appProperties;
 
@@ -78,25 +74,17 @@ public class NotificationServiceImpl implements NotificationService {
     @Override
     @Transactional
     public void notifyModerators(NotificationType type, String title, String content, String actionUrl) {
-        // Tập id vai trò cần nhận: ADMIN + MODERATOR.
-        List<Long> targetRoleIds = new ArrayList<>();
-        roleRepository.findByCodeAndDeletedAtIsNull(RoleCode.ADMIN)
-                .ifPresent(r -> targetRoleIds.add(r.getId()));
-        roleRepository.findByCodeAndDeletedAtIsNull(RoleCode.MODERATOR)
-                .ifPresent(r -> targetRoleIds.add(r.getId()));
-        if (targetRoleIds.isEmpty()) {
-            log.warn("notifyModerators: không tìm thấy vai trò ADMIN/MODERATOR, bỏ qua type={}", type);
+        // Người nhận: mọi tài khoản còn sống mang vai trò ADMIN hoặc MODERATOR. Lọc ngay ở DB
+        // (WHERE role.code IN (...)) thay vì nạp cả bảng rồi lọc trong bộ nhớ.
+        List<Long> recipientIds = userRepository
+                .findByRole_CodeInAndDeletedAtIsNull(List.of(RoleCode.ADMIN, RoleCode.MODERATOR))
+                .stream()
+                .map(User::getId)
+                .toList();
+        if (recipientIds.isEmpty()) {
+            log.warn("notifyModerators: không có tài khoản ADMIN/MODERATOR nào, bỏ qua type={}", type);
             return;
         }
-
-        // Lấy id người dùng có một trong các vai trò trên (còn hiệu lực). Chỉ đọc khóa ngoại role_id
-        // và user_id trên proxy lazy nên không phát sinh truy vấn con.
-        List<Long> recipientIds = userRoleRepository.findAll().stream()
-                .filter(ur -> ur.getDeletedAt() == null)
-                .filter(ur -> targetRoleIds.contains(ur.getRole().getId()))
-                .map(ur -> ur.getUser().getId())
-                .distinct()
-                .toList();
 
         for (Long userId : recipientIds) {
             notifyUser(userId, type, title, content, actionUrl, null);

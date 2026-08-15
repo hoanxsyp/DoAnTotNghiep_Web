@@ -1,5 +1,9 @@
 # 01 — Thiết kế kiến trúc hệ thống
 
+<!-- WEBTRO_ROLE_ONLY_UPDATE_START -->
+> **Cập nhật 2026-08-09:** phân quyền hiện hành là **role-only**. Hệ thống không còn entity/repository/bảng nghiệp vụ `permissions` hay `role_permissions`; Flyway `V15__drop_permission_tables.sql` drop hai bảng này sau các migration lịch sử. Backend kiểm tra bằng `@PreAuthorize("hasRole/hasAnyRole")` và `SecurityUtils.hasRole/hasAnyRole`; JWT chỉ chứa `role`. Tenant được phép tạo tin nhưng service chỉ chấp nhận `categoryCode = ROOMMATE`; Landlord/Admin tạo được mọi loại tin. Access token 15 phút, refresh token 1 ngày, cả hai lưu `localStorage`; khi refresh token còn dưới 15 phút và access token vẫn còn hạn, frontend chủ động gọi `/api/auth/refresh` để xoay refresh token.
+<!-- WEBTRO_ROLE_ONLY_UPDATE_END -->
+
 > **Nguồn ràng buộc:** `00_CANONICAL_DECISIONS.md` (hợp đồng kỹ thuật — nguồn sự thật duy nhất).
 > **Nguồn nghiệp vụ:** `PHAN_TICH_NGHIEP_VU_WEBSITE_PHONG_TRO.md`. Mọi ký hiệu `[§x.y]` tham chiếu tài liệu này.
 > Mọi bổ sung nằm ngoài canonical được đánh dấu **[BỔ SUNG NGOÀI CANONICAL]** để bước review đối chiếu.
@@ -316,8 +320,8 @@ sequenceDiagram
     end
     RL->>JF: 
     JF->>JF: verify chữ ký + hạn + jti KHÔNG trong blacklist Redis
-    JF->>CT: SecurityContext(userId, roles, permissions)
-    CT->>CT: @PreAuthorize("hasAuthority('LISTING_UPDATE_OWN')")
+    JF->>CT: SecurityContext(userId, roles)
+    CT->>CT: @PreAuthorize("hasAnyRole('TENANT','LANDLORD','ADMIN')")
     CT->>SV: submit(listingId, currentUserId)
     activate SV
     Note over SV: @Transactional
@@ -346,7 +350,7 @@ sequenceDiagram
 
 | # | Module | Trách nhiệm | Entity sở hữu | Mã chức năng phụ trách (mục 2 tài liệu nghiệp vụ) |
 |---|---|---|---|---|
-| 1 | **auth** | Đăng ký, đăng nhập, đăng xuất, refresh + rotation + reuse detection, quên/đổi mật khẩu, xác thực email/phone, gán role, khóa/mở khóa tài khoản. Phát hành và thu hồi token. | `roles`, `permissions`, `role_permissions`, `user_roles`, `refresh_tokens`, `password_reset_tokens`, `verifications` | `AUTH-01` đăng ký, `AUTH-02` đăng nhập, `AUTH-03` đăng xuất, `AUTH-04` quên mật khẩu, `AUTH-05` đổi mật khẩu, `AUTH-06` xác thực email/SĐT, `AUTH-07` phân quyền theo vai trò, `AUTH-08` khóa/mở khóa tài khoản `[§2.1]` |
+| 1 | **auth** | Đăng ký, đăng nhập, đăng xuất, refresh + rotation + reuse detection, quên/đổi mật khẩu, xác thực email/phone, gán role, khóa/mở khóa tài khoản. Phát hành và thu hồi token. | `roles`, `refresh_tokens`, `password_reset_tokens`, `verifications` | `AUTH-01` đăng ký, `AUTH-02` đăng nhập, `AUTH-03` đăng xuất, `AUTH-04` quên mật khẩu, `AUTH-05` đổi mật khẩu, `AUTH-06` xác thực email/SĐT, `AUTH-07` phân quyền theo vai trò, `AUTH-08` khóa/mở khóa tài khoản `[§2.1]` |
 | 2 | **user** | Hồ sơ cá nhân, hồ sơ chủ trọ, thông tin liên hệ, xem hồ sơ công khai, theo dõi chủ trọ, trạng thái xác thực chủ trọ, điểm uy tín chủ trọ. | `users`, `user_profiles`, `landlord_profiles`, `follows` | `USER-01` xem hồ sơ, `USER-02` cập nhật hồ sơ, `USER-03` quản lý thông tin liên hệ, `USER-04` xem hồ sơ chủ trọ, `USER-05` theo dõi/bỏ theo dõi, `USER-06` quản lý trạng thái xác thực chủ trọ `[§2.2]`; `FOLLOW-01`, `FOLLOW-02` `[§2.5]` |
 | 3 | **catalog** | Dữ liệu tra cứu ít đổi, dùng chung: loại tin `[§0.3]`, cây hành chính tỉnh/huyện/xã, tiện ích theo nhóm. Là module bị phụ thuộc nhiều nhất, **không phụ thuộc ai**. | `categories`, `provinces`, `districts`, `wards`, `amenities` | `ADM-05` quản lý danh mục, `ADM-06` quản lý khu vực, `ADM-07` quản lý tiện ích `[§2.12]`; `[§10.5]` |
 | 4 | **listing** | Vòng đời tin đăng (state machine), CRUD tin, ảnh, tiện ích của tin, gia hạn, lịch sử chỉnh sửa, thống kê tin, quy tắc hiển thị công khai. **Chủ sở hữu `ListingStateMachine` và `ListingVisibilityService`.** | `listings`, `listing_images`, `listing_amenities`, `listing_edit_histories` | `LIST-01` tạo nháp, `LIST-02` đăng tin, `LIST-03` sửa tin, `LIST-04` gửi duyệt, `LIST-05` duyệt/từ chối (thực thi state), `LIST-06` ẩn, `LIST-07` đóng, `LIST-08` xóa mềm, `LIST-09` gia hạn, `LIST-10` thống kê tin, `LIST-11` quản lý ảnh, `LIST-12` quản lý tiện ích `[§2.3]` |
@@ -536,7 +540,7 @@ backend_webtro/
     │   │   │   ├── AppConstant.java                  # API_PREFIX="/api", HEADER_API_VERSION="X-Api-Version"...
     │   │   │   ├── ConfigKey.java                    # 50 key của canonical §9 (hằng String)
     │   │   │   ├── ErrorCode.java                    # LISTING_NOT_FOUND, BUSINESS_RULE_VIOLATED... (canonical §7.2)
-    │   │   │   ├── PermissionCode.java               # 27 permission của canonical §4.2
+    │   │   │   ├── RoleCode.java                     # 4 role cố định
     │   │   │   ├── RoleCode.java                     # ROLE_TENANT/LANDLORD/MODERATOR/ADMIN
     │   │   │   └── CacheName.java                    # tên cache của mục 8
     │   │   │
@@ -811,7 +815,7 @@ graph TB
     BROWSER(["Trình duyệt — Desktop / Tablet / Mobile [§11.7]"])
 
     subgraph SPA["React 18 SPA (Vite build → static, phục vụ bởi nginx)"]
-        ROUTES["<b>routes/</b> — createBrowserRouter (React Router 6)<br/>ProtectedRoute · RoleRoute · PermissionRoute (canonical §12)"]
+        ROUTES["<b>routes/</b> — createBrowserRouter (React Router 6)<br/>ProtectedRoute · RoleRoute · RoleRoute (canonical §12)"]
         LAYOUTS["<b>layouts/</b> — PublicLayout · AccountLayout · LandlordLayout · AdminLayout · AuthLayout"]
         PAGES["<b>pages/</b> — 1 route = 1 page<br/>Chỉ: bố cục, gọi hook, xử lý loading/empty/error"]
         COMPS["<b>components/</b> — common/ · listing/ · search/ · comment/ · review/<br/>chatbot/ · admin/ · form/<br/>Thuần trình bày, nhận props, KHÔNG gọi API"]
@@ -934,11 +938,11 @@ frontend_webtro/
     │   ├── index.jsx                  # createBrowserRouter — map sitemap canonical §12
     │   ├── ProtectedRoute.jsx         # yêu cầu đăng nhập
     │   ├── RoleRoute.jsx              # roles=[...]
-    │   ├── PermissionRoute.jsx        # permissions=[...]
+    │   ├── RoleRoute.jsx              # roles=[...]
     │   └── paths.js                   # hằng đường dẫn tiếng Việt (canonical §12)
     │
     ├── hooks/
-    │   ├── useAuth.js                 # user, roles, permissions, isAuthenticated, login, logout
+    │   ├── useAuth.js                 # user, roles, isAuthenticated, login, logout
     │   ├── usePermission.js           # has('LISTING_MODERATE') — ẩn/hiện menu (canonical §12)
     │   ├── useListings.js · useListingDetail.js · useListingForm.js
     │   ├── useSearchFilter.js         # đồng bộ filter ↔ query string (chia sẻ link được)
@@ -954,7 +958,7 @@ frontend_webtro/
     ├── redux/
     │   ├── store.js                   # configureStore
     │   └── slices/
-    │       ├── authSlice.js           # accessToken (memory), user, roles, permissions, status
+    │       ├── authSlice.js           # accessToken (memory), user, roles, status
     │       ├── catalogSlice.js        # categories/provinces/amenities — nạp 1 lần, cache client
     │       ├── listingSlice.js · searchSlice.js · favoriteSlice.js
     │       ├── notificationSlice.js   # danh sách + unreadCount
@@ -972,46 +976,83 @@ frontend_webtro/
     ├── utils/                         # formatCurrency · formatDate (DayJS locale vi) · slugify
     │                                  # maskPhone · buildQueryString · parseQueryString
     │                                  # validators · errorMapper (errorCode → thông báo tiếng Việt)
-    ├── constants/                     # roles.js · permissions.js · listingStatus.js · categories.js
+    ├── constants/                     # roles.js · roles.js · listingStatus.js · categories.js
     │                                  # reportReasons.js · sortOptions.js · errorCodes.js  (khớp canonical §5 + §4.2)
     └── config/                        # env.js (đọc import.meta.env) · apiConfig.js · appConfig.js
 ```
 
 ### 4.3. Cơ chế xác thực phía client — phân tích đánh đổi và chốt phương án
 
-`[§11.1]` yêu cầu *"Không lộ thông tin nhạy cảm"*; canonical §8 chốt access token 15 phút + refresh token 7 ngày opaque UUID lưu DB có rotation + reuse detection. Câu hỏi còn lại: **client lưu 2 token đó ở đâu**.
+`[§11.1]` yêu cầu *"Không lộ thông tin nhạy cảm"*; canonical §8 chốt access token 15 phút + refresh token 1 ngày opaque UUID lưu DB có rotation + reuse detection. Câu hỏi còn lại: **client lưu 2 token đó ở đâu**.
+
+> **CẬP NHẬT v3 — quyết định này đã bị ĐẢO.** Bản dưới đây là quyết định hiện hành. Phần lập luận
+> chọn phương án B (cũ) giữ lại trong khối gập cuối mục để tra cứu lịch sử.
 
 **Ba phương án và đánh đổi:**
 
 | # | Phương án | Chống XSS đánh cắp token | Chống CSRF | Giữ đăng nhập khi F5 | Độ phức tạp | Nhận xét |
 |---|---|---|---|---|---|---|
-| A | Cả 2 token trong `localStorage` | ✘ **Hỏng** — mọi script chạy trên trang đọc được cả refresh token 7 ngày → chiếm quyền dài hạn | ✔ (không cookie tự gửi) | ✔ | Thấp | Rủi ro cao nhất |
-| B | Access token **trong memory** + refresh token trong cookie **httpOnly + Secure + SameSite=Strict** | ✔ **Tốt nhất** — XSS không đọc được cookie httpOnly; access token chết theo tab | Cookie tự gửi, nhưng **chỉ** tới `/api/auth/*` và `SameSite=Strict` chặn cross-site | ✔ (F5 → gọi refresh, lấy access mới) | Trung bình | **CHỌN** |
-| C | Access token trong memory + refresh token trong `localStorage` | ◐ Access an toàn hơn, nhưng refresh vẫn lộ với XSS | ✔ | ✔ | Thấp | Nửa vời |
+| A | Cả 2 token trong `localStorage` | ◐ Script trên trang đọc được cả refresh token — bù bằng rotation + reuse detection + TTL cấu hình được | ✔ (không cookie nào tự gửi) | ✔ (không cần gọi refresh) | Thấp | **CHỌN (v3)** |
+| B | Access token **trong memory** + refresh token trong cookie **httpOnly + Secure + SameSite=Strict** | ✔ Tốt nhất về lý thuyết — XSS không đọc được cookie httpOnly | Cookie tự gửi, nhưng chỉ tới `/api/auth/*` và `SameSite=Strict` chặn cross-site | ✔ (F5 → gọi refresh) | Trung bình | Chọn ở v2, **bỏ ở v3** |
+| C | Access token trong memory + refresh token trong `localStorage` | ◐ Access an toàn hơn, refresh vẫn lộ | ✔ | ✔ | Thấp | Nửa vời |
 
-**Quyết định chốt: phương án B.**
+**Quyết định chốt (v3): phương án A.**
 
-- **Access token (15 phút): giữ trong memory** — biến module trong `services/tokenService.js`, mirror trong `authSlice` để component đọc. Không `localStorage`, không cookie. Mất khi F5, và điều đó **là đúng** vì lấy lại được bằng refresh.
-- **Refresh token (7 ngày): cookie `httpOnly; Secure; SameSite=Strict; Path=/api/auth; Max-Age=604800`** do backend `Set-Cookie` khi login/refresh. JavaScript **không đọc được**.
+- **Access token (15 phút)**: `localStorage` key `webtro_access_token`.
+- **Refresh token (1 ngày)**: `localStorage` key `webtro_refresh_token`.
+- Backend **không đặt cookie nào**. Client gắn access token vào header `Authorization: Bearer` và
+  gửi refresh token trong **body** khi gọi `/api/auth/refresh`, `/api/auth/logout`,
+  `/api/auth/change-password`.
 
-**Vì sao B chứ không phải A/C:**
+**Điểm yếu của A — nói thẳng, không giấu:** `localStorage` đọc được bằng JavaScript, nên một lỗ XSS
+lấy được **cả refresh token 1 ngày**, không chỉ một access token ≤15 phút như phương án B. Đây là
+đánh đổi thật và là cái giá của quyết định này.
 
-1. **Kích thước thiệt hại khi có XSS.** Canonical §8 đã đầu tư rất nhiều vào refresh token (rotation, reuse detection, hash SHA-256 trong DB). Toàn bộ đầu tư đó **vô nghĩa** nếu client tự đặt refresh token vào `localStorage` cho script bất kỳ đọc. Với B, XSS tệ nhất chỉ lấy được access token còn sống ≤15 phút và **không** gia hạn được — thiệt hại có trần.
-2. **`SameSite=Strict` + `Path=/api/auth` triệt CSRF ngay tại gốc.** Cookie chỉ được gửi khi request xuất phát từ chính origin của site, và chỉ tới nhóm endpoint `/api/auth/*`. Mọi endpoint nghiệp vụ khác (`/api/listings`, `/api/payments`…) **không nhận cookie** — chúng chỉ chấp nhận `Authorization: Bearer`. Đây chính là lý do `csrf().disable()` vẫn đúng (mục 5.3).
-3. **`Path=/api/auth` là bắt buộc, không phải trang trí.** Nó thu hẹp bề mặt: kể cả nếu sau này có endpoint nào lỡ tin cookie, endpoint đó phải nằm dưới `/api/auth` mới nhận được.
-4. **Chi phí trả thêm là chấp nhận được:** FE cần `withCredentials: true` cho `/api/auth/*`, và một lần `bootstrapAuth()` lúc khởi động app (gọi `/api/auth/refresh`) để khôi phục phiên sau F5. Khoảng 30 dòng code — rẻ hơn nhiều so với rủi ro chiếm phiên 7 ngày.
+**Những gì đang bù lại:**
 
-**Xử lý điểm yếu của B (nêu thẳng, không giấu):**
-
-| Điểm yếu | Cách xử lý |
+| Biện pháp | Tác dụng |
 |---|---|
-| F5 mất access token → nháy màn hình đăng nhập | `App.jsx` chạy `bootstrapAuth()` **trước** khi render router; trong lúc chờ hiện `<SplashLoading/>`. `authSlice.status: 'idle' → 'loading' → 'authenticated' \| 'anonymous'`. `ProtectedRoute` **không** redirect khi `status === 'loading'` |
-| Nhiều tab: mỗi tab có access token riêng | Chấp nhận được — cả 2 tab đều refresh từ cùng cookie. Rotation sinh refresh token mới; tab kia dùng token cũ sẽ bị reuse detection hiểu nhầm là tấn công → dùng **grace period** (cuối mục 4.4) |
-| `Secure` yêu cầu HTTPS, dev chạy HTTP | Thuộc tính `Secure` đọc từ biến môi trường `${COOKIE_SECURE}` (dev=`false`, deploy=`true`) — không hardcode (canonical §1.3). `[§11.1]` *"Dùng HTTPS khi triển khai thật"* |
-| Cần đọc `roles`/`permissions` để ẩn menu | Decode access token bằng `jwt-decode` (canonical §1.2) — access token chứa `roles[]`, `permissions[]` (canonical §8). **Chỉ để hiển thị**; quyền thật luôn kiểm ở backend `[§11.2]` *"API cần kiểm tra quyền ở backend, không chỉ ẩn nút ở frontend"* |
+| Refresh token **xoay vòng mỗi lần dùng** + **reuse detection** theo `family_id` | Token bị đánh cắp mà nạn nhân còn dùng tiếp → cả họ token bị thu hồi, phiên kẻ tấn công chết theo. Cửa sổ tấn công hẹp lại đáng kể |
+| Refresh token là **opaque UUID**, DB chỉ lưu **hash SHA-256** | Lộ DB không suy ra được token; thu hồi được tức thì |
+| `HtmlSanitizer.stripAllHtml` trên mọi nội dung người dùng nhập + React escape mặc định | Thu hẹp bề mặt XSS ngay từ đầu vào |
+| `JWT_REFRESH_TTL` là **biến môi trường** | Hạ xuống `P1D` để giảm thiệt hại mà không phải sửa code |
+| Access token vào **blacklist Redis** khi logout | Token đã đăng xuất không dùng lại được |
 
-**Dữ liệu được phép ở `localStorage`** (không nhạy cảm — `[§11.11]` *"Không cache dữ liệu cá nhân nhạy cảm"*): ngôn ngữ, theme, `recentSearches` (chỉ để hiển thị), trạng thái đóng/mở chatbot widget.
-**Cấm tuyệt đối ở `localStorage`/`sessionStorage`:** access token, refresh token, mật khẩu, số điện thoại đầy đủ, email.
+**Đổi lại được gì:**
+
+1. **Phiên sống sót qua F5 mà không cần vòng `/auth/refresh`** — mở trang là dùng được ngay, không
+   có khoảng nháy chờ khôi phục phiên.
+2. **Không phụ thuộc hành vi cookie của trình duyệt.** Không còn phải lo `SameSite`, chặn cookie
+   bên thứ ba, hay FE và BE khác domain khi triển khai thật — đây là nguồn lỗi khó chẩn đoán nhất
+   của phương án B.
+3. **Lập luận `csrf().disable()` mạnh hơn:** hệ thống không dùng cookie cho bất kỳ mục đích xác
+   thực nào, nên không có thông tin xác thực nào được trình duyệt tự đính kèm ⇒ không có bề mặt
+   CSRF (kể cả dưới `/api/auth`).
+4. Bỏ được `withCredentials`, bỏ `COOKIE_SECURE`/`COOKIE_SAME_SITE`, bớt một lớp cấu hình.
+
+| Điểm cần lưu ý khi cài đặt | Cách xử lý |
+|---|---|
+| Sau mỗi lần refresh phải **ghi đè** refresh token mới | `axiosClient` lưu cả `accessToken` và `refreshToken` từ response. Gửi lại token cũ ở lần sau sẽ bị reuse detection thu hồi cả họ token — đây là lỗi trễ, rất dễ lọt review |
+| Nhiều tab dùng chung `localStorage` | Chấp nhận được: các tab dùng chung một cặp token, `tokenService.syncFromStorage()` nạp lại khi cần |
+| Cần đọc `role` để ẩn menu | Lấy từ `authSlice.user` (`GET /api/users/me`) hoặc decode access token — claim `role` (chuỗi). **Chỉ để hiển thị**; quyền thật luôn kiểm ở backend `[§11.2]` |
+
+**Dữ liệu khác được phép ở `localStorage`**: ngôn ngữ, theme, `recentSearches`, trạng thái chatbot widget.
+**Vẫn cấm tuyệt đối ở `localStorage`/`sessionStorage`:** mật khẩu, số điện thoại đầy đủ, email.
+
+<details>
+<summary>Lập luận chọn phương án B ở v2 (đã bỏ — giữ để tra cứu lịch sử)</summary>
+
+Với B, XSS tệ nhất chỉ lấy được access token còn sống ≤15 phút và không gia hạn được — thiệt hại
+có trần. Cookie `SameSite=Strict` + `Path=/api/auth` triệt CSRF ngay tại gốc: cookie chỉ được gửi
+khi request xuất phát từ chính origin của site và chỉ tới nhóm endpoint `/api/auth/*`.
+
+Vì sao vẫn bỏ: lợi thế đó chỉ đúng khi FE và BE cùng site và trình duyệt không chặn cookie. Trong
+môi trường triển khai thật của đồ án (FE nginx, BE container, có thể khác host/port/domain),
+`SameSite=Strict` làm cookie không được gửi trong nhiều tình huống hợp lệ, dẫn tới mất phiên khó
+chẩn đoán. Cộng thêm việc chỉ có cookie mới giữ được phiên khiến `change-password` phụ thuộc cookie
+một cách ngầm — thiếu cookie là âm thầm thu hồi luôn thiết bị hiện tại.
+
+</details>
 
 ### 4.4. Luồng axios interceptor tự refresh khi 401 (có hàng đợi chống race)
 
@@ -1028,7 +1069,7 @@ sequenceDiagram
     participant IC as Response Interceptor
     participant Q as failedQueue
     participant TS as tokenService
-    participant BE as POST /api/auth/refresh<br/>(cookie httpOnly tự gửi)
+    participant BE as POST /api/auth/refresh<br/>(refresh token gửi trong body)
 
     R1->>IC: 401 UNAUTHORIZED
     IC->>IC: isRefreshing == false → đặt = true
@@ -1040,14 +1081,14 @@ sequenceDiagram
     IC->>Q: push({resolve, reject})
 
     alt Refresh thành công
-        BE-->>IC: 200 {accessToken mới} + Set-Cookie refresh mới (rotation)
+        BE-->>IC: 200 {accessToken mới, refreshToken mới} (rotation)<br/>client ghi đè CẢ HAI vào localStorage
         IC->>TS: setAccessToken(mới)
         IC->>Q: processQueue(null, tokenMới) → resolve tất cả
         IC->>R1: replay A với Bearer mới
         IC->>R2: replay B với Bearer mới
         IC->>R3: replay C với Bearer mới
         IC->>IC: isRefreshing = false (trong finally)
-    else Refresh thất bại (401/403 — hết hạn 7 ngày hoặc reuse detected)
+    else Refresh thất bại (401/403 — hết hạn 1 ngày hoặc reuse detected)
         BE-->>IC: 401 / 403
         IC->>Q: processQueue(error, null) → reject tất cả
         IC->>TS: clear() + store.dispatch(logout())
@@ -1062,7 +1103,7 @@ sequenceDiagram
 |---|---|---|
 | Biến trạng thái module | `let isRefreshing = false; let failedQueue = [];` | Single-flight |
 | Request interceptor | Gắn `Authorization: Bearer ${tokenService.getAccessToken()}` nếu có; gắn `X-Api-Version: 1` (canonical §7.3) | — |
-| `withCredentials` | `true` **chỉ** cho `/api/auth/*` (nơi cần cookie refresh) | Thu hẹp bề mặt cookie |
+| `withCredentials` | **không dùng** — hệ thống không có cookie nào | Token gửi tường minh qua header/body |
 | Điều kiện kích hoạt refresh | `status === 401` **VÀ** `!originalRequest._retry` **VÀ** URL **không** thuộc `/api/auth/login`, `/api/auth/refresh`, `/api/auth/register` | Chặn vòng lặp vô hạn: 401 từ chính `/refresh` không được kích hoạt refresh nữa. 401 từ `/login` là **sai mật khẩu** `[§3.2]`, phải hiện lỗi cho người dùng chứ không refresh |
 | Đánh dấu retry | `originalRequest._retry = true` **trước** khi replay | Mỗi request chỉ được thử lại **một** lần |
 | Khi `isRefreshing === true` | Trả `new Promise((resolve, reject) => failedQueue.push({resolve, reject}))` rồi `.then(token => replay(originalRequest, token))` | Đây chính là **hàng đợi chống race** |
@@ -1089,20 +1130,13 @@ sequenceDiagram
 
 ### 5.1. Luồng JWT access + refresh
 
-**Tham số chốt (canonical §8):**
-
 | Tham số | Giá trị | Ghi chú |
 |---|---|---|
-| Access token | JWT, **15 phút** | Claim: `sub` (userId), `email`, `roles[]`, `permissions[]`, `jti`, `iat`, `exp` |
-| Refresh token | **7 ngày**, opaque UUID | Lưu DB `refresh_tokens`, cột lưu **hash SHA-256** — DB bị lộ vẫn không dùng được token |
-| Rotation | Mỗi lần refresh sinh token mới, thu hồi token cũ | — |
-| Reuse detection | Dùng lại token đã xoay → **thu hồi cả họ token** | Trừ grace period 10s (mục 4.4) |
-| Logout | Xóa refresh token + đưa `jti` vào **blacklist Redis**, TTL = hạn còn lại của access token | Access token là stateless → phải blacklist mới thu hồi được ngay |
-| Mật khẩu | BCrypt **cost 12**; tối thiểu 8 ký tự, có chữ và số | `[§3.1]`, `[§11.1]` *"Mật khẩu lưu bằng hash an toàn"* |
-
-**Vì sao access ngắn + refresh dài:** JWT không thu hồi được (đó là bản chất stateless). Giải pháp là làm cửa sổ thiệt hại nhỏ (15 phút) và đặt điểm kiểm soát thật ở refresh token — thứ **có** trong DB nên **thu hồi được**. Blacklist `jti` trong Redis lấp nốt khe 15 phút cho trường hợp logout/khóa tài khoản.
-
-**Sequence — đăng nhập, gọi API, refresh có rotation:**
+| Access token | JWT, **15 phút** | Claim: `sub`, `email`, `role`, `jti`, `iat`, `exp`. Không có `role`. |
+| Refresh token | **1 ngày**, opaque UUID | Lưu DB `refresh_tokens` dạng hash SHA-256; client lưu raw token trong `localStorage`. |
+| Rotation | Mỗi lần refresh sinh refresh token mới, thu hồi token cũ | Refresh token mới có `expired_at = now + 1 ngày`. |
+| Gia hạn chủ động | Khi refresh token còn dưới 15 phút và access còn hạn | FE gọi `/api/auth/refresh`; nếu lỗi nhưng access còn hạn thì request hiện tại vẫn tiếp tục. |
+| Hết phiên | Access không dùng được và refresh cũng hết hạn/refresh thất bại | Khi đó FE clear localStorage và điều hướng đăng nhập. |
 
 ```mermaid
 sequenceDiagram
@@ -1111,152 +1145,49 @@ sequenceDiagram
     participant AC as AuthController
     participant AS as AuthServiceImpl
     participant JS as JwtService
-    participant TS as TokenServiceImpl
     participant DB as MySQL (refresh_tokens)
-    participant RD as Redis (blacklist + rate limit)
+    participant RD as Redis blacklist
 
-    rect rgba(25,118,210,0.08)
-    Note over U,RD: 1) ĐĂNG NHẬP — AUTH-02 [§3.2]
     U->>AC: POST /api/auth/login {email, password}
-    AC->>RD: INCR login:fail:{ip}:{email} — kiểm tra 5 lần/15 phút [§3.2]
-    alt Vượt ngưỡng security.login.*
-        RD-->>U: 429 RATE_LIMIT_EXCEEDED + Retry-After (khóa tạm 15 phút)
-    end
     AC->>AS: login(request)
-    AS->>DB: findByEmail + BCrypt.matches(cost 12)
-    alt Sai mật khẩu
-        AS->>RD: INCR login:fail:{ip}:{email} EXPIRE 900
-        AS-->>U: 401 UNAUTHORIZED (KHÔNG nói "email không tồn tại" — chống dò tài khoản)
-    end
-    AS->>AS: kiểm tra UserStatus — LOCKED thì từ chối [§3.2]
-    AS->>RD: DEL login:fail:{ip}:{email}
-    AS->>JS: generateAccessToken(user) — 15 phút, có jti
-    AS->>TS: issueRefreshToken(user, ua, ip)
-    TS->>DB: INSERT refresh_tokens(token_hash=SHA256(uuid), family_id, expires_at=+7d)
-    AS->>DB: UPDATE users.last_login_at [§3.2]
-    AS-->>U: 200 {accessToken} + Set-Cookie refreshToken<br/>(httpOnly; Secure; SameSite=Strict; Path=/api/auth)
-    U->>U: tokenService.setAccessToken(memory)
-    end
+    AS->>JS: generateAccessToken(userId, email, role) - 15 phút
+    AS->>DB: INSERT refresh token hash, family_id, expired_at=now+1d
+    AS-->>U: 200 {accessToken, refreshToken, refreshExpiresIn:86400}
+    U->>U: lưu access/refresh/expiresAt vào localStorage
 
-    rect rgba(56,142,60,0.08)
-    Note over U,RD: 2) GỌI API NGHIỆP VỤ
-    U->>AC: GET /api/listings/12 + Authorization: Bearer
-    AC->>JS: verify chữ ký + exp
-    JS->>RD: EXISTS blacklist:jti:{jti}
-    alt jti trong blacklist (đã logout)
-        RD-->>U: 401 UNAUTHORIZED
-    end
-    JS-->>AC: SecurityContext(userId, roles[], permissions[])
-    AC-->>U: 200 ApiResponse
-    end
+    U->>AC: Request nghiệp vụ + Bearer access
+    AC->>JS: verify chữ ký, exp, jti
+    JS->>RD: kiểm blacklist
+    JS-->>AC: SecurityContext(userId, role)
+    AC-->>U: 200 hoặc 403 theo role/ownership
 
-    rect rgba(239,108,0,0.08)
-    Note over U,RD: 3) REFRESH — ROTATION + REUSE DETECTION
-    U->>AC: POST /api/auth/refresh (cookie tự gửi)
-    AC->>TS: refresh(rawToken, ua, ip)
-    TS->>DB: SELECT WHERE token_hash = SHA256(rawToken)
-    alt Không tồn tại
-        TS-->>U: 401 UNAUTHORIZED
-    else Hết hạn (> 7 ngày)
-        TS->>DB: xóa token
-        TS-->>U: 401 UNAUTHORIZED → FE điều hướng /dang-nhap
-    else revoked_at IS NOT NULL — token ĐÃ bị xoay
-        alt Trong grace 10s + cùng UA + cùng IP
-            TS-->>U: 200 {accessToken của lần xoay đó} (idempotent — 2 tab cùng F5)
-        else Ngoài grace → TẤN CÔNG
-            TS->>DB: UPDATE refresh_tokens SET revoked_at=NOW()<br/>WHERE family_id = ? (THU HỒI CẢ HỌ)
-            TS->>RD: blacklist mọi jti còn sống của user
-            TS->>DB: ghi AuditLog + tạo Notification cảnh báo
-            TS-->>U: 401 UNAUTHORIZED — buộc đăng nhập lại toàn bộ thiết bị
-        end
-    else Hợp lệ
-        TS->>DB: UPDATE token cũ SET revoked_at=NOW(), replaced_by=<new>
-        TS->>DB: INSERT token mới CÙNG family_id
-        TS->>JS: generateAccessToken(user)
-        TS-->>U: 200 {accessToken mới} + Set-Cookie refreshToken mới
-    end
-    end
-
-    rect rgba(198,40,40,0.08)
-    Note over U,RD: 4) ĐĂNG XUẤT — AUTH-03
-    U->>AC: POST /api/auth/logout + Bearer
-    AC->>TS: revoke(refreshToken)
-    TS->>DB: UPDATE refresh_tokens SET revoked_at = NOW()
-    TS->>RD: SETEX blacklist:jti:{jti} TTL=(exp - now) "1"
-    TS-->>U: 204 + Set-Cookie refreshToken="" Max-Age=0
+    alt refresh còn < 15 phút và access còn hạn
+        U->>AC: POST /api/auth/refresh {refreshToken}
+        AC->>AS: rotate refresh token
+        AS->>DB: revoke cũ + insert mới expired_at=now+1d
+        AS-->>U: 200 token mới
+        U->>U: cập nhật localStorage
     end
 ```
 
-**Khái niệm "họ token" (`family_id`) — [BỔ SUNG NGOÀI CANONICAL]:** canonical §8 dùng cụm *"thu hồi cả họ token"* nhưng không chốt cơ chế nhận diện "họ". Chốt: mỗi lần **đăng nhập** sinh một `family_id` (UUID); mọi lần **rotation** kế thừa `family_id` đó. Reuse detection → `UPDATE ... WHERE family_id = ?`. Nhờ vậy, một thiết bị bị tấn công không đá văng các thiết bị đăng nhập độc lập khác. Đề nghị review bổ sung cột `family_id`, `revoked_at`, `replaced_by_id`, `user_agent`, `ip_address` cho bảng `refresh_tokens` vào tài liệu thiết kế CSDL.
+### 5.2. Phân quyền role-only + ownership
 
-### 5.2. Ma trận Role × Permission (copy chính xác từ canonical §4.2)
+Hệ thống không còn bảng `permissions`/`role_permissions`. Mỗi user có đúng một role trong `users.role_id`; backend kiểm tra role trực tiếp.
 
-**4 role người** (canonical §4.1) — quan hệ `User ↔ Role` là **nhiều-nhiều** qua `user_roles`, vì `[§1.2]`: *"Chủ trọ có toàn bộ quyền cơ bản của người thuê nếu hệ thống dùng chung tài khoản"*:
+| Role | Phạm vi quyền |
+|---|---|
+| `ROLE_TENANT` | Chức năng người thuê và đăng/quản lý tin của mình với **duy nhất** `categoryCode=ROOMMATE`. |
+| `ROLE_LANDLORD` | Chức năng người thuê + mọi chức năng chủ trọ, đăng được tất cả loại tin, thanh toán/gói đẩy tin. |
+| `ROLE_MODERATOR` | Kiểm duyệt tin/bình luận/đánh giá/báo cáo/cảnh báo; không có tài chính, cấu hình, thống kê, quản lý user. |
+| `ROLE_ADMIN` | Toàn quyền quản trị. |
 
-| Code | Tên hiển thị | Ghi chú |
+Ba lớp kiểm tra vẫn giữ nguyên tinh thần bảo mật:
+
+| Lớp | Cơ chế | Ví dụ |
 |---|---|---|
-| `ROLE_TENANT` | Người thuê | mặc định khi đăng ký |
-| `ROLE_LANDLORD` | Chủ trọ | bao gồm "Người cho ở ghép" |
-| `ROLE_MODERATOR` | Kiểm duyệt viên | |
-| `ROLE_ADMIN` | Quản trị viên | |
-
-> **"Người cho ở ghép" / "Người cần ở ghép" `[§1.1]` không phải role** (canonical §4.1). Chúng là ngữ cảnh: người cho ở ghép = `ROLE_LANDLORD` đăng tin `category = ROOMMATE`; người cần ở ghép = `ROLE_TENANT` tìm tin đó. `[§7.3]` gộp chung tiêu đề *"Chủ trọ / Người cho ở ghép"* xác nhận hướng này. **"Khách chưa đăng nhập" là trạng thái ẩn danh, không phải role.**
-
-**Ma trận permission (RBAC 2 tầng: Role → Permission)** — kiểm tra ở backend bằng `@PreAuthorize("hasAuthority('...')")`, **không** chỉ ẩn nút ở frontend `[§11.2]`:
-
-| Permission code | TENANT | LANDLORD | MODERATOR | ADMIN |
-|---|:--:|:--:|:--:|:--:|
-| `LISTING_CREATE` | | ✔ | | ✔ |
-| `LISTING_UPDATE_OWN` | | ✔ | | ✔ |
-| `LISTING_UPDATE_ANY` | | | | ✔ |
-| `LISTING_MODERATE` (duyệt/từ chối/gắn cờ/tạm ẩn) | | | ✔ | ✔ |
-| `LISTING_LOCK` | | | | ✔ |
-| `LISTING_VIEW_ANY` (xem cả tin non-public) | | | ✔ | ✔ |
-| `FAVORITE_MANAGE` | ✔ | ✔ | | |
-| `CONTACT_CREATE` | ✔ | ✔ | | |
-| `COMMENT_CREATE` | ✔ | ✔ | | |
-| `COMMENT_MODERATE` | | | ✔ | ✔ |
-| `REVIEW_CREATE` | ✔ | ✔ | | |
-| `REVIEW_MODERATE` | | | ✔ | ✔ |
-| `REPORT_CREATE` | ✔ | ✔ | ✔ | ✔ |
-| `REPORT_RESOLVE` | | | ✔ | ✔ |
-| `WARNING_SEND` | | | ✔ | ✔ |
-| `USER_MANAGE` (khóa/mở khóa) | | | | ✔ |
-| `USER_ROLE_ASSIGN` | | | | ✔ |
-| `LANDLORD_VERIFY` | | | ✔ | ✔ |
-| `PAYMENT_VIEW_OWN` | | ✔ | | ✔ |
-| `PAYMENT_MANAGE` | | | | ✔ |
-| `PACKAGE_MANAGE` | | | | ✔ |
-| `CATALOG_MANAGE` | | | | ✔ |
-| `AI_CONFIG_MANAGE` | | | | ✔ |
-| `AI_LOG_VIEW` | | | ✔ | ✔ |
-| `SYSTEM_CONFIG_MANAGE` | | | | ✔ |
-| `STATISTIC_VIEW` | | | | ✔ |
-| `AUDIT_LOG_VIEW` | | | | ✔ |
-
-> Cột trống = **không có quyền**. `MODERATOR` cố tình **không** có bất kỳ permission nào về `PAYMENT`, `PACKAGE`, `SYSTEM_CONFIG`, `USER_ROLE_ASSIGN`, `STATISTIC` — đúng `[§1.2]`: *"Moderator chỉ có quyền kiểm duyệt, không quản lý cấu hình tài chính"*.
-
-**Ba tầng kiểm quyền — permission chưa đủ:**
-
-`[§11.2]` yêu cầu *"Người dùng chỉ sửa dữ liệu thuộc sở hữu của mình"*. `LISTING_UPDATE_OWN` chỉ trả lời "được sửa tin **nào đó**", không trả lời "tin **này** có phải của bạn không". Do đó:
-
-| Tầng | Cơ chế | Trả lời câu hỏi | Ví dụ |
-|---|---|---|---|
-| 1. Xác thực | `JwtAuthenticationFilter` | Bạn là ai? | 401 nếu không có/hết hạn token |
-| 2. Phân quyền | `@PreAuthorize("hasAuthority('LISTING_UPDATE_OWN')")` | Vai trò của bạn có được làm loại việc này? | 403 nếu TENANT gọi sửa tin |
-| 3. **Sở hữu** | `OwnershipPermissionEvaluator` → `@PreAuthorize("hasAuthority('LISTING_UPDATE_ANY') or @listingSecurity.isOwner(#id, principal.userId)")` | Bản ghi **cụ thể này** có phải của bạn? | 403 khi LANDLORD A sửa tin của LANDLORD B |
-
-**Chống IDOR (Insecure Direct Object Reference)** — bắt buộc, vì đây là lỗ hổng dễ mắc nhất trong hệ thống nhiều chủ sở hữu:
-
-| Endpoint | Sai (dễ mắc) | Đúng |
-|---|---|---|
-| `PUT /api/listings/{id}` | `findById(id)` rồi save | `findByIdAndOwnerIdAndDeletedAtIsNull(id, currentUserId)` → 404 nếu không khớp |
-| `GET /api/payments/{id}` | `findById(id)` | Kiểm `payment.userId == currentUserId` **hoặc** `hasAuthority('PAYMENT_MANAGE')` |
-| `PUT /api/comments/{id}` | — | `comment.userId == currentUserId` + trong `comment.edit_window_minutes` `[§3.11]` |
-| `GET /api/landlord/contacts` | Nhận `?landlordId=` từ client | **Lấy `landlordId` từ SecurityContext**, không bao giờ từ query param |
-
-> **Luật:** danh tính người thực hiện **luôn** lấy từ `SecurityContext`, **không bao giờ** từ request body/query param. Client gửi `userId` là dữ liệu không đáng tin.
-
+| Xác thực | `JwtAuthenticationFilter` | 401 nếu token hết hạn/sai/bị blacklist. |
+| Role | `@PreAuthorize("hasRole/hasAnyRole")` | Tenant được gọi `POST /api/listings`, nhưng không được vào `/api/payments`. |
+| Ownership/business | Service load entity rồi kiểm chủ sở hữu/quy tắc loại tin | Tenant gửi listing không phải `ROOMMATE` bị `403 LISTING_FORBIDDEN`; user không được sửa tin của người khác. |
 ### 5.3. Chống XSS, SQLi, CSRF, upload độc hại, lộ thông tin nhạy cảm
 
 #### 5.3.1. XSS `[§11.1]` — *"Chống XSS bằng sanitize input và escape output"*
@@ -1269,7 +1200,7 @@ Phòng thủ nhiều lớp — mất một lớp vẫn còn lớp khác:
 | 2. Validate | `@NoBannedKeyword`, giới hạn độ dài `[§3.3]`, `[§3.11]` | DTO request |
 | 3. Escape output | React escape mặc định `{value}` | Toàn frontend |
 | 4. **Cấm tuyệt đối** | **Không** `dangerouslySetInnerHTML` ở bất kỳ đâu (canonical §8, luật F5) | Grep phải rỗng |
-| 5. Không đọc được token | Access token trong memory, refresh trong cookie httpOnly (mục 4.3) | Kể cả XSS thành công, thiệt hại có trần |
+| 5. Hạn chế thiệt hại khi token bị đọc | Token ở `localStorage` (mục 4.3) nhưng refresh token xoay vòng + reuse detection thu hồi cả họ token; TTL hạ được qua biến môi trường | XSS thành công vẫn bị chặn cửa sổ khai thác |
 | 6. Response header | `X-Content-Type-Options: nosniff`, `Content-Security-Policy` (nginx, mục 14.5) | Chặn thực thi script chèn |
 
 > **Vì sao allowlist rỗng chứ không cho phép vài thẻ an toàn:** mô tả tin trọ `[§3.3]` là **văn xuôi**, không cần rich text. Cho phép dù chỉ `<b>` cũng mở cửa cho attribute injection và buộc phải bảo trì parser. `[§3.3]` validation ghi thẳng: *"Không cho phép script, HTML nguy hiểm trong mô tả"* — cách rẻ và chắc nhất là không cho phép HTML nào cả. Xuống dòng lưu bằng `\n`, render bằng CSS `white-space: pre-wrap`.
@@ -1301,7 +1232,7 @@ Chuỗi lập luận:
 | 2 | Spring Security cấu hình `SessionCreationPolicy.STATELESS` | **Không** có `JSESSIONID`, không có server session |
 | 3 | Trang `evil.com` submit form tới `POST /api/listings/12/lock` | Trình duyệt gửi request **không kèm** header `Authorization` → backend trả **401** |
 | 4 | `evil.com` muốn tự thêm header → phải dùng `fetch`/XHR | Bị **CORS preflight** chặn: `CorsConfig` chỉ allow origin của ta |
-| 5 | `evil.com` muốn đọc access token từ `localStorage` của ta | Không có ở đó (mục 4.3: memory) — và cross-origin không đọc được storage của origin khác |
+| 5 | `evil.com` muốn đọc access token từ `localStorage` của ta | **Không đọc được**: `localStorage` bị cô lập theo origin, script trên `evil.com` không truy cập được storage của origin khác. Rủi ro thật là XSS **trên chính site ta**, xử lý ở mục 4.3 |
 | **⇒** | **Không tồn tại vector CSRF trên endpoint nghiệp vụ.** Bật CSRF token chỉ thêm token vô nghĩa mà không chặn thêm bất kỳ tấn công nào | `csrf().disable()` **đúng** |
 
 **Nhưng — có một cookie trong hệ thống: refresh token cookie (mục 4.3). Nó có bị CSRF không?**
@@ -1311,7 +1242,7 @@ Chuỗi lập luận:
 | Câu hỏi | Trả lời |
 |---|---|
 | `evil.com` ép trình duyệt gửi `POST /api/auth/refresh` được không? | **Không.** Cookie đặt `SameSite=Strict` → trình duyệt **không** gửi cookie này với bất kỳ request nào khởi phát từ site khác |
-| Nếu giả sử cookie có được gửi, `evil.com` thu được gì? | **Không gì.** Response chứa access token mới, nhưng `evil.com` **không đọc được response** (CORS chặn đọc cross-origin response). Cookie mới cũng `httpOnly` |
+| `evil.com` tự gọi `/api/auth/refresh` thì sao? | **Không được gì.** Không có cookie nào tự gửi, và `evil.com` không đọc được refresh token trong `localStorage` của ta nên không dựng nổi body hợp lệ; kể cả gọi được cũng không đọc được response (CORS chặn) |
 | Có tác dụng phụ ghi dữ liệu nào không? | Chỉ xoay token của **chính nạn nhân** — không đọc được, không phá dữ liệu nghiệp vụ. Không phải CSRF có ý nghĩa |
 | Cookie có tới endpoint nghiệp vụ nào khác không? | **Không.** `Path=/api/auth` giới hạn phạm vi gửi |
 
@@ -1324,9 +1255,9 @@ Chuỗi lập luận:
 //   2. Mọi endpoint nghiệp vụ xác thực bằng header Authorization: Bearer.
 //      Trình duyệt KHÔNG tự động gắn header này vào request cross-site
 //      => tiền đề của tấn công CSRF (xác thực ngầm) không tồn tại.
-//   3. Cookie DUY NHẤT trong hệ thống là refresh token, đặt
-//      httpOnly + Secure + SameSite=Strict + Path=/api/auth
-//      => không được gửi cross-site, không đọc được bằng JS, không chạm endpoint nghiệp vụ.
+//   3. Hệ thống KHÔNG dùng cookie cho bất kỳ mục đích xác thực nào (v3): access token và
+//      refresh token đều do client giữ trong localStorage và gửi tường minh qua header/body.
+//      => không có thông tin xác thực nào được trình duyệt tự đính kèm.
 //   4. CORS chỉ allow origin của frontend => script bên thứ ba không tự thêm được Bearer.
 // Nếu SAU NÀY chuyển sang cookie session, PHẢI bật lại CSRF.
 http.csrf(AbstractHttpConfigurer::disable);
@@ -1382,7 +1313,7 @@ public ListingDetailResponse toDetailResponse(Listing l, CurrentUser viewer) {
     boolean canSeeFullPhone =
             viewer != null && (
                     viewer.getUserId().equals(l.getOwnerId())
-                 || viewer.hasAuthority(PermissionCode.LISTING_VIEW_ANY)
+                 || SecurityUtils.hasAnyRole(RoleCode.MODERATOR, RoleCode.ADMIN)
                  || viewer.getStatus() == UserStatus.ACTIVE
             );
     return ListingDetailResponse.builder()
@@ -2602,7 +2533,7 @@ graph LR
 | Mọi bảng nghiệp vụ có `deleted_at` (nullable) | Kế thừa `AuditableEntity` |
 | **Không** `DELETE` vật lý cho dữ liệu nghiệp vụ | `[§3.6]` *"Không xóa cứng tin nếu có thanh toán, báo cáo hoặc bình luận liên quan"*; `[§10.2]` *"Không xóa cứng user có giao dịch, tin đăng hoặc report"*; `[§10.6]` *"Gói đang có người dùng mua không nên xóa cứng"* |
 | Repository lọc `deleted_at IS NULL` **trong query**, **không** dùng `@Where` của Hibernate | canonical §6.1 nêu lý do: `@Where` chặn **cả Admin** xem dữ liệu đã xóa — mà `[§3.6]` yêu cầu *"Admin vẫn xem được tin đã xóa mềm"*. `@Where` là annotation ở mức entity, không tắt được theo ngữ cảnh → sai kiến trúc |
-| Cách thi hành | Method thường: `findByIdAndDeletedAtIsNull(id)`. Method admin: `findByIdIncludingDeleted(id)` + `@PreAuthorize("hasAuthority('LISTING_VIEW_ANY')")` |
+| Cách thi hành | Method thường: `findByIdAndDeletedAtIsNull(id)`. Method admin: `findByIdIncludingDeleted(id)` + `@PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")` |
 | **Ngoại lệ hợp lệ** (được phép DELETE vật lý) | `refresh_tokens`, `password_reset_tokens` hết hạn (`TokenCleanupJob`) — **không phải dữ liệu nghiệp vụ**, giữ lại chỉ phình bảng và tăng bề mặt rủi ro |
 | File ảnh | Soft delete bản ghi `listing_images`; **file vật lý giữ lại** `[§11.9]` *"Xóa ảnh khỏi hiển thị nhưng vẫn có thể lưu log nếu cần"* |
 | `audit_logs` | **Không xóa dưới bất kỳ hình thức nào** (luật A2) |
@@ -2928,14 +2859,14 @@ graph TB
 
 | Cấu hình | Giá trị | Lý do |
 |---|---|---|
-| `try_files $uri /index.html` | SPA fallback | React Router dùng `createBrowserRouter` — F5 tại `/tin/abc-123` phải trả `index.html`, không phải 404 |
+| `location / { try_files $uri $uri/ /index.html; }` | SPA fallback | React Router dùng `createBrowserRouter` — F5 tại `/tin/abc-123` phải trả `index.html`, không phải 404. Không dùng `error_page 404 /index.html` toàn cục để tránh `/assets/*.js` bị mất trả HTML thay vì 404 thật |
 | `proxy_pass /api → http://backend:8080` | | Cùng origin, không CORS |
 | `proxy_pass /uploads → http://backend:8080` | | Ảnh phục vụ qua backend có kiểm soát (mục 5.3.4), **không** để nginx serve thư mục trực tiếp |
 | `client_max_body_size ${MAX_UPLOAD_SIZE}` | 10m | Phải ≥ `5MB × số ảnh/request` `[§11.9]`. Mặc định nginx là **1m** → upload ảnh 5MB **thất bại với 413** trước cả khi chạm backend |
 | `gzip on` | JSON, JS, CSS | Mục 9.5 |
 | `server_tokens off` | | Không lộ phiên bản nginx (mục 5.3.5) |
 | Security headers | `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Content-Security-Policy` | Mục 5.3.1 |
-| Cache tĩnh | `/assets/*` → `max-age=31536000, immutable` | Vite gắn hash vào tên file |
+| Cache tĩnh | `/assets/*` → `max-age=31536000, immutable`; thiếu file → `404` thật | Vite gắn hash vào tên file; khi người dùng còn bundle cũ sau deploy, frontend tự reload một lần nếu lazy chunk bị mất |
 | `location /health` | `return 200` | Healthcheck của chính frontend |
 
 ### 14.3. Volume
@@ -3007,7 +2938,7 @@ gantt
 | `restart: unless-stopped` | Mọi service. Backend crash vì lỗi tạm thời → tự lên lại |
 | Flyway `baseline-on-migrate: false` | DB mới hoàn toàn — không cần baseline |
 | `ddl-auto: validate` | canonical §13.6 — **không** `update` ở bất kỳ đâu. `validate` khiến app **từ chối khởi động** nếu entity lệch schema → phát hiện ngay, không im lặng làm hỏng dữ liệu |
-| Seed dữ liệu | Bằng **Flyway migration** (`V2__seed_roles_permissions.sql`, `V3__seed_provinces.sql`...), **không** bằng `data.sql` hay `CommandLineRunner` | Đảm bảo `docker compose up --build` một lệnh là có đủ role, permission, tỉnh/huyện/xã, danh mục, tiện ích, banned keyword, system config (canonical §13.5) |
+| Seed dữ liệu | Bằng **Flyway migration** (`V2__seed_roles_permissions.sql`, `V3__seed_provinces.sql`...), **không** bằng `data.sql` hay `CommandLineRunner` | Đảm bảo `docker compose up --build` một lệnh là có đủ role, tỉnh/huyện/xã, danh mục, tiện ích, banned keyword, system config (canonical §13.5) |
 
 ### 14.5. Biến môi trường (KHÔNG hardcode)
 
@@ -3046,8 +2977,6 @@ Canonical §1.3: *"Không hardcode host/user/password ở bất kỳ đâu; toà
 | **JWT** | `JWT_SECRET` | `change_me_min_32_bytes_base64` | `JwtService`. **≥ 256 bit** cho HS256 — JJWT **từ chối** khóa ngắn hơn |
 | | `JWT_ACCESS_EXPIRATION_MINUTES` | `15` | canonical §8 |
 | | `JWT_REFRESH_EXPIRATION_DAYS` | `7` | canonical §8 |
-| | `COOKIE_SECURE` | `false` (dev) / `true` (deploy) | Cookie refresh token (mục 4.3) |
-| | `COOKIE_SAME_SITE` | `Strict` | mục 4.3 |
 | **Mail** | `MAIL_HOST` | `mailhog` | backend |
 | | `MAIL_PORT` | `1025` | backend |
 | | `MAIL_USERNAME` / `MAIL_PASSWORD` | *(rỗng — MailHog không cần)* | backend |
@@ -3098,10 +3027,10 @@ Canonical §1.3: *"Không hardcode host/user/password ở bất kỳ đâu; toà
 |---|---|---|---|---|
 | **QĐ-01** | **Modular monolith** — 1 deployable, 11 package dọc, giao tiếp qua interface `service` | Microservices (11 service + gateway + broker); monolith phẳng không module | `[§11.6]` yêu cầu *"tách theo **service/layer** rõ ràng"* — không phải tách process. Nghiệp vụ lõi (duyệt tin, thanh toán, sentiment) cần **transaction ACID xuyên nhiều bảng đa module**; microservices buộc dùng saga + eventual consistency → đổi tính đúng đắn lấy khả năng scale mà đề án **không cần**. Monolith phẳng thì mất ranh giới module. Modular monolith giữ **cả** ACID **lẫn** ranh giới, và **giữ đường tách sau** | `[§0.2]` `[§11.6]` `[§15]` |
 | **QĐ-02** 🔶 | **"Người cho ở ghép" / "Người cần ở ghép" KHÔNG phải role** — chỉ là ngữ cảnh: `ROLE_LANDLORD` đăng tin `category=ROOMMATE` / `ROLE_TENANT` tìm tin đó | Tạo `ROLE_ROOMMATE_HOST` + `ROLE_ROOMMATE_SEEKER` → 6 role | **Điểm mờ:** `[§1.1]` liệt kê chúng như actor riêng, nhưng `[§7.3]` gộp tiêu đề *"Chủ trọ / Người cho ở ghép"* — mâu thuẫn nội bộ. Quyết theo `[§7.3]`: hai "actor" này có **tập quyền y hệt** landlord/tenant, chỉ khác **loại tin** họ thao tác. Tách role sẽ nhân đôi ma trận permission mà không thêm một quyền nào khác biệt → phức tạp vô ích | canonical §4.1; `[§1.1]` `[§7.3]` `[§0.3]` |
-| **QĐ-03** 🔶 | **RBAC 2 tầng Role → Permission** (27 permission), kiểm bằng `@PreAuthorize("hasAuthority(...)")` + tầng thứ 3 kiểm **ownership** | Chỉ `hasRole('ADMIN')` — RBAC 1 tầng | **Điểm mờ:** `[§11.2]` chỉ nói *"Áp dụng Role-Based Access Control"*, không nói mấy tầng. Nhưng cùng mục đặt ranh giới tinh vi: *"Moderator chỉ có quyền kiểm duyệt, **không quản lý cấu hình tài chính**"* — với 1 tầng, mỗi ranh giới như vậy phải viết `hasRole('A') or hasRole('B')` rải rác, đổi chính sách = sửa hàng chục chỗ. 2 tầng: đổi chính sách = sửa dữ liệu `role_permissions`. Thêm tầng 3 vì permission trả lời "được làm **loại** việc này", không trả lời "bản ghi **này** có phải của bạn" — `[§11.2]` đòi cả hai | canonical §4.2; `[§11.2]` `[§1.2]` |
+| **QĐ-03** 🔶 | **RBAC role-only** kiểm bằng `@PreAuthorize("hasRole/hasAnyRole")` + tầng ownership | Chỉ `hasRole('ADMIN')` — RBAC 1 tầng | **Điểm mờ:** `[§11.2]` chỉ nói *"Áp dụng Role-Based Access Control"*, không nói mấy tầng. Ranh giới hiện hành được viết tường minh bằng `hasRole/hasAnyRole`; các nhánh cần dữ liệu cụ thể vẫn kiểm ownership/business rule trong service, ví dụ tenant chỉ được đăng `ROOMMATE` và người dùng chỉ sửa tin của chính mình | canonical §4.2; `[§11.2]` `[§1.2]` |
 | **QĐ-04** | **`ListingStateMachine` là điểm vào DUY NHẤT** cho mọi chuyển trạng thái; cấm `setStatus()` trực tiếp | Mỗi service tự `setStatus()` | `[§5.1]` định nghĩa 15 chuyển trạng thái hợp lệ + ràng buộc (`LOCKED` không được `RENEW`/`SUBMIT`/`SOFT_DELETE`; `REJECTED` phải sửa+duyệt lại). Rải logic này ra 6 service = **chắc chắn** có chỗ quên → tin `LOCKED` được gia hạn. Một class = một chỗ đúng, test được, và là nơi thi hành ranh giới *"AI không được `LOCK`"* (QĐ-11) | canonical §5.1; `[§5.1]` `[§3.5]` |
 | **QĐ-05** 🔶 | **`publiclyVisible` qua MỘT method `ListingVisibilityService.publicStatuses()`** — cấm viết cứng `status='ACTIVE'` | Mỗi query tự viết `status = 'ACTIVE'` | **Điểm mờ nghiêm trọng:** `[§3.7]` nói *"Chỉ hiển thị tin Active"*, nhưng `[§5.1]` nói `NeedReview` *"**có thể vẫn hiển thị hoặc tạm ẩn tùy cấu hình**"* — **hai câu mâu thuẫn**. Nếu để mỗi query tự viết, hệ thống sẽ có 8 chỗ hiểu khác nhau, và bật config `listing.need_review.publicly_visible` sẽ làm sai **âm thầm** ở chỗ nào không ai biết. Chọn mặc định `true` theo tinh thần `[§3.13]` *"Report không tự động khóa tin ngay"* | canonical §5.2; `[§5.1]` `[§3.7]` `[§3.13]` |
-| **QĐ-06** | **Access token 15' trong memory + refresh token 7 ngày trong cookie httpOnly/Secure/SameSite=Strict/Path=/api/auth** | Cả 2 trong `localStorage`; refresh trong `localStorage` | Canonical §8 đầu tư lớn vào bảo vệ refresh token (rotation, reuse detection, hash SHA-256). Toàn bộ đầu tư đó **vô hiệu** nếu client đặt refresh token nơi mọi script đọc được. Với cookie httpOnly, XSS tệ nhất chỉ lấy access token sống ≤15' và **không gia hạn được** — thiệt hại có trần. `SameSite=Strict` + `Path=/api/auth` đồng thời triệt CSRF của chính cookie đó | mục 4.3; canonical §8; `[§11.1]` |
+| **QĐ-06** (v3 — đảo so với v2) | **Cả access token và refresh token đều ở `localStorage`; backend không đặt cookie nào** | Access token trong memory + refresh token trong cookie httpOnly (quyết định v2) | Phương án cookie chỉ giữ được ưu thế khi FE/BE cùng site và trình duyệt không chặn cookie; ở môi trường triển khai thật của đồ án, `SameSite=Strict` gây mất phiên khó chẩn đoán, và `change-password` phụ thuộc cookie một cách ngầm. Đổi lại chấp nhận rủi ro XSS đọc được refresh token, bù bằng rotation + reuse detection + TTL cấu hình được. Hệ quả tốt: không còn cookie nào ⇒ không còn bề mặt CSRF | mục 4.3; canonical §8, §17.3 |
 | **QĐ-07** | **`csrf().disable()`** + ghi rõ lý do trong `SecurityConfig` | Bật CSRF token cho mọi endpoint | `[§11.1]` viết *"Chống CSRF cho form quan trọng **nếu dùng cookie session**"* — mệnh đề **có điều kiện**, và hệ thống **không** dùng cookie session (`STATELESS`). CSRF cần **xác thực ngầm**; trình duyệt **không bao giờ** tự gắn `Authorization: Bearer`. Cookie duy nhất (refresh) đã `SameSite=Strict` + `Path=/api/auth` → không chạm endpoint nghiệp vụ. Bật CSRF token = thêm nghi thức không chặn thêm tấn công nào | mục 5.3.3; canonical §8; `[§11.1]` |
 | **QĐ-08** 🔶 | **Sentiment chạy async qua `ApplicationEvent` + `@TransactionalEventListener(AFTER_COMMIT)` + `@Async`**, KHÔNG gọi trực tiếp | `CommentServiceImpl` gọi thẳng `sentimentService.analyze()` trong transaction | **Điểm mờ:** `[§11.6]` chỉ nói *"AI **có thể** chạy async bằng queue"* — "có thể" là gợi ý, không bắt buộc. Nhưng `[§9.1]` **bắt buộc**: *"AI lỗi hoặc timeout: bình luận **vẫn được lưu**"*. Gọi trực tiếp trong transaction → AI ném exception → **rollback cả bình luận** → vi phạm `[§9.1]`. Event còn phá phụ thuộc compile `interaction → ai`, giữ DAG (luật 7) và mở đường lên broker (mục 12.3) | mục 3.3, 6.1, 7.3; `[§9.1]` `[§11.6]` |
 | **QĐ-09** 🔶 | **`PaymentGateway` là interface**; impl mặc định `SandboxPaymentGateway`, chọn qua `${PAYMENT_GATEWAY}` | Viết cứng logic VNPay vào `PaymentServiceImpl` | **Điểm mờ:** `[§0.2]` nói *"Thanh toán **có thể** mô phỏng **hoặc** tích hợp cổng sandbox"* — để ngỏ cả hai. Quyết: **cả hai**, qua interface. Sandbox chạy được **offline khi bảo vệ đồ án** (rủi ro chí mạng nếu phụ thuộc mạng ngoài); VNPay/MoMo cắm thêm không đụng lõi. Cấu trúc này cũng chính là thứ `[§13.2]` khuyên: *"dùng sandbox hoặc mô phỏng để tránh phụ thuộc pháp lý, đối soát thật"* | mục 3.4, 14.5; `[§0.2]` `[§13.2]` `[§3.14]` |
@@ -3120,7 +3049,7 @@ Canonical §1.3: *"Không hardcode host/user/password ở bất kỳ đâu; toà
 | 1 | Luật phụ thuộc **7** (giao tiếp ngược chiều chỉ qua `ApplicationEvent`) và **8** (không `@ManyToOne` chéo module lên tầng trên) | 3.3 | Bổ sung vào canonical §3 (hiện có 6 luật) |
 | 2 | Thư mục `statemachine/`, `engine/`, `gateway/`, `specification/`, `listener/`, `common/event/` | 3.4 | Bổ sung vào cây package canonical §3 |
 | 3 | Luật phân lớp frontend **F1–F6** | 4.1 | Bổ sung vào canonical §12 |
-| 4 | Access token trong memory + refresh token trong **cookie httpOnly** (canonical §8 chốt token nhưng không chốt nơi lưu ở client) | 4.3 | Bổ sung vào canonical §8 |
+| 4 | Cả hai token ở **`localStorage`**, backend bỏ hết cookie (v3 — đảo quyết định v2) | 4.3 | Đã ghi vào canonical §8 + §17.3 |
 | 5 | Config key **`security.refresh.grace_seconds`** (mặc định `10`) — grace period rotation nhiều tab | 4.4 | Bổ sung vào canonical §9 |
 | 6 | Cột `family_id`, `revoked_at`, `replaced_by_id`, `user_agent`, `ip_address` cho `refresh_tokens` (canonical §8 nói "thu hồi cả họ token" nhưng chưa định nghĩa "họ") | 5.1 | Chuyển cho tài liệu thiết kế CSDL |
 | 7 | Chặn **decompression bomb** khi upload ảnh | 5.3.4 | Bổ sung vào canonical §8 |

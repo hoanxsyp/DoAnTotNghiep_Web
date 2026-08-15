@@ -26,8 +26,6 @@ public class ListingActionResponse {
     private Instant expiredAt;
     private Long daysRemaining;
 
-    // ----- submit -----
-    private Boolean autoApproved;
 
     // ----- hide / unhide -----
     private Boolean canUnhide;

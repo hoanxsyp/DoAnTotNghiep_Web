@@ -12,7 +12,7 @@ import com.webtro.common.enums.ReportStatus;
 import com.webtro.common.enums.ReportTargetType;
 import com.webtro.constant.ConfigKey;
 import com.webtro.constant.ErrorCode;
-import com.webtro.constant.PermissionCode;
+import com.webtro.constant.RoleCode;
 import com.webtro.exception.BusinessException;
 import com.webtro.exception.BusinessRuleException;
 import com.webtro.exception.ConflictException;
@@ -800,7 +800,7 @@ public class ModerationServiceImpl implements ModerationService {
     public ResolveGroupResponse resolveGroup(ResolveGroupRequest request, Long moderatorId) {
         // Kiểm quyền TRƯỚC khi đóng bất kỳ report nào (ADR-10: bulk không là cửa sau vượt phân quyền).
         if (request.getResult() == ModerationResult.SEVERE_LOCK
-                && !SecurityUtils.hasPermission(PermissionCode.LISTING_LOCK)) {
+                && !SecurityUtils.hasRole(RoleCode.ADMIN)) {
             throw new ForbiddenException(ErrorCode.REPORT_RESULT_FORBIDDEN);
         }
         TargetInfo target = resolveTargetOrThrow(request.getTargetType(), request.getTargetId());
@@ -1111,9 +1111,9 @@ public class ModerationServiceImpl implements ModerationService {
     }
 
     private void guardLockPermission(ModerationResult result) {
-        if (result == ModerationResult.SEVERE_LOCK && !SecurityUtils.hasPermission(PermissionCode.LISTING_LOCK)) {
+        if (result == ModerationResult.SEVERE_LOCK && !SecurityUtils.hasRole(RoleCode.ADMIN)) {
             throw new ForbiddenException(ErrorCode.FORBIDDEN,
-                    "Khóa tin là quyền của Admin (LISTING_LOCK)");
+                    "Khóa tin là quyền của Admin");
         }
     }
 

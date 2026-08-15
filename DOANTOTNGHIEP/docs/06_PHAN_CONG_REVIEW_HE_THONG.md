@@ -1,5 +1,9 @@
 # 📋 Tài liệu Phân công Review Hệ thống — Website Quảng cáo & Tìm kiếm Phòng trọ
 
+<!-- WEBTRO_ROLE_ONLY_UPDATE_START -->
+> **Cập nhật 2026-08-09:** phân quyền hiện hành là **role-only**. Hệ thống không còn entity/repository/bảng nghiệp vụ `permissions` hay `role_permissions`; Flyway `V15__drop_permission_tables.sql` drop hai bảng này sau các migration lịch sử. Backend kiểm tra bằng `@PreAuthorize("hasRole/hasAnyRole")` và `SecurityUtils.hasRole/hasAnyRole`; JWT chỉ chứa `role`. Tenant được phép tạo tin nhưng service chỉ chấp nhận `categoryCode = ROOMMATE`; Landlord/Admin tạo được mọi loại tin. Access token 15 phút, refresh token 1 ngày, cả hai lưu `localStorage`; khi refresh token còn dưới 15 phút và access token vẫn còn hạn, frontend chủ động gọi `/api/auth/refresh` để xoay refresh token.
+<!-- WEBTRO_ROLE_ONLY_UPDATE_END -->
+
 > **Mục đích tài liệu:** Chia toàn bộ hệ thống (Backend + Frontend) thành **03 cụm công việc cân bằng** để giao cho **03 người** cùng *kiểm tra luồng hoạt động, review nghiệp vụ, soát API, soát dữ liệu DB → BE → API → FE → người dùng, phát hiện bug và đề xuất chỉnh sửa*. Đây **KHÔNG** phải tài liệu phát triển tính năng mới — mục tiêu là **hoàn thiện & bảo đảm chất lượng** website hiện có.
 
 > **Cách dùng:** Mỗi người đọc phần "# Người N" của mình để hiểu đầy đủ cụm phụ trách (không cần hỏi thêm). Đọc mục **"Module dùng chung"** và **"Bản đồ phụ thuộc"** ở cuối để biết ranh giới phối hợp và thứ tự đọc. Tuân theo **"Sơ đồ quy trình review"** khi thực hiện.
@@ -12,7 +16,7 @@
 |---|---|---|
 | Backend | Java 21 · Spring Boot 3.3.5 · Spring Security · Spring Data JPA · Flyway · JWT | Kiến trúc hexagonal theo module, giao tiếp chéo qua **SPI Gateway** + **ApplicationEvent (AFTER_COMMIT)**; mapper **builder thủ công** (không MapStruct) |
 | Frontend | React 18 · Vite · JavaScript · MUI v5 · Redux Toolkit · React Router v6 | Lazy-load route; **axios interceptor** tự refresh token |
-| Database | MySQL 8.4 (Flyway `V1..V12`, 46 bảng) | Schema do Flyway quản; Hibernate `ddl-auto=validate` |
+| Database | MySQL 8.4 (Flyway `V1..V14`, 45 bảng) | Schema do Flyway quản; Hibernate `ddl-auto=validate` |
 | Cache / Rate-limit / JWT blacklist | Redis 7.4 | — |
 | Mail (dev) | MailHog | Xem tại `http://localhost:8025` |
 | Triển khai | Docker Compose (5 service) | `docker compose up --build`; **1 file cấu hình duy nhất** `application.yml` (mọi thứ qua biến môi trường) |
@@ -23,9 +27,9 @@
 - **Envelope response:** `ApiResponse { success, message, data, errorCode, timestamp, path, traceId }`.
 - **Phân trang:** `PageResponse { items, page, size, totalElements, totalPages, first, last }` — lưu ý danh sách nằm ở **`items`** (không phải `content`).
 - **Đăng nhập:** body dùng field **`emailOrPhone`** (không phải `email`).
-- **Phân quyền:** RBAC 2 tầng — **4 vai trò → 27 quyền**; kiểm soát bằng `@PreAuthorize("hasAuthority('...')")`.
+- **Phân quyền:** Phân quyền role-only — **4 vai trò**, kiểm soát bằng `@PreAuthorize("hasRole/hasAnyRole")`.
 - **AI:** cả 4 module là **rule-based in-process** (không gọi dịch vụ ngoài).
-- **Tài khoản demo:** admin `admin@webtro.local`; `landlordN@webtro.local` / `tenantN@webtro.local`, mật khẩu chung `Test@1234`.
+- **Tài khoản demo:** admin `admin@webtro.local` dùng `ADMIN_PASSWORD` trong `.env` (hiện tại `Admin@12345`); `moderator@webtro.local`, `landlordN@webtro.local` và `tenantN@webtro.local` dùng mật khẩu chung `Test@1234`.
 
 ---
 
@@ -53,7 +57,7 @@
 
 ## Các module phụ trách
 
-- **Module 1: Authentication & Security/RBAC** — AUTH-01..08 (đăng ký, đăng nhập, refresh/logout, quên/đổi mật khẩu, xác thực email/SĐT, RBAC 2 tầng)
+- **Module 1: Authentication & Security/RBAC** — AUTH-01..08 (đăng ký, đăng nhập, refresh/logout, quên/đổi mật khẩu, xác thực email/SĐT, role-only)
 - **Module 2: User & Profile & Follow** — USER-01..06 (hồ sơ cá nhân, hồ sơ chủ trọ, ảnh đại diện, xác thực chủ trọ, hồ sơ công khai, theo dõi chủ trọ)
 - **Module 3: Notification** — NOTI-01..06 (danh sách thông báo, đếm chưa đọc, đánh dấu đã đọc, xóa, cài đặt nhận thông báo)
 - **Module 4: Moderation người dùng (Report / Warning / BannedKeyword)** — ADM-10, RPT-03..06 (báo cáo vi phạm, xử lý báo cáo, cảnh báo vi phạm, từ khóa cấm)
@@ -69,11 +73,11 @@
 
 - Đăng ký/kích hoạt tài khoản (email verification bắt buộc trước khi đăng nhập được).
 - Đăng nhập bằng **`emailOrPhone` + password** (không phải chỉ email — điểm khác biệt quan trọng so với nhiều hệ thống khác).
-- Phát hành và xoay vòng (rotate) JWT access token (15 phút) + refresh token (7 ngày, cookie httpOnly).
+- Phát hành và xoay vòng (rotate) JWT access token (15 phút) + refresh token (1 ngày). **Cả hai token do client giữ trong `localStorage`; backend không đặt cookie nào** (canonical §8, §17.3).
 - Phát hiện refresh token bị tái sử dụng (reuse detection) → thu hồi toàn bộ họ token (`family_id`) — chống hacker dùng lại token bị đánh cắp.
 - Đăng xuất: thu hồi refresh token + đưa access token hiện tại vào blacklist Redis (để token chưa hết hạn vẫn không dùng lại được).
-- Quên/đặt lại/đổi mật khẩu, xác thực email (link) và số điện thoại (OTP 6 số, giả lập qua email vì SMS provider chưa có — dùng MailHog dev).
-- RBAC 2 tầng: 4 **Role** (`ROLE_TENANT`, `ROLE_LANDLORD`, `ROLE_MODERATOR`, `ROLE_ADMIN`) → 27 **Permission** cố định id 1..27, ánh xạ qua `role_permissions`. Authorization thực thi bằng `@PreAuthorize("hasAuthority('...')")` trên từng endpoint — không dùng `hasRole()`.
+- Quên/đặt lại/đổi mật khẩu, xác thực email (link hoặc OTP 6 số) và số điện thoại (OTP 6 số, giả lập qua email vì SMS provider chưa có — dùng MailHog dev).
+- Phân quyền role-only: 4 **Role** (`ROLE_TENANT`, `ROLE_LANDLORD`, `ROLE_MODERATOR`, `ROLE_ADMIN`) lưu ở `users.role_id`. Authorization thực thi bằng `@PreAuthorize("hasRole/hasAnyRole")`; không còn bảng `permissions`/`role_permissions`.
 
 **Vì sao cần / hỏng thì ảnh hưởng gì:** Đây là lớp gác cổng (gateway) của toàn site. Nếu:
 - JWT filter sai → toàn bộ API có thể bị bypass phân quyền hoặc ngược lại chặn nhầm người dùng hợp lệ (mất doanh thu, mất trải nghiệm).
@@ -87,23 +91,23 @@ Các trang nằm dưới `frontend_webtro/src/pages/auth/*`, dùng chung layout 
 
 | File | Màn hình | Thành phần chính |
 |---|---|---|
-| `pages/auth/LoginPage.jsx` | Đăng nhập | Form 2 field (`emailOrPhone`, `password`), toggle hiện/ẩn mật khẩu, checkbox "Ghi nhớ", link "Quên mật khẩu?", `Alert` báo lỗi riêng cho từng mã lỗi (`ACCOUNT_NOT_VERIFIED` → hiện nút "Gửi lại email" gọi `resendVerification`; `ACCOUNT_LOCKED`/403; `429` rate-limit hiện số phút chờ; `INVALID_CREDENTIALS`). Sau đăng nhập, điều hướng theo vai trò: Admin/Moderator → `/admin/dashboard`, Landlord → `/quan-ly/tong-quan`, còn lại → `/`. |
+| `pages/auth/LoginPage.jsx` | Đăng nhập | Form 2 field (`emailOrPhone`, `password`), toggle hiện/ẩn mật khẩu, checkbox "Ghi nhớ", link "Quên mật khẩu?", `Alert` báo lỗi riêng cho từng mã lỗi (`ACCOUNT_NOT_VERIFIED` → hiện nút "Gửi lại email" gọi `resendVerification`; `ACCOUNT_LOCKED`/403; `429` rate-limit hiện số phút chờ; `INVALID_CREDENTIALS`). Sau đăng nhập, điều hướng theo vai trò: Admin → `/admin/dashboard`; Moderator → `/admin/kiem-duyet`, Landlord → `/quan-ly/tong-quan`, còn lại → `/`. |
 | `pages/auth/RegisterPage.jsx` | Đăng ký | Chọn vai trò (`ToggleButtonGroup` Tenant/Landlord), họ tên, email, SĐT (regex số VN `VN_PHONE`), mật khẩu + checklist độ mạnh trực quan (`ChecklistRow`), xác nhận mật khẩu, checkbox đồng ý điều khoản. Sau khi đăng ký thành công hiện màn "kiểm tra email" (mask email) + đếm ngược cooldown gửi lại. |
 | `pages/auth/ForgotPasswordPage.jsx` | Quên mật khẩu | Form 1 field email; luôn hiện thông báo thành công (khớp hành vi BE luôn trả 200 để chống dò tài khoản); có cooldown đếm ngược. |
 | `pages/auth/ResetPasswordPage.jsx` | Đặt lại mật khẩu | Đọc `token` từ query string, form mật khẩu mới + xác nhận. |
 | `pages/auth/VerifyEmailPage.jsx` | Xác thực email | Tự động gọi `authApi.verifyEmail({token})` khi mount (chặn gọi 2 lần bằng `useRef` vì React StrictMode); 3 trạng thái `loading/success/error`; nếu lỗi có Dialog nhập email để "Gửi lại email xác thực". |
 | `pages/tenant/ChangePasswordPage.jsx` | Đổi mật khẩu (đã đăng nhập) | Form 3 field (mật khẩu hiện tại/mới/xác nhận), mỗi field có icon ẩn/hiện riêng; cảnh báo "các thiết bị khác sẽ bị đăng xuất". |
 
-Interceptor tự refresh nằm ở `src/api/axiosClient.js`: request gắn `Authorization` từ `tokenService`; response 401 (trừ chính call `/auth/refresh` hoặc `/auth/login`) → tự gọi `POST /auth/refresh` (cookie tự gửi kèm) **một lần**, dùng hàng đợi `pendingQueue` để nhiều request 401 đồng thời chỉ kích hoạt 1 lần refresh, rồi phát lại toàn bộ request đã treo với access token mới. Refresh thất bại → xóa token + gọi `onAuthFailure` (đăng xuất cứng, đăng ký từ `App`).
+Interceptor tự refresh nằm ở `src/api/axiosClient.js`: request gắn `Authorization` từ `tokenService`; response 401 (trừ chính call `/auth/refresh` hoặc `/auth/login`) → tự gọi `POST /auth/refresh` (gửi refresh token trong **body**, lấy từ `localStorage`) **một lần**, dùng hàng đợi `pendingQueue` để nhiều request 401 đồng thời chỉ kích hoạt 1 lần refresh, rồi phát lại toàn bộ request đã treo với access token mới. Refresh thất bại → xóa cả 2 token + gọi `onAuthFailure` (đăng xuất cứng, đăng ký từ `App`). **Điểm review quan trọng:** interceptor phải lưu **cả** `accessToken` lẫn `refreshToken` mới sau mỗi lần refresh — backend xoay vòng token, gửi lại token cũ sẽ bị reuse-detection thu hồi cả họ token.
 
 ### 3. Chức năng Backend
 
-**Controller:** `modules/auth/controller/AuthController.java` — 11 endpoint (`/api/auth/*`), không chứa logic nghiệp vụ, chỉ trích IP/User-Agent/cookie/header và gọi `AuthService`.
+**Controller:** `modules/auth/controller/AuthController.java` — 11 endpoint (`/api/auth/*`), không chứa logic nghiệp vụ, chỉ trích IP/User-Agent/header và gọi `AuthService`. Không còn xử lý cookie nào.
 
 **Service:** `AuthService` / impl `AuthServiceImpl` (846 dòng) — chứa toàn bộ nghiệp vụ: hash BCrypt (`PasswordEncoder`), sinh token ngẫu nhiên (`SecureRandom`, 32 byte hex = 64 ký tự), băm SHA-256 trước khi lưu DB (token/OTP không bao giờ lưu plaintext), rotation refresh token, reuse detection.
 
 **Security infrastructure** (`com.webtro.security.*`):
-- `JwtService` — sinh/validate JWT (claims gồm `userId`, `email`, `roles`, `permissions`, `jti`), TTL đọc từ `JwtProperties` (`app.jwt.*`).
+- `JwtService` — sinh/validate JWT (claims gồm `userId`, `email`, `role`, `jti`), TTL đọc từ `JwtProperties` (`app.jwt.*`).
 - `JwtAuthenticationFilter` (`OncePerRequestFilter`) — parse Bearer token, nếu không nằm trong blacklist thì dựng `CustomUserDetails` + set `SecurityContextHolder`. **Không truy DB mỗi request** — authority lấy thẳng từ claims JWT để tối ưu hiệu năng (đánh đổi: tài khoản bị khóa sau khi phát token vẫn còn hiệu lực tới khi access token hết hạn ≤ 15 phút hoặc tới lần refresh kế — các thao tác nhạy cảm phải tự kiểm tra lại ở service).
 - `TokenBlacklistService` — Redis, key `jwt:blacklist:<jti>`, TTL = thời gian còn lại của token. **Fail-closed**: Redis lỗi → coi như đã bị blacklist (từ chối) — ưu tiên an toàn hơn khả dụng.
 - `RateLimitService` — Redis `INCR` + `EXPIRE`, tự viết (không dùng bucket4j). **Fail-open**: Redis lỗi → cho qua (log WARN) — không để sự cố hạ tầng biến thành sập toàn site.
@@ -114,7 +118,7 @@ Interceptor tự refresh nằm ở `src/api/axiosClient.js`: request gắn `Auth
 **Business logic đáng chú ý (đọc trực tiếp từ `AuthServiceImpl`):**
 - Đăng nhập: không phân biệt "sai định danh" vs "sai mật khẩu" — luôn trả `INVALID_CREDENTIALS` để chống dò tài khoản. Sau `security.login.captcha_after_attempts` (mặc định 3) lần sai bắt buộc `captchaToken`. Sau `security.login.max_attempts` (mặc định 5) lần trong `security.login.window_minutes` (15 phút) → khóa tạm `security.login.lock_minutes` (15 phút), trả `429`.
 - Refresh: cửa sổ ân hạn `security.refresh.grace_seconds` (mặc định 10s) — token vừa bị xoay vòng còn được coi hợp lệ trong 10s để tránh false-positive reuse detection khi mạng chập chờn/gọi trùng; ngoài cửa sổ này mà token cũ bị dùng lại → thu hồi CẢ HỌ token (`revokeFamily`, lý do `REUSE_DETECTED`).
-- Đổi mật khẩu: thu hồi refresh token của **các thiết bị khác**, giữ lại họ token của thiết bị hiện tại (theo `family_id` của refresh token cookie hiện có).
+- Đổi mật khẩu: thu hồi refresh token của **các thiết bị khác**, giữ lại họ token của thiết bị hiện tại (theo `family_id` của refresh token client gửi kèm trong body `ChangePasswordRequest.refreshToken`). **Điểm review:** nếu FE quên gửi trường này, người dùng bị đăng xuất khỏi chính thiết bị đang đổi mật khẩu — lỗi âm thầm, không ném ngoại lệ.
 - Đặt lại mật khẩu (qua email): thu hồi **toàn bộ** refresh token của user (mọi thiết bị).
 - Mật khẩu mới không được trùng mật khẩu cũ (`NEW_PASSWORD_SAME_AS_OLD`).
 - OTP số điện thoại: tối đa `OTP_MAX_ATTEMPTS = 5` lần nhập sai trước khi phải xin OTP mới; TTL 5 phút; cooldown gửi lại 60s; tối đa 5 lần/ngày.
@@ -131,9 +135,9 @@ Interceptor tự refresh nằm ở `src/api/axiosClient.js`: request gắn `Auth
 3. Tra user theo email (chứa `@`) hoặc theo SĐT chuẩn hóa; so khớp BCrypt.
 4. Sai → tăng bộ đếm rate-limit, trả `INVALID_CREDENTIALS` (401), không tiết lộ lý do cụ thể.
 5. Đúng mật khẩu nhưng tài khoản `LOCKED`/`DELETED`/`PENDING_VERIFY` → trả lỗi tương ứng (403).
-6. Thành công: reset bộ đếm sai, cập nhật `last_login_at`, sinh `family_id` mới (UUID), tạo `refresh_tokens` (hash SHA-256), sinh access token JWT (claims roles/permissions), set cookie `httpOnly; Secure; SameSite=Strict; Path=/api/auth`.
+6. Thành công: reset bộ đếm sai, cập nhật `last_login_at`, sinh `family_id` mới (UUID), tạo `refresh_tokens` (hash SHA-256), sinh access token JWT (claim `role` dạng chuỗi), trả cả 2 token trong body.
 7. FE lưu access token vào `tokenService` (bộ nhớ/localStorage tuỳ cấu hình), điều hướng theo vai trò.
-8. Khi access token hết hạn (15 phút), lần gọi API tiếp theo nhận 401 → axios interceptor tự gọi `/auth/refresh` (cookie refresh gửi kèm tự động) → nhận access token mới → phát lại request gốc, người dùng không hề biết.
+8. Khi access token hết hạn (15 phút), lần gọi API tiếp theo nhận 401 → axios interceptor tự gọi `/auth/refresh` (refresh token lấy từ `localStorage`, gửi trong body) → nhận **cặp** token mới, ghi đè `localStorage` → phát lại request gốc, người dùng không hề biết.
 9. Nếu refresh cũng thất bại (refresh token hết hạn/bị thu hồi/reuse) → xóa token phía client, chuyển về trang đăng nhập.
 
 ```mermaid
@@ -148,11 +152,11 @@ flowchart TD
     F -- PENDING_VERIFY --> F2[403 ACCOUNT_NOT_VERIFIED]
     F -- DELETED --> F3[403 ACCOUNT_DELETED]
     F -- ACTIVE --> G[Reset bộ đếm sai\nSinh access token 15' + refresh token 7d\nfamily_id mới]
-    G --> H[Set-Cookie refresh token\nTrả accessToken trong body]
+    G --> H[Trả accessToken + refreshToken trong body\nClient lưu localStorage]
     H --> I[FE lưu accessToken, điều hướng theo vai trò]
     I --> J[Gọi API khác kèm Bearer accessToken]
     J --> K{401 vì hết hạn?}
-    K -- Có --> L[axios interceptor: POST /auth/refresh\ncookie tự gửi]
+    K -- Có --> L[axios interceptor: POST /auth/refresh\nrefresh token trong body]
     L --> M{Refresh hợp lệ?}
     M -- Có --> N[Access token mới -> phát lại request gốc]
     M -- Không (hết hạn/reuse) --> O[Xóa token, chuyển /dang-nhap]
@@ -161,7 +165,7 @@ flowchart TD
 
 ### 5. Dữ liệu chạy như thế nào
 
-`LoginRequest {emailOrPhone, password, captchaToken?, rememberDevice}` → FE validate Yup (bắt buộc 2 field) → `POST /api/auth/login` → BE bind vào `LoginRequest` DTO, `@Valid` kiểm `@NotBlank/@Size` → `AuthServiceImpl.login()`: chuẩn hóa `identifier` (trim + lowercase), tính `counterId = IP:sha256(identifier)` để rate-limit không lộ định danh gốc trong Redis key → tra `UserRepository` → so khớp `PasswordEncoder` trên `passwordHash` (BCrypt, cột `VARCHAR(72)`) → build `LoginResponse` (access/refresh token, `AuthUserResponse` gồm roles/permissions/`landlordVerified`) qua `AuthMapper` (builder thủ công, không MapStruct) → Controller set cookie + bọc `ApiResponse.success(data, message)` → FE `authApi.login()` unwrap `response.data.data`, dispatch Redux `authSlice.login` lưu `accessToken` + `user` vào store, `tokenService.set()` lưu token cho interceptor.
+`LoginRequest {emailOrPhone, password, captchaToken?, rememberDevice}` → FE validate Yup (bắt buộc 2 field) → `POST /api/auth/login` → BE bind vào `LoginRequest` DTO, `@Valid` kiểm `@NotBlank/@Size` → `AuthServiceImpl.login()`: chuẩn hóa `identifier` (trim + lowercase), tính `counterId = IP:sha256(identifier)` để rate-limit không lộ định danh gốc trong Redis key → tra `UserRepository` → so khớp `PasswordEncoder` trên `passwordHash` (BCrypt, cột `VARCHAR(72)`) → build `LoginResponse` (access/refresh token, `AuthUserResponse` gồm `role` (chuỗi)/`landlordVerified`) qua `AuthMapper` (builder thủ công, không MapStruct) → Controller bọc `ApiResponse.success(data, message)` → FE `authApi.login()` unwrap `response.data.data`, dispatch Redux `authSlice.login` lưu `user` vào store, `tokenService.setTokens()` lưu **cả 2 token** vào `localStorage` cho interceptor.
 
 DTO biến đổi qua các lớp: `LoginRequest` (FE gửi) → Entity `User` (đọc, không ghi thêm ngoài `lastLoginAt`/`failedLoginCount`) → `RefreshToken` entity (ghi mới, chỉ lưu HASH) → `LoginResponse`/`TokenResponse`/`AuthUserResponse` (trả FE, KHÔNG bao giờ trả `passwordHash`).
 
@@ -169,29 +173,27 @@ DTO biến đổi qua các lớp: `LoginRequest` (FE gửi) → Entity `User` (�
 
 | Bảng | Vai trò | Quan hệ | Field quan trọng |
 |---|---|---|---|
-| `users` | Tài khoản gốc | 1-N với `user_roles`, `refresh_tokens`, `verifications`, `password_reset_tokens`; 1-1 với `user_profiles`, `landlord_profiles` | `email_uk`/`phone_uk` (generated column STORED, unique — chỉ tính khi `deleted_at IS NULL AND status <> 'DELETED'`, cho phép tái đăng ký sau khi xóa mềm); `password_hash VARCHAR(72)`; `status` (`ACTIVE/PENDING_VERIFY/LOCKED/DELETED`); `failed_login_count`; `locked_until/lock_reason/locked_by/locked_at` |
-| `roles` | 4 vai trò cố định | 1-N `role_permissions`, `user_roles` | `code` CHECK IN 4 giá trị `ROLE_*`; id 1..4 cố định (seed V2) |
-| `permissions` | 27 quyền cố định | 1-N `role_permissions` | `code`, `module`; id 1..27 cố định (seed V2) |
-| `role_permissions` | Ma trận N-N Role↔Permission | — | UNIQUE (`role_id`,`permission_id`); 49 dòng seed (Tenant 5, Landlord 8, Moderator 9, Admin 27) |
-| `user_roles` | N-N User↔Role | — | UNIQUE (`user_id`,`role_id`); `assigned_by` |
+| `users` | Tài khoản gốc | **N-1 với `roles` qua cột `role_id` (NOT NULL — mỗi user đúng 1 vai trò)**; 1-N với `refresh_tokens`, `verifications`, `password_reset_tokens`; 1-1 với `user_profiles`, `landlord_profiles` | `email_uk`/`phone_uk` (generated column STORED, unique — chỉ tính khi `deleted_at IS NULL AND status <> 'DELETED'`, cho phép tái đăng ký sau khi xóa mềm); `password_hash VARCHAR(72)`; `status` (`ACTIVE/PENDING_VERIFY/LOCKED/DELETED`); `failed_login_count`; `locked_until/lock_reason/locked_by/locked_at` |
+| `roles` | 4 vai trò cố định | 1-N `users` | `code` CHECK IN 4 giá trị `ROLE_*`; id 1..4 cố định (seed V2) | — | UNIQUE (`role_id`,`permission_id`); 49 dòng seed (Tenant 5, Landlord 8, Moderator 9, Admin 27) |
+| ~~`user_roles`~~ | **ĐÃ BỎ ở V13** — vai trò nằm ở `users.role_id` | — | Lịch sử đổi vai trò xem `audit_logs(ROLE_CHANGE)` |
 | `refresh_tokens` | Phiên đăng nhập | N-1 `users`; tự tham chiếu `parent_id` (chuỗi rotation) | `token_hash` (SHA-256, KHÔNG lưu raw), `family_id` (UUID, nhóm token cùng phiên gốc), `used_at`, `revoked_at`, `revoked_reason` (`ROTATED/REUSE_DETECTED/LOGOUT/PASSWORD_CHANGE/PASSWORD_RESET/ADMIN_LOCK/ROLE_CHANGE/ACCOUNT_LOCKED`) |
 | `password_reset_tokens` | Token quên mật khẩu | N-1 `users` | `token_hash`, `expires_at` (30'), `used_at` |
-| `verifications` | Dùng chung cho EMAIL/PHONE/LANDLORD | N-1 `users` | `type` CHECK (`EMAIL/PHONE/LANDLORD`), `status` (`PENDING/VERIFIED/REJECTED/EXPIRED`), `token_hash` (email), `otp_hash` (SĐT), `attempt_count`, `expires_at`, `reviewed_by/reviewed_at/reject_reason` (dùng chung cho xác thực chủ trọ ở Module 5) |
+| `verifications` | Dùng chung cho EMAIL/PHONE/LANDLORD | N-1 `users` | `type` CHECK (`EMAIL/PHONE/LANDLORD`), `status` (`PENDING/VERIFIED/REJECTED/EXPIRED`), `token_hash` (link email), `otp_hash` (email/SĐT), `attempt_count`, `expires_at`, `reviewed_by/reviewed_at/reject_reason` (dùng chung cho xác thực chủ trọ ở Module 5) |
 
-> Lưu ý: entity Java trong repo là `Verification` (số ít) ánh xạ bảng `verifications`, không tồn tại bảng `email_verification_tokens`/`phone_otp*` riêng như mô tả sơ bộ trong đề bài — thực tế cả email token lẫn phone OTP đều dùng CHUNG một bảng `verifications` phân biệt bằng cột `type`.
+> Lưu ý: entity Java trong repo là `Verification` (số ít) ánh xạ bảng `verifications`, không tồn tại bảng `email_verification_tokens`/`phone_otp*` riêng như mô tả sơ bộ trong đề bài — thực tế email token, email OTP và phone OTP đều dùng CHUNG một bảng `verifications` phân biệt bằng cột `type` và cột hash tương ứng.
 
 ### 7. API liên quan
 
 | Method | URL | Request | Response | Auth | Permission | Validation | Error chính |
 |---|---|---|---|---|---|---|---|
 | POST | `/api/auth/register` | `RegisterRequest{fullName,email,phone,password,confirmPassword,requestedRole,contactName?,contactPhone?,acceptTerms}` | `201` `RegisterResponse` | Public | — | `@ValidPassword`, `@ValidPhone`, `acceptTerms=true`; landlord bắt buộc contact | `EMAIL_ALREADY_EXISTS`, `PHONE_ALREADY_EXISTS`, `PASSWORD_CONFIRM_MISMATCH`, `LANDLORD_CONTACT_REQUIRED`, `REGISTER_RATE_LIMIT`(429) |
-| POST | `/api/auth/login` | `LoginRequest{emailOrPhone,password,captchaToken?,rememberDevice}` | `200` `LoginResponse{accessToken,refreshToken,expiresIn,refreshExpiresIn,user}` + Set-Cookie | Public | — | `@NotBlank` | `INVALID_CREDENTIALS`(401), `ACCOUNT_LOCKED`(403), `ACCOUNT_NOT_VERIFIED`(403), `ACCOUNT_DELETED`(403), `CAPTCHA_REQUIRED`, `LOGIN_ATTEMPT_EXCEEDED`(429) |
-| POST | `/api/auth/refresh` | Cookie `refresh_token` hoặc `RefreshTokenRequest{refreshToken}` | `200` `TokenResponse` + Set-Cookie mới | Cookie/Public | — | — | `REFRESH_TOKEN_INVALID`, `REFRESH_TOKEN_EXPIRED`, `REFRESH_TOKEN_REUSED`(401, thu hồi cả họ) |
-| POST | `/api/auth/logout` | Cookie + `LogoutRequest{refreshToken?}`, header `Authorization` | `204` + xóa cookie | Có thể kèm Bearer | — | — | idempotent, không lỗi khi token đã hết hạn |
+| POST | `/api/auth/login` | `LoginRequest{emailOrPhone,password,captchaToken?,rememberDevice}` | `200` `LoginResponse{accessToken,refreshToken,expiresIn,refreshExpiresIn,user{role}}` | Public | — | `@NotBlank` | `INVALID_CREDENTIALS`(401), `ACCOUNT_LOCKED`(403), `ACCOUNT_NOT_VERIFIED`(403), `ACCOUNT_DELETED`(403), `CAPTCHA_REQUIRED`, `LOGIN_ATTEMPT_EXCEEDED`(429) |
+| POST | `/api/auth/refresh` | `RefreshTokenRequest{refreshToken}` (**bắt buộc**) | `200` `TokenResponse{accessToken,refreshToken mới}` | Public | — | — | `REFRESH_TOKEN_INVALID`, `REFRESH_TOKEN_EXPIRED`, `REFRESH_TOKEN_REUSED`(401, thu hồi cả họ) |
+| POST | `/api/auth/logout` | `LogoutRequest{refreshToken?}`, header `Authorization` | `204` (client tự xóa localStorage) | Có thể kèm Bearer | — | — | idempotent, không lỗi khi token đã hết hạn |
 | POST | `/api/auth/forgot-password` | `ForgotPasswordRequest{email}` | `200` luôn thành công | Public | — | `@Email` | `FORGOT_PASSWORD` rate-limit 3/giờ (im lặng nếu vượt — check trước) |
 | POST | `/api/auth/reset-password` | `ResetPasswordRequest{token,newPassword,confirmPassword}` | `200` | Public | — | password strength | `PASSWORD_RESET_TOKEN_INVALID`, `PASSWORD_RESET_TOKEN_EXPIRED`, `NEW_PASSWORD_SAME_AS_OLD` |
 | POST | `/api/auth/change-password` | `ChangePasswordRequest{oldPassword,newPassword,confirmPassword}` | `200` | **Bearer bắt buộc** | `isAuthenticated()` | — | `OLD_PASSWORD_INCORRECT`, `NEW_PASSWORD_SAME_AS_OLD`, `PASSWORD_CONFIRM_MISMATCH` |
-| POST | `/api/auth/verify-email` | `VerifyEmailRequest{token}` | `200` `VerifyEmailResponse` | Public | — | — | `OTP_INVALID`, `OTP_EXPIRED`, `VERIFICATION_ALREADY_DONE`(409) |
+| POST | `/api/auth/verify-email` | `VerifyEmailRequest{token}` hoặc `{email,otp}` | `200` `VerifyEmailResponse` | Public | — | — | `OTP_INVALID`, `OTP_EXPIRED`, `OTP_ATTEMPT_EXCEEDED`, `VERIFICATION_ALREADY_DONE`(409) |
 | POST | `/api/auth/resend-verification` | `ResendVerificationRequest{email}` | `200` `{cooldownSeconds}` | Public | — | — | luôn 200 (chống dò email); cooldown 60s, tối đa 5/ngày |
 | POST | `/api/auth/send-phone-otp` | `SendPhoneOtpRequest{phone}` | `200` `PhoneOtpResponse{maskedPhone,expiresInSeconds,cooldownSeconds}` | **Bearer bắt buộc** | `isAuthenticated()` | SĐT phải khớp tài khoản | `INVALID_PHONE_FORMAT`, `VERIFICATION_ALREADY_DONE`, `PHONE_ALREADY_EXISTS` |
 | POST | `/api/auth/verify-phone` | `VerifyPhoneRequest{otp}` | `200` `VerifyPhoneResponse` | **Bearer bắt buộc** | `isAuthenticated()` | — | `OTP_INVALID`, `OTP_EXPIRED`, `OTP_ATTEMPT_EXCEEDED`(429, ≥5 lần sai) |
@@ -219,7 +221,7 @@ DTO biến đổi qua các lớp: `LoginRequest` (FE gửi) → Entity `User` (�
 - □ Đăng nhập đúng bằng email / bằng SĐT / SĐT có định dạng khác nhau (có `+84`, `0`).
 - □ Đăng nhập sai mật khẩu 3 lần → yêu cầu captcha; sai tiếp tới 5 lần → khóa tạm 15 phút, HTTP 429 kèm `Retry-After`.
 - □ Đăng nhập khi tài khoản `PENDING_VERIFY` / `LOCKED` / `DELETED`.
-- □ Refresh token hết hạn (>7 ngày) — refresh bằng token đã bị rotate (reuse) → phải thu hồi cả họ và các phiên khác đều bị đăng xuất.
+- □ Refresh token hết hạn (>1 ngày) — refresh bằng token đã bị rotate (reuse) → phải thu hồi cả họ và các phiên khác đều bị đăng xuất.
 - □ Refresh 2 request gần như đồng thời bằng CÙNG 1 refresh token (race condition) — kỳ vọng: 1 request qua nhờ grace window 10s, không bị coi là reuse giả.
 - □ Đổi mật khẩu: thiết bị hiện tại KHÔNG bị đăng xuất, thiết bị khác BỊ đăng xuất.
 - □ Đặt lại mật khẩu qua email: TẤT CẢ thiết bị bị đăng xuất.
@@ -235,12 +237,12 @@ DTO biến đổi qua các lớp: `LoginRequest` (FE gửi) → Entity `User` (�
 ### 10. Các lỗi dễ gặp
 
 - **Nhầm lẫn `emailOrPhone` với email thuần túy**: nếu FE/test hardcode field `email` cho login sẽ luôn 400 vì DTO yêu cầu đúng tên `emailOrPhone`.
-- **Quên đổi cookie path khi test qua Postman**: cookie refresh gắn `Path=/api/auth`, Postman/browser có thể không gửi cookie nếu gọi domain/path khác → luôn nhận `REFRESH_TOKEN_INVALID` dù mới login xong.
+- **Gửi lại refresh token CŨ sau khi đã refresh**: backend xoay vòng token mỗi lần refresh; dùng lại token cũ kích hoạt reuse-detection và thu hồi **cả họ token** → mất phiên. Đây là lỗi trễ, chỉ lộ ra ở lần refresh thứ hai.
 - **Redis không chạy (dev quên `docker compose up`)**: `TokenBlacklistService` fail-closed → **mọi request có Bearer token bị từ chối** (vì `isBlacklisted()` trả `true` khi Redis lỗi) — dễ nhầm là lỗi JWT trong khi thực chất là Redis down. Ngược lại `RateLimitService` fail-open nên rate-limit "biến mất" âm thầm khi Redis lỗi — dễ bỏ sót trong test bảo mật.
 - **So sánh sai `INVALID_CREDENTIALS` với 404 user not found**: code cố tình trả cùng lỗi cho cả 2 trường hợp; nếu FE hiển thị message khác nhau (do tự đoán) sẽ vô tình lộ email tồn tại hay không.
 - **Đếm `failed_login_count` trên `User` entity nhưng KHÔNG lưu ngay** (chỉ set field trong transaction, save entity khi transaction commit tự flush) — nếu code refactor tách transaction sai chỗ sẽ mất số đếm này (khác với bộ đếm rate-limit ở Redis — 2 cơ chế đếm song song, dễ gây nhầm lẫn khi debug).
-- **JWT chứa roles/permissions "đóng băng" tại thời điểm login/refresh**: nếu Admin đổi quyền của user đang online, quyền mới **chỉ có hiệu lực sau khi access token hết hạn (≤15 phút) hoặc user refresh** — không phải ngay lập tức. Đây là hành vi THIẾT KẾ (đã có cơ chế `revokeSessions` khi đổi role để ép logout), nhưng dễ bị hiểu nhầm là bug nếu không biết.
-- **Quên `HttpOnly` cookie không đọc được bằng JS**: FE cố tình đọc `document.cookie` để lấy refresh token sẽ luôn `undefined` — đúng chủ ý bảo mật, không phải lỗi.
+- **JWT chứa role "đóng băng" tại thời điểm login/refresh**: nếu Admin đổi quyền của user đang online, quyền mới **chỉ có hiệu lực sau khi access token hết hạn (≤15 phút) hoặc user refresh** — không phải ngay lập tức. Đây là hành vi THIẾT KẾ (đã có cơ chế `revokeSessions` khi đổi role để ép logout), nhưng dễ bị hiểu nhầm là bug nếu không biết.
+- **Tìm cookie `refresh_token` trong DevTools**: không còn nữa (bỏ ở v3). Token nằm ở Application → Local Storage, key `webtro_access_token` / `webtro_refresh_token`.
 - **Test đăng ký chủ trọ (`requestedRole=LANDLORD`) mà không set `contactPhone` hợp lệ theo `PhoneUtil.isValid`**: lỗi trả về là `LANDLORD_CONTACT_REQUIRED` chung chung, không rõ do thiếu tên hay SĐT sai định dạng — cần xem kỹ log/response để debug.
 
 ### 11. Các điểm cần review
@@ -249,7 +251,7 @@ DTO biến đổi qua các lớp: `LoginRequest` (FE gửi) → Entity `User` (�
 - **Bảo mật**: `JwtAuthenticationFilter` dùng claims trong token, không hit DB — review xem có endpoint nhạy cảm nào (ví dụ khóa tài khoản) cần double-check trạng thái user real-time thay vì tin claims cũ không (hiện đã có `getAliveUser()` ở admin service, nhưng nên rà soát toàn bộ).
 - **Business**: rate limit "quên mật khẩu" theo **email**, còn rate limit "đăng nhập" theo **IP + hash(identifier)** — không đồng nhất cách khóa khóa (key theo email vs theo IP) — cân nhắc có nên thống nhất chiến lược chống brute-force.
 - **UX**: thông báo lỗi rate-limit hiện `retryAfterSeconds` — FE `LoginPage` đã convert ra phút, nhưng `ForgotPasswordPage`/`RegisterPage` cần rà lại có xử lý tương tự không (tránh hiện message kỹ thuật khó hiểu).
-- **API naming**: `POST /auth/refresh` chấp nhận cả cookie lẫn body `refreshToken` (dùng `firstNonBlank`) — cân nhắc rủi ro nếu FE gửi nhầm refresh token cũ trong body trong khi cookie đã có token mới (client-side bug) → có thể vô tình kích hoạt reuse-detection giả và đăng xuất người dùng oan. Nên review lại độ ưu tiên cookie vs body.
+- **API naming**: `POST /auth/refresh` chỉ nhận `refreshToken` trong body và bắt buộc (`@NotBlank`) — không còn đường cookie nên không còn mơ hồ về độ ưu tiên.
 - **Validation**: `RegisterRequest.fullName` dùng regex `^[\p{L} .'\-]+$` chỉ cho chữ + khoảng trắng + `.` `'` `-` — kiểm tra có chặn nhầm tên có ký tự hợp lệ khác (ví dụ số La Mã, dấu ngoặc trong bút danh) không.
 - **Performance**: `notifyModerators` (dùng khi đăng ký gửi `ACCOUNT_REGISTERED`... thực ra chỉ `notifyUser`) — nhưng cờ ở nơi khác (`notifyModerators`) load TOÀN BỘ `userRoleRepository.findAll()` rồi filter trong bộ nhớ — với hệ thống nhiều user sẽ chậm dần; nên có query có điều kiện thay vì load full bảng.
 - **Response/DB**: cột `users.password_hash VARCHAR(72)` đúng độ dài BCrypt chuẩn (60 ký tự + biên) — nhưng không có kiểm tra version thuật toán (nếu sau này đổi sang Argon2 sẽ cần migrate cột).
@@ -257,7 +259,7 @@ DTO biến đổi qua các lớp: `LoginRequest` (FE gửi) → Entity `User` (�
 ### 12. Kết quả mong đợi
 
 - Toàn bộ 11 API auth hoạt động đúng theo bảng ở mục 7, trả đúng HTTP status + `ApiResponse` envelope + `errorCode` chuẩn.
-- RBAC hoạt động đúng cho cả 4 vai trò: verify bằng cách gọi từng nhóm API admin bằng token của Tenant/Landlord/Moderator để chắc chắn bị 403 đúng chỗ (Moderator không có `USER_ROLE_ASSIGN`, `PAYMENT_*`, `SYSTEM_CONFIG_MANAGE`, `STATISTIC_VIEW` — kiểm chứng qua bảng seed 49 dòng `role_permissions`).
+- RBAC hoạt động đúng cho cả 4 vai trò: verify bằng cách gọi từng nhóm API admin bằng token của Tenant/Landlord/Moderator để chắc chắn bị 403 đúng chỗ (Moderator không có `USER_ROLE_ASSIGN`, `PAYMENT_*`, `SYSTEM_CONFIG_MANAGE`, `STATISTIC_VIEW` — kiểm chứng trực tiếp bằng role guard).
 - Refresh token rotation + reuse detection hoạt động đúng, có bằng chứng qua kiểm tra bảng `refresh_tokens` (`revoked_reason`).
 - Không có lỗ hổng lộ thông tin tài khoản qua thông báo lỗi (login/forgot-password/resend-verification đều "im lặng" như thiết kế).
 - Toàn bộ ngưỡng bảo mật đọc từ `system_configs`, không có số hardcode trong code nghiệp vụ (trừ các hằng KỸ THUẬT có ghi chú rõ trong `AuthServiceImpl`).
@@ -342,7 +344,7 @@ flowchart TD
 
 ### 5. Dữ liệu chạy như thế nào
 
-`UpdateProfileRequest{fullName,gender,dateOfBirth,address,bio}` → FE Yup validate (min/max length, `dateOfBirth` không ở tương lai) → `PUT /api/users/me` → `UpdateProfileRequest` bind → `UserServiceImpl.updateMyProfile()`: cập nhật entity `User` (fullName, gender) và `UserProfile` (dateOfBirth, addressDetail, bio — sanitize HTML) trong CÙNG 1 transaction (2 bảng khác nhau) → gọi lại `getMyProfile()` để build `UserProfileResponse` đầy đủ (bao gồm roles/permissions load từ `RoleRepository`/`PermissionRepository`, và `landlordProfile` chỉ nhúng nếu user thực sự có `ROLE_LANDLORD`) → trả FE → FE `dispatch(bootstrapAuth())` để đồng bộ lại Redux store (đảm bảo header/avatar toàn site cập nhật ngay).
+`UpdateProfileRequest{fullName,gender,dateOfBirth,address,bio}` → FE Yup validate (min/max length, `dateOfBirth` không ở tương lai) → `PUT /api/users/me` → `UpdateProfileRequest` bind → `UserServiceImpl.updateMyProfile()`: cập nhật entity `User` (fullName, gender) và `UserProfile` (dateOfBirth, addressDetail, bio — sanitize HTML) trong CÙNG 1 transaction (2 bảng khác nhau) → gọi lại `getMyProfile()` để build `UserProfileResponse` đầy đủ (bao gồm role load từ `RoleRepository`, và `landlordProfile` chỉ nhúng nếu user thực sự có `ROLE_LANDLORD`) → trả FE → FE `dispatch(bootstrapAuth())` để đồng bộ lại Redux store (đảm bảo header/avatar toàn site cập nhật ngay).
 
 ### 6. Database liên quan
 
@@ -562,7 +564,7 @@ Phía đọc: FE gọi `GET /notifications?type=...&unreadOnly=...&page=&size=` 
 - **`NEW_MATCHING_LISTING` không nằm trong `PREFERENCE_TYPES`** — nếu FE (khi được xây dựng) lỡ hiển thị toggle cho loại này trong trang cài đặt, gọi `PUT /preferences` sẽ luôn lỗi (vi phạm CHECK DB `ck_notification_preferences_type`) — cần đảm bảo FE danh sách cài đặt CHỈ render đúng 16 loại BE trả về.
 - **Field tên `link`/`targetUrl`/`actionUrl` không nhất quán** giữa các nơi đọc ở FE (`NotificationBell` dùng `n.actionUrl`, `NotificationsPage` dùng `n.targetUrl`) — cần verify field thật sự BE trả về là gì (`NotificationResponse`/`NotificationMapper` — chưa đọc chi tiết trong lượt này) để xác định đây có phải bug thật hay chỉ là 2 field khác nhau có chủ đích.
 - **Gửi email đồng bộ trong transaction DB** (`notifyUser` gọi `mailService.sendHtml` bên trong transaction ghi `notifications`) — nếu SMTP (MailHog ở dev, hoặc SMTP thật ở production) chậm/treo, sẽ giữ transaction DB mở lâu → có thể gây khóa (lock) không cần thiết trên các bảng liên quan trong cùng transaction cha (ví dụ `AdminUserServiceImpl.lockUser` gọi `notifyUser` trong transaction khóa user).
-- **`notifyModerators` load toàn bộ `userRoleRepository.findAll()`** rồi filter — hiệu năng giảm khi số `user_roles` tăng lớn (đã nêu tương tự ở Module 1).
+- ~~**`notifyModerators` load toàn bộ `userRoleRepository.findAll()`** rồi filter~~ — **đã sửa ở v3**: dùng `userRepository.findByRole_CodeInAndDeletedAtIsNull(List.of(ADMIN, MODERATOR))`, lọc ngay ở DB.
 
 ### 11. Các điểm cần review
 
@@ -872,7 +874,7 @@ flowchart TD
 | `refresh_tokens` | (đã mô tả Module 1) | Ghi `revoked_at`/`revoked_reason` (`ADMIN_LOCK`, `ROLE_CHANGE`) khi Admin thao tác |
 | `audit_logs` | N-1 tùy chọn `users` (actor, SET NULL) | Append-only; `action` (12 giá trị CHECK ở V1, mở rộng ở V11/V12 lên 20 giá trị: thêm `LANDLORD_VERIFY/UNVERIFY`, `LISTING_HIDE/UNHIDE`, `COMMENT_HIDE/UNHIDE/SPAM`, `REVIEW_HIDE/UNHIDE`), `target_type`, `target_id`, `target_label`, `old_value`/`new_value` (JSON), `reason`, `ip_address`, `user_agent`, `request_id` |
 | `system_configs` | Độc lập (lookup, dùng cho `page.about`/`page.terms` + hàng trăm ngưỡng khác) | `config_key` UNIQUE, `config_value`, `default_value`, `value_type` (`STRING/INT/DECIMAL/BOOLEAN/JSON`), `group_name`, `is_editable` |
-| `role_permissions`, `user_roles` | (đã mô tả Module 1) | Module này GHI `user_roles` khi `updateRoles` |
+| `roles` | (đã mô tả Module 1) | Module này GHI `users.role_id` khi `updateRole` |
 
 ### 7. API liên quan
 
@@ -885,7 +887,7 @@ flowchart TD
 | GET | `/api/admin/users/{id}` | — | `AdminUserDetailResponse` | Bearer | `USER_MANAGE` | `USER_NOT_FOUND` |
 | PUT | `/api/admin/users/{id}/lock` | `LockUserRequest{reason,notifyUser?,lockListings?}` | `UserActionResponse` | Bearer | `USER_MANAGE` | `LOCK_REASON_REQUIRED`, `CANNOT_LOCK_SELF`, `USER_ALREADY_LOCKED`(409), `CANNOT_MODIFY_ADMIN`(403) |
 | PUT | `/api/admin/users/{id}/unlock` | `UnlockUserRequest{reason?,unlockListings?}` | `UserActionResponse` | Bearer | `USER_MANAGE` | `USER_ALREADY_ACTIVE`(409), `CANNOT_MODIFY_ADMIN` |
-| PUT | `/api/admin/users/{id}/roles` | `UpdateRolesRequest{roles[],reason}` | `UserActionResponse` | Bearer | `USER_ROLE_ASSIGN` | `ROLE_ASSIGN_INVALID`, `CANNOT_MODIFY_ADMIN`, `ROLE_NOT_FOUND` |
+| PUT | `/api/admin/users/{id}/role` | `UpdateRoleRequest{role,reason}` | `UserActionResponse{previousRole,role,...}` | Bearer | `USER_ROLE_ASSIGN` | `ROLE_ASSIGN_INVALID`, `CANNOT_MODIFY_ADMIN`, `ROLE_NOT_FOUND` |
 | GET | `/api/admin/landlords` | `keyword?,verificationStatus[]?,minTrustScore?,maxTrustScore?,postingSuspended?`, `Pageable` (whitelist sort, mặc định `trustScore,ASC`, size ≤100) | `PageResponse<AdminLandlordResponse>` | Bearer | `LANDLORD_VERIFY` | `INVALID_SORT_FIELD` |
 | PUT | `/api/admin/landlords/{id}/verify` | `VerifyLandlordRequest{note?}` (body tùy chọn) | `LandlordVerificationActionResponse` | Bearer | `LANDLORD_VERIFY` | `LANDLORD_ALREADY_VERIFIED`(409) |
 | PUT | `/api/admin/landlords/{id}/unverify` | `UnverifyLandlordRequest{reason}` | `LandlordVerificationActionResponse` | Bearer | `LANDLORD_VERIFY` | `LANDLORD_NOT_VERIFIED`(409, thực chất trạng thái ≠ VERIFIED) |
@@ -948,7 +950,7 @@ flowchart TD
 - Dashboard/Statistics trả số liệu chính xác, khớp với dữ liệu thật trong DB (đối chiếu bằng query SQL thủ công ít nhất 3 chỉ số).
 - Audit Log ghi đầy đủ, chính xác, KHÔNG có endpoint nào cho phép sửa/xóa bản ghi.
 - Xác nhận và báo cáo rõ ràng về gap "About/Terms không tích hợp CMS" cho team liên quan xử lý.
-- Toàn bộ phân quyền (`STATISTIC_VIEW`, `USER_MANAGE`, `USER_ROLE_ASSIGN`, `LANDLORD_VERIFY`, `AUDIT_LOG_VIEW`) đúng theo ma trận 49 dòng seed ở `V2__seed_roles_permissions.sql`.
+- Toàn bộ phân quyền (`STATISTIC_VIEW`, `USER_MANAGE`, `USER_ROLE_ASSIGN`, `LANDLORD_VERIFY`, `AUDIT_LOG_VIEW`) đúng theo chính sách role-only.
 
 ---
 
@@ -972,7 +974,7 @@ flowchart TD
 
 > Tài liệu này được viết từ việc đọc trực tiếp source code thật (BE Spring Boot 3.3.5/Java 21, FE React 18 + MUI v5) tại thời điểm rà soát. Mọi tên field, endpoint, bảng DB đều lấy nguyên văn từ code — không suy đoán. Chỗ nào không xác định được sẽ ghi `> Cần bổ sung theo source code`.
 
-> **Bối cảnh kỹ thuật chung**: Kiến trúc hexagonal theo module dưới `com.webtro.modules.*`; giao tiếp chéo module qua SPI gateway (`ListingGateway`, `ListingDataGateway`, `InteractionSignalGateway`...) và `ApplicationEvent` (`AFTER_COMMIT`). Mapper viết tay (KHÔNG MapStruct). Flyway `V1..V12`. Redis dùng cho cache/rate-limit/JWT blacklist. Envelope response chung `ApiResponse { success, message, data, errorCode, timestamp, path, traceId }`; phân trang `PageResponse { items, page, size, totalElements, totalPages, first, last }`. RBAC 2 tầng: 4 vai trò → 27 quyền, kiểm bằng `@PreAuthorize("hasAuthority('...')")`. Phạm vi dữ liệu: chỉ Hà Nội (1 tỉnh, 12 quận, 62 phường) — do đó các trường `provinceId/districtId/wardId` trong thực tế sẽ ít biến thiên nhưng code vẫn tổng quát 3 cấp tỉnh/huyện/xã.
+> **Bối cảnh kỹ thuật chung**: Kiến trúc hexagonal theo module dưới `com.webtro.modules.*`; giao tiếp chéo module qua SPI gateway (`ListingGateway`, `ListingDataGateway`, `InteractionSignalGateway`...) và `ApplicationEvent` (`AFTER_COMMIT`). Mapper viết tay (KHÔNG MapStruct). Flyway `V1..V12`. Redis dùng cho cache/rate-limit/JWT blacklist. Envelope response chung `ApiResponse { success, message, data, errorCode, timestamp, path, traceId }`; phân trang `PageResponse { items, page, size, totalElements, totalPages, first, last }`. Phân quyền role-only: 4 vai trò, kiểm bằng `@PreAuthorize("hasRole/hasAnyRole")`. Phạm vi dữ liệu: chỉ Hà Nội (1 tỉnh, 12 quận, 62 phường) — do đó các trường `provinceId/districtId/wardId` trong thực tế sẽ ít biến thiên nhưng code vẫn tổng quát 3 cấp tỉnh/huyện/xã.
 
 ## Các module phụ trách
 
@@ -1038,7 +1040,7 @@ Vai trò trong hệ thống:
 **Validation** (đọc ngưỡng động từ `SystemConfigService`, KHÔNG hardcode):
 - Độ dài tiêu đề/mô tả: `listing.title.min/max`, `listing.description.min/max`.
 - Số ảnh: `listing.image.min/max`, kích thước tối đa `listing.image.max_size_mb`.
-- Quota đăng tin/ngày: `spam.listing.daily`, riêng tài khoản mới (< 7 ngày) dùng `spam.listing.new_account.daily`.
+- Quota đăng tin/ngày: `spam.listing.daily` — **một ngưỡng duy nhất cho mọi người dùng** (v3). Ngưỡng riêng cho tài khoản mới đã bỏ vì làm hai chủ trọ cùng vai trò có mức sử dụng khác nhau.
 - Renew miễn phí/tháng: `listing.renew_free_per_month`.
 - Ngưỡng cảnh báo cảm xúc để tính `flagged` trong thống kê: `ai.sentiment.negative_ratio_l1`, `ai.sentiment.min_comments_l1`.
 - Bean Validation (`jakarta.validation`) trên DTO request cho các ràng buộc biên "hiển nhiên" (vd `price > 0`, `latitude` trong 8–24 — biên lãnh thổ VN).
@@ -1047,7 +1049,7 @@ Vai trò trong hệ thống:
 - **Ảnh hợp lệ kiểm bằng magic bytes** (`isAllowedImage`) — đọc 12 byte đầu để nhận diện JPG/PNG/WEBP thật, KHÔNG tin `Content-Type` client gửi (chống upload file thực thi đổi đuôi).
 - **Slug tự sinh & chống trùng** (`uniqueSlug`/`uniqueSlugKeepingSelf`) dựa trên `SlugUtil.toSlug(title)`, thêm hậu tố `-2`, `-3`... nếu trùng.
 - **Phát hiện & ghi lịch sử thay đổi field** (`detect`/`recordHistory`): khi `update()`, so từng field cũ/mới, đánh dấu field nào là "nhạy cảm" (`title, description, price, provinceId, districtId, wardId, addressDetail`) → nếu tin đang `ACTIVE` và có field nhạy cảm đổi → tự động chuyển về `PENDING` (`RESUBMIT_AFTER_EDIT`) để duyệt lại. Field không nhạy cảm (`categoryId, area, maxOccupants`) đổi thì giữ nguyên trạng thái. Mỗi lần sửa ghi 1+ dòng `ListingEditHistory` cùng `editBatchId` (UUID) để nhóm các thay đổi trong 1 lần submit.
-- **Auto-approve** (`canAutoApprove`): chỉ khi bật config `listing.auto_approve_trusted_landlord`, tin KHÔNG bị `priceDeviationFlag`, `trustScore >= trust.threshold.risky`, và hồ sơ chủ trọ `VERIFIED` + `warningCount == 0`.
+- ~~**Auto-approve** (`canAutoApprove`)~~ — **đã bỏ ở v3**. Mọi tin gửi duyệt đều vào `PENDING`, không có luồng tự duyệt theo uy tín/xác minh nữa (hai chủ trọ cùng vai trò phải đi cùng một luồng). Kéo theo `ListingActionResponse.autoApproved` và config `listing.auto_approve.trusted_landlord` cũng đã bỏ.
 - **Rate limit** (`RateLimitService` + Redis): `listing-submit` tối đa 20 lần/ngày/user, `listing-renew` tối đa 10 lần/ngày, `listing-image-upload` tối đa 50 lần/giờ.
 - **Đếm view có khử trùng lặp** (`maybeCountView`): key Redis `view:dedup:{listingId}:{u:userId|ip:hash}`, TTL theo `view.dedup_minutes`; **fail-open** — nếu Redis lỗi vẫn cộng 1 view (không chặn UX).
 - **Gia hạn (`renew`)**: có lượt miễn phí/tháng (`freeRenewUsedThisMonth` trên `LandlordProfile`, reset khi sang tháng mới); hết lượt miễn phí hoặc chọn `packageId` → trả về `paymentRequired=true` kèm danh sách gói (KHÔNG lỗi, HTTP 200) để FE điều hướng sang thanh toán.
@@ -1136,7 +1138,7 @@ Ví dụ luồng **tạo tin** (Input → FE → API → BE validate → busines
 
 | Method | URL | Request | Response | Auth | Permission | Validation | Error tiêu biểu |
 |---|---|---|---|---|---|---|---|
-| POST | `/api/listings` | `ListingCreateRequest` | `ApiResponse<ListingCreateResponse>` (201) | Bắt buộc | `LISTING_CREATE` | Bean Validation + nghiệp vụ (category/địa chỉ/tiện ích/độ dài/quota) | `CATEGORY_NOT_FOUND`, `AREA_NOT_SUPPORTED`, `ADDRESS_HIERARCHY_MISMATCH`, `AMENITY_NOT_FOUND`, `INVALID_TITLE_LENGTH`, `INVALID_DESCRIPTION_LENGTH`, `INVALID_AVAILABLE_FROM`, `ROOMMATE_INFO_REQUIRED`, `LISTING_QUOTA_DAILY`/`LISTING_QUOTA_NEW_ACCOUNT`, `LISTING_POSTING_SUSPENDED` |
+| POST | `/api/listings` | `ListingCreateRequest` | `ApiResponse<ListingCreateResponse>` (201) | Bắt buộc | `LISTING_CREATE` | Bean Validation + nghiệp vụ (category/địa chỉ/tiện ích/độ dài/quota) | `CATEGORY_NOT_FOUND`, `AREA_NOT_SUPPORTED`, `ADDRESS_HIERARCHY_MISMATCH`, `AMENITY_NOT_FOUND`, `INVALID_TITLE_LENGTH`, `INVALID_DESCRIPTION_LENGTH`, `INVALID_AVAILABLE_FROM`, `ROOMMATE_INFO_REQUIRED`, `LISTING_QUOTA_DAILY`, `LISTING_POSTING_SUSPENDED` |
 | PUT | `/api/listings/{id}` | `ListingUpdateRequest` | `ApiResponse<ListingDetailResponse>` (kèm `moderationImpact`) | Bắt buộc | `LISTING_UPDATE_OWN` hoặc `LISTING_UPDATE_ANY` | như trên | `LISTING_NOT_FOUND`, `LISTING_FORBIDDEN`, `LISTING_LOCKED_CANNOT_EDIT` |
 | DELETE | `/api/listings/{id}` | — | 204 No Content | Bắt buộc | `LISTING_UPDATE_OWN`/`LISTING_UPDATE_ANY` | trạng thái ≠ `LOCKED` | `LISTING_LOCKED_CANNOT_DELETE`, `LISTING_INVALID_TRANSITION` |
 | POST | `/api/listings/{id}/submit` | — | `ApiResponse<ListingActionResponse>` | Bắt buộc | `LISTING_UPDATE_OWN` | đủ ảnh min, email verified, không bị suspend, rate-limit 20/ngày | `IMAGE_COUNT_MIN`, `LANDLORD_NOT_VERIFIED`, `LISTING_POSTING_SUSPENDED`, `LISTING_LOCKED_CANNOT_SUBMIT`, `LISTING_INVALID_TRANSITION` |
@@ -1177,7 +1179,7 @@ Ví dụ luồng **tạo tin** (Input → FE → API → BE validate → busines
 
 - □ Tạo tin thiếu từng field bắt buộc lần lượt (categoryId, title, price, area, provinceId/districtId/wardId, addressDetail, contactPhone) → đúng message lỗi field-level.
 - □ Tạo tin với `districtId` không thuộc `provinceId` đã chọn (giả mạo qua DevTools) → `ADDRESS_HIERARCHY_MISMATCH`.
-- □ Tạo tin thứ N+1 trong ngày khi đã đạt quota (tài khoản mới vs tài khoản cũ) → đúng `ErrorCode` tương ứng.
+- □ Tạo tin vượt quota `spam.listing.daily` trong ngày → `LISTING_QUOTA_DAILY`. Kiểm tra thêm: tài khoản mới tạo và tài khoản lâu năm phải chịu **cùng** một ngưỡng (yêu cầu "cùng vai trò = cùng chức năng").
 - □ Submit tin khi chưa đủ số ảnh tối thiểu → `IMAGE_COUNT_MIN`; khi email chưa verify → `LANDLORD_NOT_VERIFIED`.
 - □ Submit 21 lần/ngày → rate-limit chặn lần thứ 21.
 - □ Sửa field nhạy cảm (title/price/address) trên tin `ACTIVE` → tin tự chuyển `PENDING`, `moderationImpact.requiresReapproval=true`; sửa field không nhạy cảm (area, categoryId) → giữ nguyên `ACTIVE`.
@@ -1214,7 +1216,7 @@ Ví dụ luồng **tạo tin** (Input → FE → API → BE validate → busines
 - **Validation**: `ListingCreateRequest.title` giới hạn cứng `@Size(max=150)` khớp cột DB, nhưng ngưỡng min/max thực tế lại đọc từ `SystemConfig` ở tầng service — 2 nguồn giới hạn khác nhau (annotation vs config) dễ lệch nếu admin đổi `listing.title.max` > 150 (không thể vì bị chặn ở Bean Validation trước khi tới service) — **đây là giới hạn cứng ẩn** mà admin cấu hình động không vượt qua được, cần ghi rõ trong tài liệu vận hành.
 - **Security**: `deleteImage`/`setPrimaryImage`/`reorderImages` đều dùng `requireOwnerOrUpdateAny` — đã đúng nguyên tắc kiểm tra sở hữu ở tầng service (không chỉ dựa `@PreAuthorize`).
 - **Performance**: `enforcePostingQuota` chạy `listingRepository.count(spec)` mỗi lần tạo tin (đếm tin trong ngày) — với owner có rất nhiều tin, index `idx_listings_owner_id_status` không cover `created_at`; nên xác nhận có cần thêm index `(owner_id, created_at)` khi traffic lớn.
-- **UX**: thông báo lỗi quota mới chỉ phân biệt "tài khoản mới" vs "còn lại" theo 7 ngày kể từ khi tạo tài khoản — chưa chắc khớp với thông điệp hiển thị ở FE (cần đối chiếu copy thực tế).
+- **UX**: chỉ còn một thông điệp quota duy nhất (`LISTING_QUOTA_DAILY`) — cần đối chiếu copy hiển thị ở FE xem có còn nhắc "tài khoản mới" không.
 
 ### 12. Kết quả mong đợi
 
@@ -1949,6 +1951,12 @@ flowchart TD
 
 ## Module: Landlord Dashboard/Overview (Tổng quan chủ trọ)
 
+> **Cập nhật 2026-08-11:** lỗi mismatch được mô tả trong mục này đã được xử lý theo hướng (a): backend `GET /api/landlord/dashboard`
+> nhận `days=7|30|90` và trả các field frontend đang dùng (`activeCount`, `pendingCount`, `viewCount30d`,
+> `contactCount30d`, `chart`, `topListings`, `actionItems`, `landlordVerificationStatus`), đồng thời vẫn giữ các field
+> cũ (`totalListings`, `listingsByStatus`, `totalViews`, `totalFavorites`, `totalContacts`, khối trust) để không phá client cũ.
+> Kiểm chứng local: DB `landlord1@webtro.local` có `PENDING=1`, API trả `pendingCount=1`.
+
 ### 1. Module này dùng để làm gì?
 
 Trang đầu tiên chủ trọ nhìn thấy sau khi đăng nhập vào khu vực quản lý (`/quan-ly/tong-quan`): tổng hợp nhanh "sức khỏe" của toàn bộ tin đăng — số tin theo trạng thái, tổng lượt xem/lưu/liên hệ, điểm uy tín, tỷ lệ phản hồi. Về bản chất đây là một **API tổng hợp (aggregation) mỏng**, không có nghiệp vụ ghi dữ liệu — chỉ đọc và cộng dồn số liệu đã có sẵn từ Module 1 (`ListingRepository`) và module `user` (`LandlordProfileRepository`).
@@ -2110,7 +2118,7 @@ Module này không sở hữu bảng riêng — chỉ đọc:
 > - Mapper viết tay (KHÔNG MapStruct) — nằm ở `modules/<module>/mapper/*Mapper.java`, dùng builder thủ công.
 > - Flyway `V1__baseline_schema.sql` … `V12__extend_audit_content_moderation.sql`; các bảng thuộc phạm vi Người 3 chủ yếu nằm trong `V1` (group *interaction*, *moderation*, *payment*, *ai*, *admin*), field `system_configs` seed ở `V5__seed_system_configs.sql`, `promotion_packages` seed ở `V7__seed_promotion_packages.sql`.
 > - Envelope response: `ApiResponse { success, message, data, errorCode, timestamp, path, traceId }`; phân trang `PageResponse { items, page, size, totalElements, totalPages, first, last }`.
-> - RBAC 2 tầng: 4 vai trò → 27 quyền, `@PreAuthorize("hasAuthority('...')")`. Đăng nhập dùng field `emailOrPhone`.
+> - Phân quyền role-only: 4 vai trò, `@PreAuthorize("hasRole/hasAnyRole")`. Đăng nhập dùng field `emailOrPhone`.
 
 ---
 

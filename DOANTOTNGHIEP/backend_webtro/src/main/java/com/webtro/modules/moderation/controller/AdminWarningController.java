@@ -43,7 +43,7 @@ public class AdminWarningController {
 
     /** Gửi cảnh báo vi phạm cho một người dùng. */
     @PostMapping
-    @PreAuthorize("hasAuthority('WARNING_SEND')")
+    @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Gửi cảnh báo vi phạm",
             description = "Đủ ngưỡng cảnh báo trong cửa sổ sẽ tự tạm khóa đăng tin; chỉ đề xuất khóa tài khoản.")
     public ResponseEntity<ApiResponse<WarningResponse>> create(
@@ -56,7 +56,7 @@ public class AdminWarningController {
 
     /** Danh sách cảnh báo. */
     @GetMapping
-    @PreAuthorize("hasAuthority('WARNING_SEND')")
+    @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Danh sách cảnh báo")
     public ResponseEntity<ApiResponse<PageResponse<WarningItemResponse>>> list(
             @RequestParam(required = false) Long userId,

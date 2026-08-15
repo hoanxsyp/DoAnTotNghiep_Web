@@ -1,7 +1,6 @@
 package com.webtro.modules.auth.controller;
 
 import com.webtro.common.ApiResponse;
-import com.webtro.constant.AppConstant;
 import com.webtro.modules.auth.dto.request.ChangePasswordRequest;
 import com.webtro.modules.auth.dto.request.ForgotPasswordRequest;
 import com.webtro.modules.auth.dto.request.LoginRequest;
@@ -28,17 +27,14 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
-import java.time.Duration;
 
 /**
  * API xác thực và quản lý phiên (AUTH-01..08) — docs/03 mục 4.1.
@@ -47,8 +43,9 @@ import java.time.Duration;
  * {@link AuthService}; đặt/xóa cookie refresh token; trả đúng HTTP status + envelope. Không chứa
  * logic nghiệp vụ (canonical luật 1 & 6).
  *
- * <p>Refresh token đặt trong cookie {@code httpOnly; Secure; SameSite=Strict; Path=/api/auth}
- * (canonical mục 8), đồng thời trả trong body theo hợp đồng docs/03.
+ * <p>Access token và refresh token đều trả trong BODY; client lưu cả hai vào {@code localStorage}
+ * và tự gắn vào header/body ở các lần gọi sau. Hệ thống KHÔNG dùng cookie cho token, nên cũng
+ * không có bề mặt tấn công CSRF qua cookie phiên.
  */
 @RestController
 @RequestMapping("/api/auth")
@@ -78,37 +75,31 @@ public class AuthController {
     public ResponseEntity<ApiResponse<LoginResponse>> login(
             @Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
         LoginResponse data = authService.login(request, clientIp(httpRequest), userAgent(httpRequest));
-        return ResponseEntity.ok()
-                .header(HttpHeaders.SET_COOKIE, buildRefreshCookie(data.getRefreshToken(), data.getRefreshExpiresIn()).toString())
-                .body(ApiResponse.success(data, "Đăng nhập thành công"));
+        return ResponseEntity.ok(ApiResponse.success(data, "Đăng nhập thành công"));
     }
 
     @PostMapping("/refresh")
     @Operation(summary = "Làm mới token",
-            description = "Xoay vòng refresh token (rotation) + phát hiện tái sử dụng. Ưu tiên đọc token từ cookie.")
+            description = "Xoay vòng refresh token (rotation) + phát hiện tái sử dụng. Token đọc từ body; "
+                    + "phản hồi trả về refresh token MỚI — client phải ghi đè giá trị đang lưu.")
     public ResponseEntity<ApiResponse<TokenResponse>> refresh(
-            @CookieValue(name = AppConstant.REFRESH_TOKEN_COOKIE, required = false) String cookieToken,
-            @RequestBody(required = false) RefreshTokenRequest request,
+            @Valid @RequestBody RefreshTokenRequest request,
             HttpServletRequest httpRequest) {
-        String raw = firstNonBlank(cookieToken, request == null ? null : request.getRefreshToken());
-        TokenResponse data = authService.refresh(raw, clientIp(httpRequest), userAgent(httpRequest));
-        return ResponseEntity.ok()
-                .header(HttpHeaders.SET_COOKIE, buildRefreshCookie(data.getRefreshToken(), data.getRefreshExpiresIn()).toString())
-                .body(ApiResponse.success(data, "Làm mới phiên thành công"));
+        TokenResponse data = authService.refresh(
+                request.getRefreshToken(), clientIp(httpRequest), userAgent(httpRequest));
+        return ResponseEntity.ok(ApiResponse.success(data, "Làm mới phiên thành công"));
     }
 
     @PostMapping("/logout")
     @Operation(summary = "Đăng xuất",
-            description = "Thu hồi refresh token trong DB, đưa access token vào blacklist và xóa cookie (AUTH-03).")
+            description = "Thu hồi refresh token trong DB và đưa access token vào blacklist (AUTH-03). "
+                    + "Client tự xóa hai token khỏi localStorage.")
     public ResponseEntity<Void> logout(
-            @CookieValue(name = AppConstant.REFRESH_TOKEN_COOKIE, required = false) String cookieToken,
             @RequestBody(required = false) LogoutRequest request,
             HttpServletRequest httpRequest) {
-        String raw = firstNonBlank(cookieToken, request == null ? null : request.getRefreshToken());
+        String raw = request == null ? null : request.getRefreshToken();
         authService.logout(raw, bearerToken(httpRequest));
-        return ResponseEntity.noContent()
-                .header(HttpHeaders.SET_COOKIE, clearRefreshCookie().toString())
-                .build();
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/forgot-password")
@@ -135,9 +126,8 @@ public class AuthController {
             description = "Đổi mật khẩu khi đã đăng nhập; đăng xuất các thiết bị khác (AUTH-05).")
     public ResponseEntity<ApiResponse<Void>> changePassword(
             @AuthenticationPrincipal CustomUserDetails principal,
-            @CookieValue(name = AppConstant.REFRESH_TOKEN_COOKIE, required = false) String cookieToken,
             @Valid @RequestBody ChangePasswordRequest request) {
-        authService.changePassword(principal.getId(), cookieToken, request);
+        authService.changePassword(principal.getId(), request.getRefreshToken(), request);
         return ResponseEntity.ok(ApiResponse.success("Đổi mật khẩu thành công. Các thiết bị khác đã bị đăng xuất."));
     }
 
@@ -184,28 +174,6 @@ public class AuthController {
     //  Helper hạ tầng web
     // ==================================================================
 
-    /** Cookie refresh token theo canonical mục 8. */
-    private ResponseCookie buildRefreshCookie(String token, long maxAgeSeconds) {
-        return ResponseCookie.from(AppConstant.REFRESH_TOKEN_COOKIE, token)
-                .httpOnly(true)
-                .secure(true)
-                .sameSite("Strict")
-                .path(AppConstant.REFRESH_TOKEN_COOKIE_PATH)
-                .maxAge(Duration.ofSeconds(Math.max(0, maxAgeSeconds)))
-                .build();
-    }
-
-    /** Cookie rỗng hết hạn ngay — dùng khi đăng xuất. */
-    private ResponseCookie clearRefreshCookie() {
-        return ResponseCookie.from(AppConstant.REFRESH_TOKEN_COOKIE, "")
-                .httpOnly(true)
-                .secure(true)
-                .sameSite("Strict")
-                .path(AppConstant.REFRESH_TOKEN_COOKIE_PATH)
-                .maxAge(0)
-                .build();
-    }
-
     private String clientIp(HttpServletRequest request) {
         String forwarded = request.getHeader("X-Forwarded-For");
         if (forwarded != null && !forwarded.isBlank()) {
@@ -227,10 +195,4 @@ public class AuthController {
         return null;
     }
 
-    private static String firstNonBlank(String a, String b) {
-        if (a != null && !a.isBlank()) {
-            return a;
-        }
-        return b;
-    }
 }

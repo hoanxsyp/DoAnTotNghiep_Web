@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import {
   Box, Stack, TextField, MenuItem, Chip, Avatar, Typography, IconButton,
-  InputAdornment, Menu, ListItemIcon, ListItemText, Checkbox, Dialog,
-  DialogTitle, DialogContent, DialogActions, Button, FormGroup, FormControlLabel,
+  InputAdornment, Menu, ListItemIcon, ListItemText, Dialog,
+  DialogTitle, DialogContent, DialogActions, Button, RadioGroup, Radio, FormControlLabel,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
@@ -24,7 +24,10 @@ const ROLE_LIST = [ROLES.TENANT, ROLES.LANDLORD, ROLES.MODERATOR, ROLES.ADMIN];
 
 /**
  * Quản lý người dùng (docs/04 §10.2, API 4.13.x). Tìm/lọc theo tên-email-SĐT, vai trò, trạng thái;
- * khóa/mở khóa (USER_MANAGE); phân quyền vai trò (USER_ROLE_ASSIGN). PermissionRoute chặn ở route.
+ * khóa/mở khóa (USER_MANAGE); đổi vai trò (USER_ROLE_ASSIGN) — backend kiểm tra quyền thật.
+ *
+ * Mỗi người dùng có ĐÚNG MỘT vai trò nên hộp thoại đổi vai trò dùng RadioGroup (chọn một), không
+ * phải Checkbox (chọn nhiều).
  */
 const UsersPage = () => {
   const {
@@ -39,7 +42,8 @@ const UsersPage = () => {
   const [activeUser, setActiveUser] = useState(null);
   const [lockDialog, setLockDialog] = useState(false);
   const [roleDialog, setRoleDialog] = useState(false);
-  const [roleSelection, setRoleSelection] = useState([]);
+  const [roleSelection, setRoleSelection] = useState('');
+  const [roleReason, setRoleReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const applyFilters = (next = {}) => {
@@ -78,10 +82,10 @@ const UsersPage = () => {
     }
   };
 
-  const handleSaveRoles = async () => {
+  const handleSaveRole = async () => {
     setSubmitting(true);
     try {
-      await adminApi.updateUserRoles(activeUser.id, { roles: roleSelection });
+      await adminApi.updateUserRole(activeUser.id, { role: roleSelection, reason: roleReason.trim() });
       notify.success('Đã cập nhật vai trò. Người dùng cần đăng nhập lại.');
       setRoleDialog(false);
       reload();
@@ -106,14 +110,11 @@ const UsersPage = () => {
     },
     { key: 'phone', label: 'Điện thoại', render: (r) => r.phone || '—' },
     {
-      key: 'roles', label: 'Vai trò', render: (r) => (
-        <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
-          {(r.roles || []).map((role) => {
-            const m = metaChip(ROLE_META, role);
-            return <Chip key={role} size="small" label={m.label} color={m.color} variant="outlined" />;
-          })}
-        </Stack>
-      ),
+      key: 'role', label: 'Vai trò', render: (r) => {
+        if (!r.role) return '—';
+        const m = metaChip(ROLE_META, r.role);
+        return <Chip size="small" label={m.label} color={m.color} variant="outlined" />;
+      },
     },
     { key: 'trustScore', label: 'Uy tín', align: 'center', render: (r) => r.trustScore ?? '—' },
     {
@@ -181,9 +182,14 @@ const UsersPage = () => {
             <ListItemText>Khóa tài khoản</ListItemText>
           </MenuItem>
         )}
-        <MenuItem onClick={() => { closeMenu(); setRoleSelection(activeUser?.roles || []); setRoleDialog(true); }}>
+        <MenuItem onClick={() => {
+          closeMenu();
+          setRoleSelection(activeUser?.role || '');
+          setRoleReason('');
+          setRoleDialog(true);
+        }}>
           <ListItemIcon><ManageAccountsIcon fontSize="small" /></ListItemIcon>
-          <ListItemText>Phân quyền vai trò</ListItemText>
+          <ListItemText>Đổi vai trò</ListItemText>
         </MenuItem>
       </Menu>
 
@@ -201,29 +207,45 @@ const UsersPage = () => {
       />
 
       <Dialog open={roleDialog} onClose={() => setRoleDialog(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Phân quyền vai trò</DialogTitle>
+        <DialogTitle>Đổi vai trò</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-            {activeUser?.fullName}. Đổi vai trò sẽ thu hồi toàn bộ phiên đăng nhập của người dùng.
+            {activeUser?.fullName}. Mỗi người dùng chỉ có một vai trò; đổi vai trò sẽ thu hồi toàn bộ
+            phiên đăng nhập của người dùng.
           </Typography>
-          <FormGroup>
+          <RadioGroup value={roleSelection} onChange={(e) => setRoleSelection(e.target.value)}>
             {ROLE_LIST.map((rl) => (
-              <FormControlLabel
-                key={rl}
-                control={
-                  <Checkbox
-                    checked={roleSelection.includes(rl)}
-                    onChange={(e) => setRoleSelection((prev) => e.target.checked ? [...prev, rl] : prev.filter((x) => x !== rl))}
-                  />
-                }
-                label={ROLE_META[rl].label}
-              />
+              <FormControlLabel key={rl} value={rl} control={<Radio />} label={ROLE_META[rl].label} />
             ))}
-          </FormGroup>
+          </RadioGroup>
+          <TextField
+            fullWidth
+            multiline
+            minRows={2}
+            size="small"
+            sx={{ mt: 1 }}
+            label="Lý do thay đổi"
+            placeholder="Tối thiểu 10 ký tự — sẽ được ghi vào nhật ký kiểm toán"
+            value={roleReason}
+            onChange={(e) => setRoleReason(e.target.value)}
+            error={roleReason.length > 0 && roleReason.trim().length < 10}
+            helperText={roleReason.length > 0 && roleReason.trim().length < 10
+              ? 'Lý do phải từ 10 đến 500 ký tự'
+              : ' '}
+          />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setRoleDialog(false)} disabled={submitting}>Hủy</Button>
-          <Button variant="contained" onClick={handleSaveRoles} disabled={submitting || !roleSelection.length}>Lưu</Button>
+          <Button
+            variant="contained"
+            onClick={handleSaveRole}
+            disabled={submitting
+              || !roleSelection
+              || roleReason.trim().length < 10
+              || roleReason.trim().length > 500}
+          >
+            Lưu
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>

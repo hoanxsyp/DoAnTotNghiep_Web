@@ -25,10 +25,15 @@ public interface RoleRepository extends JpaRepository<Role, Long> {
     /** Danh sách vai trò còn hiệu lực, sắp theo thứ tự hiển thị. */
     List<Role> findByDeletedAtIsNullOrderByDisplayOrderAsc();
 
-    /** Mã các vai trò của một user (dùng khi nạp authorities cho JWT/UserDetails). */
+    /**
+     * Mã vai trò DUY NHẤT của một user (dùng khi nạp authorities cho JWT/UserDetails).
+     *
+     * <p>Trả {@link Optional} chứ không phải danh sách: từ V13 mỗi user có đúng một vai trò
+     * ({@code users.role_id}). {@code empty} chỉ xảy ra khi user không tồn tại / đã xóa mềm.
+     */
     @Query("""
-            SELECT r.code FROM UserRole ur JOIN ur.role r
-            WHERE ur.user.id = :userId AND r.deletedAt IS NULL AND ur.deletedAt IS NULL
+            SELECT r.code FROM User u JOIN u.role r
+            WHERE u.id = :userId AND u.deletedAt IS NULL AND r.deletedAt IS NULL
             """)
-    List<String> findRoleCodesByUserId(@Param("userId") Long userId);
+    Optional<String> findRoleCodeByUserId(@Param("userId") Long userId);
 }

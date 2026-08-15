@@ -2,7 +2,6 @@ package com.webtro.modules.catalog.controller;
 
 import com.webtro.common.ApiResponse;
 import com.webtro.common.PageResponse;
-import com.webtro.constant.PermissionCode;
 import com.webtro.modules.catalog.dto.request.AreaImportRequest;
 import com.webtro.modules.catalog.dto.request.CreateDistrictRequest;
 import com.webtro.modules.catalog.dto.request.CreateProvinceRequest;
@@ -41,14 +40,14 @@ import java.net.URI;
 
 /**
  * API quản trị khu vực hành chính (tỉnh/huyện/xã) — mục 4.17.5–4.17.11, 4.17.18–4.17.20 của
- * {@code docs/03}. Quyền chung {@code CATALOG_MANAGE}. Không có endpoint DELETE cho khu vực: dữ
+ * {@code docs/03}. Chỉ Admin được quản trị catalog. Không có endpoint DELETE cho khu vực: dữ
  * liệu hành chính là dữ liệu tham chiếu, muốn ngừng dùng thì tắt hỗ trợ qua {@code /toggle}
  * (mục 4.17.5–4.17.11 quy tắc 2).
  */
 @RestController
 @RequestMapping("/api/admin")
 @RequiredArgsConstructor
-@PreAuthorize("hasAuthority('" + PermissionCode.CATALOG_MANAGE + "')")
+@PreAuthorize("hasRole('ADMIN')")
 @Tag(name = "17. Admin - Catalog", description = "Quản trị danh mục, khu vực, tiện ích")
 public class AdminLocationController {
 

@@ -34,7 +34,7 @@ public class AiSentimentController {
                     + "nghiệm từ điển). persist=true (chỉ với commentId) ghi đè kết quả và tính lại uy tín. "
                     + "Yêu cầu quyền AI_LOG_VIEW.")
     @PostMapping("/analyze")
-    @PreAuthorize("hasAuthority('AI_LOG_VIEW')")
+    @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     public ResponseEntity<ApiResponse<SentimentResponse>> analyze(
             @Valid @RequestBody SentimentAnalyzeRequest request,
             @AuthenticationPrincipal CustomUserDetails principal) {

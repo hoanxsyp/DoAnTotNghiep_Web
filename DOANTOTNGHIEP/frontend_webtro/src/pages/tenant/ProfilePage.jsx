@@ -181,7 +181,7 @@ const ProfilePage = () => {
               <Stack spacing={1}>
                 <InfoRow label="Email" value={profile?.email} verified={profile?.emailVerified} />
                 <InfoRow label="Số điện thoại" value={profile?.phone || 'Chưa cập nhật'} verified={profile?.phoneVerified} />
-                <InfoRow label="Vai trò" value={(profile?.roles || []).map(roleLabel).join(', ')} />
+                <InfoRow label="Vai trò" value={roleLabel(profile?.role)} />
                 <InfoRow label="Tham gia" value={formatDateTime(profile?.createdAt, 'DD/MM/YYYY')} />
               </Stack>
 
@@ -270,7 +270,7 @@ const ProfilePage = () => {
 const roleLabel = (r) => ({
   ROLE_TENANT: 'Người thuê', ROLE_LANDLORD: 'Chủ trọ',
   ROLE_MODERATOR: 'Kiểm duyệt', ROLE_ADMIN: 'Quản trị',
-}[r] || r);
+}[r] || r || '—');
 
 const InfoRow = ({ label, value, verified }) => (
   <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>

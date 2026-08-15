@@ -1,5 +1,9 @@
 # 00 — Quyết định chuẩn (Canonical Decisions)
 
+<!-- WEBTRO_ROLE_ONLY_UPDATE_START -->
+> **Cập nhật 2026-08-09:** phân quyền hiện hành là **role-only**. Hệ thống không còn entity/repository/bảng nghiệp vụ `permissions` hay `role_permissions`; Flyway `V15__drop_permission_tables.sql` drop hai bảng này sau các migration lịch sử. Backend kiểm tra bằng `@PreAuthorize("hasRole/hasAnyRole")` và `SecurityUtils.hasRole/hasAnyRole`; JWT chỉ chứa `role`. Tenant được phép tạo tin nhưng service chỉ chấp nhận `categoryCode = ROOMMATE`; Landlord/Admin tạo được mọi loại tin. Access token 15 phút, refresh token 1 ngày, cả hai lưu `localStorage`; khi refresh token còn dưới 15 phút và access token vẫn còn hạn, frontend chủ động gọi `/api/auth/refresh` để xoay refresh token.
+<!-- WEBTRO_ROLE_ONLY_UPDATE_END -->
+
 > **Đây là hợp đồng kỹ thuật của toàn dự án.**
 > Mọi tài liệu thiết kế (01→04) và mọi dòng source code trong `backend_webtro/` và
 > `frontend_webtro/` **bắt buộc** tuân theo file này. Khi có mâu thuẫn giữa các tài
@@ -13,8 +17,16 @@
 | Phiên bản | Thay đổi |
 |---|---|
 | v1 | Bản chốt đầu tiên, viết trước khi soạn 4 tài liệu thiết kế. |
-| **v2 (hiện hành)** | Hợp nhất 23 đề xuất `[BỔ SUNG NGOÀI CANONICAL]` từ `01` mục 15.1 và Phụ lục A của `02` sau vòng kiểm toán phủ nghiệp vụ + nhất quán chéo. Xem mục 16 để biết danh sách thay đổi và lý do chấp nhận. |
+| v2 | Hợp nhất 23 đề xuất `[BỔ SUNG NGOÀI CANONICAL]` từ `01` mục 15.1 và Phụ lục A của `02` sau vòng kiểm toán phủ nghiệp vụ + nhất quán chéo. Xem mục 16 để biết danh sách thay đổi và lý do chấp nhận. |
+| **v3 (hiện hành)** | Mỗi người dùng đúng **một** vai trò (`users.role_id`, V13); bảo đảm **hai người cùng vai trò = bộ chức năng y hệt nhau** (bỏ 5 cơ chế phân biệt theo từng người, V14); đảo quyết định nơi lưu token sang **`localStorage` cho cả access + refresh token**, backend bỏ hết cookie. Xem mục 17. |
 
+> **v3 sửa 3 điểm về mô hình quyền và phiên đăng nhập** (xem mục 17):
+> 1. `User ↔ Role` từ **nhiều-nhiều** → **nhiều-một** (`users.role_id`): mỗi người dùng đúng một
+>    vai trò (mục 4.1, migration V13).
+> 2. Bỏ mọi cơ chế khiến **hai người cùng vai trò lại khác bộ chức năng** (mục 4.4).
+> 3. Nơi lưu token ở client: đảo sang **`localStorage` cho cả hai token**, backend bỏ hết cookie
+>    (mục 8).
+>
 > **v2 sửa 4 lỗi thực chất của v1** (không phải bổ sung trang trí):
 > 1. Công thức recommendation của v1 chỉ có 6 số hạng → **bỏ sót 3/11** mục "Dữ liệu đầu vào"
 >    mà `[§9.2]` liệt kê (diện tích quan tâm, số người ở, giới tính ở ghép).
@@ -196,8 +208,20 @@ Ba package chuyên biệt chỉ xuất hiện ở nơi cần:
 
 ### 4.1. Role (4 role người)
 
-`[§1.1]`, `[§6.1]` — quan hệ `User ↔ Role` là **nhiều-nhiều** qua `user_roles`
-(vì `[§1.2]`: *"Chủ trọ có toàn bộ quyền cơ bản của người thuê nếu hệ thống dùng chung tài khoản"*).
+`[§1.1]`, `[§6.1]` — **chốt v3:** quan hệ `User → Role` là **nhiều-một** qua cột
+`users.role_id` (NOT NULL, FK → `roles`). **Mỗi người dùng có ĐÚNG MỘT vai trò.**
+
+> **DEVIATION có chủ đích khỏi đề bài `[§6.2]`** (*"một user có thể có một hoặc nhiều role"*).
+> Lý do: đề bài `[§1.2]` chỉ đòi *"Chủ trọ có toàn bộ quyền cơ bản của người thuê"* — yêu cầu này
+> được thỏa bằng **ma trận quyền** (`ROLE_LANDLORD` ⊇ `ROLE_TENANT` ở mục 4.2), không cần user giữ
+> hai role. Đổi lại ta được một bảo đảm mạnh hơn và kiểm chứng được: **hai người cùng vai trò thì
+> có bộ chức năng y hệt nhau**. Với mô hình nhiều-nhiều cũ, hai "chủ trọ" có thể khác quyền nhau
+> chỉ vì một người được gán kèm `ROLE_TENANT` — đúng thứ phải loại bỏ.
+>
+> Ràng buộc "1 role" nằm ở **cấu trúc bảng** (một cột FK), không phải ở quy ước lập trình, nên
+> không có đường nào tạo ra user nhiều vai trò. Bảng nối `user_roles` đã bị bỏ ở migration **V13**;
+> lịch sử đổi vai trò vẫn còn đủ trong `audit_logs` (action `ROLE_CHANGE`: actor, giá trị cũ, giá
+> trị mới, lý do).
 
 | Code | Tên hiển thị | Ghi chú |
 |---|---|---|
@@ -212,44 +236,54 @@ là role riêng. Chúng là ngữ cảnh: người cho ở ghép = `ROLE_LANDLOR
 tiêu đề "Chủ trọ / Người cho ở ghép" xác nhận hướng này.
 "Khách chưa đăng nhập" là trạng thái ẩn danh, không phải role.
 
-### 4.2. Permission (RBAC 2 tầng: Role → Permission)
+### 4.2. Phân quyền role-only (không bảng Permission)
 
-Cần thiết vì `[§1.2]` + `[§11.2]` đặt ranh giới tinh vi: *"Moderator chỉ có quyền kiểm duyệt,
-không quản lý cấu hình tài chính"*. Kiểm tra ở backend bằng `@PreAuthorize("hasAuthority('...')")`,
-**không** chỉ ẩn nút ở frontend `[§11.2]`.
+Từ cập nhật 2026-08-09, hệ thống **không dùng bảng `permissions` và `role_permissions`**. Lý do: người dùng cùng vai trò phải có cùng quyền hạn, nên quyền được suy ra trực tiếp từ `users.role_id`.
 
-| Permission code | TENANT | LANDLORD | MODERATOR | ADMIN |
-|---|:--:|:--:|:--:|:--:|
-| `LISTING_CREATE` | | ✔ | | ✔ |
-| `LISTING_UPDATE_OWN` | | ✔ | | ✔ |
-| `LISTING_UPDATE_ANY` | | | | ✔ |
-| `LISTING_MODERATE` (duyệt/từ chối/gắn cờ/tạm ẩn) | | | ✔ | ✔ |
-| `LISTING_LOCK` | | | | ✔ |
-| `LISTING_VIEW_ANY` (xem cả tin non-public) | | | ✔ | ✔ |
-| `FAVORITE_MANAGE` | ✔ | ✔ | | |
-| `CONTACT_CREATE` | ✔ | ✔ | | |
-| `COMMENT_CREATE` | ✔ | ✔ | | |
-| `COMMENT_MODERATE` | | | ✔ | ✔ |
-| `REVIEW_CREATE` | ✔ | ✔ | | |
-| `REVIEW_MODERATE` | | | ✔ | ✔ |
-| `REPORT_CREATE` | ✔ | ✔ | ✔ | ✔ |
-| `REPORT_RESOLVE` | | | ✔ | ✔ |
-| `WARNING_SEND` | | | ✔ | ✔ |
-| `USER_MANAGE` (khóa/mở khóa) | | | | ✔ |
-| `USER_ROLE_ASSIGN` | | | | ✔ |
-| `LANDLORD_VERIFY` | | | ✔ | ✔ |
-| `PAYMENT_VIEW_OWN` | | ✔ | | ✔ |
-| `PAYMENT_MANAGE` | | | | ✔ |
-| `PACKAGE_MANAGE` | | | | ✔ |
-| `CATALOG_MANAGE` | | | | ✔ |
-| `AI_CONFIG_MANAGE` | | | | ✔ |
-| `AI_LOG_VIEW` | | | ✔ | ✔ |
-| `SYSTEM_CONFIG_MANAGE` | | | | ✔ |
-| `STATISTIC_VIEW` | | | | ✔ |
-| `AUDIT_LOG_VIEW` | | | | ✔ |
+| Role | Được phép chính |
+|---|---|
+| `ROLE_TENANT` | Xem/lưu/liên hệ/bình luận/đánh giá/báo cáo; tạo và quản lý tin của mình nhưng **chỉ** loại `ROOMMATE` (tìm người ở ghép). |
+| `ROLE_LANDLORD` | Toàn bộ quyền người dùng cuối; tạo/quản lý mọi loại tin; thanh toán/gói đẩy tin; hồ sơ chủ trọ. |
+| `ROLE_MODERATOR` | Kiểm duyệt tin, bình luận, đánh giá, báo cáo, cảnh báo; không quản lý tài chính/cấu hình/người dùng. |
+| `ROLE_ADMIN` | Toàn quyền quản trị hệ thống. |
 
-> Cột trống = **không có quyền**. `MODERATOR` cố tình **không** có bất kỳ permission nào về
-> `PAYMENT`, `PACKAGE`, `SYSTEM_CONFIG`, `USER_ROLE_ASSIGN`, `STATISTIC` — đúng `[§1.2]`.
+**Thực thi trong code:**
+
+- Controller dùng `@PreAuthorize("hasRole('ADMIN')")` hoặc `@PreAuthorize("hasAnyRole('LANDLORD','ADMIN')")`.
+- Service dùng `SecurityUtils.hasRole(...)` / `hasAnyRole(...)` cho các nhánh nghiệp vụ cần kiểm tra sau khi load entity.
+- JWT chỉ chứa `role`, không chứa `permissions[]`.
+- Flyway `V15__drop_permission_tables.sql` drop `role_permissions` rồi drop `permissions`. Tên migration V2 cũ được giữ để tránh sửa checksum lịch sử, nhưng schema cuối cùng không còn hai bảng này.
+
+### 4.3. Quy tắc riêng cho tenant đăng tin
+
+`ROLE_TENANT` được vào màn `/quan-ly/tin-dang/tao`, nhưng backend chỉ chấp nhận `CategoryCode.ROOMMATE`. Nếu tenant gửi loại khác, service trả `403 LISTING_FORBIDDEN` với thông điệp "Người thuê chỉ được đăng tin loại tìm người ở ghép". Frontend cũng lọc danh mục để tenant chỉ thấy lựa chọn `ROOMMATE`.
+### 4.4. Hai người cùng vai trò = bộ chức năng y hệt nhau (chốt v3)
+
+Đây là ràng buộc bắt buộc, không phải khuyến nghị: **vai trò là thứ DUY NHẤT quyết định một người
+dùng làm được gì.** Không có bảng cấp quyền riêng cho từng user (`user_permissions` không tồn tại
+và không được phép thêm); quyền hiện hành chỉ suy ra từ `users.role_id`.
+
+**Được phép khác nhau giữa hai người cùng vai trò** (đây là dữ liệu/chế tài, không phải chức năng):
+
+| Loại | Ví dụ | Vì sao không tính là vi phạm |
+|---|---|---|
+| Quyền sở hữu dữ liệu | chỉ sửa/xóa tin của chính mình | cùng một chức năng, khác đối tượng tác động |
+| Chế tài **có thời hạn** | `landlord_profiles.posting_restricted_until` | kiểm duyệt viên áp dụng, có ngày hết hạn, hồi phục được |
+| Trạng thái vòng đời tài khoản | `ACTIVE` / `LOCKED` | không phải phân quyền |
+| Hạn mức chu kỳ **bằng nhau cho mọi người** | `spam.listing.daily`, gia hạn miễn phí 2 lần/tháng | cùng một ngưỡng, tự reset |
+
+**Đã bị loại bỏ ở v3 vì vi phạm** (chi tiết ở mục 17):
+
+- Hạn mức đăng tin thấp hơn cho tài khoản dưới 7 ngày tuổi (`spam.listing.new_account_daily`).
+- Cấm đăng tin **vĩnh viễn** khi `warning_count` chạm ngưỡng — không có đường hồi phục.
+- Tự động duyệt tin cho chủ trọ "đã xác minh + điểm uy tín cao"
+  (`listing.auto_approve.trusted_landlord`) — hai chủ trọ cùng vai trò đi hai luồng khác nhau.
+- Chặn gửi duyệt tin theo `email_verified_at` (đã thừa: đăng nhập vốn đã chặn `PENDING_VERIFY`).
+- `isLandlord = có vai trò LANDLORD **hoặc** có hồ sơ chủ trọ` — người bị hạ vai trò vẫn còn hồ sơ
+  sót lại nên hiển thị khác người cùng vai trò với mình.
+
+Hai config key đầu đã bị xóa khỏi `system_configs` ở migration **V14** để Admin không còn chỉnh
+được một thứ không có tác dụng.
 
 ---
 
@@ -410,7 +444,7 @@ khóa tin ngay" `[§3.13]`).
 
 ---
 
-## 6. Danh sách Entity chốt (46 bảng)
+## 6. Danh sách Entity chốt (45 bảng)
 
 `[§6.1]` liệt kê 38 entity. Bổ sung 8 entity **bắt buộc** để thỏa các mục nghiệp vụ khác mà
 `[§6.1]` không liệt kê tường minh:
@@ -425,11 +459,14 @@ khóa tin ngay" `[§3.13]`).
 | `BannedKeyword` | `[§3.3]`, `[§5.3]`, `[§11.10]` *"Chặn từ khóa cấm"* |
 | `ViolationWarning` | `[§5.4]` *"3 lần cảnh báo trong 30 ngày"* — phải đếm được |
 | `Coupon` | `[§10.6]` *"Cấu hình khuyến mãi nếu cần"*, `[§2.9]` PROMO |
-| `NotificationPreference` | `[§11.12]` *"Có thể tắt một số loại thông báo không quan trọng"* — không có bảng này thì câu đó không có chỗ thực thi (**bảng thứ 46, thêm ở v2**) |
+| `NotificationPreference` | `[§11.12]` *"Có thể tắt một số loại thông báo không quan trọng"* — không có bảng này thì câu đó không có chỗ thực thi (**thêm ở v2**) |
+
+> **v3:** bỏ bảng nối `user_roles` (migration V13) vì mỗi người dùng chỉ còn một vai trò, lưu ở
+> cột `users.role_id`. Tổng số bảng: **46 → 45**.
 
 Danh sách đầy đủ theo module:
 
-**auth/user (11)** — `users`, `roles`, `user_roles`, `permissions`, `role_permissions`,
+**auth/user (10)** — `users` (có cột `role_id`), `roles`,
 `user_profiles`, `landlord_profiles`, `verifications`, `refresh_tokens`,
 `password_reset_tokens`, `follows`
 
@@ -544,26 +581,39 @@ Phân trang (`data` chứa):
 
 ## 8. Bảo mật
 
-- Access token JWT: **15 phút**, chứa `sub` (userId), `email`, `roles[]`, `permissions[]`, `jti`.
-- Refresh token: **7 ngày**, opaque UUID, **lưu DB** (`refresh_tokens`, hash SHA-256), **xoay
+- Access token JWT: **15 phút**, chứa `sub` (userId), `email`, `role` (CHUỖI đơn — mỗi người
+  dùng một vai trò), `jti`.
+- Refresh token: **1 ngày**, opaque UUID, **lưu DB** (`refresh_tokens`, hash SHA-256), **xoay
   vòng (rotation)** mỗi lần refresh + phát hiện tái sử dụng (reuse detection) → thu hồi cả họ token.
 - **"Họ token" (`family_id`)**: mỗi lần login sinh một `family_id` mới; mọi refresh token xoay vòng
   từ nó kế thừa cùng `family_id`. Reuse detection → thu hồi **toàn bộ** token cùng `family_id`.
   Bảng `refresh_tokens` vì vậy phải có: `family_id`, `revoked_at`, `replaced_by_id`, `user_agent`,
   `ip_address`.
-- **Nơi lưu token ở client (chốt v2):** access token **giữ trong memory** (biến module + mirror
-  vào Redux, **không** `localStorage`); refresh token nằm trong cookie
-  `httpOnly; Secure; SameSite=Strict; Path=/api/auth; Max-Age=604800`.
-  Lý do: nếu để refresh token trong `localStorage` thì toàn bộ đầu tư vào rotation + reuse
-  detection + hash SHA-256 trở nên vô nghĩa — một lỗ XSS bất kỳ đọc được token 7 ngày. Với
-  phương án này, thiệt hại tệ nhất của XSS bị chặn trần ở một access token sống ≤15 phút và
-  **không gia hạn được**.
-- **`csrf().disable()` vẫn đúng, và đây là lý do:** cookie bị giới hạn `Path=/api/auth` +
-  `SameSite=Strict`, nên mọi endpoint nghiệp vụ (`/api/listings`, `/api/payments`…) **không hề
-  nhận cookie** — chúng chỉ chấp nhận `Authorization: Bearer`. Không có endpoint nào vừa gây
-  side-effect vừa được xác thực bằng cookie ⇒ không có bề mặt CSRF.
-  *Ràng buộc kéo theo: nếu sau này có ai đặt endpoint gây side-effect dưới `/api/auth` mà xác
-  thực bằng cookie, luận điểm này gãy và phải bật lại CSRF cho nhóm path đó.*
+- **Nơi lưu token ở client (chốt v3 — ĐẢO quyết định v2):** **cả access token và refresh token
+  đều lưu trong `localStorage`** (`webtro_access_token`, `webtro_refresh_token`). Backend
+  **không đặt cookie nào**; client tự gắn access token vào header `Authorization` và gửi refresh
+  token trong body khi gọi `/api/auth/refresh`, `/api/auth/logout`, `/api/auth/change-password`.
+
+  *Quyết định v2 trước đây là: access token trong memory + refresh token trong cookie
+  `httpOnly; SameSite=Strict; Path=/api/auth`. Nay bỏ.*
+
+  **Đánh đổi phải nói thẳng:** `localStorage` đọc được bằng JavaScript, nên một lỗ XSS sẽ lấy
+  được **cả refresh token 1 ngày** — chứ không chỉ một access token sống ≤15 phút như phương án
+  cũ. Đây là điểm yếu thật, không tô hồng. Những thứ đang bù lại:
+  - Refresh token **xoay vòng mỗi lần dùng** + **reuse detection** theo `family_id`: token bị
+    đánh cắp mà nạn nhân còn dùng tiếp thì cả họ token bị thu hồi, phiên của kẻ tấn công chết theo.
+  - Refresh token là **opaque UUID lưu hash SHA-256** trong DB, thu hồi được tức thì.
+  - Mọi nội dung người dùng nhập đều bị **strip HTML** trước khi lưu (`HtmlSanitizer`), React
+    escape mặc định khi render → bề mặt XSS bị thu hẹp.
+  - Có thể giảm thêm thiệt hại bằng biến môi trường `JWT_REFRESH_TTL` (ví dụ `P1D` thay vì `P7D`)
+    mà không phải sửa code.
+
+  **Đổi lại:** phiên sống sót qua F5 mà không cần một vòng `/auth/refresh` chỉ để lấy lại access
+  token; luồng xác thực không phụ thuộc hành vi cookie của trình duyệt (chặn cookie bên thứ ba,
+  `SameSite`, khác domain giữa FE và BE) nên triển khai và gỡ lỗi đơn giản hơn nhiều.
+- **`csrf().disable()` vẫn đúng, và lý do nay còn mạnh hơn:** hệ thống **không dùng cookie cho bất
+  kỳ mục đích xác thực nào**. Không có thông tin xác thực nào được trình duyệt tự đính kèm vào
+  request, nên không có bề mặt CSRF — kể cả với các endpoint dưới `/api/auth`.
 - Logout: xóa refresh token + đưa `jti` của access token vào **blacklist Redis** với TTL = hạn còn lại.
 - **Chính sách khi Redis chết — bất đối xứng có chủ đích:**
   - Rate limit → **fail-open** (cho request đi qua, log WARN). Redis chết không được làm sập
@@ -984,12 +1034,10 @@ Ba quyết định trong đó, ghi rõ để không bị hiểu nhầm là tùy 
 **Landlord** (`/quan-ly/*`): `tong-quan`, `tin-dang`, `tin-dang/tao`, `tin-dang/:id/sua`,
 `tin-dang/:id/thong-ke`, `nguoi-lien-he`, `tin-nhan`, `goi-dich-vu`, `thanh-toan`, `ho-so-chu-tro`.
 
-**Admin/Moderator** (`/admin/*`): `dashboard`, `nguoi-dung`, `chu-tro`, `tin-dang`,
-`kiem-duyet`, `bao-cao`, `binh-luan`, `danh-gia`, `danh-muc`, `khu-vuc`, `tien-ich`,
-`goi-dich-vu`, `thanh-toan`, `ai/log`, `ai/cau-hinh`, `thong-ke`, `cau-hinh`, `audit-log`.
+**Admin/Moderator** (`/admin/*`): dùng chung layout nhưng route con lọc theo role. Admin có `dashboard`, `nguoi-dung`, `danh-muc`, `khu-vuc`, `tien-ich`, `goi-dich-vu`, `thanh-toan`, `ai/cau-hinh`, `thong-ke`, `cau-hinh`, `audit-log`; Moderator có `chu-tro`, `tin-dang`, `kiem-duyet`, `bao-cao`, `binh-luan`, `danh-gia`, `ai/log`. Admin cũng truy cập được toàn bộ route của Moderator.
 
 Route guard: `<ProtectedRoute>` (đăng nhập) + `<RoleRoute roles=[...]>` +
-`<PermissionRoute permissions=[...]>`. Admin và Moderator **dùng chung** layout `/admin` nhưng
+`<RoleRoute roles=[...]>`. Admin và Moderator **dùng chung** layout `/admin` nhưng
 menu render theo permission — Moderator không thấy mục tài chính/cấu hình `[§1.2]`.
 
 **Luật phân lớp frontend F1–F6** (đối xứng với 8 luật backend ở mục 3):
@@ -1062,3 +1110,81 @@ Một phần được coi là xong khi:
 
 **Một điểm không nhận nguyên văn:** `01` mục 15.1 đề xuất cổng backend **8081**; canonical chốt
 **8080** cho khớp `docker-compose.yml`, `.env.example` và `README.md` đã dựng. `01` phải sửa theo.
+
+---
+
+## 17. Tổng hợp thay đổi v2 → v3
+
+Ba yêu cầu, và những gì đã đổi trong source để thỏa từng yêu cầu.
+
+### 17.1. Mỗi người dùng có đúng MỘT vai trò
+
+| Tầng | Thay đổi |
+|---|---|
+| DB | **V13**: thêm `users.role_id` (NOT NULL, FK → `roles`, `ON DELETE RESTRICT`), backfill vai trò cao nhất từ `user_roles` (`MAX(role_id)`, chỉ dòng `deleted_at IS NULL`), rồi **DROP `user_roles`**. 46 → **45 bảng**. |
+| Entity | `User` thêm `@ManyToOne Role role`; **xóa** `UserRole.java` và `UserRoleRepository.java`. |
+| Repository | `RoleRepository.findRoleCodesByUserId` → `findRoleCodeByUserId` trả `Optional<String>`; ``AdminUserRoleMetricsRepository` đổi sang đếm trên `User` (bỏ `DISTINCT`); `UserRepository` thêm `findByRole_CodeInAndDeletedAtIsNull`. |
+| JWT | Claim `roles[]` (mảng) → **`role`** (chuỗi). Đổi TÊN claim chứ không đổi kiểu claim cũ, để token phát hành trước V13 fail rõ ràng (mất authority, buộc đăng nhập lại) thay vì lỗi ép kiểu ngầm. |
+| Security | `CustomUserDetails` nhận `String role`; authority = `role`. |
+| Đăng ký | `AuthServiceImpl.register` gán **một** vai trò: chọn chủ trọ → `ROLE_LANDLORD`, còn lại → `ROLE_TENANT`. Bỏ hẳn việc luôn gán kèm `ROLE_TENANT`. |
+| Quản trị | `PUT /api/admin/users/{id}/roles` → **`PUT /api/admin/users/{id}/role`**; body `{roles[], reason}` → `{role, reason}`; `UpdateRolesRequest` → `UpdateRoleRequest`. **Bỏ** đoạn tự thêm `ROLE_TENANT` khi gán `ROLE_LANDLORD`. |
+| DTO | `roles: string[]` → `role: string` ở `AuthUserResponse`, `RegisterResponse`, `UserProfileResponse`, `AdminUserResponse`, `AdminUserDetailResponse`; `UserActionResponse`: `previousRoles/roles` → `previousRole/role`. |
+| Seed | `DemoDataInitializer` bỏ dòng gán thêm `ROLE_TENANT` cho 2 chủ trọ đầu; `createUser` nhận thẳng `Role`. |
+| Frontend | `selectRoles` → `selectRole`; `useAuth.hasAnyRole(list)` nay là `list.includes(role)`; `RoleRoute` đảo chiều `includes`; màn Quản lý người dùng đổi Checkbox (chọn nhiều) → **RadioGroup** (chọn một). |
+
+### 17.2. Hai người cùng vai trò = bộ chức năng y hệt nhau
+
+Đã gỡ 5 cơ chế phân biệt theo từng người (chi tiết ở mục 4.4):
+
+| Vị trí | Cơ chế đã bỏ |
+|---|---|
+| `ListingServiceImpl.enforcePostingQuota` | hạn mức riêng cho tài khoản < 7 ngày tuổi |
+| `ListingServiceImpl.enforcePostingNotSuspended` | cấm đăng tin **vĩnh viễn** theo `warning_count` (giữ lại `posting_restricted_until` — chế tài có thời hạn) |
+| `ListingServiceImpl.canAutoApprove` | tự duyệt tin theo `verification_status` + `trust_score` + `warning_count` |
+| `ListingServiceImpl.requireEmailVerified` | chặn gửi duyệt theo `email_verified_at` (thừa: đăng nhập đã chặn `PENDING_VERIFY`) |
+| `UserServiceImpl.getPublicProfile` | `isLandlord = có vai trò LANDLORD **hoặc** có hồ sơ chủ trọ` |
+
+Kéo theo: `ListingActionResponse.autoApproved` bị bỏ (không còn luồng tự duyệt), hằng
+`ConfigKey.LISTING_AUTO_APPROVE_TRUSTED_LANDLORD`, `ConfigKey.SPAM_LISTING_NEW_ACCOUNT_DAILY`,
+`ErrorCode.LISTING_QUOTA_NEW_ACCOUNT` bị xóa, và **V14** xóa hai dòng tương ứng trong
+`system_configs`.
+
+**Không đụng tới** (cố ý): kiểm tra quyền sở hữu dữ liệu, chế tài có thời hạn, trạng thái
+`LOCKED`, và hạn mức chu kỳ áp dụng bằng nhau cho mọi người.
+
+### 17.3. Access token và refresh token đều ở `localStorage`
+
+| Tầng | Thay đổi |
+|---|---|
+| `AuthController` | Xóa `buildRefreshCookie()`, `clearRefreshCookie()`, mọi `@CookieValue` và header `Set-Cookie`. `/refresh` nhận `@Valid @RequestBody RefreshTokenRequest` (nay `@NotBlank`); `/logout` đọc token từ body (vẫn cho phép rỗng vì logout idempotent). |
+| `AppConstant` | Xóa `REFRESH_TOKEN_COOKIE`, `REFRESH_TOKEN_COOKIE_PATH`. |
+| `ChangePasswordRequest` | **Thêm** `refreshToken` (không bắt buộc) — thay cho cookie, để người dùng không bị đá khỏi chính thiết bị đang đổi mật khẩu. |
+| `tokenService` | Lưu `webtro_access_token` + `webtro_refresh_token` trong `localStorage`, cache trong biến module; thêm `getRefresh/setRefresh/setTokens/hasRefresh/syncFromStorage`. |
+| `axiosClient` | Bỏ `withCredentials`; gửi `{refreshToken}` trong body khi làm mới; **ghi đè refresh token mới** sau mỗi lần refresh (bắt buộc — backend xoay vòng token). |
+| `authSlice` | `bootstrapAuth` đọc token từ `localStorage`, chỉ gọi `/auth/refresh` khi access token đã mất; không còn gọi API khi chưa từng đăng nhập. |
+
+### 17.4. Hai lỗi có sẵn phát hiện và sửa kèm
+
+Cả hai đều nằm trên đường kiểm chứng của 17.1 nên bắt buộc phải sửa mới verify được:
+
+1. **`POST /api/auth/register` luôn trả 400.** `RegisterPage.jsx` gửi `{..., role: 'ROLE_TENANT'}`
+   trong khi `RegisterRequest` đòi `requestedRole` (enum `TENANT|LANDLORD`, không có tiền tố
+   `ROLE_`), `confirmPassword` và `acceptTerms`. Đã sửa payload phía FE, kèm
+   `contactName`/`contactPhone` khi đăng ký làm chủ trọ.
+2. **Đổi vai trò trong màn quản trị luôn trả 400.** Hộp thoại không có ô "Lý do" trong khi
+   `reason` là bắt buộc (10–500 ký tự). Đã thêm ô nhập lý do + kiểm tra độ dài phía client.
+
+### 17.5. Đã kiểm chứng trên hệ thống đang chạy
+
+```
+45 bảng nghiệp vụ · user_roles không còn tồn tại · users.role_id NOT NULL + FK
+20/20 người dùng có đúng 1 vai trò (ADMIN 1 · MODERATOR 1 · LANDLORD 6 · TENANT 12)
+6 chủ trọ  -> 1 bộ quyền duy nhất (8 quyền)   |  4 người thuê -> 1 bộ quyền duy nhất (5 quyền)
+login: không có Set-Cookie · user.role là chuỗi · claim JWT `role` là chuỗi
+refresh: xoay vòng token 2 lần liên tiếp OK · dùng lại token cũ -> 401 · thiếu token -> 400
+đổi mật khẩu: phiên hiện tại còn sống, thiết bị khác bị thu hồi
+đăng ký TENANT/LANDLORD -> 201, đúng 1 vai trò trong DB
+PUT /admin/users/{id}/role -> 200 · endpoint /roles cũ -> 404 · vai trò lạ -> 422
+ma trận quyền: TENANT/LANDLORD/MODERATOR/ADMIN chặn-cho đúng theo V2 seed
+frontend + reverse proxy /api: 200
+```

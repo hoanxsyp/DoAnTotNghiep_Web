@@ -8,7 +8,7 @@ import com.webtro.common.enums.NotificationType;
 import com.webtro.common.enums.ReviewStatus;
 import com.webtro.constant.ConfigKey;
 import com.webtro.constant.ErrorCode;
-import com.webtro.constant.PermissionCode;
+import com.webtro.constant.RoleCode;
 import com.webtro.exception.BusinessException;
 import com.webtro.exception.BusinessRuleException;
 import com.webtro.exception.ConflictException;
@@ -209,7 +209,7 @@ public class ReviewServiceImpl implements ReviewService {
     public ReviewResponse updateReview(Long reviewId, CreateReviewRequest request, Long userId) {
         Review r = aliveById(reviewId);
         if (!r.getUserId().equals(userId)) {
-            if (SecurityUtils.hasPermission(PermissionCode.REVIEW_MODERATE)) {
+            if (SecurityUtils.hasAnyRole(RoleCode.MODERATOR, RoleCode.ADMIN)) {
                 throw new ForbiddenException(ErrorCode.REVIEW_CONTENT_IMMUTABLE_BY_ADMIN);
             }
             throw new ForbiddenException(ErrorCode.REVIEW_FORBIDDEN);
@@ -246,7 +246,7 @@ public class ReviewServiceImpl implements ReviewService {
     public void deleteReview(Long reviewId, Long userId, String moderationReason) {
         Review r = aliveById(reviewId);
         boolean author = r.getUserId().equals(userId);
-        boolean moderator = SecurityUtils.hasPermission(PermissionCode.REVIEW_MODERATE);
+        boolean moderator = SecurityUtils.hasAnyRole(RoleCode.MODERATOR, RoleCode.ADMIN);
         if (!author && !moderator) {
             throw new ForbiddenException(ErrorCode.REVIEW_FORBIDDEN);
         }

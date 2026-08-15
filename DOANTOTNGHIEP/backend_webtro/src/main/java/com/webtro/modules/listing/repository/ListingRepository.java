@@ -79,6 +79,27 @@ public interface ListingRepository
             + "AND l.deletedAt IS NULL")
     long sumContactCountForOwner(@Param("ownerId") Long ownerId);
 
+    /** So tin theo owner/status, bo qua xoa mem. */
+    @Query("SELECT COUNT(l) FROM Listing l WHERE l.ownerId = :ownerId AND l.status = :status "
+            + "AND l.deletedAt IS NULL")
+    long countByOwnerAndStatus(@Param("ownerId") Long ownerId, @Param("status") ListingStatus status);
+
+    /** So tin active sap het han trong cua so chi dinh. */
+    @Query("SELECT COUNT(l) FROM Listing l WHERE l.ownerId = :ownerId "
+            + "AND l.status = com.webtro.common.enums.ListingStatus.ACTIVE "
+            + "AND l.expiredAt IS NOT NULL AND l.expiredAt > :now AND l.expiredAt <= :threshold "
+            + "AND l.deletedAt IS NULL")
+    long countExpiringSoonForOwner(@Param("ownerId") Long ownerId,
+                                   @Param("now") Instant now,
+                                   @Param("threshold") Instant threshold);
+
+    /** Top tin cua chu tro theo luot xem/lien he. */
+    @Query("SELECT l FROM Listing l WHERE l.ownerId = :ownerId AND l.status IN :statuses "
+            + "AND l.deletedAt IS NULL ORDER BY l.viewCount DESC, l.contactCount DESC, l.updatedAt DESC")
+    List<Listing> findTopForLandlordDashboard(@Param("ownerId") Long ownerId,
+                                              @Param("statuses") Collection<ListingStatus> statuses,
+                                              Pageable pageable);
+
     // ==================================================================
     //  Truy vấn phục vụ job nền (canonical mục 11) — thêm cho scheduler
     // ==================================================================

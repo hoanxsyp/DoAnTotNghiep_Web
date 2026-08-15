@@ -8,8 +8,8 @@ import { unwrap } from './apiHelper';
 const authApi = {
   register: (payload) => unwrap(axiosClient.post('/auth/register', payload)),
   login: (payload) => unwrap(axiosClient.post('/auth/login', payload)),
-  logout: () => unwrap(axiosClient.post('/auth/logout')),
-  refresh: () => unwrap(axiosClient.post('/auth/refresh')),
+  logout: (payload) => unwrap(axiosClient.post('/auth/logout', payload)),
+  refresh: (payload) => unwrap(axiosClient.post('/auth/refresh', payload)),
   me: () => unwrap(axiosClient.get('/users/me')),
   forgotPassword: (payload) => unwrap(axiosClient.post('/auth/forgot-password', payload)),
   resetPassword: (payload) => unwrap(axiosClient.post('/auth/reset-password', payload)),

@@ -18,17 +18,17 @@ public class AdminUserMapper {
 
     /**
      * @param user    tài khoản
-     * @param roles   mã vai trò của tài khoản
+     * @param role    mã vai trò của tài khoản
      * @param profile hồ sơ chủ trọ (null nếu chưa là chủ trọ)
      */
-    public AdminUserResponse toResponse(User user, List<String> roles, LandlordProfile profile) {
+    public AdminUserResponse toResponse(User user, String role, LandlordProfile profile) {
         AdminUserResponse.AdminUserResponseBuilder b = AdminUserResponse.builder()
                 .id(user.getId())
                 .fullName(user.getFullName())
                 .email(user.getEmail())
                 .phone(user.getPhone())
                 .avatarUrl(user.getAvatarUrl())
-                .roles(roles)
+                .role(role)
                 .status(user.getStatus() != null ? user.getStatus().name() : null)
                 .statusLabel(user.getStatus() != null ? user.getStatus().getLabel() : null)
                 .emailVerified(user.getEmailVerifiedAt() != null)

@@ -2,12 +2,14 @@ import { useSelector } from 'react-redux';
 import {
   selectCurrentUser,
   selectIsAuthenticated,
-  selectRoles,
-  selectPermissions,
+  selectRole,
 } from '@/redux/authSlice';
 
 /**
- * Hook truy cập trạng thái xác thực + kiểm tra role/permission phía client.
+ * Hook truy cập trạng thái xác thực + kiểm tra role phía client.
+ *
+ * `role` là MỘT chuỗi (mỗi người dùng đúng một vai trò), nên `hasAnyRole(list)` hỏi "vai trò của
+ * tôi có nằm trong danh sách được phép không" — chú ý chiều của `includes`.
  *
  * LƯU Ý: đây chỉ để ĐIỀU HƯỚNG và ẩn/hiện UI (canonical luật F6). Backend LUÔN kiểm tra quyền lại
  * — ẩn nút không phải là phân quyền.
@@ -15,23 +17,17 @@ import {
 export const useAuth = () => {
   const user = useSelector(selectCurrentUser);
   const isAuthenticated = useSelector(selectIsAuthenticated);
-  const roles = useSelector(selectRoles);
-  const permissions = useSelector(selectPermissions);
+  const role = useSelector(selectRole);
 
-  const hasRole = (role) => roles.includes(role);
-  const hasAnyRole = (list) => list.some((r) => roles.includes(r));
-  const hasPermission = (perm) => permissions.includes(perm);
-  const hasAnyPermission = (list) => list.some((p) => permissions.includes(p));
+  const hasRole = (target) => role === target;
+  const hasAnyRole = (list) => list.includes(role);
 
   return {
     user,
     isAuthenticated,
-    roles,
-    permissions,
+    role,
     hasRole,
     hasAnyRole,
-    hasPermission,
-    hasAnyPermission,
   };
 };
 

@@ -60,7 +60,7 @@ public class ListingController {
     private final ListingService listingService;
 
     @PostMapping
-    @PreAuthorize("hasAuthority('LISTING_CREATE')")
+    @PreAuthorize("hasAnyRole('TENANT','LANDLORD','ADMIN')")
     @Operation(summary = "Tạo tin đăng mới (LIST-01/LIST-02)",
             description = "Luôn tạo ở trạng thái DRAFT; submitImmediately=true sẽ gửi duyệt ngay.")
     public ResponseEntity<ApiResponse<ListingCreateResponse>> create(
@@ -71,7 +71,7 @@ public class ListingController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyAuthority('LISTING_UPDATE_OWN','LISTING_UPDATE_ANY')")
+    @PreAuthorize("hasAnyRole('TENANT','LANDLORD','ADMIN')")
     @Operation(summary = "Sửa tin đăng (LIST-03)",
             description = "Thay đổi nhạy cảm trên tin ACTIVE sẽ đưa tin về PENDING để duyệt lại.")
     public ResponseEntity<ApiResponse<ListingDetailResponse>> update(
@@ -81,7 +81,7 @@ public class ListingController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyAuthority('LISTING_UPDATE_OWN','LISTING_UPDATE_ANY')")
+    @PreAuthorize("hasAnyRole('TENANT','LANDLORD','ADMIN')")
     @Operation(summary = "Xóa mềm tin đăng (LIST-08)")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         listingService.delete(id);
@@ -89,32 +89,30 @@ public class ListingController {
     }
 
     @PostMapping("/{id}/submit")
-    @PreAuthorize("hasAuthority('LISTING_UPDATE_OWN')")
+    @PreAuthorize("hasAnyRole('TENANT','LANDLORD','ADMIN')")
     @Operation(summary = "Gửi duyệt tin (LIST-04)")
     public ResponseEntity<ApiResponse<ListingActionResponse>> submit(@PathVariable Long id) {
         ListingActionResponse data = listingService.submit(id);
-        String message = Boolean.TRUE.equals(data.getAutoApproved())
-                ? "Tin của bạn đã được tự động duyệt và đang hiển thị."
-                : "Đã gửi tin chờ duyệt. Tin sẽ được kiểm duyệt trong vòng 24 giờ.";
-        return ResponseEntity.ok(ApiResponse.success(data, message));
+        return ResponseEntity.ok(ApiResponse.success(data,
+                "Đã gửi tin chờ duyệt. Tin sẽ được kiểm duyệt trong vòng 24 giờ."));
     }
 
     @PostMapping("/{id}/hide")
-    @PreAuthorize("hasAuthority('LISTING_UPDATE_OWN')")
+    @PreAuthorize("hasAnyRole('TENANT','LANDLORD','ADMIN')")
     @Operation(summary = "Ẩn tin (LIST-06)")
     public ResponseEntity<ApiResponse<ListingActionResponse>> hide(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.success(listingService.hide(id), "Đã ẩn tin"));
     }
 
     @PostMapping("/{id}/unhide")
-    @PreAuthorize("hasAuthority('LISTING_UPDATE_OWN')")
+    @PreAuthorize("hasAnyRole('TENANT','LANDLORD','ADMIN')")
     @Operation(summary = "Hiển thị lại tin")
     public ResponseEntity<ApiResponse<ListingActionResponse>> unhide(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.success(listingService.unhide(id), "Tin đã được hiển thị lại"));
     }
 
     @PostMapping("/{id}/close")
-    @PreAuthorize("hasAuthority('LISTING_UPDATE_OWN')")
+    @PreAuthorize("hasAnyRole('TENANT','LANDLORD','ADMIN')")
     @Operation(summary = "Đóng tin (LIST-07)")
     public ResponseEntity<ApiResponse<ListingActionResponse>> close(
             @PathVariable Long id, @Valid @RequestBody CloseListingRequest request) {
@@ -123,7 +121,7 @@ public class ListingController {
     }
 
     @PostMapping("/{id}/renew")
-    @PreAuthorize("hasAuthority('LISTING_UPDATE_OWN')")
+    @PreAuthorize("hasAnyRole('TENANT','LANDLORD','ADMIN')")
     @Operation(summary = "Gia hạn tin (LIST-09)")
     public ResponseEntity<ApiResponse<RenewResponse>> renew(
             @PathVariable Long id, @Valid @RequestBody(required = false) RenewListingRequest request) {
@@ -147,7 +145,7 @@ public class ListingController {
     }
 
     @GetMapping("/my")
-    @PreAuthorize("hasAuthority('LISTING_CREATE')")
+    @PreAuthorize("hasAnyRole('TENANT','LANDLORD','ADMIN')")
     @Operation(summary = "Danh sách tin của tôi", description = "Lọc theo trạng thái, từ khóa, danh mục.")
     public ResponseEntity<ApiResponse<PageResponse<ListingSummaryResponse>>> getMyListings(
             @RequestParam(name = "status", required = false) List<ListingStatus> statuses,
@@ -162,7 +160,7 @@ public class ListingController {
     }
 
     @GetMapping("/{id}/stats")
-    @PreAuthorize("hasAnyAuthority('LISTING_UPDATE_OWN','STATISTIC_VIEW')")
+    @PreAuthorize("hasAnyRole('TENANT','LANDLORD','ADMIN')")
     @Operation(summary = "Thống kê tin đăng (LIST-10)")
     public ResponseEntity<ApiResponse<ListingStatsResponse>> getStats(
             @PathVariable Long id,
@@ -173,7 +171,7 @@ public class ListingController {
     }
 
     @PostMapping(path = "/{id}/images", consumes = "multipart/form-data")
-    @PreAuthorize("hasAnyAuthority('LISTING_UPDATE_OWN','LISTING_UPDATE_ANY')")
+    @PreAuthorize("hasAnyRole('TENANT','LANDLORD','ADMIN')")
     @Operation(summary = "Upload ảnh tin đăng (LIST-11)")
     public ResponseEntity<ApiResponse<ImageUploadResponse>> uploadImages(
             @PathVariable Long id,
@@ -185,7 +183,7 @@ public class ListingController {
     }
 
     @DeleteMapping("/{id}/images/{imageId}")
-    @PreAuthorize("hasAnyAuthority('LISTING_UPDATE_OWN','LISTING_UPDATE_ANY')")
+    @PreAuthorize("hasAnyRole('TENANT','LANDLORD','ADMIN')")
     @Operation(summary = "Xóa ảnh tin đăng")
     public ResponseEntity<Void> deleteImage(
             @PathVariable Long id, @PathVariable Long imageId,
@@ -195,7 +193,7 @@ public class ListingController {
     }
 
     @PutMapping("/{id}/images/{imageId}/primary")
-    @PreAuthorize("hasAnyAuthority('LISTING_UPDATE_OWN','LISTING_UPDATE_ANY')")
+    @PreAuthorize("hasAnyRole('TENANT','LANDLORD','ADMIN')")
     @Operation(summary = "Đặt ảnh đại diện")
     public ResponseEntity<ApiResponse<ModerationImpactResponse>> setPrimaryImage(
             @PathVariable Long id, @PathVariable Long imageId) {
@@ -204,7 +202,7 @@ public class ListingController {
     }
 
     @PutMapping("/{id}/images/order")
-    @PreAuthorize("hasAnyAuthority('LISTING_UPDATE_OWN','LISTING_UPDATE_ANY')")
+    @PreAuthorize("hasAnyRole('TENANT','LANDLORD','ADMIN')")
     @Operation(summary = "Sắp xếp thứ tự ảnh")
     public ResponseEntity<ApiResponse<List<ListingService.ListingImageResponseOrder>>> reorderImages(
             @PathVariable Long id, @Valid @RequestBody ImageOrderRequest request) {
@@ -213,7 +211,7 @@ public class ListingController {
     }
 
     @PutMapping("/{id}/amenities")
-    @PreAuthorize("hasAnyAuthority('LISTING_UPDATE_OWN','LISTING_UPDATE_ANY')")
+    @PreAuthorize("hasAnyRole('TENANT','LANDLORD','ADMIN')")
     @Operation(summary = "Cập nhật tiện ích của tin (LIST-12)")
     public ResponseEntity<ApiResponse<List<ListingAmenityResponse>>> updateAmenities(
             @PathVariable Long id, @Valid @RequestBody AmenityUpdateRequest request) {

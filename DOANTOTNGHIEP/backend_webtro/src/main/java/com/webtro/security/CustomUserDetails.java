@@ -8,14 +8,14 @@ import org.springframework.security.core.userdetails.UserDetails;
 
 import java.util.Collection;
 import java.util.List;
-import java.util.stream.Stream;
 
 /**
  * Principal của Spring Security cho hệ thống. Gói thông tin định danh + quyền của người dùng đã
  * xác thực, dùng làm {@code Authentication.getPrincipal()}.
  *
- * <p>Authority gồm CẢ role ({@code ROLE_*}) và permission (RBAC 2 tầng, canonical mục 4.2), nên
- * {@code hasRole()} và {@code hasAuthority()} đều dùng được ở {@code @PreAuthorize}.
+ * <p>Authority chỉ gồm role ({@code ROLE_*}). Mỗi người dùng có ĐÚNG MỘT role; mọi phân quyền
+ * backend dùng {@code hasRole()} / {@code hasAnyRole()} để bảo đảm hai người cùng role luôn có
+ * cùng bộ chức năng.
  */
 @Getter
 public class CustomUserDetails implements UserDetails {
@@ -24,20 +24,17 @@ public class CustomUserDetails implements UserDetails {
     private final String email;
     private final String passwordHash;
     private final UserStatus status;
-    private final List<String> roles;
-    private final List<String> permissions;
+    private final String role;
     private final Collection<? extends GrantedAuthority> authorities;
 
     public CustomUserDetails(Long id, String email, String passwordHash, UserStatus status,
-                             List<String> roles, List<String> permissions) {
+                             String role) {
         this.id = id;
         this.email = email;
         this.passwordHash = passwordHash;
         this.status = status;
-        this.roles = roles == null ? List.of() : List.copyOf(roles);
-        this.permissions = permissions == null ? List.of() : List.copyOf(permissions);
-        this.authorities = Stream.concat(this.roles.stream(), this.permissions.stream())
-                .distinct()
+        this.role = role;
+        this.authorities = (role == null || role.isBlank() ? List.<String>of() : List.of(role)).stream()
                 .map(SimpleGrantedAuthority::new)
                 .toList();
     }
@@ -78,7 +75,7 @@ public class CustomUserDetails implements UserDetails {
         return status == UserStatus.ACTIVE;
     }
 
-    public boolean hasPermission(String permission) {
-        return permissions.contains(permission);
+    public boolean hasRole(String expectedRole) {
+        return role != null && role.equals(expectedRole);
     }
 }

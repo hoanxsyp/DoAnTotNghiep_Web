@@ -8,7 +8,6 @@ import com.webtro.modules.user.entity.UserProfile;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
-import java.util.List;
 
 /**
  * Chuyển đổi {@link User} ↔ DTO (thủ công, dùng Builder — canonical luật 3, không MapStruct).
@@ -23,12 +22,11 @@ public class UserMapper {
      * @param user            người dùng
      * @param profile         hồ sơ người thuê (có thể null nếu chưa tạo)
      * @param landlordProfile hồ sơ chủ trọ (null nếu không phải chủ trọ)
-     * @param roles           danh sách mã vai trò
-     * @param permissions     danh sách mã quyền
+     * @param role            mã vai trò duy nhất
      */
     public UserProfileResponse toProfileResponse(User user, UserProfile profile,
                                                  LandlordProfile landlordProfile,
-                                                 List<String> roles, List<String> permissions) {
+                                                 String role) {
         return UserProfileResponse.builder()
                 .id(user.getId())
                 .fullName(user.getFullName())
@@ -38,8 +36,7 @@ public class UserMapper {
                 .gender(user.getGender())
                 .dateOfBirth(profile != null ? profile.getDateOfBirth() : null)
                 .status(user.getStatus())
-                .roles(roles)
-                .permissions(permissions)
+                .role(role)
                 .emailVerified(user.getEmailVerifiedAt() != null)
                 .phoneVerified(user.getPhoneVerifiedAt() != null)
                 .address(profile != null ? profile.getAddressDetail() : null)

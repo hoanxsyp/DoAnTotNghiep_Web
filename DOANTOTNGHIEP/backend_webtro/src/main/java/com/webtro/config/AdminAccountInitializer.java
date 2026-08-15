@@ -6,10 +6,8 @@ import com.webtro.config.properties.AppProperties;
 import com.webtro.constant.RoleCode;
 import com.webtro.modules.user.entity.Role;
 import com.webtro.modules.user.entity.User;
-import com.webtro.modules.user.entity.UserRole;
 import com.webtro.modules.user.repository.RoleRepository;
 import com.webtro.modules.user.repository.UserRepository;
-import com.webtro.modules.user.repository.UserRoleRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
@@ -41,7 +39,6 @@ public class AdminAccountInitializer implements ApplicationRunner {
     private final AppProperties appProperties;
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
-    private final UserRoleRepository userRoleRepository;
     private final PasswordEncoder passwordEncoder;
 
     @Override
@@ -74,16 +71,10 @@ public class AdminAccountInitializer implements ApplicationRunner {
                 .gender(Gender.UNKNOWN)
                 .status(UserStatus.ACTIVE)
                 .emailVerifiedAt(Instant.now())
+                .role(adminRole)
                 .failedLoginCount(0)
                 .build();
-        user = userRepository.save(user);
-
-        UserRole userRole = UserRole.builder()
-                .user(user)
-                .role(adminRole)
-                .assignedAt(Instant.now())
-                .build();
-        userRoleRepository.save(userRole);
+        userRepository.save(user);
 
         log.info("Đã tạo tài khoản quản trị khởi tạo: {}", admin.getEmail());
     }

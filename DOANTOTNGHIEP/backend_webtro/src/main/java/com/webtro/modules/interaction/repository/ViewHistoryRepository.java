@@ -53,4 +53,28 @@ public interface ViewHistoryRepository extends JpaRepository<ViewHistory, Long> 
     /** Id các lượt xem cũ hơn {@code threshold} — {@code DataRetentionJob} xóa theo lô. */
     @Query("SELECT v.id FROM ViewHistory v WHERE v.viewedAt < :threshold ORDER BY v.id ASC")
     List<Long> findIdsViewedBefore(@Param("threshold") Instant threshold, Pageable pageable);
+
+    /** Count counted views for listings owned by owner in [from, to). */
+    @Query("SELECT COUNT(v) FROM ViewHistory v, Listing l "
+            + "WHERE l.id = v.listingId AND l.ownerId = :ownerId AND l.deletedAt IS NULL "
+            + "AND v.isCounted = true AND v.viewedAt >= :from AND v.viewedAt < :to")
+    long countCountedViewsForOwnerBetween(@Param("ownerId") Long ownerId,
+                                          @Param("from") Instant from,
+                                          @Param("to") Instant to);
+
+    /** Daily counted views for listings owned by owner in [from, to). */
+    @Query(value = """
+            SELECT DATE(v.viewed_at) AS day, COUNT(*) AS total
+            FROM view_histories v
+            JOIN listings l ON l.id = v.listing_id
+            WHERE l.owner_id = :ownerId
+              AND l.deleted_at IS NULL
+              AND v.is_counted = true
+              AND v.viewed_at >= :from
+              AND v.viewed_at < :to
+            GROUP BY DATE(v.viewed_at)
+            """, nativeQuery = true)
+    List<Object[]> countDailyViewsForOwnerBetween(@Param("ownerId") Long ownerId,
+                                                  @Param("from") Instant from,
+                                                  @Param("to") Instant to);
 }

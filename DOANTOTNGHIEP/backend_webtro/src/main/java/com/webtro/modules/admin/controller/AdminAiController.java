@@ -51,14 +51,14 @@ public class AdminAiController {
     private final SentimentService sentimentService;
 
     @GetMapping("/config")
-    @PreAuthorize("hasAuthority('AI_CONFIG_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Xem cấu hình AI", description = "Cấu hình 4 module AI + trọng số điểm uy tín.")
     public ResponseEntity<ApiResponse<AiConfigResponse>> getConfig() {
         return ResponseEntity.ok(ApiResponse.success(adminAiService.getConfig(), "Lấy cấu hình AI thành công"));
     }
 
     @PutMapping("/config")
-    @PreAuthorize("hasAuthority('AI_CONFIG_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Cập nhật cấu hình AI", description = "Đổi ngưỡng/trọng số/bật-tắt module; ghi audit bắt buộc.")
     public ResponseEntity<ApiResponse<UpdateConfigResponse>> updateConfig(
             @Valid @RequestBody UpdateConfigRequest request,
@@ -69,7 +69,7 @@ public class AdminAiController {
     }
 
     @GetMapping("/logs")
-    @PreAuthorize("hasAuthority('AI_LOG_VIEW')")
+    @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Xem log AI", description = "Lịch sử sentiment/recommendation/price/chatbot theo module.")
     public ResponseEntity<ApiResponse<AiLogResponse>> getLogs(
             @RequestParam AiModule module,
@@ -85,7 +85,7 @@ public class AdminAiController {
     }
 
     @GetMapping("/alerts")
-    @PreAuthorize("hasAuthority('AI_LOG_VIEW')")
+    @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Cảnh báo cảm xúc tiêu cực",
             description = "Tin bị AI đánh dấu cần kiểm tra do tỷ lệ bình luận tiêu cực cao "
                     + "(need_review_count > 0), kèm tỷ lệ tiêu cực. Phân trang.")
@@ -97,7 +97,7 @@ public class AdminAiController {
     }
 
     @GetMapping("/price-deviations")
-    @PreAuthorize("hasAuthority('AI_LOG_VIEW')")
+    @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Tin lệch giá",
             description = "Tin bị AI đánh cờ lệch giá (price_deviation_flag = true), kèm giá đề xuất "
                     + "và tỷ lệ lệch từ dự đoán gần nhất. Phân trang.")
@@ -109,7 +109,7 @@ public class AdminAiController {
     }
 
     @PostMapping("/sentiment/reanalyze")
-    @PreAuthorize("hasAnyAuthority('AI_LOG_VIEW','COMMENT_MODERATE')")
+    @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Phân tích lại cảm xúc một bình luận",
             description = "Chạy lại phân tích cảm xúc cho một bình luận có sẵn, ghi đè kết quả và "
                     + "tính lại điểm uy tín tin. Ủy quyền cho SentimentService.analyze (persist).")

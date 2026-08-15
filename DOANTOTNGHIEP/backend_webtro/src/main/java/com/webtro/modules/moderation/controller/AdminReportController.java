@@ -75,7 +75,7 @@ public class AdminReportController {
 
     /** Danh sách báo cáo (phẳng hoặc gom nhóm theo đối tượng). */
     @GetMapping
-    @PreAuthorize("hasAuthority('REPORT_RESOLVE')")
+    @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Danh sách báo cáo",
             description = "groupBy=NONE trả danh sách phẳng + thống kê; groupBy=TARGET trả các nhóm theo đối tượng.")
     public ResponseEntity<ApiResponse<Object>> list(
@@ -107,7 +107,7 @@ public class AdminReportController {
 
     /** Chi tiết báo cáo kèm ngữ cảnh. */
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('REPORT_RESOLVE')")
+    @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Chi tiết báo cáo")
     public ResponseEntity<ApiResponse<ReportDetailResponse>> detail(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.success(
@@ -116,7 +116,7 @@ public class AdminReportController {
 
     /** Nhận xử lý báo cáo (PENDING → REVIEWING). */
     @PutMapping("/{id}/status")
-    @PreAuthorize("hasAuthority('REPORT_RESOLVE')")
+    @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Nhận xử lý báo cáo")
     public ResponseEntity<ApiResponse<AssignReportResponse>> assign(
             @PathVariable Long id,
@@ -129,7 +129,7 @@ public class AdminReportController {
 
     /** Xử lý (kết luận) báo cáo. */
     @PutMapping("/{id}/resolve")
-    @PreAuthorize("hasAuthority('REPORT_RESOLVE')")
+    @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Xử lý báo cáo",
             description = "SEVERE_LOCK yêu cầu thêm quyền LISTING_LOCK (chỉ Admin), kiểm ở service.")
     public ResponseEntity<ApiResponse<ResolveReportResponse>> resolve(
@@ -142,7 +142,7 @@ public class AdminReportController {
 
     /** Toàn bộ báo cáo về một đối tượng. */
     @GetMapping("/target/{targetType}/{targetId}")
-    @PreAuthorize("hasAuthority('REPORT_RESOLVE')")
+    @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Báo cáo theo đối tượng")
     public ResponseEntity<ApiResponse<ReportTargetGroupResponse>> byTarget(
             @PathVariable ReportTargetType targetType,
@@ -156,7 +156,7 @@ public class AdminReportController {
 
     /** Xử lý cả nhóm báo cáo về cùng đối tượng bằng một quyết định. */
     @PutMapping("/resolve-group")
-    @PreAuthorize("hasAuthority('REPORT_RESOLVE')")
+    @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Xử lý cả nhóm báo cáo")
     public ResponseEntity<ApiResponse<ResolveGroupResponse>> resolveGroup(
             @Valid @RequestBody ResolveGroupRequest request,

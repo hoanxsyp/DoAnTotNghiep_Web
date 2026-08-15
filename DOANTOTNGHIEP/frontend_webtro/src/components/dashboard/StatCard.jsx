@@ -10,7 +10,7 @@ import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
  * - severity='error' -> viền đỏ (VD "7 báo cáo chờ xử lý").
  * - Giá trị format vi-VN.
  *
- * Props: label, value, icon (node), color (str palette), delta (num), deltaLabel,
+ * Props: label, value, icon (node), color (str palette), delta (num), deltaSuffix, deltaLabel,
  *        loading (bool), onClick (fn), severity 'error'|..., hint
  */
 const fmt = (v) => (typeof v === 'number' ? v.toLocaleString('vi-VN') : v);
@@ -21,6 +21,7 @@ export default function StatCard({
   icon,
   color = 'primary',
   delta,
+  deltaSuffix = '%',
   deltaLabel,
   loading = false,
   onClick,
@@ -92,7 +93,7 @@ export default function StatCard({
                   variant="caption"
                   sx={{ color: deltaUp ? 'success.main' : deltaDown ? 'error.main' : 'text.secondary' }}
                 >
-                  {Math.abs(delta)}%{deltaLabel ? ` ${deltaLabel}` : ''}
+                  {Math.abs(delta)}{deltaSuffix}{deltaLabel ? ` ${deltaLabel}` : ''}
                 </Typography>
               </Stack>
             )}

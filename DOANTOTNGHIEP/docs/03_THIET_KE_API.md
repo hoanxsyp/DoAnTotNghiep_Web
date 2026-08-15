@@ -1,10 +1,14 @@
 # 03 — Thiết kế API (Hợp đồng Backend ↔ Frontend)
 
+<!-- WEBTRO_ROLE_ONLY_UPDATE_START -->
+> **Cập nhật 2026-08-09:** phân quyền hiện hành là **role-only**. Hệ thống không còn entity/repository/bảng nghiệp vụ `permissions` hay `role_permissions`; Flyway `V15__drop_permission_tables.sql` drop hai bảng này sau các migration lịch sử. Backend kiểm tra bằng `@PreAuthorize("hasRole/hasAnyRole")` và `SecurityUtils.hasRole/hasAnyRole`; JWT chỉ chứa `role`. Tenant được phép tạo tin nhưng service chỉ chấp nhận `categoryCode = ROOMMATE`; Landlord/Admin tạo được mọi loại tin. Access token 15 phút, refresh token 1 ngày, cả hai lưu `localStorage`; khi refresh token còn dưới 15 phút và access token vẫn còn hạn, frontend chủ động gọi `/api/auth/refresh` để xoay refresh token.
+<!-- WEBTRO_ROLE_ONLY_UPDATE_END -->
+
 > **Phạm vi:** tài liệu này là hợp đồng kỹ thuật giữa `backend_webtro/` và `frontend_webtro/`.
 > Hai bên code song song dựa trên tài liệu này mà không cần trao đổi thêm.
 >
 > **Nguồn sự thật:** `00_CANONICAL_DECISIONS.md` (gọi tắt: *canonical*). Mọi enum, tên bảng,
-> permission code, config key trong tài liệu này **trùng khớp 100%** với canonical.
+> role code, config key trong tài liệu này **trùng khớp 100%** với canonical.
 > Ký hiệu `[§x.y]` tham chiếu `PHAN_TICH_NGHIEP_VU_WEBSITE_PHONG_TRO.md`.
 >
 > Mọi phần bổ sung vượt ngoài canonical đều được đánh dấu **[BỔ SUNG NGOÀI CANONICAL]** và
@@ -312,7 +316,7 @@ Cấu hình trong `CorsConfig`, origin đọc từ biến môi trường `APP_CO
 | `MISSING_PARAMETER` | 400 | Thiếu tham số bắt buộc `{name}` | query/path param bắt buộc vắng | canonical §7.2 |
 | `TYPE_MISMATCH` | 400 | Tham số `{name}` sai kiểu dữ liệu | ép kiểu thất bại | canonical §7.2 |
 | `UNAUTHORIZED` | 401 | Vui lòng đăng nhập để tiếp tục | Không có/sai token | canonical §7.2 |
-| `FORBIDDEN` | 403 | Bạn không có quyền thực hiện thao tác này | Thiếu permission | `[§11.2]`, canonical §4.2 |
+| `FORBIDDEN` | 403 | Bạn không có quyền thực hiện thao tác này | Role không được phép hoặc không phải chủ sở hữu tài nguyên | `[§11.2]`, canonical §4.2 |
 | `RESOURCE_NOT_FOUND` | 404 | Không tìm thấy dữ liệu yêu cầu | Fallback 404 | canonical §7.2 |
 | `METHOD_NOT_ALLOWED` | 405 | Phương thức không được hỗ trợ cho tài nguyên này | Sai HTTP method | canonical §7.2 |
 | `BUSINESS_RULE_VIOLATED` | 422 | Thao tác không hợp lệ với trạng thái hiện tại | Fallback vi phạm nghiệp vụ | canonical §7.2 |
@@ -353,7 +357,7 @@ Cấu hình trong `CorsConfig`, origin đọc từ biến môi trường `APP_CO
 | `TOKEN_INVALID` | 401 | Phiên đăng nhập không hợp lệ | Chữ ký JWT sai / malformed | canonical §8 |
 | `TOKEN_REVOKED` | 401 | Phiên đăng nhập đã bị thu hồi | `jti` nằm trong blacklist Redis | canonical §8 |
 | `REFRESH_TOKEN_INVALID` | 401 | Phiên làm việc không hợp lệ, vui lòng đăng nhập lại | Refresh token không tồn tại trong `refresh_tokens` | canonical §8 |
-| `REFRESH_TOKEN_EXPIRED` | 401 | Phiên làm việc đã hết hạn, vui lòng đăng nhập lại | Quá 7 ngày | canonical §8 |
+| `REFRESH_TOKEN_EXPIRED` | 401 | Phiên làm việc đã hết hạn, vui lòng đăng nhập lại | Quá 1 ngày | canonical §8 |
 | `REFRESH_TOKEN_REUSED` | 401 | Phát hiện bất thường bảo mật. Toàn bộ phiên đã bị thu hồi | Reuse detection → thu hồi cả họ token | canonical §8 |
 | `PASSWORD_RESET_TOKEN_INVALID` | 400 | Liên kết đặt lại mật khẩu không hợp lệ | Token không có trong `password_reset_tokens` | `[§2.1]` AUTH-04 |
 | `PASSWORD_RESET_TOKEN_EXPIRED` | 410 | Liên kết đặt lại mật khẩu đã hết hạn | Quá hạn | `[§2.1]` AUTH-04 |
@@ -601,16 +605,15 @@ server bằng `react-toastify`. FE **không** tự dịch `errorCode` sang tiế
 
 ## 3. Xác thực & phân quyền
 
-### 3.1. Cơ chế (canonical §8)
+### 3.1. Token và phiên đăng nhập
 
-| Thành phần | Quy định |
+| Thành phần | Chính sách hiện hành |
 |---|---|
-| Access token | JWT HS512, **15 phút**, claims: `sub` (userId), `email`, `roles[]`, `permissions[]`, `jti`, `iat`, `exp` |
-| Refresh token | **opaque UUID v4**, **7 ngày**, lưu bảng `refresh_tokens` dưới dạng **hash SHA-256** |
-| Rotation | Mỗi lần `/api/auth/refresh` → thu hồi token cũ, phát token mới cùng `family_id` |
-| Reuse detection | Dùng lại token đã `revoked` → **thu hồi toàn bộ family** → `401 REFRESH_TOKEN_REUSED` |
-| Logout | Xóa refresh token + đưa `jti` access token vào blacklist Redis, TTL = hạn còn lại |
-| Lưu ở FE | `accessToken` + `refreshToken` trong `localStorage` (SPA thuần, không cookie → `csrf().disable()` là đúng — canonical §8) |
+| Access token | JWT HS512, TTL **15 phút** (`PT15M`), lưu `localStorage` key `webtro_access_token`. Claim: `sub`, `email`, `role`, `jti`, `iat`, `exp`. Không có `permissions[]`. |
+| Refresh token | Opaque UUID, TTL **1 ngày** (`P1D`), lưu `localStorage` key `webtro_refresh_token`; DB chỉ lưu SHA-256 hash. |
+| Refresh rotation | Mỗi lần gọi `/api/auth/refresh` sinh access token mới và refresh token mới, thu hồi token cũ. |
+| Chủ động gia hạn refresh | Frontend lưu thêm `webtro_refresh_expires_at`; nếu refresh còn dưới 15 phút và access vẫn còn hạn thì gọi `/api/auth/refresh`. |
+| Hết phiên | Chỉ coi là hết phiên khi access token không dùng được **và** refresh token cũng hết hạn/không refresh được. |
 
 **Payload access token mẫu:**
 
@@ -618,22 +621,14 @@ server bằng `react-toastify`. FE **không** tự dịch `errorCode` sang tiế
 {
   "sub": "42",
   "email": "chutro.nguyen@example.com",
-  "roles": ["ROLE_TENANT", "ROLE_LANDLORD"],
-  "permissions": ["LISTING_CREATE", "LISTING_UPDATE_OWN", "FAVORITE_MANAGE",
-                  "CONTACT_CREATE", "COMMENT_CREATE", "REVIEW_CREATE",
-                  "REPORT_CREATE", "PAYMENT_VIEW_OWN"],
+  "role": "ROLE_LANDLORD",
   "jti": "0d2e4b6f-8a91-4c11-9a77-5f1c9a2e8b3d",
   "iat": 1784282400,
   "exp": 1784283300
 }
 ```
 
-> `permissions[]` được nhúng vào token để `@PreAuthorize("hasAuthority('...')")` không phải
-> query DB mỗi request. Đổi quyền → token cũ còn hiệu lực tối đa 15 phút. Khi Admin gọi
-> `PUT /api/admin/users/{id}/roles`, backend **thu hồi toàn bộ refresh token** của user đó, buộc
-> đăng nhập lại → quyền mới có hiệu lực ngay ở lần refresh kế tiếp.
-
-### 3.2. Sequence — Đăng nhập `[§3.2]`
+### 3.2. Sequence - Đăng nhập
 
 ```mermaid
 sequenceDiagram
@@ -641,267 +636,106 @@ sequenceDiagram
     actor U as Người dùng
     participant FE as Frontend (React)
     participant API as AuthController
-    participant RL as RateLimitFilter (Redis)
     participant AS as AuthServiceImpl
     participant DB as MySQL
     participant JWT as JwtService
 
     U->>FE: Nhập email + mật khẩu
     FE->>API: POST /api/auth/login {emailOrPhone, password}
-    API->>RL: check "login:{ip}:{email}"
-    alt Vượt 5 lần / 15 phút [§3.2]
-        RL-->>FE: 429 LOGIN_ATTEMPT_EXCEEDED + Retry-After: 900
-    else Trong ngưỡng
-        RL-->>API: OK
-        API->>AS: login(request)
-        AS->>DB: findByEmailOrPhone(...)
-        alt Không tồn tại hoặc sai mật khẩu (BCrypt cost 12)
-            AS->>RL: INCR "login:{ip}:{email}" EXPIRE 900
-            AS-->>FE: 401 INVALID_CREDENTIALS
-        else Đúng mật khẩu
-            AS->>AS: kiểm tra UserStatus [§3.2]
-            alt LOCKED
-                AS-->>FE: 403 ACCOUNT_LOCKED
-            else PENDING_VERIFY
-                AS-->>FE: 403 ACCOUNT_NOT_VERIFIED
-            else ACTIVE
-                AS->>JWT: generateAccessToken(user) — 15 phút
-                AS->>DB: INSERT refresh_tokens (hash SHA-256, family_id, 7 ngày)
-                AS->>DB: UPDATE users SET last_login_at = now()
-                AS->>RL: DEL "login:{ip}:{email}"
-                AS-->>FE: 200 {accessToken, refreshToken, expiresIn: 900, user}
-                FE->>FE: lưu localStorage + dispatch(setCredentials)
-                FE-->>U: Điều hướng theo role [§3.2]
-            end
-        end
+    API->>AS: login(request)
+    AS->>DB: findByEmailOrPhone + BCrypt.matches
+    alt Sai thông tin / tài khoản không hợp lệ
+        AS-->>FE: 401/403
+    else ACTIVE
+        AS->>JWT: generateAccessToken(userId, email, role) - 15 phút
+        AS->>DB: INSERT refresh_tokens(hash, family_id, expired_at=now+1d)
+        AS-->>FE: 200 {accessToken, refreshToken, expiresIn:900, refreshExpiresIn:86400, user{role}}
+        FE->>FE: tokenService.setTokens() lưu localStorage
     end
 ```
 
-### 3.3. Sequence — Gọi API có token
+### 3.3. Sequence - Gọi API có token
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant FE as axiosInstance
+    participant FE as axiosClient
     participant F as JwtAuthenticationFilter
-    participant R as Redis (blacklist jti)
+    participant R as Redis blacklist
     participant JWT as JwtService
-    participant SEC as PermissionEvaluator
     participant C as Controller
+    participant S as Service
 
-    FE->>F: GET /api/listings/my + Authorization: Bearer <access>
-    F->>JWT: parse & verify chữ ký HS512
-    alt Chữ ký sai / malformed
-        F-->>FE: 401 TOKEN_INVALID
-    else exp < now
-        F-->>FE: 401 TOKEN_EXPIRED
+    FE->>F: Request + Authorization: Bearer <access>
+    F->>JWT: verify chữ ký + exp + jti
+    JWT->>R: kiểm tra blacklist
+    alt Token sai/hết hạn/bị thu hồi
+        F-->>FE: 401 UNAUTHORIZED
     else Hợp lệ
-        F->>R: EXISTS "jwt:blacklist:{jti}"
-        alt Có trong blacklist (đã logout)
-            F-->>FE: 401 TOKEN_REVOKED
-        else Không
-            F->>F: set SecurityContext (CustomUserDetails + authorities = permissions[])
-            F->>C: forward
-            C->>SEC: @PreAuthorize("hasAuthority('LISTING_CREATE')")
-            alt Thiếu quyền
-                SEC-->>FE: 403 FORBIDDEN
-            else Đủ quyền
-                C-->>FE: 200 ApiResponse<...>
-            end
+        F->>F: SecurityContext(userId, role)
+        F->>C: forward
+        C->>C: @PreAuthorize("hasRole/hasAnyRole")
+        C->>S: xử lý nghiệp vụ + kiểm ownership nếu cần
+        S-->>FE: 200 ApiResponse
+    end
+```
+
+### 3.4. Sequence - Refresh token và gia hạn chủ động
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant FE as axiosClient/tokenService
+    participant API as AuthController
+    participant AS as AuthServiceImpl
+    participant DB as refresh_tokens
+
+    alt refresh còn < 15 phút và access còn hạn
+        FE->>API: POST /api/auth/refresh {refreshToken}
+        API->>AS: refresh(token)
+        AS->>DB: revoke token cũ + insert token mới expired_at=now+1d
+        AS-->>FE: 200 {accessToken, refreshToken, expiresIn:900, refreshExpiresIn:86400}
+        FE->>FE: cập nhật localStorage, request hiện tại tiếp tục
+    else API trả 401 do access hết hạn
+        FE->>API: POST /api/auth/refresh {refreshToken}
+        alt Refresh hợp lệ
+            AS-->>FE: 200 token mới
+            FE->>API: replay request gốc
+        else Refresh hết hạn/thu hồi
+            AS-->>FE: 401
+            FE->>FE: clear localStorage + logout
         end
     end
 ```
 
-### 3.4. Sequence — Refresh token khi 401 (rotation + reuse detection)
+### 3.5. Bảng role theo endpoint chính
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant FE as axios interceptor
-    participant API as AuthController
-    participant AS as AuthServiceImpl
-    participant DB as refresh_tokens
-
-    FE->>API: GET /api/favorites
-    API-->>FE: 401 TOKEN_EXPIRED
-    Note over FE: interceptor bắt 401 → xếp hàng request đang chờ<br/>chỉ MỘT lần refresh chạy (isRefreshing flag)
-    FE->>API: POST /api/auth/refresh {refreshToken}
-    API->>AS: refresh(token)
-    AS->>DB: SELECT WHERE token_hash = SHA256(token)
-    alt Không tìm thấy
-        AS-->>FE: 401 REFRESH_TOKEN_INVALID
-    else expired_at < now
-        AS->>DB: DELETE bản ghi
-        AS-->>FE: 401 REFRESH_TOKEN_EXPIRED
-    else revoked_at != null  (REUSE DETECTION)
-        AS->>DB: UPDATE refresh_tokens SET revoked_at = now()<br/>WHERE family_id = :familyId  (thu hồi CẢ HỌ)
-        AS-->>FE: 401 REFRESH_TOKEN_REUSED
-        FE->>FE: xóa localStorage → điều hướng /dang-nhap
-    else Hợp lệ
-        AS->>DB: UPDATE cũ SET revoked_at = now(), replaced_by = :newId  (ROTATION)
-        AS->>DB: INSERT token mới (cùng family_id, 7 ngày)
-        AS-->>FE: 200 {accessToken, refreshToken, expiresIn: 900}
-        FE->>FE: cập nhật localStorage
-        FE->>API: phát lại các request đã xếp hàng với token mới
-        API-->>FE: 200
-    end
-```
-
-**Bảng `refresh_tokens` — cột phục vụ rotation:**
-
-| Cột | Kiểu | Ý nghĩa |
-|---|---|---|
-| `token_hash` | `CHAR(64)` | SHA-256 hex của UUID, `uk_refresh_tokens_token_hash` |
-| `family_id` | `CHAR(36)` | Cùng một chuỗi rotation; sinh mới khi login |
-| `replaced_by` | `BIGINT UNSIGNED` nullable | Id token thay thế |
-| `revoked_at` | `DATETIME` nullable | `!= null` → đã dùng/đã thu hồi |
-| `expired_at` | `DATETIME` | login + 7 ngày (không gia hạn khi rotate — hết 7 ngày là bắt buộc đăng nhập lại) |
-| `user_agent`, `ip_address` | `VARCHAR` | phục vụ `[§11.4]` logging |
-
-### 3.5. Sequence — Đăng xuất `[§2.1]` AUTH-03
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor U as Người dùng
-    participant FE as Frontend
-    participant API as AuthController
-    participant AS as AuthServiceImpl
-    participant DB as refresh_tokens
-    participant R as Redis
-
-    U->>FE: Bấm "Đăng xuất"
-    FE->>API: POST /api/auth/logout {refreshToken} + Bearer <access>
-    API->>AS: logout(jti, exp, refreshToken)
-    AS->>DB: UPDATE SET revoked_at = now() WHERE family_id = (SELECT family_id ...)
-    AS->>R: SET "jwt:blacklist:{jti}" 1 EX (exp - now)
-    AS-->>FE: 204 No Content
-    FE->>FE: xóa localStorage + dispatch(logout) + reset RTK store
-    FE-->>U: Điều hướng "/"
-```
-
-> Logout thu hồi **cả family** — đăng xuất một thiết bị làm mất hiệu lực chuỗi rotation của
-> thiết bị đó, không ảnh hưởng thiết bị khác (mỗi lần login có `family_id` riêng).
-
-### 3.6. Bảng permission theo endpoint (canonical §4.2)
-
-Ký hiệu: **A** = anonymous (không cần token) · **AU** = authenticated (chỉ cần đăng nhập, không
-cần permission) · **OWNER** = chủ sở hữu tài nguyên (kiểm tra trong service, không phải permission).
-
-| Endpoint | Quyền yêu cầu |
+| Nhóm endpoint | Role/điều kiện |
 |---|---|
-| `POST /api/auth/register`, `/login`, `/refresh`, `/forgot-password`, `/reset-password`, `/verify-email`, `/verify-phone`, `/resend-verification`, `/send-phone-otp` | **A** |
-| `POST /api/auth/logout`, `POST /api/auth/change-password` | **AU** |
-| `GET/PUT /api/users/me`, `PATCH /api/users/me/contact`, `POST /api/users/me/avatar` | **AU** |
-| `DELETE /api/users/me/avatar`, `DELETE /api/users/me` | **AU** |
-| `GET /api/users/{id}`, `GET /api/users/{id}/listings`, `GET /api/users/{id}/reviews` | **A** |
-| `POST /DELETE /api/users/{id}/follow`, `GET /api/users/me/following` | **AU** |
-| `GET/PUT /api/users/me/landlord-profile`, `POST /api/users/me/landlord-verification` | `LISTING_CREATE` *(đại diện vai trò chủ trọ)* |
-| `GET /api/categories`, `/provinces`, `/provinces/{id}/districts`, `/districts/{id}/wards`, `/amenities` | **A** |
-| `GET /api/system-configs/public` | **A** *(chỉ whitelist `listing.title.*`, `listing.description.*`, `listing.image.*` — mục 4.3.6)* |
-| `GET /api/listings`, `GET /api/search/listings`, `GET /api/search/suggestions` | **A** |
-| `GET /api/listings/{id}` | **A** (tin public) · `LISTING_VIEW_ANY` (tin non-public) |
-| `GET /api/listings/{id}/related`, `GET /api/listings/suggested` | **A** |
-| `POST /api/listings` | `LISTING_CREATE` |
-| `PUT /api/listings/{id}` | `LISTING_UPDATE_OWN` + **OWNER**, hoặc `LISTING_UPDATE_ANY` |
-| `DELETE /api/listings/{id}` | `LISTING_UPDATE_OWN` + **OWNER**, hoặc `LISTING_UPDATE_ANY` |
-| `POST /api/listings/{id}/submit`, `/hide`, `/unhide`, `/close`, `/renew` | `LISTING_UPDATE_OWN` + **OWNER** |
-| `POST/DELETE/PUT /api/listings/{id}/images/**`, `PUT /api/listings/{id}/amenities` | `LISTING_UPDATE_OWN` + **OWNER**, hoặc `LISTING_UPDATE_ANY` |
-| `GET /api/listings/{id}/stats` | `LISTING_UPDATE_OWN` + **OWNER**, hoặc `STATISTIC_VIEW` |
-| `GET /api/listings/my` | `LISTING_CREATE` |
-| `GET /api/landlord/dashboard` | `LISTING_CREATE` |
-| `GET /api/listings/{id}/edit-histories` | `LISTING_UPDATE_OWN` + **OWNER**, hoặc `LISTING_VIEW_ANY` |
-| `POST /api/favorites`, `DELETE /api/favorites/{listingId}`, `GET /api/favorites` | `FAVORITE_MANAGE` |
-| `GET/DELETE /api/history/views`, `DELETE /api/history/views/{id}` | **AU** |
-| `GET/DELETE /api/search/histories` | **AU** |
-| `POST /api/listings/{id}/contact`, `GET /api/listings/{id}/contact-info` | `CONTACT_CREATE` |
-| `GET /api/landlord/contacts` | `LISTING_CREATE` |
-| `GET/POST /api/conversations`, `GET /api/conversations/{id}`, `GET/POST /api/conversations/{id}/messages`, `POST /api/conversations/{id}/read` | `CONTACT_CREATE` + thành viên hội thoại |
-| `GET /api/listings/{id}/comments` | **A** |
-| `POST /api/listings/{id}/comments`, `POST /api/comments/{id}/reply` | `COMMENT_CREATE` |
-| `PUT/DELETE /api/comments/{id}` | `COMMENT_CREATE` + **OWNER**, hoặc `COMMENT_MODERATE` (chỉ xóa) |
-| `GET /api/listings/{id}/reviews`, `GET /api/listings/{id}/reviews/eligibility` | **A** / **AU** cho eligibility |
-| `POST /api/listings/{id}/reviews`, `PUT /api/reviews/{id}` | `REVIEW_CREATE` (+ **OWNER** với PUT) |
-| `DELETE /api/reviews/{id}` | `REVIEW_CREATE` + **OWNER**, hoặc `REVIEW_MODERATE` |
-| `GET /api/reviews/my` | `REVIEW_CREATE` |
-| `POST /api/reports`, `GET /api/reports/my` | `REPORT_CREATE` |
-| `GET /api/promotion-packages`, `GET /api/promotion-packages/{id}` | **A** |
-| `POST /api/payments`, `GET /api/payments/{id}`, `GET /api/payments/my`, `POST /api/payments/{id}/cancel` | `PAYMENT_VIEW_OWN` |
-| `POST /api/listings/{id}/promote` | `PAYMENT_VIEW_OWN` + **OWNER** của listing |
-| `GET /api/promotion-subscriptions/my` | `PAYMENT_VIEW_OWN` |
-| `POST /api/coupons/validate` | `PAYMENT_VIEW_OWN` |
-| `POST /api/payments/callback` | **A** + xác thực **HMAC signature** (mục 6) |
-| `GET /api/notifications`, `/unread-count`, `PUT .../read`, `PUT .../read-all`, `DELETE .../{id}`, `GET/PUT /api/notifications/preferences` | **AU** |
-| `POST /api/ai/chatbot/message` | **A** `[§1.2]` "Khách dùng chatbot ở mức cơ bản" |
-| `GET /api/ai/chatbot/conversations`, `GET /api/ai/chatbot/conversations/{id}/messages` | **AU** |
-| `POST /api/ai/recommendations` | **A** (cold start) / **AU** (cá nhân hóa) |
-| `POST /api/ai/price-prediction` | `LISTING_CREATE` |
-| `GET /api/ai/price-prediction/histories` | `LISTING_UPDATE_OWN` + **OWNER**, hoặc `AI_LOG_VIEW` |
-| `POST /api/ai/sentiment/analyze` | `AI_LOG_VIEW` |
-| `GET /api/admin/dashboard`, `GET /api/admin/statistics`, `GET /api/admin/statistics/revenue` | `STATISTIC_VIEW` |
-| `GET /api/admin/users`, `GET /api/admin/users/{id}` | `USER_MANAGE` |
-| `PUT /api/admin/users/{id}/lock`, `/unlock` | `USER_MANAGE` |
-| `PUT /api/admin/users/{id}/roles` | `USER_ROLE_ASSIGN` |
-| `GET /api/admin/landlords` | `LANDLORD_VERIFY` |
-| `PUT /api/admin/landlords/{id}/verify`, `/unverify`, `/reject-verification`, `/restrict-posting` | `LANDLORD_VERIFY` |
-| `GET /api/admin/listings`, `GET /api/admin/listings/{id}` | `LISTING_VIEW_ANY` |
-| `PUT /api/admin/listings/{id}/approve`, `/reject`, `/hide`, `/flag-need-review`, `/clear-need-review`, `/request-edit` | `LISTING_MODERATE` |
-| `PUT /api/admin/listings/{id}/lock`, `/unlock` | `LISTING_LOCK` |
-| `GET /api/admin/moderation-actions`, `GET /api/admin/moderation/queue` | `LISTING_MODERATE` |
-| `PUT /api/admin/listings/bulk` | `LISTING_MODERATE` (+ `LISTING_LOCK` khi `action = LOCK`) |
-| `GET /api/admin/comments`, `PUT /api/admin/comments/{id}/hide`, `/unhide`, `/mark-spam` | `COMMENT_MODERATE` |
-| `PUT /api/admin/comments/bulk` | `COMMENT_MODERATE` |
-| `GET /api/admin/reviews`, `PUT /api/admin/reviews/{id}/hide`, `/unhide` | `REVIEW_MODERATE` |
-| `GET /api/admin/reports`, `GET /api/admin/reports/{id}` | `REPORT_RESOLVE` |
-| `GET /api/admin/reports/target/{targetType}/{targetId}` | `REPORT_RESOLVE` |
-| `PUT /api/admin/reports/{id}/status`, `PUT /api/admin/reports/{id}/resolve` | `REPORT_RESOLVE` |
-| `PUT /api/admin/reports/resolve-group` | `REPORT_RESOLVE` (+ `LISTING_LOCK` khi `result = SEVERE_LOCK`) |
-| `POST /api/admin/warnings`, `GET /api/admin/warnings` | `WARNING_SEND` |
-| `GET/POST/PUT/DELETE /api/admin/categories/**`, `/provinces/**`, `/districts/**`, `/wards/**`, `/amenities/**` | `CATALOG_MANAGE` |
-| `PUT /api/admin/{categories\|amenities\|provinces\|districts\|wards}/{id}/toggle` | `CATALOG_MANAGE` |
-| `PUT /api/admin/categories/order`, `PUT /api/admin/amenities/order` | `CATALOG_MANAGE` |
-| `POST /api/admin/areas/import` | `CATALOG_MANAGE` |
-| `GET/POST/PUT /api/admin/promotion-packages/**` | `PACKAGE_MANAGE` |
-| `GET/POST/PUT /api/admin/coupons/**` | `PACKAGE_MANAGE` |
-| `GET /api/admin/payments`, `GET /api/admin/payments/{id}` | `PAYMENT_MANAGE` |
-| `PUT /api/admin/payments/{id}/refund`, `POST /api/admin/payments/{id}/reconcile` | `PAYMENT_MANAGE` |
-| `GET /api/admin/ai/logs`, `GET /api/admin/ai/alerts`, `GET /api/admin/ai/price-deviations` | `AI_LOG_VIEW` |
-| `POST /api/admin/ai/sentiment/reanalyze` | `AI_LOG_VIEW` |
-| `GET/PUT /api/admin/ai/config` | `AI_CONFIG_MANAGE` |
-| `GET/PUT /api/admin/system-configs` | `SYSTEM_CONFIG_MANAGE` |
-| `GET/POST/PUT/DELETE /api/admin/banned-keywords/**`, `PUT /api/admin/banned-keywords/{id}/toggle` | `SYSTEM_CONFIG_MANAGE` |
-| `GET /api/admin/audit-logs` | `AUDIT_LOG_VIEW` |
-| `GET /api/payments/my/export` | `PAYMENT_VIEW_OWN` |
-| `GET /api/admin/users/export` | `USER_MANAGE` |
-| `GET /api/admin/payments/export` | `PAYMENT_MANAGE` |
-| `GET /api/admin/statistics/export` | `STATISTIC_VIEW` |
-| `GET /api/admin/audit-logs/export` | `AUDIT_LOG_VIEW` |
-| `GET /api/admin/ai/logs/export` | `AI_LOG_VIEW` |
+| Public auth/search/listing detail public/catalog | Anonymous |
+| Hồ sơ cá nhân, lưu tin, lịch sử, chat, comment/review/report của mình | Authenticated (`TENANT`, `LANDLORD`, `ADMIN` theo endpoint) |
+| `POST /api/listings` | `TENANT`, `LANDLORD`, `ADMIN`; service chặn tenant nếu `categoryCode != ROOMMATE`. |
+| Sửa/xóa/submit/hide/renew tin của mình | `TENANT`, `LANDLORD`, `ADMIN` + owner; admin có thể thao tác rộng hơn theo endpoint admin. |
+| Hồ sơ chủ trọ, dashboard chủ trọ, thanh toán/gói dịch vụ | `LANDLORD`, `ADMIN`. |
+| Kiểm duyệt tin/bình luận/đánh giá/báo cáo/cảnh báo | `MODERATOR`, `ADMIN`; khóa nghiêm trọng chỉ `ADMIN` ở các nhánh yêu cầu khóa cứng. |
+| Quản trị người dùng, danh mục, thanh toán, gói, cấu hình, thống kê, audit | `ADMIN`. |
 
-> **Kiểm chứng ranh giới Moderator `[§1.2]`:** Moderator **không** có `PAYMENT_MANAGE`,
-> `PACKAGE_MANAGE`, `SYSTEM_CONFIG_MANAGE`, `USER_ROLE_ASSIGN`, `USER_MANAGE`, `STATISTIC_VIEW`,
-> `AI_CONFIG_MANAGE`, `CATALOG_MANAGE`, `LISTING_LOCK` → mọi endpoint tài chính/cấu hình trả
-> `403 FORBIDDEN` cho Moderator. Đây là hành vi **đúng theo thiết kế**, FE ẩn menu tương ứng
-> nhưng backend vẫn chặn `[§11.2]`.
-
-**Cách khai báo trong code:**
+### 3.6. Cách khai báo trong code
 
 ```java
 @PostMapping
-@PreAuthorize("hasAuthority('LISTING_CREATE')")
-@Operation(summary = "Tạo tin đăng mới (LIST-01/LIST-02)")
+@PreAuthorize("hasAnyRole('TENANT','LANDLORD','ADMIN')")
 public ResponseEntity<ApiResponse<ListingDetailResponse>> create(
-        @Valid @RequestBody CreateListingRequest request,
-        @CurrentUser CustomUserDetails principal) { ... }
+        @Valid @RequestBody CreateListingRequest request) { ... }
 ```
 
-Kiểm tra **OWNER** không dùng `@PreAuthorize` (cần load entity) mà nằm trong service:
+Kiểm tra riêng tenant chỉ được đăng ở ghép nằm trong service vì cần load `Category` từ DB:
 
 ```java
-private void assertCanModify(Listing listing, CustomUserDetails principal) {
-    if (principal.hasAuthority(PermissionCode.LISTING_UPDATE_ANY)) return;
-    if (!listing.getOwnerId().equals(principal.getUserId())) {
-        throw new ForbiddenException(ErrorCode.LISTING_FORBIDDEN);
+private void validateCategoryAllowedForCurrentRole(CategoryCode categoryCode) {
+    if (SecurityUtils.hasRole(RoleCode.TENANT) && categoryCode != CategoryCode.ROOMMATE) {
+        throw new ForbiddenException(ErrorCode.LISTING_FORBIDDEN,
+                "Người thuê chỉ được đăng tin loại tìm người ở ghép");
     }
 }
 ```
@@ -978,7 +812,7 @@ Controller: `com.webtro.modules.auth.controller.AuthController`. Tag Swagger: `0
     "email": "nguyen.van.an@gmail.com",
     "fullName": "Nguyễn Văn An",
     "status": "PENDING_VERIFY",
-    "roles": ["ROLE_TENANT", "ROLE_LANDLORD"],
+    "role": "ROLE_LANDLORD",
     "verificationEmailSent": true,
     "createdAt": "2026-07-17T10:00:00Z"
   },
@@ -993,10 +827,10 @@ Controller: `com.webtro.modules.auth.controller.AuthController`. Tag Swagger: `0
 **Quy tắc nghiệp vụ:**
 1. Một email chỉ thuộc một tài khoản `[§3.1]` → check `uk_users_email` (kể cả `PENDING_VERIFY`).
 2. Một số điện thoại chỉ thuộc một tài khoản **đang hoạt động** `[§3.1]` → check trùng trên `status IN (ACTIVE, PENDING_VERIFY)`; số của tài khoản `DELETED` được tái sử dụng.
-3. `requestedRole = LANDLORD` → gán **cả hai** role `ROLE_TENANT` + `ROLE_LANDLORD` (canonical §4.1: *"Chủ trọ có toàn bộ quyền cơ bản của người thuê"*), tạo thêm bản ghi `landlord_profiles`.
-4. `requestedRole = TENANT` → chỉ `ROLE_TENANT`.
+3. `requestedRole = LANDLORD` → gán **đúng một** vai trò `ROLE_LANDLORD` và tạo thêm bản ghi `landlord_profiles`. Yêu cầu *"Chủ trọ có toàn bộ quyền cơ bản của người thuê"* `[§1.2]` được thỏa bằng ma trận quyền (canonical §4.2: `ROLE_LANDLORD` ⊇ `ROLE_TENANT`), **không** gán kèm `ROLE_TENANT`.
+4. `requestedRole = TENANT` → `ROLE_TENANT`.
 5. Mật khẩu hash BCrypt cost 12 (canonical §8).
-6. Tạo `verifications` (`type = EMAIL`, `status = PENDING`, token 64 ký tự ngẫu nhiên, TTL 24 giờ), gửi email async qua `@Async` (canonical §3 `AsyncConfig`).
+6. Tạo `verifications` (`type = EMAIL`, `status = PENDING`, token 64 ký tự ngẫu nhiên + OTP 6 chữ số, TTL 24 giờ), gửi email async qua `@Async` (canonical §3 `AsyncConfig`).
 7. Sinh `NotificationType = ACCOUNT_REGISTERED`, kênh `IN_APP` + `EMAIL` `[§5.6]`.
 8. **Không** trả token — user phải xác thực rồi mới đăng nhập được `[§3.1]` bước 6.
 
@@ -1031,17 +865,14 @@ Controller: `com.webtro.modules.auth.controller.AuthController`. Tag Swagger: `0
     "refreshToken": "9c1f7b3e-42a8-4d5e-b6c1-77e0a2f4d8b9",
     "tokenType": "Bearer",
     "expiresIn": 900,
-    "refreshExpiresIn": 604800,
+    "refreshExpiresIn": 86400,
     "user": {
       "id": 42,
       "fullName": "Nguyễn Văn An",
       "email": "nguyen.van.an@gmail.com",
       "avatarUrl": "https://cdn.webtro.vn/avatars/8f3c2a1e.webp",
       "status": "ACTIVE",
-      "roles": ["ROLE_TENANT", "ROLE_LANDLORD"],
-      "permissions": ["LISTING_CREATE", "LISTING_UPDATE_OWN", "FAVORITE_MANAGE",
-                      "CONTACT_CREATE", "COMMENT_CREATE", "REVIEW_CREATE",
-                      "REPORT_CREATE", "PAYMENT_VIEW_OWN"],
+      "role": "ROLE_LANDLORD",
       "landlordVerified": true,
       "lastLoginAt": "2026-07-16T22:14:03Z"
     }
@@ -1090,13 +921,13 @@ Controller: `com.webtro.modules.auth.controller.AuthController`. Tag Swagger: `0
     "refreshToken": "3b8e0d21-7f44-4a19-8c62-1de5a0b93c47",
     "tokenType": "Bearer",
     "expiresIn": 900,
-    "refreshExpiresIn": 518400
+    "refreshExpiresIn": 86400
   },
   "timestamp": "2026-07-17T10:15:00Z"
 }
 ```
 
-> `refreshExpiresIn` = số giây còn lại của **family** (không reset về 604800) — hết 7 ngày kể từ
+> `refreshExpiresIn` = số giây còn lại của **family** (reset theo token mới về tối đa 86400) — hết 1 ngày kể từ
 > login là bắt buộc đăng nhập lại.
 
 **Mã lỗi:** `VALIDATION_FAILED`, `REFRESH_TOKEN_INVALID`, `REFRESH_TOKEN_EXPIRED`,
@@ -1249,7 +1080,9 @@ bị đăng xuất, thiết bị khác bị.
 
 | Field | Kiểu | Bắt buộc | Ràng buộc | Mô tả |
 |---|---|:--:|---|---|
-| `token` | string | ✔ | `@NotBlank`, 64 ký tự | Token trong link email |
+| `token` | string | ✘ | 32-64 ký tự | Token trong link email. Có `token` thì không cần `email`/`otp` |
+| `email` | string | ✘ | email hợp lệ, tối đa 150 ký tự | Bắt buộc khi xác thực bằng OTP |
+| `otp` | string | ✘ | 6 chữ số | Bắt buộc khi không dùng `token` |
 
 **Response 200**
 
@@ -1270,7 +1103,9 @@ bị đăng xuất, thiết bị khác bị.
 **Mã lỗi:** `VALIDATION_FAILED`, `OTP_INVALID`, `OTP_EXPIRED`, `OTP_ALREADY_USED`,
 `VERIFICATION_ALREADY_DONE`, `RATE_LIMIT_EXCEEDED`.
 
-**Quy tắc:** `verifications` (`type = EMAIL`) → `status = VERIFIED`; `users.status`:
+**Quy tắc:** chấp nhận một trong hai cách xác thực: `{ "token": "..." }` từ link email hoặc
+`{ "email": "...", "otp": "123456" }` từ mã trong email. `verifications` (`type = EMAIL`) lưu
+`token_hash` và `otp_hash`; xác thực thành công → `status = VERIFIED`; `users.status`:
 `PENDING_VERIFY` → `ACTIVE` `[§3.1]` bước 6. Nếu đã `ACTIVE` → `409 VERIFICATION_ALREADY_DONE`.
 
 ---
@@ -1398,10 +1233,7 @@ Controller: `UserController`, `FollowController`. Tag Swagger: `02. User`.
     "gender": "MALE",
     "dateOfBirth": "1998-05-20",
     "status": "ACTIVE",
-    "roles": ["ROLE_TENANT", "ROLE_LANDLORD"],
-    "permissions": ["LISTING_CREATE", "LISTING_UPDATE_OWN", "FAVORITE_MANAGE",
-                    "CONTACT_CREATE", "COMMENT_CREATE", "REVIEW_CREATE",
-                    "REPORT_CREATE", "PAYMENT_VIEW_OWN"],
+    "role": "ROLE_LANDLORD",
     "emailVerified": true,
     "phoneVerified": false,
     "address": "12 Nguyễn Huệ, P. Bến Nghé, Q.1, TP. Hồ Chí Minh",
@@ -3735,8 +3567,6 @@ riêng biệt, không phải một endpoint dùng chung.
     "viewCount30d": 1544,
     "contactCount30d": 34,
     "deltas": {
-      "activeCount": 1,
-      "pendingCount": -2,
       "viewCountPercent": 12.40,
       "contactCountPercent": -5.88
     },
@@ -3789,7 +3619,7 @@ riêng biệt, không phải một endpoint dùng chung.
 | `pendingCount` | `COUNT(... status = 'PENDING')` | Tin đang chờ Admin duyệt `[§5.1]` |
 | `viewCount30d` | `SUM(view_histories)` trong `days` ngày, **chỉ tin của mình** | Đã khử trùng theo `view.dedup_minutes` (30) `[§3.8]` |
 | `contactCount30d` | `SUM(contact_logs)` trong `days` ngày | Đã khử trùng theo `contact.dedup_minutes` (60) `[§3.10]` |
-| `deltas.activeCount` / `pendingCount` | Chênh lệch **tuyệt đối** so với đầu kỳ | Số nguyên có dấu |
+| `deltas.activeCount` / `pendingCount` | Chỉ trả khi có nguồn lịch sử trạng thái đủ tin cậy | Không suy diễn từ trạng thái hiện tại; nếu chưa có snapshot/event lịch sử thì bỏ field |
 | `deltas.viewCountPercent` / `contactCountPercent` | Chênh lệch **phần trăm** so với kỳ liền trước cùng độ dài | `DECIMAL(5,2)` có dấu; kỳ trước = 0 → trả `null` (**không** trả `100` hay chia cho 0) |
 | `chart` | Chuỗi thời gian theo **ngày**, đủ `days` phần tử | Ngày không có dữ liệu → `views: 0, contacts: 0` (**không** bỏ trống — FE vẽ liền mạch) |
 | `topListings` | Top **5** tin theo `viewCount` giảm dần | Chỉ tin `ACTIVE`/`HIDDEN`; dùng `ListingSummaryResponse` rút gọn (mục 5.2) |
@@ -6133,7 +5963,7 @@ Controller: `AdminUserController`, `AdminLandlordController`. Tag Swagger: `13. 
       {
         "id": 42, "fullName": "Nguyễn Văn An", "email": "nguyen.van.an@gmail.com",
         "phone": "0901234456", "avatarUrl": "https://cdn.webtro.vn/avatars/8f3c2a1e.webp",
-        "roles": ["ROLE_TENANT", "ROLE_LANDLORD"],
+        "role": "ROLE_LANDLORD",
         "status": "ACTIVE", "statusLabel": "Đang hoạt động",
         "emailVerified": true, "phoneVerified": false, "landlordVerified": true,
         "trustScore": 87, "listingCount": 6, "activeListingCount": 4,
@@ -6144,7 +5974,7 @@ Controller: `AdminUserController`, `AdminLandlordController`. Tag Swagger: `13. 
       {
         "id": 117, "fullName": "Vũ Đình Khoa", "email": "khoa.vu.spam@gmail.com",
         "phone": "0356789012", "avatarUrl": null,
-        "roles": ["ROLE_TENANT", "ROLE_LANDLORD"],
+        "role": "ROLE_LANDLORD",
         "status": "LOCKED", "statusLabel": "Đã bị khóa",
         "emailVerified": true, "phoneVerified": false, "landlordVerified": false,
         "trustScore": 12, "listingCount": 9, "activeListingCount": 0,
@@ -6181,9 +6011,7 @@ Controller: `AdminUserController`, `AdminLandlordController`. Tag Swagger: `13. 
     "id": 117, "fullName": "Vũ Đình Khoa", "email": "khoa.vu.spam@gmail.com",
     "phone": "0356789012", "gender": "MALE", "dateOfBirth": "2000-08-11",
     "address": "Không cung cấp", "avatarUrl": null,
-    "roles": ["ROLE_TENANT", "ROLE_LANDLORD"],
-    "permissions": ["LISTING_CREATE", "LISTING_UPDATE_OWN", "FAVORITE_MANAGE", "CONTACT_CREATE",
-                    "COMMENT_CREATE", "REVIEW_CREATE", "REPORT_CREATE", "PAYMENT_VIEW_OWN"],
+    "role": "ROLE_LANDLORD",
     "status": "LOCKED",
     "lockReason": "Đăng nhiều tin có ảnh không thật và thông tin sai lệch nghiêm trọng.",
     "lockedAt": "2026-07-11T04:22:00Z", "lockedById": 1, "lockedByName": "Quản trị viên",
@@ -6305,7 +6133,7 @@ Audit `AuditAction = USER_UNLOCK` `[§11.4]`.
 
 ---
 
-#### 4.13.5. `PUT /api/admin/users/{id}/roles` — Cập nhật vai trò
+#### 4.13.5. `PUT /api/admin/users/{id}/role` — Đổi vai trò
 
 | Mục | Nội dung |
 |---|---|
@@ -6316,7 +6144,7 @@ Audit `AuditAction = USER_UNLOCK` `[§11.4]`.
 
 | Field | Kiểu | Bắt buộc | Ràng buộc | Mô tả |
 |---|---|:--:|---|---|
-| `roles` | enum[] | ✔ | Không rỗng; mỗi phần tử ∈ `RoleCode` (canonical §4.1) | Tập role **thay thế toàn bộ** |
+| `role` | enum | ✔ | ∈ `RoleCode` (canonical §4.1) | Vai trò mới — **thay thế** vai trò hiện tại (mỗi user đúng một vai trò) |
 | `reason` | string | ✔ | 10–500 ký tự | Lý do (audit `[§11.4]`) |
 
 **Response 200**
@@ -6327,10 +6155,8 @@ Audit `AuditAction = USER_UNLOCK` `[§11.4]`.
   "message": "Đã cập nhật vai trò cho Trần Thị Bình",
   "data": {
     "userId": 88,
-    "previousRoles": ["ROLE_TENANT"],
-    "roles": ["ROLE_TENANT", "ROLE_LANDLORD"],
-    "permissions": ["LISTING_CREATE", "LISTING_UPDATE_OWN", "FAVORITE_MANAGE", "CONTACT_CREATE",
-                    "COMMENT_CREATE", "REVIEW_CREATE", "REPORT_CREATE", "PAYMENT_VIEW_OWN"],
+    "previousRole": "ROLE_TENANT",
+    "role": "ROLE_LANDLORD",
     "landlordProfileCreated": true,
     "revokedSessionCount": 1,
     "auditLogId": 44130,
@@ -6344,12 +6170,12 @@ Audit `AuditAction = USER_UNLOCK` `[§11.4]`.
 `ROLE_ASSIGN_INVALID`, `CANNOT_MODIFY_ADMIN`, `VALIDATION_FAILED`.
 
 **Quy tắc nghiệp vụ:**
-1. Quan hệ `User ↔ Role` là **nhiều-nhiều** qua `user_roles` (canonical §4.1) → `roles` là tập.
-2. Gán `ROLE_LANDLORD` mà chưa có → **luôn** kèm `ROLE_TENANT` (canonical §4.1: *"Chủ trọ có toàn
-   bộ quyền cơ bản của người thuê"* `[§1.2]`); tự tạo `landlord_profiles` nếu chưa có.
-3. Gỡ `ROLE_LANDLORD` khi user còn tin `ACTIVE` → **cho phép**, nhưng tin chuyển `HIDDEN`
-   (không cho quản lý tin mà mất quyền).
-4. Mảng rỗng, hoặc tự gỡ `ROLE_ADMIN` của chính mình → `422 ROLE_ASSIGN_INVALID`.
+1. Quan hệ `User → Role` là **nhiều-một** qua `users.role_id` (canonical §4.1) → `role` là một giá trị.
+2. Gán `ROLE_LANDLORD` → tự tạo `landlord_profiles` nếu chưa có. **Không** gán kèm `ROLE_TENANT`:
+   `ROLE_LANDLORD` đã bao hàm trọn quyền của `ROLE_TENANT` trong ma trận (canonical §4.2).
+3. Hạ vai trò khỏi `ROLE_LANDLORD` khi user còn tin `ACTIVE` → **cho phép**, nhưng tin chuyển
+   `HIDDEN` (không cho quản lý tin mà mất quyền).
+4. `role` rỗng / không thuộc `RoleCode`, hoặc tự gỡ `ROLE_ADMIN` của chính mình → `422 ROLE_ASSIGN_INVALID`.
 5. Không đổi role của Admin khác → `403 CANNOT_MODIFY_ADMIN`.
 6. **Thu hồi toàn bộ refresh token** của user → quyền mới có hiệu lực ở lần đăng nhập kế tiếp
    (permissions nhúng trong JWT — mục 3.1).
@@ -9705,7 +9531,7 @@ Tag Swagger: `20. Admin - System`.
         "actorId": 1, "actorName": "Quản trị viên", "actorRoles": ["ROLE_ADMIN"],
         "targetType": "USER", "targetId": 88, "targetLabel": "Trần Thị Bình",
         "changes": [
-          { "field": "roles", "oldValue": "[ROLE_TENANT]", "newValue": "[ROLE_TENANT, ROLE_LANDLORD]" }
+          { "field": "role", "oldValue": "ROLE_TENANT", "newValue": "ROLE_LANDLORD" }
         ],
         "reason": "Người dùng đăng ký làm chủ trọ và đã cung cấp đủ thông tin liên hệ.",
         "ipAddress": "203.0.113.42",
@@ -9953,7 +9779,7 @@ phân tách hàng nghìn, đơn vị VNĐ.
 | Mã | HTTP | Khi nào |
 |---|---|---|
 | `UNAUTHORIZED` | 401 | Thiếu/hết hạn token |
-| `FORBIDDEN` | 403 | Thiếu permission tương ứng ở bảng 4.21.1 |
+| `FORBIDDEN` | 403 | Role không được phép hoặc không phải chủ sở hữu tài nguyên tương ứng ở bảng 4.21.1 |
 | `VALIDATION_FAILED` | 400 | Filter sai, `columns` chứa cột không cho phép |
 | `AUDIT_LOG_RANGE_TOO_LARGE` | 400 | Khoảng ngày vượt trần của endpoint danh sách (thống nhất với bảng mã lỗi tổng ở mục 2 — đây là ràng buộc **thuần request**, kiểm tra được mà không cần chạm dữ liệu, nên là 400 chứ không phải 422; cùng loại với `STATISTIC_RANGE_INVALID`) |
 | **`EXPORT_EMPTY`** | 422 | Không có dòng nào khớp filter — **không** trả tệp rỗng |
@@ -10114,7 +9940,7 @@ Dùng nhúng ở: tác giả bình luận, tác giả đánh giá, `partner` tro
 | **`memberSince`** | Instant | luôn (công khai, không nhạy cảm) |
 
 > `UserSummaryResponse` **không bao giờ** chứa `status`, `dateOfBirth`, `address`, `roles`,
-> `permissions`, `lastLoginAt` với người xem thường `[§11.1]`.
+> `role`, `lastLoginAt` với người xem thường `[§11.1]`.
 
 ### 5.5. `LandlordPublicResponse` — hồ sơ chủ trọ công khai
 
@@ -10192,7 +10018,7 @@ public class PageResponse<T> {
 | `user.email` (công khai) | ✘ | ✘ | ✔ (của mình) | ✔ (`REPORT_RESOLVE`) | ✔ | `[§11.1]` |
 | `user.phone` (công khai) | ✘ | ✘ | ✔ (của mình) | ✔ | ✔ | `[§11.1]` |
 | `user.dateOfBirth`, `address` | ✘ | ✘ | ✔ (của mình) | ✘ | ✔ | `[§11.1]` |
-| `user.status`, `roles`, `permissions` | ✘ | ✘ | ✔ (của mình) | ✘ | ✔ (`USER_MANAGE`) | `[§11.1]` |
+| `user.status`, `role` | ✘ | ✘ | ✔ (của mình) | ✘ | ✔ (`USER_MANAGE`) | `[§11.1]` |
 | `user.lastLoginAt` | ✘ | ✘ | ✔ (của mình) | ✘ | ✔ | `[§10.2]` |
 | `tenant.phone` trong contact log | ✘ | ✘ | ✔ (chủ tin) | ✘ | ✔ | `[§3.10]` |
 | `listing.contactCount` | ✘ | ✘ | ✔ | ✘ | ✔ | `[§4.2]` |
@@ -12083,7 +11909,7 @@ public class OpenApiConfig {
                                 `{ success, message, data, timestamp }`; khi lỗi có thêm
                                 `errorCode`, `errors[]`, `path`, `traceId`.
 
-                                **Xác thực**: Bearer JWT (15 phút) + refresh token opaque (7 ngày,
+                                **Xác thực**: Bearer JWT (15 phút) + refresh token opaque (1 ngày,
                                 có rotation + reuse detection). Gọi `POST /api/auth/login` rồi bấm
                                 nút **Authorize**.
 
@@ -12166,7 +11992,7 @@ public class ListingController {
     private final ListingService listingService;
 
     @PostMapping
-    @PreAuthorize("hasAuthority('LISTING_CREATE')")
+    @PreAuthorize("hasAnyRole('TENANT','LANDLORD','ADMIN')")
     @SecurityRequirement(name = "bearerAuth")
     @Operation(
         summary = "Tạo tin đăng mới (LIST-01 / LIST-02)",
@@ -12348,7 +12174,7 @@ frontend_webtro/src/
 ├── constants/
 │   ├── errorCodes.js           # Map errorCode → xử lý riêng (mục 10.4)
 │   ├── enums.js                # Enum khớp canonical §5 + nhãn tiếng Việt
-│   └── permissions.js          # Permission code khớp canonical §4.2
+│   └── roles.js                # Role code khớp chính sách role-only
 ├── hooks/
 │   ├── useAuth.js
 │   ├── usePermission.js        # hasPermission(code) — đọc từ Redux
@@ -12384,7 +12210,7 @@ const axiosClient = axios.create({
 
 // ---------- Request interceptor: gắn Bearer token ----------
 axiosClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('accessToken');
+  const token = localStorage.getItem('webtro_access_token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
@@ -12425,7 +12251,7 @@ axiosClient.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const refreshToken = localStorage.getItem('refreshToken');
+        const refreshToken = localStorage.getItem('webtro_refresh_token');
         if (!refreshToken) throw new Error('NO_REFRESH_TOKEN');
 
         // Dùng axios GỐC — tránh interceptor đệ quy
@@ -12436,8 +12262,8 @@ axiosClient.interceptors.response.use(
         );
 
         const { accessToken, refreshToken: newRefresh } = data.data;   // rotation (canonical §8)
-        localStorage.setItem('accessToken', accessToken);
-        localStorage.setItem('refreshToken', newRefresh);
+        localStorage.setItem('webtro_access_token', accessToken);
+        localStorage.setItem('webtro_refresh_token', newRefresh);
         store.dispatch(setCredentials({ accessToken, refreshToken: newRefresh }));
 
         flushQueue(null, accessToken);
@@ -12447,8 +12273,8 @@ axiosClient.interceptors.response.use(
       } catch (refreshError) {
         // REFRESH_TOKEN_REUSED / EXPIRED / INVALID → đăng xuất
         flushQueue(refreshError, null);
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
+        localStorage.removeItem('webtro_access_token');
+        localStorage.removeItem('webtro_refresh_token');
         store.dispatch(logout());
         window.location.href = '/dang-nhap?redirect=' + encodeURIComponent(window.location.pathname);
         return Promise.reject(refreshError);
@@ -12709,13 +12535,10 @@ export function usePermission() {
 ```
 
 ```javascript
-// src/routes/PermissionRoute.jsx
-export default function PermissionRoute({ permissions, children }) {
-  const { hasAny } = usePermission();
-  const isAuthenticated = useSelector((s) => s.auth.isAuthenticated);
-
-  if (!isAuthenticated) return <Navigate to="/dang-nhap" replace />;
-  if (!hasAny(permissions)) return <Navigate to="/404" replace />;
+// src/routes/RoleRoute.jsx
+export default function RoleRoute({ roles, children }) {
+  const role = useSelector((s) => s.auth.user?.role ?? null);
+  if (!roles.includes(role)) return <Navigate to="/403" replace />;
   return children;
 }
 ```
@@ -12737,7 +12560,7 @@ export default function PermissionRoute({ permissions, children }) {
 | **ADR-01** | **Không viết cứng `status = 'ACTIVE'` trong mọi truy vấn công khai** | `[§3.7]` nói *"Chỉ hiển thị tin Active"* nhưng `[§5.1]` nói `NeedReview` *"Có thể vẫn hiển thị hoặc tạm ẩn tùy cấu hình"* — **mâu thuẫn trực tiếp** | **Một** method `ListingVisibilityService.publicStatuses()` đọc `listing.need_review.publicly_visible`; **mọi** truy vấn công khai (search, chi tiết, gợi ý, chatbot, related, sitemap) dùng nó | canonical §5.2 chốt quy tắc này là *"tối quan trọng"*. Mặc định `true` đúng tinh thần `[§3.13]` *"Report không tự động khóa tin ngay"*. Nếu viết cứng `ACTIVE`, đổi config sẽ không có tác dụng ở 6 chỗ khác nhau | Thêm một lần đọc config (đã cache Redis) mỗi truy vấn |
 | **ADR-02** | **AI không bao giờ tự khóa tin/tài khoản — chỉ `FLAG_NEED_REVIEW` + đề xuất** | `[§9.1]` đưa ngưỡng *"Tin đã NeedReview 3 lần trong 30 ngày → Đề xuất khóa tin"* — chữ **"đề xuất"** là mấu chốt | `autoActionTaken` chỉ có `FLAG_NEED_REVIEW` \| `NONE`. `accountLockSuggested`, `recommendedAction`, `recommendedResult` là **dữ liệu cho người**, không phải lệnh | canonical §10 *"AI không bao giờ tự khóa tài khoản"*; `[§10.10]` *"AI không tự khóa tài khoản nếu chưa có cấu hình rõ"*, *"Các quyết định nặng cần Admin/Moderator xác nhận"*; `[§0.2]` *"AI ở mức hỗ trợ quyết định, không thay thế hoàn toàn người kiểm duyệt"* | Moderator phải thao tác thủ công → chậm hơn, nhưng đúng nghiệp vụ và tránh khóa oan |
 | **ADR-03** | **Lỗi AI không bao giờ làm hỏng nghiệp vụ lõi** | AI chạy async có thể chết; nếu để nó chặn thì mất bình luận / mất tin | Bình luận: **vẫn lưu**, `PENDING_ANALYSIS`, `SentimentRetryJob` xử lý lại. Đăng tin: **vẫn tạo**, `pricePrediction.available = false`. Chỉ endpoint AI thuần trả 503 | **`[§9.1]`** *"AI lỗi hoặc timeout: bình luận vẫn được lưu, sentiment ở trạng thái PendingAnalysis"*; **`[§9.4]`** *"Không chặn đăng tin chỉ vì giá khác dự đoán"*; `[§3.3]` *"không bị chặn tự động"*; canonical §10.1 | Có độ trễ hiển thị nhãn cảm xúc; cần job retry |
-| **ADR-04** | **Permission nhúng trong JWT, đổi quyền → thu hồi refresh token** | RBAC 2 tầng cần check `hasAuthority` mỗi request. Query DB mỗi request quá tốn; nhưng nhúng vào token thì quyền cũ còn hiệu lực đến 15 phút | Nhúng `permissions[]` vào JWT (15 phút). Khi `PUT /api/admin/users/{id}/roles` hoặc lock user → **thu hồi toàn bộ refresh token** + blacklist `jti` | canonical §8 (access 15 phút, blacklist Redis); `[§11.2]` *"API cần kiểm tra quyền ở backend"*. Cửa sổ lệch ≤ 15 phút được đóng ngay bằng thu hồi token khi đổi quyền | Cửa sổ tối đa 15 phút nếu chỉ đổi permission của Role (không đổi role của user) — chấp nhận được với đồ án |
+| **ADR-04** | **JWT chỉ nhúng role, đổi role thì thu hồi refresh token** | Quyền hiện hành suy ra trực tiếp từ role, không còn bảng permission. | Access token chứa `role`; khi đổi role/lock user thì thu hồi refresh token và blacklist `jti`. | Khớp backend role-only và tránh query DB mỗi request. | Role cũ có thể còn hiệu lực tối đa 15 phút nếu chưa bị blacklist, nên các thao tác đổi role/lock phải revoke session. |
 | **ADR-05** | **Endpoint trùng nghiệp vụ → dùng chung một service method, không nhân đôi logic** | `[§12.3]` có `GET /api/listings`, `[§12.4]` có `GET /api/search/listings` — **cùng nghiệp vụ**. `[§12.8]` có `POST /api/payments` và `POST /api/listings/{id}/promote` — cũng vậy | `@GetMapping({"/api/listings", "/api/search/listings"})` cùng một method. `/promote` gọi cùng `PaymentService.createPayment()`. `/api/listings` là canonical URL cho SEO | Giữ đúng hợp đồng `[§12]` mà không vi phạm canonical §3 luật 6 (*"Không có logic nghiệp vụ trong controller"*) và §13.1 (không code trùng). Xóa một trong hai sẽ **mâu thuẫn với tài liệu nghiệp vụ** | Có hai URL cho một việc → FE phải biết dùng cái nào (đã ghi rõ ở mục 10.5) |
 | **ADR-06** | **Review luôn gắn với Listing; "đánh giá chủ trọ" = tổng hợp review trên tin của chủ trọ** | `[§3.12]` nói *"Đánh giá tin **hoặc chủ trọ**"* nhưng `[§6.3]` Review chỉ có `ListingId`, không có `LandlordId` — **tài liệu mơ hồ** | Một bảng `reviews` với `listing_id`. `GET /api/users/{id}/reviews` gom review trên mọi tin của chủ trọ. `landlord_profiles.average_rating` là trung bình có trọng số | Tránh hai bảng review song song (phức tạp, khó đồng bộ điểm). Vẫn thỏa `[§3.12]` bước 5 *"cập nhật điểm trung bình của tin **và chủ trọ**"* và `[§8.6]` *"Tính lại AverageRating của tin và chủ trọ"* | Không đánh giá được chủ trọ khi họ chưa có tin nào — tình huống không có thật trong nghiệp vụ |
 | **ADR-07** | **`POST /api/ai/sentiment/analyze` là công cụ Admin, không phải endpoint người dùng** | `[§12.9]` liệt kê endpoint này, nhưng `[§5.5]` nói sentiment chạy *"Khi có bình luận mới hoặc bình luận được sửa"* — tức **tự động**, không ai gọi thủ công | Endpoint tồn tại (giữ hợp đồng `[§12.9]`) nhưng yêu cầu `AI_LOG_VIEW`; dùng để phân tích lại một bình luận hoặc thử từ điển với `text` bất kỳ | `[§9.1]` *"Admin yêu cầu phân tích lại"* là một trong 4 điều kiện kích hoạt → endpoint có mục đích rõ ràng. Để anonymous gọi sẽ tạo lỗ hổng DoS và không có nghiệp vụ tương ứng | Người dùng cuối không gọi được — đúng ý đồ |

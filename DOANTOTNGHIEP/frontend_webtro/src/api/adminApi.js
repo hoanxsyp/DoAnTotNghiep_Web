@@ -15,7 +15,7 @@ const adminApi = {
   getUser: (id) => unwrap(axiosClient.get(`/admin/users/${id}`)),
   lockUser: (id, payload) => unwrap(axiosClient.put(`/admin/users/${id}/lock`, payload)),
   unlockUser: (id) => unwrap(axiosClient.put(`/admin/users/${id}/unlock`)),
-  updateUserRoles: (id, payload) => unwrap(axiosClient.put(`/admin/users/${id}/roles`, payload)),
+  updateUserRole: (id, payload) => unwrap(axiosClient.put(`/admin/users/${id}/role`, payload)),
 
   // ----- Chủ trọ (LANDLORD_VERIFY) -----
   getLandlords: (params) => unwrap(axiosClient.get('/admin/landlords', { params })),

@@ -41,15 +41,12 @@ import com.webtro.modules.user.entity.PasswordResetToken;
 import com.webtro.modules.user.entity.RefreshToken;
 import com.webtro.modules.user.entity.Role;
 import com.webtro.modules.user.entity.User;
-import com.webtro.modules.user.entity.UserRole;
 import com.webtro.modules.user.entity.Verification;
 import com.webtro.modules.user.repository.LandlordProfileRepository;
 import com.webtro.modules.user.repository.PasswordResetTokenRepository;
-import com.webtro.modules.user.repository.PermissionRepository;
 import com.webtro.modules.user.repository.RefreshTokenRepository;
 import com.webtro.modules.user.repository.RoleRepository;
 import com.webtro.modules.user.repository.UserRepository;
-import com.webtro.modules.user.repository.UserRoleRepository;
 import com.webtro.modules.user.repository.VerificationRepository;
 import com.webtro.security.TokenBlacklistService;
 import com.webtro.security.RateLimitService;
@@ -69,7 +66,6 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HexFormat;
@@ -132,12 +128,10 @@ public class AuthServiceImpl implements AuthService {
 
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
-    private final UserRoleRepository userRoleRepository;
     private final LandlordProfileRepository landlordProfileRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final VerificationRepository verificationRepository;
-    private final PermissionRepository permissionRepository;
 
     private final PasswordEncoder passwordEncoder;
     private final com.webtro.security.JwtService jwtService;
@@ -192,30 +186,31 @@ public class AuthServiceImpl implements AuthService {
             throw new ConflictException(ErrorCode.PHONE_ALREADY_EXISTS);
         }
 
-        // 5) Tạo user PENDING_VERIFY, hash BCrypt cost 12.
+        // 5) Xác định vai trò: mỗi tài khoản có ĐÚNG MỘT vai trò. Chọn chủ trọ thì là LANDLORD,
+        //    ngược lại là TENANT. Phân quyền theo role ở backend nên hai tài khoản cùng role luôn
+        //    có cùng bộ chức năng.
+        String roleCode = asLandlord ? RoleCode.LANDLORD : RoleCode.TENANT;
+        Role role = requireRole(roleCode);
+
+        // 6) Tạo user PENDING_VERIFY, hash BCrypt cost 12.
         User user = User.builder()
                 .fullName(fullName)
                 .email(email)
                 .phone(phone)
                 .passwordHash(passwordEncoder.encode(request.getPassword()))
                 .status(UserStatus.PENDING_VERIFY)
+                .role(role)
                 .failedLoginCount(0)
                 .build();
         user = userRepository.save(user);
 
-        // 6) Gán vai trò: luôn TENANT; nếu chọn chủ trọ thì thêm LANDLORD (canonical §4.1).
-        List<String> roleCodes = new ArrayList<>();
-        assignRole(user, RoleCode.TENANT);
-        roleCodes.add(RoleCode.TENANT);
         if (asLandlord) {
-            assignRole(user, RoleCode.LANDLORD);
-            roleCodes.add(RoleCode.LANDLORD);
             createLandlordProfile(user, fullName, contactName, contactPhone, email);
         }
 
         // 7) Sinh Verification EMAIL (token 64 ký tự, TTL 24 giờ) và gửi email xác thực.
-        String rawToken = createEmailVerification(user, email);
-        boolean emailSent = sendVerificationEmail(user, rawToken);
+        EmailVerificationChallenge challenge = createEmailVerification(user, email);
+        boolean emailSent = sendVerificationEmail(user, challenge);
 
         // 8) Thông báo ACCOUNT_REGISTERED (in-app + email theo [§5.6]).
         notificationService.notifyUser(user.getId(), NotificationType.ACCOUNT_REGISTERED,
@@ -225,7 +220,7 @@ public class AuthServiceImpl implements AuthService {
         // 9) Ghi nhận đã dùng một lượt rate limit đăng ký.
         rateLimitService.checkLimit("register", safeId(ipAddress), registerMax, REGISTER_WINDOW);
 
-        return authMapper.toRegisterResponse(user, roleCodes, emailSent);
+        return authMapper.toRegisterResponse(user, roleCode, emailSent);
     }
 
     // ==================================================================
@@ -286,11 +281,10 @@ public class AuthServiceImpl implements AuthService {
         Instant refreshExpiry = now.plus(jwtProperties.getRefreshTokenTtl());
         String rawRefresh = createRefreshToken(user, familyId, null, now, refreshExpiry, ipAddress, userAgent);
 
-        List<String> roles = roleRepository.findRoleCodesByUserId(user.getId());
-        List<String> permissions = permissionRepository.findPermissionCodesByUserId(user.getId());
-        String accessToken = jwtService.generateAccessToken(user.getId(), user.getEmail(), roles, permissions);
+        String role = resolveRoleCode(user);
+        String accessToken = jwtService.generateAccessToken(user.getId(), user.getEmail(), role);
 
-        AuthUserResponse userInfo = authMapper.toAuthUserResponse(user, roles, permissions, resolveLandlordVerified(user.getId()));
+        AuthUserResponse userInfo = authMapper.toAuthUserResponse(user, role, resolveLandlordVerified(user.getId()));
 
         return LoginResponse.builder()
                 .accessToken(accessToken)
@@ -346,18 +340,18 @@ public class AuthServiceImpl implements AuthService {
                             + (user.getLockReason() != null ? ". Lý do: " + user.getLockReason() : ""));
         }
 
-        // Xoay vòng: thu hồi token cũ, phát token mới cùng họ, giữ nguyên hạn của họ.
+        // Xoay vòng: thu hồi token cũ, phát token mới cùng họ và gia hạn theo TTL refresh hiện tại.
         current.setUsedAt(now);
         current.setRevokedAt(now);
         current.setRevokedReason("ROTATED");
+        Instant newRefreshExpiry = now.plus(jwtProperties.getRefreshTokenTtl());
         String rawRefresh = createRefreshToken(user, current.getFamilyId(), current, now,
-                current.getExpiresAt(), ipAddress, userAgent);
+                newRefreshExpiry, ipAddress, userAgent);
 
-        List<String> roles = roleRepository.findRoleCodesByUserId(user.getId());
-        List<String> permissions = permissionRepository.findPermissionCodesByUserId(user.getId());
-        String accessToken = jwtService.generateAccessToken(user.getId(), user.getEmail(), roles, permissions);
+        String role = resolveRoleCode(user);
+        String accessToken = jwtService.generateAccessToken(user.getId(), user.getEmail(), role);
 
-        long refreshRemaining = Math.max(0, current.getExpiresAt().getEpochSecond() - now.getEpochSecond());
+        long refreshRemaining = Math.max(0, newRefreshExpiry.getEpochSecond() - now.getEpochSecond());
         return TokenResponse.builder()
                 .accessToken(accessToken)
                 .refreshToken(rawRefresh)
@@ -512,8 +506,7 @@ public class AuthServiceImpl implements AuthService {
     public VerifyEmailResponse verifyEmail(VerifyEmailRequest request, String ipAddress) {
         rateLimitService.checkLimit("verify-email", safeId(ipAddress), VERIFY_EMAIL_MAX, VERIFY_EMAIL_WINDOW);
 
-        Verification v = verificationRepository.findByTokenHashAndDeletedAtIsNull(sha256Hex(request.getToken().trim()))
-                .orElseThrow(() -> new BusinessException(ErrorCode.OTP_INVALID));
+        Verification v = resolveEmailVerification(request);
 
         if (v.getType() != VerificationType.EMAIL) {
             throw new BusinessException(ErrorCode.OTP_INVALID);
@@ -564,8 +557,8 @@ public class AuthServiceImpl implements AuthService {
                 verificationRepository.findByUser_IdAndTypeAndStatusAndDeletedAtIsNull(
                                 user.getId(), VerificationType.EMAIL, VerificationStatus.PENDING)
                         .forEach(old -> old.setStatus(VerificationStatus.EXPIRED));
-                String rawToken = createEmailVerification(user, email);
-                sendVerificationEmail(user, rawToken);
+                EmailVerificationChallenge challenge = createEmailVerification(user, email);
+                sendVerificationEmail(user, challenge);
             }
         }
         // Không tiết lộ email có tồn tại hay không — luôn trả cooldown.
@@ -678,16 +671,19 @@ public class AuthServiceImpl implements AuthService {
     //  Helper riêng
     // ==================================================================
 
-    private void assignRole(User user, String roleCode) {
-        Role role = roleRepository.findByCodeAndDeletedAtIsNull(roleCode)
+    /**
+     * Mã vai trò của người dùng. Đọc thẳng từ {@code user.role} (quan hệ nhiều-một) nên không phát
+     * sinh truy vấn thêm khi entity đã nạp trong cùng phiên.
+     */
+    private String resolveRoleCode(User user) {
+        return user.getRole() == null ? null : user.getRole().getCode();
+    }
+
+    /** Nạp vai trò theo mã; vai trò do V2 seed nên thiếu là lỗi cấu hình hệ thống. */
+    private Role requireRole(String roleCode) {
+        return roleRepository.findByCodeAndDeletedAtIsNull(roleCode)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.ROLE_NOT_FOUND,
                         "Chưa seed vai trò " + roleCode));
-        UserRole userRole = UserRole.builder()
-                .user(user)
-                .role(role)
-                .assignedAt(Instant.now())
-                .build();
-        userRoleRepository.save(userRole);
     }
 
     private void createLandlordProfile(User user, String fullName, String contactName, String contactPhone, String email) {
@@ -702,29 +698,63 @@ public class AuthServiceImpl implements AuthService {
         landlordProfileRepository.save(profile);
     }
 
-    /** Tạo Verification EMAIL, trả về token THÔ (chỉ token thô mới gửi qua mail; DB lưu hash). */
-    private String createEmailVerification(User user, String email) {
+    /** Tạo Verification EMAIL, trả về token/OTP THÔ để gửi qua mail; DB chỉ lưu hash. */
+    private EmailVerificationChallenge createEmailVerification(User user, String email) {
         String rawToken = randomToken();
+        String otp = randomOtp();
         Verification v = Verification.builder()
                 .user(user)
                 .type(VerificationType.EMAIL)
                 .status(VerificationStatus.PENDING)
                 .targetValue(email)
                 .tokenHash(sha256Hex(rawToken))
+                .otpHash(sha256Hex(otp))
                 .attemptCount(0)
                 .expiresAt(Instant.now().plus(EMAIL_TOKEN_TTL))
                 .build();
         verificationRepository.save(v);
-        return rawToken;
+        return new EmailVerificationChallenge(rawToken, otp);
     }
 
-    private boolean sendVerificationEmail(User user, String rawToken) {
-        String verifyUrl = frontendUrl(appProperties.getFrontend().getVerifyEmailPath(), rawToken);
+    private boolean sendVerificationEmail(User user, EmailVerificationChallenge challenge) {
+        String verifyUrl = frontendUrl(appProperties.getFrontend().getVerifyEmailPath(), challenge.rawToken());
         Map<String, Object> vars = new HashMap<>();
         vars.put("fullName", user.getFullName());
         vars.put("verifyUrl", verifyUrl);
-        vars.put("otp", ""); // Xác thực email dùng link, không dùng OTP số.
+        vars.put("otp", challenge.otp());
         return safeSendMail(user.getEmail(), "Xác thực email tài khoản Webtro", "verify-email", vars);
+    }
+
+    private Verification resolveEmailVerification(VerifyEmailRequest request) {
+        if (!isBlank(request.getToken())) {
+            return verificationRepository.findByTokenHashAndDeletedAtIsNull(sha256Hex(request.getToken().trim()))
+                    .orElseThrow(() -> new BusinessException(ErrorCode.OTP_INVALID));
+        }
+
+        if (isBlank(request.getEmail()) || isBlank(request.getOtp())) {
+            throw new BusinessException(ErrorCode.OTP_INVALID, "Vui lòng nhập token hoặc email và mã OTP");
+        }
+
+        String email = request.getEmail().trim().toLowerCase(Locale.ROOT);
+        User user = userRepository.findByEmailIgnoreCaseAndDeletedAtIsNull(email)
+                .orElseThrow(() -> new BusinessException(ErrorCode.OTP_INVALID));
+        Verification v = verificationRepository.findByUser_IdAndTypeAndStatusAndDeletedAtIsNull(
+                        user.getId(), VerificationType.EMAIL, VerificationStatus.PENDING).stream()
+                .filter(item -> email.equalsIgnoreCase(item.getTargetValue()))
+                .max(Comparator.comparing(Verification::getCreatedAt))
+                .orElseThrow(() -> new BusinessException(ErrorCode.OTP_INVALID));
+
+        if (v.getAttemptCount() >= OTP_MAX_ATTEMPTS) {
+            throw new BusinessRuleException(ErrorCode.OTP_ATTEMPT_EXCEEDED);
+        }
+        if (isBlank(v.getOtpHash()) || !sha256Hex(request.getOtp().trim()).equals(v.getOtpHash())) {
+            v.setAttemptCount(v.getAttemptCount() + 1);
+            throw new BusinessException(ErrorCode.OTP_INVALID);
+        }
+        return v;
+    }
+
+    private record EmailVerificationChallenge(String rawToken, String otp) {
     }
 
     private Optional<User> resolveByEmailOrPhone(String identifier) {

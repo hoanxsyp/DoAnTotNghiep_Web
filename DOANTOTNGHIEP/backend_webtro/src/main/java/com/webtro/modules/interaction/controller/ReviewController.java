@@ -62,7 +62,7 @@ public class ReviewController {
     }
 
     @PostMapping("/listings/{id}/reviews")
-    @PreAuthorize("hasAuthority('REVIEW_CREATE')")
+    @PreAuthorize("hasAnyRole('TENANT','LANDLORD','ADMIN')")
     @Operation(summary = "Tạo đánh giá")
     public ResponseEntity<ApiResponse<ReviewResponse>> create(
             @PathVariable Long id, @Valid @RequestBody CreateReviewRequest request,
@@ -73,7 +73,7 @@ public class ReviewController {
     }
 
     @PutMapping("/reviews/{id}")
-    @PreAuthorize("hasAuthority('REVIEW_CREATE')")
+    @PreAuthorize("hasAnyRole('TENANT','LANDLORD','ADMIN')")
     @Operation(summary = "Sửa đánh giá (trong cửa sổ cho phép)")
     public ResponseEntity<ApiResponse<ReviewResponse>> update(
             @PathVariable Long id, @Valid @RequestBody CreateReviewRequest request,
@@ -83,7 +83,7 @@ public class ReviewController {
     }
 
     @DeleteMapping("/reviews/{id}")
-    @PreAuthorize("hasAnyAuthority('REVIEW_CREATE','REVIEW_MODERATE')")
+    @PreAuthorize("hasAnyRole('TENANT','LANDLORD','MODERATOR','ADMIN')")
     @Operation(summary = "Xóa (tác giả) hoặc ẩn (kiểm duyệt viên) đánh giá")
     public ResponseEntity<Void> delete(
             @PathVariable Long id,
@@ -94,7 +94,7 @@ public class ReviewController {
     }
 
     @GetMapping("/reviews/my")
-    @PreAuthorize("hasAuthority('REVIEW_CREATE')")
+    @PreAuthorize("hasAnyRole('TENANT','LANDLORD','ADMIN')")
     @Operation(summary = "Đánh giá của tôi")
     public ResponseEntity<ApiResponse<PageResponse<ReviewResponse>>> myReviews(
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable,

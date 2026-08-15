@@ -13,7 +13,6 @@ import lombok.Setter;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.util.List;
 
 /**
  * Hồ sơ cá nhân đầy đủ của chính người dùng — {@code GET/PUT /api/users/me}
@@ -52,11 +51,8 @@ public class UserProfileResponse {
     @Schema(description = "Trạng thái tài khoản", example = "ACTIVE")
     private UserStatus status;
 
-    @Schema(description = "Danh sách vai trò", example = "[\"ROLE_TENANT\", \"ROLE_LANDLORD\"]")
-    private List<String> roles;
-
-    @Schema(description = "Danh sách quyền hiệu lực")
-    private List<String> permissions;
+    @Schema(description = "Vai trò duy nhất của người dùng", example = "ROLE_TENANT")
+    private String role;
 
     @Schema(description = "Email đã xác thực chưa", example = "true")
     private boolean emailVerified;

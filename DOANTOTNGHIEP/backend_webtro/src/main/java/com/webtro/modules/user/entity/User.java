@@ -7,7 +7,10 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.Index;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -36,6 +39,7 @@ import java.time.Instant;
         name = "users",
         indexes = {
                 @Index(name = "idx_users_status", columnList = "status"),
+                @Index(name = "idx_users_role_id", columnList = "role_id"),
                 @Index(name = "idx_users_full_name", columnList = "full_name"),
                 @Index(name = "idx_users_created_at", columnList = "created_at"),
                 @Index(name = "idx_users_email_lookup", columnList = "email"),
@@ -80,6 +84,16 @@ public class User extends AuditableEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     private UserStatus status = UserStatus.PENDING_VERIFY;
+
+    /**
+     * Vai trò DUY NHẤT của người dùng (V13: quan hệ nhiều-một, bảng nối {@code user_roles} đã bỏ).
+     *
+     * <p>Toàn bộ phân quyền của người dùng suy ra trực tiếp từ đúng vai trò này, nên hai người cùng
+     * vai trò luôn có bộ chức năng y hệt nhau.
+     */
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "role_id", nullable = false)
+    private Role role;
 
     /** Thời điểm xác thực email. */
     @Column(name = "email_verified_at")

@@ -23,10 +23,10 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 /**
  * Cấu hình bảo mật trung tâm (canonical mục 8, §11.2).
  *
- * <p><b>{@code csrf().disable()} là ĐÚNG</b> với API stateless dùng Bearer token: mọi endpoint
- * nghiệp vụ chỉ nhận {@code Authorization: Bearer}, không nhận cookie session. Cookie refresh token
- * bị giới hạn {@code Path=/api/auth} + {@code SameSite=Strict} nên không có endpoint gây side-effect
- * nào được xác thực bằng cookie ⇒ không có bề mặt CSRF (canonical mục 8).
+ * <p><b>{@code csrf().disable()} là ĐÚNG</b> với API stateless dùng Bearer token: hệ thống KHÔNG
+ * dùng cookie cho bất kỳ mục đích xác thực nào (access token và refresh token đều do client giữ
+ * trong {@code localStorage} và gửi tường minh qua header/body). Không có thông tin xác thực nào
+ * được trình duyệt tự đính kèm ⇒ không có bề mặt CSRF (canonical mục 8).
  *
  * <p>{@code @EnableMethodSecurity} bật {@code @PreAuthorize} để kiểm quyền ở tầng service/controller
  * bằng permission code (RBAC 2 tầng).

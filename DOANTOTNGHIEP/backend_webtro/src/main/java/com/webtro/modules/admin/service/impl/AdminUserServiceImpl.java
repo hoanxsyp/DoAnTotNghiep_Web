@@ -18,7 +18,7 @@ import com.webtro.modules.admin.dto.request.RejectLandlordVerificationRequest;
 import com.webtro.modules.admin.dto.request.RestrictLandlordPostingRequest;
 import com.webtro.modules.admin.dto.request.UnlockUserRequest;
 import com.webtro.modules.admin.dto.request.UnverifyLandlordRequest;
-import com.webtro.modules.admin.dto.request.UpdateRolesRequest;
+import com.webtro.modules.admin.dto.request.UpdateRoleRequest;
 import com.webtro.modules.admin.dto.request.VerifyLandlordRequest;
 import com.webtro.modules.admin.dto.response.AdminLandlordResponse;
 import com.webtro.modules.admin.dto.response.AdminUserDetailResponse;
@@ -42,14 +42,12 @@ import com.webtro.modules.user.entity.RefreshToken;
 import com.webtro.modules.user.entity.Role;
 import com.webtro.modules.user.entity.User;
 import com.webtro.modules.user.entity.UserProfile;
-import com.webtro.modules.user.entity.UserRole;
 import com.webtro.modules.user.entity.Verification;
 import com.webtro.modules.user.repository.LandlordProfileRepository;
 import com.webtro.modules.user.repository.RefreshTokenRepository;
 import com.webtro.modules.user.repository.RoleRepository;
 import com.webtro.modules.user.repository.UserProfileRepository;
 import com.webtro.modules.user.repository.UserRepository;
-import com.webtro.modules.user.repository.UserRoleRepository;
 import com.webtro.modules.user.repository.VerificationRepository;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
@@ -98,7 +96,6 @@ public class AdminUserServiceImpl implements AdminUserService {
     private static final int MAX_PAGE_SIZE = 100;
 
     private final UserRepository userRepository;
-    private final UserRoleRepository userRoleRepository;
     private final RoleRepository roleRepository;
     private final LandlordProfileRepository landlordProfileRepository;
     private final UserProfileRepository userProfileRepository;
@@ -124,10 +121,14 @@ public class AdminUserServiceImpl implements AdminUserService {
     }
 
     private AdminUserResponse toResponse(User user) {
-        List<String> roles = roleRepository.findRoleCodesByUserId(user.getId());
         LandlordProfile profile = landlordProfileRepository
                 .findByUser_IdAndDeletedAtIsNull(user.getId()).orElse(null);
-        return adminUserMapper.toResponse(user, roles, profile);
+        return adminUserMapper.toResponse(user, roleCodeOf(user), profile);
+    }
+
+    /** Mã vai trò duy nhất của người dùng — đọc thẳng từ quan hệ, không cần truy vấn phụ. */
+    private String roleCodeOf(User user) {
+        return user.getRole() == null ? null : user.getRole().getCode();
     }
 
     // ============================ Khóa ============================
@@ -233,30 +234,21 @@ public class AdminUserServiceImpl implements AdminUserService {
 
     @Override
     @Transactional
-    public UserActionResponse updateRoles(Long userId, UpdateRolesRequest request, Long actorId) {
+    public UserActionResponse updateRole(Long userId, UpdateRoleRequest request, Long actorId) {
         User user = getAliveUser(userId);
 
-        List<String> previousRoles = roleRepository.findRoleCodesByUserId(userId);
-        boolean targetIsAdmin = previousRoles.contains(RoleCode.ADMIN);
+        String previousRole = roleCodeOf(user);
+        boolean targetIsAdmin = RoleCode.ADMIN.equals(previousRole);
 
-        // Chuẩn hóa tập vai trò mong muốn.
-        Set<String> desired = new LinkedHashSet<>();
-        for (String r : request.getRoles()) {
-            if (r != null && !r.isBlank()) {
-                desired.add(r.trim());
-            }
-        }
-        if (desired.isEmpty()) {
+        // Chuẩn hóa và kiểm tra mã vai trò trước khi truy DB.
+        String desired = request.getRole() == null ? "" : request.getRole().trim();
+        if (!RoleCode.ALL.contains(desired)) {
             throw new BusinessException(ErrorCode.ROLE_ASSIGN_INVALID,
-                    "Tập vai trò không được rỗng");
-        }
-        // Chủ trọ luôn kèm quyền cơ bản của người thuê (canonical §4.1).
-        if (desired.contains(RoleCode.LANDLORD)) {
-            desired.add(RoleCode.TENANT);
+                    "Vai trò không hợp lệ: " + desired);
         }
 
         // Không tự gỡ ROLE_ADMIN của chính mình.
-        if (userId.equals(actorId) && !desired.contains(RoleCode.ADMIN) && targetIsAdmin) {
+        if (userId.equals(actorId) && targetIsAdmin && !RoleCode.ADMIN.equals(desired)) {
             throw new BusinessException(ErrorCode.ROLE_ASSIGN_INVALID,
                     "Không thể tự gỡ vai trò quản trị viên của chính mình");
         }
@@ -267,37 +259,16 @@ public class AdminUserServiceImpl implements AdminUserService {
 
         Instant now = Instant.now();
 
-        // Gỡ các vai trò không còn trong tập mong muốn (soft delete).
-        List<UserRole> existing = userRoleRepository.findByUser_IdAndDeletedAtIsNull(userId);
-        Set<String> existingCodes = new LinkedHashSet<>();
-        for (UserRole ur : existing) {
-            String code = ur.getRole().getCode();
-            existingCodes.add(code);
-            if (!desired.contains(code)) {
-                ur.softDelete();
-                userRoleRepository.save(ur);
-            }
-        }
-
-        // Thêm vai trò mới.
-        for (String code : desired) {
-            if (existingCodes.contains(code)) {
-                continue;
-            }
-            Role role = roleRepository.findByCodeAndDeletedAtIsNull(code)
-                    .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.ROLE_NOT_FOUND,
-                            "Không tìm thấy vai trò: " + code));
-            userRoleRepository.save(UserRole.builder()
-                    .user(user)
-                    .role(role)
-                    .assignedAt(now)
-                    .assignedBy(actorId)
-                    .build());
-        }
+        // Thay thế vai trò — mỗi người dùng chỉ giữ đúng một vai trò.
+        Role role = roleRepository.findByCodeAndDeletedAtIsNull(desired)
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.ROLE_NOT_FOUND,
+                        "Không tìm thấy vai trò: " + desired));
+        user.setRole(role);
+        userRepository.save(user);
 
         // Tự tạo hồ sơ chủ trọ nếu vừa được cấp ROLE_LANDLORD.
         boolean profileCreated = false;
-        if (desired.contains(RoleCode.LANDLORD)
+        if (RoleCode.LANDLORD.equals(desired)
                 && !landlordProfileRepository.existsByUser_IdAndDeletedAtIsNull(userId)) {
             landlordProfileRepository.save(LandlordProfile.builder()
                     .user(user)
@@ -311,14 +282,13 @@ public class AdminUserServiceImpl implements AdminUserService {
 
         int revoked = revokeSessions(userId, "ROLE_CHANGE");
 
-        List<String> newRoles = new ArrayList<>(desired);
         Long auditId = auditLogService.recordChange(AuditAction.ROLE_CHANGE, actorId, "USER", userId,
-                user.getFullName(), previousRoles.toString(), newRoles.toString(), request.getReason());
+                user.getFullName(), previousRole, desired, request.getReason());
 
         return UserActionResponse.builder()
                 .userId(userId)
-                .previousRoles(previousRoles)
-                .roles(newRoles)
+                .previousRole(previousRole)
+                .role(desired)
                 .landlordProfileCreated(profileCreated)
                 .revokedSessionCount(revoked)
                 .auditLogId(auditId)
@@ -332,7 +302,6 @@ public class AdminUserServiceImpl implements AdminUserService {
     @Transactional(readOnly = true)
     public AdminUserDetailResponse getUserDetail(Long userId) {
         User user = getAliveUser(userId);
-        List<String> roles = roleRepository.findRoleCodesByUserId(userId);
         UserProfile profile = userProfileRepository.findByUser_IdAndDeletedAtIsNull(userId).orElse(null);
         LandlordProfile landlord = landlordProfileRepository
                 .findByUser_IdAndDeletedAtIsNull(userId).orElse(null);
@@ -344,7 +313,7 @@ public class AdminUserServiceImpl implements AdminUserService {
                 .phone(user.getPhone())
                 .avatarUrl(user.getAvatarUrl())
                 .gender(user.getGender() != null ? user.getGender().name() : null)
-                .roles(roles)
+                .role(roleCodeOf(user))
                 .status(user.getStatus() != null ? user.getStatus().name() : null)
                 .statusLabel(user.getStatus() != null ? user.getStatus().getLabel() : null)
                 .emailVerified(user.getEmailVerifiedAt() != null)
@@ -657,7 +626,7 @@ public class AdminUserServiceImpl implements AdminUserService {
 
     /** Kiểm tra người dùng có vai trò chủ trọ; ném {@code TARGET_NOT_LANDLORD} nếu không. */
     private void assertIsLandlord(Long userId) {
-        if (!roleRepository.findRoleCodesByUserId(userId).contains(RoleCode.LANDLORD)) {
+        if (!RoleCode.LANDLORD.equals(roleRepository.findRoleCodeByUserId(userId).orElse(null))) {
             throw new BusinessException(ErrorCode.TARGET_NOT_LANDLORD);
         }
     }
@@ -734,7 +703,7 @@ public class AdminUserServiceImpl implements AdminUserService {
 
     /** Chặn thao tác lên Admin khác (self đã bị chặn riêng ở nơi gọi khi cần). */
     private void assertNotOtherAdmin(Long userId) {
-        if (roleRepository.findRoleCodesByUserId(userId).contains(RoleCode.ADMIN)) {
+        if (RoleCode.ADMIN.equals(roleRepository.findRoleCodeByUserId(userId).orElse(null))) {
             throw new ForbiddenException(ErrorCode.CANNOT_MODIFY_ADMIN);
         }
     }

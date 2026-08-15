@@ -13,16 +13,15 @@ import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Date;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 /**
  * Phát hành và xác thực JWT access token (canonical mục 8).
  *
- * <p>Access token: 15 phút, chứa {@code sub} (userId), {@code email}, {@code roles[]},
- * {@code permissions[]}, {@code jti}. Refresh token KHÔNG do lớp này quản (nó là opaque UUID lưu
- * DB, xem module auth) — lớp này chỉ lo access token JWT.
+ * <p>Access token: 15 phút, chứa {@code sub} (userId), {@code email}, {@code role} (CHUỖI đơn — mỗi
+ * người dùng một vai trò), {@code jti}. Refresh token KHÔNG do lớp này quản
+ * (nó là opaque UUID lưu DB, xem module auth) — lớp này chỉ lo access token JWT.
  *
  * <p>Lớp này cố ý KHÔNG phụ thuộc entity User: nó nhận các giá trị nguyên thủy để tránh kéo module
  * user vào tầng security.
@@ -43,7 +42,7 @@ public class JwtService {
      * Phát hành access token. {@code jti} là định danh duy nhất để có thể đưa vào blacklist khi
      * logout (canonical mục 8).
      */
-    public String generateAccessToken(Long userId, String email, List<String> roles, List<String> permissions) {
+    public String generateAccessToken(Long userId, String email, String role) {
         Instant now = Instant.now();
         Instant expiry = now.plus(props.getAccessTokenTtl());
         return Jwts.builder()
@@ -53,8 +52,7 @@ public class JwtService {
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(expiry))
                 .claim(AppConstant.JWT_CLAIM_EMAIL, email)
-                .claim(AppConstant.JWT_CLAIM_ROLES, roles)
-                .claim(AppConstant.JWT_CLAIM_PERMISSIONS, permissions)
+                .claim(AppConstant.JWT_CLAIM_ROLE, role)
                 .signWith(key)
                 .compact();
     }
@@ -89,16 +87,14 @@ public class JwtService {
         return claims.getId();
     }
 
-    @SuppressWarnings("unchecked")
-    public List<String> extractRoles(Claims claims) {
-        Object roles = claims.get(AppConstant.JWT_CLAIM_ROLES);
-        return roles instanceof List<?> list ? (List<String>) list : List.of();
-    }
-
-    @SuppressWarnings("unchecked")
-    public List<String> extractPermissions(Claims claims) {
-        Object perms = claims.get(AppConstant.JWT_CLAIM_PERMISSIONS);
-        return perms instanceof List<?> list ? (List<String>) list : List.of();
+    /**
+     * Vai trò duy nhất trong token. Trả {@code null} nếu token cũ (phát hành trước V13, dùng claim
+     * {@code roles} dạng mảng) — khi đó principal không có authority vai trò nào và người dùng
+     * buộc phải làm mới token, thay vì nhận nhầm quyền.
+     */
+    public String extractRole(Claims claims) {
+        Object role = claims.get(AppConstant.JWT_CLAIM_ROLE);
+        return role instanceof String s && !s.isBlank() ? s : null;
     }
 
     public String extractEmail(Claims claims) {

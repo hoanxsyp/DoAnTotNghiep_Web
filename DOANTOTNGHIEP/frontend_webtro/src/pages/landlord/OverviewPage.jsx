@@ -87,12 +87,12 @@ const OverviewPage = () => {
             <Grid item xs={6} md={3}>
               <StatCard loading={loading} label="Tin đang hiển thị" value={data?.activeCount ?? 0}
                 icon={<ArticleIcon />} color="success" delta={data?.deltas?.activeCount}
-                onClick={() => navigate('/quan-ly/tin-dang?status=ACTIVE')} />
+                deltaSuffix="" onClick={() => navigate('/quan-ly/tin-dang?status=ACTIVE')} />
             </Grid>
             <Grid item xs={6} md={3}>
               <StatCard loading={loading} label="Chờ duyệt" value={data?.pendingCount ?? 0}
                 icon={<HourglassEmptyIcon />} color="warning" delta={data?.deltas?.pendingCount}
-                onClick={() => navigate('/quan-ly/tin-dang?status=PENDING')} />
+                deltaSuffix="" onClick={() => navigate('/quan-ly/tin-dang?status=PENDING')} />
             </Grid>
             <Grid item xs={6} md={3}>
               <StatCard loading={loading} label={`Lượt xem (${days} ngày)`} value={data?.viewCount30d ?? 0}

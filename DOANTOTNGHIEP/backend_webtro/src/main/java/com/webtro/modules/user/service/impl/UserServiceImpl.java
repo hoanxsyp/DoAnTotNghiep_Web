@@ -30,7 +30,6 @@ import com.webtro.modules.user.entity.Verification;
 import com.webtro.modules.user.mapper.LandlordProfileMapper;
 import com.webtro.modules.user.mapper.UserMapper;
 import com.webtro.modules.user.repository.LandlordProfileRepository;
-import com.webtro.modules.user.repository.PermissionRepository;
 import com.webtro.modules.user.repository.RoleRepository;
 import com.webtro.modules.user.repository.UserProfileRepository;
 import com.webtro.modules.user.repository.UserRepository;
@@ -70,7 +69,6 @@ public class UserServiceImpl implements UserService {
     private final UserProfileRepository userProfileRepository;
     private final LandlordProfileRepository landlordProfileRepository;
     private final RoleRepository roleRepository;
-    private final PermissionRepository permissionRepository;
     private final VerificationRepository verificationRepository;
     private final com.webtro.modules.user.repository.FollowRepository followRepository;
 
@@ -96,11 +94,10 @@ public class UserServiceImpl implements UserService {
         User user = getById(userId);
         UserProfile profile = userProfileRepository.findByUser_IdAndDeletedAtIsNull(userId).orElse(null);
         LandlordProfile landlord = landlordProfileRepository.findByUser_IdAndDeletedAtIsNull(userId).orElse(null);
-        List<String> roles = roleRepository.findRoleCodesByUserId(userId);
-        List<String> permissions = permissionRepository.findPermissionCodesByUserId(userId);
+        String role = user.getRole() == null ? null : user.getRole().getCode();
         // landlordProfile chỉ nhúng khi user thực sự có vai trò chủ trọ.
-        LandlordProfile embedded = roles.contains(RoleCode.LANDLORD) ? landlord : null;
-        return userMapper.toProfileResponse(user, profile, embedded, roles, permissions);
+        LandlordProfile embedded = RoleCode.LANDLORD.equals(role) ? landlord : null;
+        return userMapper.toProfileResponse(user, profile, embedded, role);
     }
 
     @Override
@@ -297,9 +294,14 @@ public class UserServiceImpl implements UserService {
             throw new ResourceNotFoundException(ErrorCode.USER_NOT_FOUND);
         }
 
-        List<String> roles = roleRepository.findRoleCodesByUserId(targetUserId);
-        LandlordProfile lp = landlordProfileRepository.findByUser_IdAndDeletedAtIsNull(targetUserId).orElse(null);
-        boolean isLandlord = roles.contains(RoleCode.LANDLORD) || lp != null;
+        // Chủ trọ hay không CHỈ do vai trò quyết định. Trước đây còn xét "có hồ sơ chủ trọ" —
+        // điều đó khiến hai người cùng vai trò lại hiển thị/hoạt động khác nhau (ví dụ người
+        // từng là chủ trọ rồi bị hạ vai trò vẫn còn hồ sơ sót lại).
+        boolean isLandlord = RoleCode.LANDLORD.equals(
+                roleRepository.findRoleCodeByUserId(targetUserId).orElse(null));
+        LandlordProfile lp = isLandlord
+                ? landlordProfileRepository.findByUser_IdAndDeletedAtIsNull(targetUserId).orElse(null)
+                : null;
 
         long followerCount = followRepository.countByLandlord_IdAndDeletedAtIsNull(targetUserId);
         boolean followedByMe = currentUserId != null

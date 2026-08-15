@@ -7,7 +7,6 @@ import com.webtro.modules.user.entity.User;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
-import java.util.List;
 
 /**
  * Mapper thủ công entity ↔ DTO cho module Auth (canonical luật 3: mapper là nơi duy nhất chuyển
@@ -17,13 +16,13 @@ import java.util.List;
 public class AuthMapper {
 
     /** Dựng kết quả đăng ký từ {@link User} vừa tạo. */
-    public RegisterResponse toRegisterResponse(User user, List<String> roles, boolean emailSent) {
+    public RegisterResponse toRegisterResponse(User user, String role, boolean emailSent) {
         return RegisterResponse.builder()
                 .userId(user.getId())
                 .email(user.getEmail())
                 .fullName(user.getFullName())
                 .status(user.getStatus() == null ? null : user.getStatus().name())
-                .roles(roles)
+                .role(role)
                 .verificationEmailSent(emailSent)
                 .createdAt(user.getCreatedAt())
                 .build();
@@ -35,16 +34,14 @@ public class AuthMapper {
      * @param landlordVerified {@code null} nếu người dùng không phải chủ trọ; ngược lại là trạng thái
      *                         đã xác minh chủ trọ.
      */
-    public AuthUserResponse toAuthUserResponse(User user, List<String> roles, List<String> permissions,
-                                               Boolean landlordVerified) {
+    public AuthUserResponse toAuthUserResponse(User user, String role, Boolean landlordVerified) {
         return AuthUserResponse.builder()
                 .id(user.getId())
                 .fullName(user.getFullName())
                 .email(user.getEmail())
                 .avatarUrl(user.getAvatarUrl())
                 .status(user.getStatus() == null ? null : user.getStatus().name())
-                .roles(roles)
-                .permissions(permissions)
+                .role(role)
                 .landlordVerified(landlordVerified)
                 .lastLoginAt(user.getLastLoginAt())
                 .build();

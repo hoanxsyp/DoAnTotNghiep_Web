@@ -11,8 +11,8 @@ import RoleRoute from '@/routes/RoleRoute';
 
 import PageLoader from '@/components/common/PageLoader';
 import { ROLES } from '@/constants';
-import { selectPermissions } from '@/redux/authSlice';
-import { tenantMenu, landlordMenu, adminMenu, buildAdminMenu } from '@/config/menus';
+import { selectRole } from '@/redux/authSlice';
+import { tenantMenu, buildAdminMenu, buildListingManagementMenu } from '@/config/menus';
 
 /**
  * File định tuyến trung tâm (canonical mục 12 — sitemap). Dùng createBrowserRouter (React Router v6).
@@ -22,15 +22,54 @@ import { tenantMenu, landlordMenu, adminMenu, buildAdminMenu } from '@/config/me
  * cho từng khu vực (Tenant/Landlord/Admin). Ẩn/điều hướng chỉ là UX — backend luôn kiểm tra lại (F6).
  */
 
+const CHUNK_RELOAD_KEY = 'webtro:chunk-reload-url';
+
+const isDynamicImportError = (error) => {
+  const message = String(error?.message || '');
+  return message.includes('Failed to fetch dynamically imported module')
+    || message.includes('Importing a module script failed')
+    || message.includes('Loading chunk')
+    || error?.name === 'ChunkLoadError';
+};
+
+const lazyWithChunkRetry = (factory) => lazy(() =>
+  factory()
+    .then((module) => {
+      if (typeof window !== 'undefined') {
+        window.sessionStorage.removeItem(CHUNK_RELOAD_KEY);
+      }
+      return module;
+    })
+    .catch((error) => {
+      if (typeof window === 'undefined' || !isDynamicImportError(error)) {
+        throw error;
+      }
+
+      const currentUrl = window.location.href;
+      if (window.sessionStorage.getItem(CHUNK_RELOAD_KEY) === currentUrl) {
+        throw error;
+      }
+
+      window.sessionStorage.setItem(CHUNK_RELOAD_KEY, currentUrl);
+      window.location.reload();
+      return new Promise(() => {});
+    }));
+
 // ---- Helper lazy-load: trả về element đã bọc Suspense + PageLoader ----
 const load = (factory) => {
-  const Component = lazy(factory);
+  const Component = lazyWithChunkRetry(factory);
   return (
     <Suspense fallback={<PageLoader />}>
       <Component />
     </Suspense>
   );
 };
+
+const loadForRoles = (roles, factory) => (
+  <RoleRoute roles={roles}>
+    {load(factory)}
+  </RoleRoute>
+);
 
 // ================= PUBLIC =================
 const HomePage = () => import('@/pages/public/HomePage');
@@ -94,12 +133,17 @@ const SystemConfigPage = () => import('@/pages/admin/SystemConfigPage');
 const AuditLogPage = () => import('@/pages/admin/AuditLogPage');
 
 /**
- * Layout admin: menu được LỌC theo permission của người dùng hiện tại (canonical §1.2) — Moderator
- * không thấy nhóm Tài chính / Cấu hình hệ thống. adminMenu gốc vẫn được import để làm nguồn lọc.
+ * Layout admin: menu được lọc theo role của người dùng hiện tại. Moderator không thấy nhóm Tài
+ * chính / Cấu hình hệ thống.
  */
 const AdminDashboardLayout = () => {
-  const permissions = useSelector(selectPermissions);
-  return <DashboardLayout menu={buildAdminMenu(permissions)} title="Quản trị" />;
+  const role = useSelector(selectRole);
+  return <DashboardLayout menu={buildAdminMenu(role)} title="Quản trị" />;
+};
+
+const ListingManagementLayout = () => {
+  const role = useSelector(selectRole);
+  return <DashboardLayout menu={buildListingManagementMenu(role)} title="Quản lý" />;
 };
 
 const router = createBrowserRouter([
@@ -148,24 +192,24 @@ const router = createBrowserRouter([
     ],
   },
 
-  // ---------- LANDLORD (ROLE_LANDLORD | ROLE_ADMIN) ----------
+  // ---------- LISTING MANAGEMENT (TENANT | LANDLORD | ADMIN) ----------
   {
     element: (
-      <RoleRoute roles={[ROLES.LANDLORD, ROLES.ADMIN]}>
-        <DashboardLayout menu={landlordMenu} title="Quản lý" />
+      <RoleRoute roles={[ROLES.TENANT, ROLES.LANDLORD, ROLES.ADMIN]}>
+        <ListingManagementLayout />
       </RoleRoute>
     ),
     children: [
-      { path: '/quan-ly/tong-quan', element: load(OverviewPage) },
+      { path: '/quan-ly/tong-quan', element: loadForRoles([ROLES.LANDLORD, ROLES.ADMIN], OverviewPage) },
       { path: '/quan-ly/tin-dang', element: load(MyListingsPage) },
       { path: '/quan-ly/tin-dang/tao', element: load(CreateListingPage) },
       { path: '/quan-ly/tin-dang/:id/sua', element: load(EditListingPage) },
       { path: '/quan-ly/tin-dang/:id/thong-ke', element: load(ListingStatsPage) },
       { path: '/quan-ly/nguoi-lien-he', element: load(ContactsPage) },
-      { path: '/quan-ly/goi-dich-vu', element: load(LandlordPackagesPage) },
-      { path: '/quan-ly/thanh-toan', element: load(LandlordPaymentsPage) },
-      { path: '/quan-ly/thanh-toan/ket-qua', element: load(PaymentResultPage) },
-      { path: '/quan-ly/ho-so-chu-tro', element: load(LandlordProfileEditPage) },
+      { path: '/quan-ly/goi-dich-vu', element: loadForRoles([ROLES.LANDLORD, ROLES.ADMIN], LandlordPackagesPage) },
+      { path: '/quan-ly/thanh-toan', element: loadForRoles([ROLES.LANDLORD, ROLES.ADMIN], LandlordPaymentsPage) },
+      { path: '/quan-ly/thanh-toan/ket-qua', element: loadForRoles([ROLES.LANDLORD, ROLES.ADMIN], PaymentResultPage) },
+      { path: '/quan-ly/ho-so-chu-tro', element: loadForRoles([ROLES.LANDLORD, ROLES.ADMIN], LandlordProfileEditPage) },
     ],
   },
 
@@ -177,25 +221,25 @@ const router = createBrowserRouter([
       </RoleRoute>
     ),
     children: [
-      { path: '/admin/dashboard', element: load(DashboardPage) },
-      { path: '/admin/nguoi-dung', element: load(UsersPage) },
-      { path: '/admin/chu-tro', element: load(LandlordsPage) },
-      { path: '/admin/tin-dang', element: load(AdminListingsPage) },
-      { path: '/admin/kiem-duyet', element: load(ModerationQueuePage) },
-      { path: '/admin/bao-cao', element: load(ReportsPage) },
-      { path: '/admin/binh-luan', element: load(CommentsPage) },
-      { path: '/admin/danh-gia', element: load(ReviewsPage) },
-      { path: '/admin/danh-muc', element: load(CategoriesPage) },
-      { path: '/admin/khu-vuc', element: load(AreasPage) },
-      { path: '/admin/tien-ich', element: load(AmenitiesPage) },
-      { path: '/admin/tu-khoa-cam', element: load(BannedKeywordsPage) },
-      { path: '/admin/goi-dich-vu', element: load(AdminPackagesPage) },
-      { path: '/admin/thanh-toan', element: load(AdminPaymentsPage) },
-      { path: '/admin/ai/log', element: load(AiLogsPage) },
-      { path: '/admin/ai/cau-hinh', element: load(AiConfigPage) },
-      { path: '/admin/thong-ke', element: load(StatisticsPage) },
-      { path: '/admin/cau-hinh', element: load(SystemConfigPage) },
-      { path: '/admin/audit-log', element: load(AuditLogPage) },
+      { path: '/admin/dashboard', element: loadForRoles([ROLES.ADMIN], DashboardPage) },
+      { path: '/admin/nguoi-dung', element: loadForRoles([ROLES.ADMIN], UsersPage) },
+      { path: '/admin/chu-tro', element: loadForRoles([ROLES.ADMIN, ROLES.MODERATOR], LandlordsPage) },
+      { path: '/admin/tin-dang', element: loadForRoles([ROLES.ADMIN, ROLES.MODERATOR], AdminListingsPage) },
+      { path: '/admin/kiem-duyet', element: loadForRoles([ROLES.ADMIN, ROLES.MODERATOR], ModerationQueuePage) },
+      { path: '/admin/bao-cao', element: loadForRoles([ROLES.ADMIN, ROLES.MODERATOR], ReportsPage) },
+      { path: '/admin/binh-luan', element: loadForRoles([ROLES.ADMIN, ROLES.MODERATOR], CommentsPage) },
+      { path: '/admin/danh-gia', element: loadForRoles([ROLES.ADMIN, ROLES.MODERATOR], ReviewsPage) },
+      { path: '/admin/danh-muc', element: loadForRoles([ROLES.ADMIN], CategoriesPage) },
+      { path: '/admin/khu-vuc', element: loadForRoles([ROLES.ADMIN], AreasPage) },
+      { path: '/admin/tien-ich', element: loadForRoles([ROLES.ADMIN], AmenitiesPage) },
+      { path: '/admin/tu-khoa-cam', element: loadForRoles([ROLES.ADMIN], BannedKeywordsPage) },
+      { path: '/admin/goi-dich-vu', element: loadForRoles([ROLES.ADMIN], AdminPackagesPage) },
+      { path: '/admin/thanh-toan', element: loadForRoles([ROLES.ADMIN], AdminPaymentsPage) },
+      { path: '/admin/ai/log', element: loadForRoles([ROLES.ADMIN, ROLES.MODERATOR], AiLogsPage) },
+      { path: '/admin/ai/cau-hinh', element: loadForRoles([ROLES.ADMIN], AiConfigPage) },
+      { path: '/admin/thong-ke', element: loadForRoles([ROLES.ADMIN], StatisticsPage) },
+      { path: '/admin/cau-hinh', element: loadForRoles([ROLES.ADMIN], SystemConfigPage) },
+      { path: '/admin/audit-log', element: loadForRoles([ROLES.ADMIN], AuditLogPage) },
     ],
   },
 

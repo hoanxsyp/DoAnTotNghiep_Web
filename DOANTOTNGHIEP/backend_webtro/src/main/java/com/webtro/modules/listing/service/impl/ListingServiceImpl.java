@@ -3,11 +3,9 @@ package com.webtro.modules.listing.service.impl;
 import com.webtro.common.PageResponse;
 import com.webtro.common.enums.CategoryCode;
 import com.webtro.common.enums.ListingStatus;
-import com.webtro.common.enums.VerificationStatus;
-import com.webtro.common.event.ListingApprovedEvent;
 import com.webtro.constant.ConfigKey;
 import com.webtro.constant.ErrorCode;
-import com.webtro.constant.PermissionCode;
+import com.webtro.constant.RoleCode;
 import com.webtro.exception.BusinessRuleException;
 import com.webtro.exception.ConflictException;
 import com.webtro.exception.ForbiddenException;
@@ -52,13 +50,10 @@ import com.webtro.modules.listing.service.ListingVisibilityService;
 import com.webtro.modules.listing.service.TrustScoreService;
 import com.webtro.modules.listing.statemachine.ListingEvent;
 import com.webtro.modules.listing.statemachine.ListingStateMachine;
-import com.webtro.modules.notification.service.NotificationService;
 import com.webtro.modules.payment.entity.PromotionPackage;
 import com.webtro.modules.payment.repository.PromotionPackageRepository;
 import com.webtro.modules.user.entity.LandlordProfile;
-import com.webtro.modules.user.entity.User;
 import com.webtro.modules.user.repository.LandlordProfileRepository;
-import com.webtro.modules.user.repository.UserRepository;
 import com.webtro.security.RateLimitService;
 import com.webtro.security.SecurityUtils;
 import com.webtro.storage.FileStorage;
@@ -68,7 +63,6 @@ import com.webtro.util.SlugUtil;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -77,7 +71,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
-import com.webtro.common.enums.NotificationType;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -119,15 +112,12 @@ public class ListingServiceImpl implements ListingService {
     private final RateLimitService rateLimitService;
     private final FileStorage fileStorage;
     private final StringRedisTemplate redisTemplate;
-    private final ApplicationEventPublisher eventPublisher;
-    private final NotificationService notificationService;
 
     private final CategoryRepository categoryRepository;
     private final ProvinceRepository provinceRepository;
     private final DistrictRepository districtRepository;
     private final WardRepository wardRepository;
     private final AmenityRepository amenityRepository;
-    private final UserRepository userRepository;
     private final LandlordProfileRepository landlordProfileRepository;
     private final PromotionPackageRepository promotionPackageRepository;
 
@@ -141,6 +131,7 @@ public class ListingServiceImpl implements ListingService {
         Long userId = requireCurrentUserId();
 
         Category category = requireActiveCategory(req.getCategoryId());
+        validateCategoryAllowedForCurrentRole(category.getCode());
         validateLocation(req.getProvinceId(), req.getDistrictId(), req.getWardId());
         validateAmenities(req.getAmenityIds());
         validateTextLengths(req.getTitle(), req.getDescription());
@@ -237,6 +228,7 @@ public class ListingServiceImpl implements ListingService {
         }
 
         Category category = requireActiveCategory(req.getCategoryId());
+        validateCategoryAllowedForCurrentRole(category.getCode());
         validateLocation(req.getProvinceId(), req.getDistrictId(), req.getWardId());
         validateAmenities(req.getAmenityIds());
         validateTextLengths(req.getTitle(), req.getDescription());
@@ -369,37 +361,20 @@ public class ListingServiceImpl implements ListingService {
         if (imageCount < config.getInt(ConfigKey.LISTING_IMAGE_MIN)) {
             throw new BusinessRuleException(ErrorCode.IMAGE_COUNT_MIN);
         }
-        requireEmailVerified(userId);
         enforcePostingNotSuspended(userId);
 
+        // Mọi tin đều vào hàng chờ kiểm duyệt. Trước đây chủ trọ "đã xác minh + điểm uy tín cao"
+        // được tự động duyệt — hai chủ trọ cùng vai trò lại đi hai luồng khác nhau, nên đã bỏ.
         ListingStatus before = listing.getStatus();
         ListingStatus pending = stateMachine.transition(before, ListingEvent.SUBMIT);
         listing.setStatus(pending);
-
-        boolean autoApproved = false;
-        if (canAutoApprove(listing, userId)) {
-            ListingStatus active = stateMachine.transition(listing.getStatus(), ListingEvent.APPROVE);
-            listing.setStatus(active);
-            listing.setPublishedAt(Instant.now());
-            listing.setExpiredAt(Instant.now().plus(Duration.ofDays(
-                    config.getInt(ConfigKey.LISTING_DISPLAY_DAYS))));
-            autoApproved = true;
-        }
         listingRepository.save(listing);
-
-        if (autoApproved) {
-            eventPublisher.publishEvent(new ListingApprovedEvent(listing.getId(), userId));
-            notificationService.notifyUser(userId, NotificationType.LISTING_APPROVED,
-                    "Tin của bạn đã được duyệt",
-                    "Tin \"" + listing.getTitle() + "\" đã được tự động duyệt và đang hiển thị.");
-        }
 
         return ListingActionResponse.builder()
                 .id(listing.getId())
                 .status(listing.getStatus().name())
                 .previousStatus(before.name())
                 .at(Instant.now())
-                .autoApproved(autoApproved)
                 .expiredAt(listing.getExpiredAt())
                 .build();
     }
@@ -547,7 +522,7 @@ public class ListingServiceImpl implements ListingService {
     @Override
     @Transactional
     public ListingDetailResponse getDetail(Long id, boolean countView, String clientIp) {
-        boolean privileged = SecurityUtils.hasPermission(PermissionCode.LISTING_VIEW_ANY);
+        boolean privileged = SecurityUtils.hasAnyRole(RoleCode.MODERATOR, RoleCode.ADMIN);
         Listing listing = listingRepository.findAliveById(id)
                 .orElseGet(() -> privileged ? listingRepository.findAnyById(id).orElse(null) : null);
         if (listing == null) {
@@ -608,7 +583,7 @@ public class ListingServiceImpl implements ListingService {
         Listing listing = loadAlive(id);
         boolean owner = SecurityUtils.getCurrentUserId().map(uid -> uid.equals(listing.getOwnerId()))
                 .orElse(false);
-        if (!owner && !SecurityUtils.hasPermission(PermissionCode.STATISTIC_VIEW)) {
+        if (!owner && !SecurityUtils.hasRole(RoleCode.ADMIN)) {
             throw new ForbiddenException(ErrorCode.LISTING_FORBIDDEN);
         }
         if (from != null && to != null && to.isBefore(from)) {
@@ -926,10 +901,17 @@ public class ListingServiceImpl implements ListingService {
     private Long requireOwnerOrUpdateAny(Listing listing) {
         Long userId = requireCurrentUserId();
         if (!userId.equals(listing.getOwnerId())
-                && !SecurityUtils.hasPermission(PermissionCode.LISTING_UPDATE_ANY)) {
+                && !SecurityUtils.hasRole(RoleCode.ADMIN)) {
             throw new ForbiddenException(ErrorCode.LISTING_FORBIDDEN);
         }
         return userId;
+    }
+
+    private void validateCategoryAllowedForCurrentRole(CategoryCode categoryCode) {
+        if (SecurityUtils.hasRole(RoleCode.TENANT) && categoryCode != CategoryCode.ROOMMATE) {
+            throw new ForbiddenException(ErrorCode.LISTING_FORBIDDEN,
+                    "Người thuê chỉ được đăng tin loại tìm người ở ghép");
+        }
     }
 
     private Category requireActiveCategory(Long categoryId) {
@@ -1004,6 +986,12 @@ public class ListingServiceImpl implements ListingService {
         }
     }
 
+    /**
+     * Hạn mức đăng tin trong ngày — MỘT ngưỡng duy nhất cho mọi người dùng.
+     *
+     * <p>Trước đây tài khoản dưới 7 ngày tuổi chịu hạn mức thấp hơn; điều đó khiến hai chủ trọ
+     * cùng vai trò lại có mức sử dụng khác nhau nên đã bỏ.
+     */
     private void enforcePostingQuota(Long userId) {
         Instant startOfDay = LocalDate.now(ZONE_VN).atStartOfDay(ZONE_VN).toInstant();
         Specification<Listing> spec = (root, query, cb) -> cb.and(
@@ -1011,53 +999,25 @@ public class ListingServiceImpl implements ListingService {
                 cb.greaterThanOrEqualTo(root.get("createdAt"), startOfDay));
         long todayCount = listingRepository.count(spec);
 
-        User user = userRepository.findByIdAndDeletedAtIsNull(userId)
-                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.USER_NOT_FOUND));
-        boolean newAccount = user.getCreatedAt() != null
-                && user.getCreatedAt().isAfter(Instant.now().minus(Duration.ofDays(7)));
-        if (newAccount) {
-            if (todayCount >= config.getInt(ConfigKey.SPAM_LISTING_NEW_ACCOUNT_DAILY)) {
-                throw new BusinessRuleException(ErrorCode.LISTING_QUOTA_NEW_ACCOUNT);
-            }
-        } else if (todayCount >= config.getInt(ConfigKey.SPAM_LISTING_DAILY)) {
+        if (todayCount >= config.getInt(ConfigKey.SPAM_LISTING_DAILY)) {
             throw new BusinessRuleException(ErrorCode.LISTING_QUOTA_DAILY);
         }
     }
 
+    /**
+     * Chặn đăng tin khi đang bị kiểm duyệt viên đình chỉ CÓ THỜI HẠN.
+     *
+     * <p>Đây là chế tài tạm thời do hành vi vi phạm, có ngày hết hạn rõ ràng — không phải sự khác
+     * biệt về bộ chức năng giữa hai người cùng vai trò. Nhánh cũ "đủ số lần cảnh cáo thì cấm đăng
+     * vĩnh viễn" đã bỏ vì nó khoá chức năng theo từng người và không có đường hồi phục.
+     */
     private void enforcePostingNotSuspended(Long userId) {
         landlordProfileRepository.findByUser_IdAndDeletedAtIsNull(userId).ifPresent(profile -> {
             if (profile.getPostingRestrictedUntil() != null
                     && profile.getPostingRestrictedUntil().isAfter(Instant.now())) {
                 throw new ForbiddenException(ErrorCode.LISTING_POSTING_SUSPENDED);
             }
-            if (nz(profile.getWarningCount()) >= config.getInt(ConfigKey.MOD_THRESHOLD_WARNING_COUNT)) {
-                throw new ForbiddenException(ErrorCode.LISTING_POSTING_SUSPENDED);
-            }
         });
-    }
-
-    private void requireEmailVerified(Long userId) {
-        User user = userRepository.findByIdAndDeletedAtIsNull(userId)
-                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.USER_NOT_FOUND));
-        if (user.getEmailVerifiedAt() == null) {
-            throw new ForbiddenException(ErrorCode.LANDLORD_NOT_VERIFIED);
-        }
-    }
-
-    private boolean canAutoApprove(Listing listing, Long userId) {
-        if (!config.getBoolean(ConfigKey.LISTING_AUTO_APPROVE_TRUSTED_LANDLORD)) {
-            return false;
-        }
-        if (Boolean.TRUE.equals(listing.getPriceDeviationFlag())) {
-            return false;
-        }
-        if (intOf(listing.getTrustScore()) < config.getInt(ConfigKey.TRUST_THRESHOLD_RISKY)) {
-            return false;
-        }
-        return landlordProfileRepository.findByUser_IdAndDeletedAtIsNull(userId)
-                .map(p -> p.getVerificationStatus() == VerificationStatus.VERIFIED
-                        && nz(p.getWarningCount()) == 0)
-                .orElse(false);
     }
 
     private void maybeCountView(Listing listing, Long viewerId, String clientIp) {

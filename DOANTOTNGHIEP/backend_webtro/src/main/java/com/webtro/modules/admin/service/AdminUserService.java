@@ -8,7 +8,7 @@ import com.webtro.modules.admin.dto.request.RejectLandlordVerificationRequest;
 import com.webtro.modules.admin.dto.request.RestrictLandlordPostingRequest;
 import com.webtro.modules.admin.dto.request.UnlockUserRequest;
 import com.webtro.modules.admin.dto.request.UnverifyLandlordRequest;
-import com.webtro.modules.admin.dto.request.UpdateRolesRequest;
+import com.webtro.modules.admin.dto.request.UpdateRoleRequest;
 import com.webtro.modules.admin.dto.request.VerifyLandlordRequest;
 import com.webtro.modules.admin.dto.response.AdminLandlordResponse;
 import com.webtro.modules.admin.dto.response.AdminUserDetailResponse;
@@ -39,8 +39,8 @@ public interface AdminUserService {
     /** Mở khóa tài khoản (canonical 4.13.4). */
     UserActionResponse unlockUser(Long userId, UnlockUserRequest request, Long actorId);
 
-    /** Cập nhật vai trò (canonical 4.13.5): thay thế toàn bộ tập vai trò + ghi audit. */
-    UserActionResponse updateRoles(Long userId, UpdateRolesRequest request, Long actorId);
+    /** Đổi vai trò (canonical 4.13.5): thay thế vai trò duy nhất của người dùng + ghi audit. */
+    UserActionResponse updateRole(Long userId, UpdateRoleRequest request, Long actorId);
 
     /** Chi tiết một người dùng cho quản trị (canonical mục 4.13): hồ sơ + vai trò + số liệu liên quan. */
     AdminUserDetailResponse getUserDetail(Long userId);

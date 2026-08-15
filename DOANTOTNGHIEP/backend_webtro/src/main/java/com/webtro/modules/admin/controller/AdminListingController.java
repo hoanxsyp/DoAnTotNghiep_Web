@@ -60,7 +60,7 @@ public class AdminListingController {
     private final ModerationService moderationService;
 
     @GetMapping("/listings")
-    @PreAuthorize("hasAuthority('LISTING_VIEW_ANY')")
+    @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Quản lý tin đăng", description = "Lọc theo trạng thái, chủ trọ, danh mục, khu vực, lệch giá, thời gian.")
     public ResponseEntity<ApiResponse<PageResponse<AdminListingResponse>>> searchListings(
             @RequestParam(required = false) List<ListingStatus> status,
@@ -85,7 +85,7 @@ public class AdminListingController {
     }
 
     @GetMapping("/moderation-queue")
-    @PreAuthorize("hasAuthority('LISTING_VIEW_ANY')")
+    @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Hàng đợi kiểm duyệt",
             description = "Tin chờ xử lý (PENDING + NEED_REVIEW), phân trang, ưu tiên tin cũ trước.")
     public ResponseEntity<ApiResponse<PageResponse<AdminListingResponse>>> moderationQueue(
@@ -95,7 +95,7 @@ public class AdminListingController {
     }
 
     @GetMapping("/moderation-actions")
-    @PreAuthorize("hasAuthority('LISTING_VIEW_ANY')")
+    @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Nhật ký hành động kiểm duyệt",
             description = "Lịch sử hành động kiểm duyệt gần đây (mới nhất trước), lọc tùy chọn theo đối tượng và tin.")
     public ResponseEntity<ApiResponse<PageResponse<AdminModerationActionResponse>>> moderationActions(
@@ -108,7 +108,7 @@ public class AdminListingController {
     }
 
     @GetMapping("/listings/{id}")
-    @PreAuthorize("hasAuthority('LISTING_VIEW_ANY')")
+    @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Chi tiết tin (Admin)", description = "Chi tiết một tin cho kiểm duyệt, gồm cả tin không công khai.")
     public ResponseEntity<ApiResponse<AdminListingResponse>> getListingDetail(@PathVariable Long id) {
         AdminListingResponse data = adminListingService.getListingDetail(id);
@@ -116,7 +116,7 @@ public class AdminListingController {
     }
 
     @PutMapping("/listings/{id}/approve")
-    @PreAuthorize("hasAuthority('LISTING_MODERATE')")
+    @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Duyệt tin", description = "PENDING → ACTIVE; đặt publishedAt/expiredAt; báo chủ trọ + người theo dõi.")
     public ResponseEntity<ApiResponse<AdminListingActionResponse>> approve(
             @PathVariable Long id, @Valid @RequestBody(required = false) ApproveListingRequest request,
@@ -127,7 +127,7 @@ public class AdminListingController {
     }
 
     @PutMapping("/listings/{id}/reject")
-    @PreAuthorize("hasAuthority('LISTING_MODERATE')")
+    @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Từ chối tin", description = "PENDING → REJECTED; bắt buộc lý do; báo chủ trọ.")
     public ResponseEntity<ApiResponse<AdminListingActionResponse>> reject(
             @PathVariable Long id, @Valid @RequestBody RejectListingRequest request,
@@ -137,7 +137,7 @@ public class AdminListingController {
     }
 
     @PutMapping("/listings/{id}/hide")
-    @PreAuthorize("hasAuthority('LISTING_MODERATE')")
+    @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Ẩn tin", description = "ACTIVE/NEED_REVIEW → HIDDEN do kiểm duyệt; ghi nhật ký + báo chủ trọ.")
     public ResponseEntity<ApiResponse<AdminListingActionResponse>> hide(
             @PathVariable Long id,
@@ -149,7 +149,7 @@ public class AdminListingController {
     }
 
     @PutMapping("/listings/{id}/unhide")
-    @PreAuthorize("hasAuthority('LISTING_MODERATE')")
+    @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Bỏ ẩn tin", description = "HIDDEN → ACTIVE; khôi phục hiển thị công khai; báo chủ trọ.")
     public ResponseEntity<ApiResponse<AdminListingActionResponse>> unhide(
             @PathVariable Long id,
@@ -161,7 +161,7 @@ public class AdminListingController {
     }
 
     @PutMapping("/listings/{id}/flag-need-review")
-    @PreAuthorize("hasAuthority('LISTING_MODERATE')")
+    @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Đánh dấu cần kiểm tra", description = "ACTIVE → NEED_REVIEW; đưa tin vào hàng đợi kiểm duyệt.")
     public ResponseEntity<ApiResponse<AdminListingActionResponse>> flagNeedReview(
             @PathVariable Long id,
@@ -173,7 +173,7 @@ public class AdminListingController {
     }
 
     @PutMapping("/listings/{id}/clear-need-review")
-    @PreAuthorize("hasAuthority('LISTING_MODERATE')")
+    @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Bỏ đánh dấu cần kiểm tra", description = "NEED_REVIEW → ACTIVE khi kết luận không vi phạm.")
     public ResponseEntity<ApiResponse<AdminListingActionResponse>> clearNeedReview(
             @PathVariable Long id,
@@ -185,7 +185,7 @@ public class AdminListingController {
     }
 
     @PutMapping("/listings/{id}/lock")
-    @PreAuthorize("hasAuthority('LISTING_LOCK')")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Khóa tin", description = "→ LOCKED; bắt buộc lý do + mức độ vi phạm; báo chủ trọ.")
     public ResponseEntity<ApiResponse<AdminListingActionResponse>> lock(
             @PathVariable Long id, @Valid @RequestBody LockListingRequest request,
@@ -195,7 +195,7 @@ public class AdminListingController {
     }
 
     @PutMapping("/listings/{id}/unlock")
-    @PreAuthorize("hasAuthority('LISTING_LOCK')")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Mở khóa tin", description = "LOCKED → HIDDEN; chủ trọ tự bật lại sau khi sửa.")
     public ResponseEntity<ApiResponse<AdminListingActionResponse>> unlock(
             @PathVariable Long id, @Valid @RequestBody UnlockListingRequest request,
@@ -205,7 +205,7 @@ public class AdminListingController {
     }
 
     @PutMapping("/listings/{id}/request-edit")
-    @PreAuthorize("hasAuthority('LISTING_MODERATE')")
+    @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Yêu cầu chỉnh sửa tin",
             description = "Gửi yêu cầu chủ trọ chỉnh sửa tin (ghi hành động REQUEST_EDIT + thông báo); KHÔNG đổi trạng thái tin.")
     public ResponseEntity<ApiResponse<AdminListingActionResponse>> requestEdit(
@@ -217,7 +217,7 @@ public class AdminListingController {
     }
 
     @PutMapping("/listings/bulk")
-    @PreAuthorize("hasAuthority('LISTING_MODERATE')")
+    @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Kiểm duyệt tin hàng loạt",
             description = "Áp một hành động (APPROVE/REJECT/LOCK/HIDE) cho nhiều tin; mỗi tin xử lý độc lập; trả về danh sách thành công và thất bại.")
     public ResponseEntity<ApiResponse<BulkActionResponse>> bulkModerate(

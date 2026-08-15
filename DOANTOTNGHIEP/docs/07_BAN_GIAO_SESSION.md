@@ -1,8 +1,12 @@
 # 🧭 Bàn giao Session — Website Quảng cáo & Tìm kiếm Phòng trọ
 
+<!-- WEBTRO_ROLE_ONLY_UPDATE_START -->
+> **Cập nhật 2026-08-09:** phân quyền hiện hành là **role-only**. Hệ thống không còn entity/repository/bảng nghiệp vụ `permissions` hay `role_permissions`; Flyway `V15__drop_permission_tables.sql` drop hai bảng này sau các migration lịch sử. Backend kiểm tra bằng `@PreAuthorize("hasRole/hasAnyRole")` và `SecurityUtils.hasRole/hasAnyRole`; JWT chỉ chứa `role`. Tenant được phép tạo tin nhưng service chỉ chấp nhận `categoryCode = ROOMMATE`; Landlord/Admin tạo được mọi loại tin. Access token 15 phút, refresh token 1 ngày, cả hai lưu `localStorage`; khi refresh token còn dưới 15 phút và access token vẫn còn hạn, frontend chủ động gọi `/api/auth/refresh` để xoay refresh token.
+<!-- WEBTRO_ROLE_ONLY_UPDATE_END -->
+
 > **Mục đích file này:** ghi lại **thật chi tiết & tường minh** toàn bộ những gì đã trao đổi và thực hiện trong session làm việc, để **session mới đọc file này là hiểu ngay luồng dự án, trạng thái hiện tại, các quyết định kỹ thuật, những bẫy (gotcha) và việc còn lại** — không cần hỏi lại từ đầu.
 >
-> **Cập nhật lần cuối:** 2026-07-25. Người dùng: `nguyenxuanhoa8b@gmail.com` (git user `hoanxyp`), branch `main`.
+> **Cập nhật lần cuối:** 2026-08-05. Người dùng: `nguyenxuanhoa8b@gmail.com`, branch `main`.
 
 ---
 
@@ -60,10 +64,10 @@ DOANTOTNGHIEP/
 │       ├── api/                  # authApi, userApi, listingApi, searchApi, catalogApi,
 │       │                         #   interactionApi, paymentApi, aiApi, adminApi
 │       ├── pages/                # auth/, public/, tenant/, landlord/, admin/
-│       ├── routes/router.jsx     # lazy-load + RoleRoute/PermissionRoute
+│       ├── routes/router.jsx     # lazy-load + RoleRoute
 │       └── components/           # NotificationBell, chatbot/ChatbotWidget...
 └── docs/
-    ├── 00_CANONICAL_DECISIONS.md          # "canonical v2.1" — nguồn chân lý (46 bảng, 105 config key, 10 job)
+    ├── 00_CANONICAL_DECISIONS.md          # "canonical v3" — nguồn chân lý (45 bảng, 10 job)
     ├── 01_KIEN_TRUC_HE_THONG.md
     ├── 02_THIET_KE_DATABASE.md
     ├── 03_THIET_KE_API.md
@@ -185,7 +189,7 @@ Người dùng: *"Phạm vi web trong khu vực Hà Nội"*.
    $bytes = [System.Text.Encoding]::UTF8.GetBytes($body)
    Invoke-WebRequest $url -Method POST -ContentType 'application/json; charset=utf-8' -Body $bytes ...
    ```
-4. **Đăng nhập:** body dùng field **`emailOrPhone`** (KHÔNG phải `email`). Nếu để `email` → 400 validation.
+4. **Đăng nhập:** body dùng field **`emailOrPhone`** (KHÔNG phải `email`). Nếu để `email` → 400 validation. Phản hồi trả `user.role` là **chuỗi** (không phải mảng `roles`).
 5. **Phân trang:** danh sách nằm ở **`data.items`** (KHÔNG phải `data.content`). `PageResponse { items, page, size, totalElements, totalPages, first, last }`.
 6. **Đổi migration hoặc logic seed → phải `docker compose down -v`.** Lý do: (a) Flyway checksum sẽ fail nếu sửa file `Vx` đã chạy; (b) seeder chỉ chạy khi `listingRepository.count()==0`.
 7. **Docker Desktop tự tắt khi máy nghỉ.** Khởi động lại:
@@ -214,7 +218,7 @@ Backend healthy khi `GET http://localhost:8080/actuator/health` → `{"status":"
 ### 8.2. Tài khoản demo
 | Vai trò | Email | Mật khẩu |
 |---|---|---|
-| Admin | `admin@webtro.local` | `Hx23huNeMePv@Aa1` (từ `.env` `ADMIN_PASSWORD`) |
+| Admin | `admin@webtro.local` | `Admin@12345` (từ `.env` `ADMIN_PASSWORD`) |
 | Chủ trọ | `landlord1@webtro.local` … `landlordN@` | `Test@1234` |
 | Người thuê | `tenant1@webtro.local` … `tenantN@` | `Test@1234` |
 | Moderator | `moderator@webtro.local` | `Test@1234` |
@@ -244,8 +248,8 @@ function PostU($url,$tok,$obj){ $b=$enc.GetBytes(($obj|ConvertTo-Json -Compress)
 
 - **Envelope response:** `ApiResponse { success, message, data, errorCode, timestamp, path, traceId }`.
 - **Phân trang:** `PageResponse { items, ... }` (xem bẫy #5).
-- **JWT:** access 15 phút + refresh 7 ngày (rotation + reuse detection + `family_id` + Redis blacklist). Refresh token trong **httpOnly cookie** (SameSite=Strict, Path=`/api/auth`).
-- **RBAC 2 tầng:** 4 vai trò → 27 quyền; `@PreAuthorize("hasAuthority('QUYEN')")`.
+- **JWT:** access 15 phút + refresh 1 ngày (rotation + reuse detection + `family_id` + Redis blacklist). **Cả hai token nằm ở `localStorage` phía client** (`webtro_access_token` / `webtro_refresh_token`); backend KHÔNG đặt cookie nào. Claim JWT chỉ còn `role` (chuỗi đơn), không có `permissions[]`.
+- **Phân quyền role-only:** 4 vai trò; `@PreAuthorize("hasRole/hasAnyRole")`. **Mỗi user đúng MỘT vai trò** (`users.role_id`, NOT NULL) — không có bảng `user_roles`, không có cấp quyền riêng cho từng người.
 - **State machine tin đăng:** `ListingStateMachine` là **cổng DUY NHẤT** đổi trạng thái (DRAFT/PENDING/ACTIVE/REJECTED/HIDDEN/EXPIRED/CLOSED/LOCKED/NEED_REVIEW/DELETED).
 - **Sự kiện AI/notify:** `@TransactionalEventListener(phase = AFTER_COMMIT)`; listener có GHI dữ liệu **PHẢI** `@Transactional(propagation = REQUIRES_NEW)` và **KHÔNG** `readOnly=true` (xem bug 6.5).
 - **Giao tiếp chéo module:** qua **SPI Gateway** (adapter hexagonal) + ApplicationEvent — module này không phụ thuộc trực tiếp entity module kia.
@@ -253,7 +257,7 @@ function PostU($url,$tok,$obj){ $b=$enc.GetBytes(($obj|ConvertTo-Json -Compress)
 - **Cấu hình runtime:** ngưỡng nghiệp vụ ở bảng `system_configs` (Admin sửa được), không phải `application.yml`.
 - **4 AI** rule-based in-process: `SentimentAnalyzer` (từ điển tiếng Việt), `ContentBasedRecommendationEngine`, `RuleBasedChatbotEngine` (intent+slot), `ComparableHedonicPriceEstimator` (so sánh + hedonic).
 - **10 job `@Scheduled`:** DataRetention, ListingExpiry, ListingExpiryReminder, NewMatchingListingNotify, PaymentReconcile, PromotionExpiry, RecommendationPrecompute, SentimentRetry, TokenCleanup, TrustScoreRecalc.
-- **Flyway V1..V12:** V1 baseline schema · V2 roles/permissions · V3 catalog · **V4 địa giới Hà Nội** · V5 system_configs · V6 banned_keywords · V7 promotion_packages · V8 admin note · V9 amenity groups note · V10 fulltext index · V11/V12 mở rộng enum audit/notification/moderation.
+- **Flyway V1..V15:** V1 baseline schema · V2 roles/permissions · V3 catalog · **V4 địa giới Hà Nội** · V5 system_configs · V6 banned_keywords · V7 promotion_packages · V8 admin note · V9 amenity groups note · V10 fulltext index · V11/V12 mở rộng enum audit/notification/moderation · **V13 chuyển user↔role sang `users.role_id` và bỏ bảng `user_roles`** · **V14 xóa 2 config gây khác quyền giữa người cùng vai trò** · **V15 drop `role_permissions` và `permissions`**.
 
 ---
 
@@ -275,6 +279,66 @@ function PostU($url,$tok,$obj){ $b=$enc.GetBytes(($obj|ConvertTo-Json -Compress)
 | `docs/07_BAN_GIAO_SESSION.md` | **Tạo mới** | Chính file này |
 
 > Lưu ý: các thay đổi trên **đã build & verify chạy được**, nhưng **CHƯA commit git** (branch `main`, working tree có thay đổi). Session mới cân nhắc commit khi người dùng yêu cầu.
+
+---
+
+## 10b. SESSION 2026-08-05 — Ba thay đổi về phân quyền & phiên đăng nhập
+
+Yêu cầu của người dùng: (1) mỗi user chỉ có duy nhất 1 role; (2) hai người cùng role phải dùng
+được đúng cùng bộ chức năng; (3) refresh token và access token lưu ở `localStorage`.
+
+Chi tiết đầy đủ ở **`docs/00_CANONICAL_DECISIONS.md` mục 17**. Tóm tắt để tra nhanh:
+
+### Mô hình vai trò
+- Bảng nối `user_roles` **đã bị bỏ** (V13). Vai trò nằm ở **`users.role_id`** (NOT NULL, FK).
+- `RoleRepository.findRoleCodesByUserId` → **`findRoleCodeByUserId`** trả `Optional<String>`.
+- Entity `UserRole` và `UserRoleRepository` **đã xóa** — đừng tìm nữa.
+- Đăng ký: chọn chủ trọ → **chỉ** `ROLE_LANDLORD` (không kèm `ROLE_TENANT` như trước). An toàn vì
+  ma trận quyền có `ROLE_LANDLORD ⊇ ROLE_TENANT`.
+- API đổi vai trò: **`PUT /api/admin/users/{id}/role`** body `{role, reason}` (đường cũ `/roles`
+  với `{roles[], reason}` đã bỏ, gọi vào sẽ 404).
+- DTO: `roles: string[]` → **`role: string`** ở mọi response; `UserActionResponse` dùng
+  `previousRole` / `role`.
+- JWT: claim `roles[]` → **`role`** (chuỗi). Token phát hành trước V13 sẽ mất authority (cố ý —
+  fail rõ ràng thay vì lỗi ép kiểu ngầm).
+
+### Cùng vai trò = cùng chức năng
+Đã gỡ 5 cổng chặn theo từng người trong `ListingServiceImpl` và `UserServiceImpl`: hạn mức riêng
+cho tài khoản mới, cấm đăng vĩnh viễn theo `warning_count`, tự duyệt tin theo uy tín/xác minh,
+chặn theo `email_verified_at`, và `isLandlord = role || có hồ sơ chủ trọ`.
+**Giữ nguyên** (không phải vi phạm): kiểm tra quyền sở hữu dữ liệu, chế tài **có thời hạn**
+(`posting_restricted_until`), trạng thái `LOCKED`, hạn mức chu kỳ áp dụng bằng nhau cho mọi người.
+
+### Token
+- Backend **không đặt cookie nào**. `AuthController` đã gỡ hết `@CookieValue` / `Set-Cookie`.
+- FE lưu `webtro_access_token` + `webtro_refresh_token` trong `localStorage`
+  (`services/tokenService.js`).
+- `POST /auth/refresh` **bắt buộc** có `refreshToken` trong body (`@NotBlank`).
+- `ChangePasswordRequest` **thêm** trường `refreshToken` (không bắt buộc) — thiếu nó thì người dùng
+  bị đăng xuất khỏi chính thiết bị đang đổi mật khẩu, và lỗi này **âm thầm** không ném ngoại lệ.
+- ⚠ **Bẫy dễ vỡ nhất:** sau mỗi lần `/auth/refresh` phải ghi đè **CẢ HAI** token. Gửi lại refresh
+  token cũ ở lần sau → reuse detection thu hồi cả họ token → mất phiên. Lỗi chỉ lộ ở lần refresh
+  thứ hai.
+
+### Hai lỗi có sẵn phát hiện và sửa kèm
+1. `POST /api/auth/register` **luôn trả 400** — FE gửi `role: 'ROLE_TENANT'` trong khi BE đòi
+   `requestedRole` (enum `TENANT|LANDLORD`), `confirmPassword`, `acceptTerms`. Đã sửa payload FE.
+2. Hộp thoại đổi vai trò ở màn quản trị **luôn trả 400** — không có ô "Lý do" trong khi `reason`
+   là bắt buộc (10–500 ký tự). Đã thêm ô nhập + kiểm tra độ dài.
+
+### Đã kiểm chứng trên hệ thống đang chạy (2026-08-05)
+```
+14 migration ap dung, schema v14 · 45 bang nghiep vu · users.role_id NOT NULL + FK
+20/20 nguoi dung dung 1 vai tro (ADMIN 1 · MODERATOR 1 · LANDLORD 6 · TENANT 12)
+6 chu tro -> 1 bo quyen duy nhat (8) · 4 nguoi thue -> 1 bo quyen duy nhat (5)
+login khong co Set-Cookie · claim JWT `role` la chuoi
+refresh xoay vong 2 lan lien tiep OK · dung lai token cu -> 401 · thieu token -> 400
+doi mat khau: phien hien tai con song
+dang ky TENANT/LANDLORD -> 201, dung 1 vai tro trong DB
+PUT /admin/users/{id}/role -> 200 · /roles cu -> 404 · vai tro la -> 422
+ma tran quyen 4 vai tro x 7 endpoint: dung theo V2 seed
+frontend + reverse proxy /api: 200 · 5 container healthy
+```
 
 ---
 

@@ -61,7 +61,7 @@ public class FollowServiceImpl implements FollowService {
         }
         User landlord = userRepository.findByIdAndDeletedAtIsNull(landlordId)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.USER_NOT_FOUND));
-        if (!roleRepository.findRoleCodesByUserId(landlordId).contains(RoleCode.LANDLORD)) {
+        if (!RoleCode.LANDLORD.equals(roleRepository.findRoleCodeByUserId(landlordId).orElse(null))) {
             throw new com.webtro.exception.BusinessRuleException(ErrorCode.TARGET_NOT_LANDLORD);
         }
         if (followRepository.existsByFollower_IdAndLandlord_IdAndDeletedAtIsNull(followerId, landlordId)) {

@@ -37,7 +37,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/admin/amenities")
 @RequiredArgsConstructor
-@PreAuthorize("hasAuthority('" + com.webtro.constant.PermissionCode.CATALOG_MANAGE + "')")
+@PreAuthorize("hasRole('ADMIN')")
 @Tag(name = "17. Admin - Catalog", description = "Quản trị danh mục, khu vực, tiện ích")
 public class AdminAmenityController {
 

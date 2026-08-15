@@ -53,7 +53,7 @@ public class CommentController {
     }
 
     @PostMapping("/listings/{id}/comments")
-    @PreAuthorize("hasAuthority('COMMENT_CREATE')")
+    @PreAuthorize("hasAnyRole('TENANT','LANDLORD','ADMIN')")
     @Operation(summary = "Tạo bình luận")
     public ResponseEntity<ApiResponse<CommentResponse>> create(
             @PathVariable Long id, @Valid @RequestBody CreateCommentRequest request,
@@ -64,7 +64,7 @@ public class CommentController {
     }
 
     @PostMapping("/comments/{id}/reply")
-    @PreAuthorize("hasAuthority('COMMENT_CREATE')")
+    @PreAuthorize("hasAnyRole('TENANT','LANDLORD','ADMIN')")
     @Operation(summary = "Trả lời bình luận")
     public ResponseEntity<ApiResponse<CommentResponse>> reply(
             @PathVariable Long id, @Valid @RequestBody UpdateCommentRequest request,
@@ -75,7 +75,7 @@ public class CommentController {
     }
 
     @PutMapping("/comments/{id}")
-    @PreAuthorize("hasAuthority('COMMENT_CREATE')")
+    @PreAuthorize("hasAnyRole('TENANT','LANDLORD','ADMIN')")
     @Operation(summary = "Sửa bình luận (trong cửa sổ cho phép)")
     public ResponseEntity<ApiResponse<CommentResponse>> update(
             @PathVariable Long id, @Valid @RequestBody UpdateCommentRequest request,
@@ -85,7 +85,7 @@ public class CommentController {
     }
 
     @DeleteMapping("/comments/{id}")
-    @PreAuthorize("hasAnyAuthority('COMMENT_CREATE','COMMENT_MODERATE')")
+    @PreAuthorize("hasAnyRole('TENANT','LANDLORD','MODERATOR','ADMIN')")
     @Operation(summary = "Xóa bình luận (tác giả trong cửa sổ, hoặc kiểm duyệt viên)")
     public ResponseEntity<Void> delete(@PathVariable Long id,
                                        @AuthenticationPrincipal CustomUserDetails user) {

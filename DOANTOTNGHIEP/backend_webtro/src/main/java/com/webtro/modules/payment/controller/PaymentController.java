@@ -1,7 +1,6 @@
 package com.webtro.modules.payment.controller;
 
 import com.webtro.common.ApiResponse;
-import com.webtro.constant.PermissionCode;
 import com.webtro.modules.payment.dto.request.CreatePaymentRequest;
 import com.webtro.modules.payment.dto.request.PaymentCallbackRequest;
 import com.webtro.modules.payment.dto.request.PromoteListingRequest;
@@ -38,7 +37,7 @@ import java.util.List;
 /**
  * API thanh toán mua gói đẩy tin (canonical 4.9.3–4.9.7, 4.9.10, mục 6).
  * Callback là endpoint công khai (bảo vệ bằng HMAC signature); các endpoint còn lại cần
- * {@code PAYMENT_VIEW_OWN}.
+ * vai trò chủ trọ hoặc admin.
  */
 @RestController
 @RequestMapping("/api")
@@ -49,7 +48,7 @@ public class PaymentController {
     private final PaymentService paymentService;
 
     @PostMapping("/payments")
-    @PreAuthorize("hasAuthority('" + PermissionCode.PAYMENT_VIEW_OWN + "')")
+    @PreAuthorize("hasAnyRole('LANDLORD','ADMIN')")
     @Operation(summary = "Tạo giao dịch mua gói đẩy tin")
     public ResponseEntity<ApiResponse<PaymentResponse>> create(
             @Valid @RequestBody CreatePaymentRequest request,
@@ -63,7 +62,7 @@ public class PaymentController {
     }
 
     @PostMapping("/listings/{id}/promote")
-    @PreAuthorize("hasAuthority('" + PermissionCode.PAYMENT_VIEW_OWN + "')")
+    @PreAuthorize("hasAnyRole('LANDLORD','ADMIN')")
     @Operation(summary = "Mua gói đẩy tin cho một tin (đường tắt)")
     public ResponseEntity<ApiResponse<PaymentResponse>> promote(
             @PathVariable Long id,
@@ -78,17 +77,17 @@ public class PaymentController {
     }
 
     @GetMapping("/payments/{id}")
-    @PreAuthorize("hasAnyAuthority('" + PermissionCode.PAYMENT_VIEW_OWN + "','" + PermissionCode.PAYMENT_MANAGE + "')")
+    @PreAuthorize("hasAnyRole('LANDLORD','ADMIN')")
     @Operation(summary = "Chi tiết một giao dịch")
     public ResponseEntity<ApiResponse<PaymentResponse>> detail(
             @PathVariable Long id, @AuthenticationPrincipal CustomUserDetails user) {
-        boolean canManage = user.hasPermission(PermissionCode.PAYMENT_MANAGE);
+        boolean canManage = user.hasRole(com.webtro.constant.RoleCode.ADMIN);
         PaymentResponse data = paymentService.getPayment(id, user.getId(), canManage);
         return ResponseEntity.ok(ApiResponse.success(data, "Lấy chi tiết giao dịch thành công"));
     }
 
     @GetMapping("/payments/my")
-    @PreAuthorize("hasAuthority('" + PermissionCode.PAYMENT_VIEW_OWN + "')")
+    @PreAuthorize("hasAnyRole('LANDLORD','ADMIN')")
     @Operation(summary = "Lịch sử thanh toán của tôi")
     public ResponseEntity<ApiResponse<PaymentHistoryResponse>> myPayments(
             @RequestParam(required = false) List<com.webtro.common.enums.PaymentStatus> status,
@@ -103,7 +102,7 @@ public class PaymentController {
     }
 
     @PostMapping("/payments/{id}/cancel")
-    @PreAuthorize("hasAuthority('" + PermissionCode.PAYMENT_VIEW_OWN + "')")
+    @PreAuthorize("hasAnyRole('LANDLORD','ADMIN')")
     @Operation(summary = "Hủy giao dịch đang chờ thanh toán")
     public ResponseEntity<ApiResponse<PaymentResponse>> cancel(
             @PathVariable Long id, @AuthenticationPrincipal CustomUserDetails user) {

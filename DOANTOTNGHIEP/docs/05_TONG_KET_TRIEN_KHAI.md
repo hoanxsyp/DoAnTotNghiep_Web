@@ -1,5 +1,9 @@
 # 05 — Tổng kết triển khai & hướng dẫn vận hành
 
+<!-- WEBTRO_ROLE_ONLY_UPDATE_START -->
+> **Cập nhật 2026-08-09:** phân quyền hiện hành là **role-only**. Hệ thống không còn entity/repository/bảng nghiệp vụ `permissions` hay `role_permissions`; Flyway `V15__drop_permission_tables.sql` drop hai bảng này sau các migration lịch sử. Backend kiểm tra bằng `@PreAuthorize("hasRole/hasAnyRole")` và `SecurityUtils.hasRole/hasAnyRole`; JWT chỉ chứa `role`. Tenant được phép tạo tin nhưng service chỉ chấp nhận `categoryCode = ROOMMATE`; Landlord/Admin tạo được mọi loại tin. Access token 15 phút, refresh token 1 ngày, cả hai lưu `localStorage`; khi refresh token còn dưới 15 phút và access token vẫn còn hạn, frontend chủ động gọi `/api/auth/refresh` để xoay refresh token.
+<!-- WEBTRO_ROLE_ONLY_UPDATE_END -->
+
 Tài liệu này tổng kết những gì đã xây dựng và cách chạy/kiểm thử toàn hệ thống. Đây là bản mô tả
 sản phẩm **thực tế đã chạy được**, không phải kế hoạch.
 
@@ -7,14 +11,14 @@ sản phẩm **thực tế đã chạy được**, không phải kế hoạch.
 
 | Hạng mục | Kết quả đã kiểm chứng |
 |---|---|
-| Flyway migration | 10 file, 46 bảng, seed đầy đủ — áp dụng thành công trên MySQL 8.4 |
-| Hibernate `validate` | PASS — 46 entity khớp chính xác schema |
+| Flyway migration | **14 file** (V1…V14), **45 bảng**, seed đầy đủ — áp dụng thành công trên MySQL 8.4 |
+| Hibernate `validate` | PASS — 45 entity khớp chính xác schema |
 | Khởi động Spring context | Thành công, ~500 bean (controller, service, adapter, listener, scheduler) |
-| Số REST endpoint phục vụ | **160** (Swagger `/v3/api-docs`) |
+| Số REST endpoint phục vụ | **198** operation trên **170** path (Swagger `/v3/api-docs`) |
 | Tài khoản admin | Tự tạo lúc khởi động từ biến môi trường (hash BCrypt) |
 | Scheduler | Đã chạy thật (log `SentimentRetryJob hoàn tất`) |
-| Smoke test API | Đăng nhập (JWT + 27 permission), `/users/me`, dashboard, tìm kiếm, danh mục, khu vực — PASS |
-| Ghi dữ liệu | Đăng ký chủ trọ thành công → tạo user + role + verification |
+| Smoke test API | Đăng nhập (JWT role-only), `/users/me`, dashboard, tìm kiếm, danh mục, khu vực — PASS |
+| Ghi dữ liệu | Đăng ký chủ trọ thành công → tạo user (đúng **1 vai trò**) + `landlord_profiles` + verification |
 | Email bất đồng bộ | MailHog nhận email chào mừng + xác thực |
 | Frontend | `npm run build` OK, Docker image (nginx) OK |
 | End-to-end qua nginx | SPA phục vụ + proxy `/api` + đăng nhập — PASS |
@@ -22,17 +26,19 @@ sản phẩm **thực tế đã chạy được**, không phải kế hoạch.
 ## 2. Quy mô mã nguồn
 
 **Backend** (`backend_webtro/`): ~590 file Java.
-- 46 entity + 46 repository, 43 controller, ~70 service (interface + impl), ~180 DTO, ~32 mapper thủ công.
+- 45 entity + 45 repository, 43 controller, ~70 service (interface + impl), ~180 DTO, ~32 mapper thủ công.
 - 12 SPI adapter nối chéo module (mẫu hexagonal, giữ ranh giới module).
 - 10 scheduler job, 4 module AI rule-based (sentiment tiếng Việt, gợi ý 9 số hạng, chatbot, dự đoán giá).
-- Security: JWT access + refresh token (rotation + reuse detection + blacklist Redis), RBAC 2 tầng
-  (4 role → 27 permission), rate limit Redis.
+- Security: JWT access + refresh token (rotation + reuse detection + blacklist Redis), phân quyền role-only
+  (4 role, role-only), rate limit Redis. **Mỗi người dùng có đúng một vai trò**
+  (`users.role_id`); quyền suy 100% từ vai trò nên hai người cùng vai trò có bộ chức năng y hệt nhau.
+  Access token + refresh token do client giữ trong `localStorage`, backend không đặt cookie nào.
 
 **Frontend** (`frontend_webtro/`): ~127 file.
 - 51 trang (public/auth/tenant/landlord/admin), 34 component dùng lại, 18 API module, router lazy-load,
-  3 guard (ProtectedRoute/RoleRoute/PermissionRoute), theme MUI sáng/tối, axios interceptor tự refresh.
+  3 guard (ProtectedRoute/RoleRoute), theme MUI sáng/tối, axios interceptor tự refresh.
 
-**Docs** (`docs/`): 6 tài liệu (~30.000 dòng) — canonical, kiến trúc, database, API, giao diện, tổng kết.
+**Docs** (`docs/`): 8 tài liệu — canonical (00), kiến trúc (01), database (02), API (03), giao diện (04), tổng kết (05), phân công review (06), bàn giao session (07).
 
 ## 3. Cách chạy
 

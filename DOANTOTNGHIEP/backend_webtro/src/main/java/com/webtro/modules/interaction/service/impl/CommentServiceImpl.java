@@ -10,7 +10,7 @@ import com.webtro.common.enums.SentimentLabel;
 import com.webtro.common.event.CommentCreatedEvent;
 import com.webtro.constant.ConfigKey;
 import com.webtro.constant.ErrorCode;
-import com.webtro.constant.PermissionCode;
+import com.webtro.constant.RoleCode;
 import com.webtro.exception.BusinessRuleException;
 import com.webtro.exception.ConflictException;
 import com.webtro.exception.ForbiddenException;
@@ -79,7 +79,7 @@ public class CommentServiceImpl implements CommentService {
                                             Pageable pageable) {
         ListingGateway.ListingBrief listing = listingGateway.getBrief(listingId);
         Long ownerId = listing.ownerId();
-        boolean viewerModerates = SecurityUtils.hasPermission(PermissionCode.COMMENT_MODERATE);
+        boolean viewerModerates = SecurityUtils.hasAnyRole(RoleCode.MODERATOR, RoleCode.ADMIN);
 
         Page<Comment> page = commentRepository.findByListingIdAndParentIsNullAndStatusAndDeletedAtIsNull(
                 listingId, CommentStatus.VISIBLE, pageable);
@@ -226,7 +226,7 @@ public class CommentServiceImpl implements CommentService {
         Comment c = commentRepository.findByIdAndDeletedAtIsNull(commentId)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.COMMENT_NOT_FOUND));
         boolean author = c.getUserId().equals(userId);
-        boolean moderator = SecurityUtils.hasPermission(PermissionCode.COMMENT_MODERATE);
+        boolean moderator = SecurityUtils.hasAnyRole(RoleCode.MODERATOR, RoleCode.ADMIN);
         if (!author && !moderator) {
             throw new ForbiddenException(ErrorCode.COMMENT_FORBIDDEN);
         }

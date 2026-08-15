@@ -1,8 +1,10 @@
 package com.webtro.security;
 
+import com.webtro.constant.RoleCode;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 
+import java.util.Arrays;
 import java.util.Optional;
 
 /**
@@ -34,7 +36,21 @@ public final class SecurityUtils {
         return getCurrentUser().isPresent();
     }
 
-    public static boolean hasPermission(String permission) {
-        return getCurrentUser().map(u -> u.hasPermission(permission)).orElse(false);
+    public static Optional<String> getCurrentRole() {
+        return getCurrentUser().map(CustomUserDetails::getRole);
+    }
+
+    public static boolean hasRole(String role) {
+        return getCurrentRole().map(role::equals).orElse(false);
+    }
+
+    public static boolean hasAnyRole(String... roles) {
+        return getCurrentRole()
+                .map(current -> Arrays.asList(roles).contains(current))
+                .orElse(false);
+    }
+
+    public static boolean isAdmin() {
+        return hasRole(RoleCode.ADMIN);
     }
 }

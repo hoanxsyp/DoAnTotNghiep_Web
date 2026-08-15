@@ -16,13 +16,11 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.List;
-
 /**
  * Lọc mọi request: nếu có {@code Authorization: Bearer <token>} hợp lệ (và không nằm trong
  * blacklist), dựng {@code Authentication} từ claims và đặt vào SecurityContext.
  *
- * <p>Dùng thẳng claims trong token để tạo authority (không truy DB mỗi request → nhanh). Trạng
+ * <p>Dùng thẳng role trong token để tạo authority (không truy DB mỗi request → nhanh). Trạng
  * thái tài khoản bị khóa sau khi token phát hành sẽ bị chặn khi token hết hạn (≤15 phút) hoặc khi
  * làm mới token — đánh đổi hợp lý cho hiệu năng. Thao tác nhạy cảm vẫn kiểm tra lại ở service.
  */
@@ -55,11 +53,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private void authenticate(Claims claims, HttpServletRequest request) {
         Long userId = jwtService.extractUserId(claims);
         String email = jwtService.extractEmail(claims);
-        List<String> roles = jwtService.extractRoles(claims);
-        List<String> permissions = jwtService.extractPermissions(claims);
+        String role = jwtService.extractRole(claims);
 
         CustomUserDetails principal = new CustomUserDetails(
-                userId, email, null, com.webtro.common.enums.UserStatus.ACTIVE, roles, permissions);
+                userId, email, null, com.webtro.common.enums.UserStatus.ACTIVE, role);
 
         UsernamePasswordAuthenticationToken authentication =
                 new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities());

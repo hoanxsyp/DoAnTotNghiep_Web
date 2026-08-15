@@ -42,7 +42,7 @@ public class ConversationController {
     private final ConversationService conversationService;
 
     @GetMapping
-    @PreAuthorize("hasAuthority('CONTACT_CREATE')")
+    @PreAuthorize("hasAnyRole('TENANT','LANDLORD','ADMIN')")
     @Operation(summary = "Danh sách cuộc trò chuyện")
     public ResponseEntity<ApiResponse<ConversationPageResponse>> list(
             @RequestParam(required = false, defaultValue = "ALL") String role,
@@ -56,7 +56,7 @@ public class ConversationController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAuthority('CONTACT_CREATE')")
+    @PreAuthorize("hasAnyRole('TENANT','LANDLORD','ADMIN')")
     @Operation(summary = "Tạo (hoặc lấy lại) cuộc trò chuyện")
     public ResponseEntity<ApiResponse<ConversationCreatedResponse>> create(
             @Valid @RequestBody CreateConversationRequest request,
@@ -71,7 +71,7 @@ public class ConversationController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('CONTACT_CREATE')")
+    @PreAuthorize("hasAnyRole('TENANT','LANDLORD','ADMIN')")
     @Operation(summary = "Chi tiết cuộc trò chuyện")
     public ResponseEntity<ApiResponse<ConversationResponse>> detail(
             @PathVariable Long id, @AuthenticationPrincipal CustomUserDetails user) {
@@ -80,7 +80,7 @@ public class ConversationController {
     }
 
     @GetMapping("/{id}/messages")
-    @PreAuthorize("hasAuthority('CONTACT_CREATE')")
+    @PreAuthorize("hasAnyRole('TENANT','LANDLORD','ADMIN')")
     @Operation(summary = "Danh sách tin nhắn của cuộc trò chuyện")
     public ResponseEntity<ApiResponse<PageResponse<MessageResponse>>> messages(
             @PathVariable Long id,
@@ -91,7 +91,7 @@ public class ConversationController {
     }
 
     @PostMapping("/{id}/messages")
-    @PreAuthorize("hasAuthority('CONTACT_CREATE')")
+    @PreAuthorize("hasAnyRole('TENANT','LANDLORD','ADMIN')")
     @Operation(summary = "Gửi tin nhắn")
     public ResponseEntity<ApiResponse<MessageResponse>> sendMessage(
             @PathVariable Long id, @Valid @RequestBody SendMessageRequest request,
@@ -102,7 +102,7 @@ public class ConversationController {
     }
 
     @PostMapping("/{id}/read")
-    @PreAuthorize("hasAuthority('CONTACT_CREATE')")
+    @PreAuthorize("hasAnyRole('TENANT','LANDLORD','ADMIN')")
     @Operation(summary = "Đánh dấu đã đọc")
     public ResponseEntity<Void> markRead(@PathVariable Long id,
                                          @AuthenticationPrincipal CustomUserDetails user) {

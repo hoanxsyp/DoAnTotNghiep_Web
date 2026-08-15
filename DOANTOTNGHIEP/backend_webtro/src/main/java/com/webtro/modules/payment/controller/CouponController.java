@@ -1,7 +1,6 @@
 package com.webtro.modules.payment.controller;
 
 import com.webtro.common.ApiResponse;
-import com.webtro.constant.PermissionCode;
 import com.webtro.modules.payment.dto.request.ValidateCouponRequest;
 import com.webtro.modules.payment.dto.response.CouponValidationResponse;
 import com.webtro.modules.payment.service.PromotionService;
@@ -31,7 +30,7 @@ public class CouponController {
     private final PromotionService promotionService;
 
     @PostMapping("/validate")
-    @PreAuthorize("hasAuthority('" + PermissionCode.PAYMENT_VIEW_OWN + "')")
+    @PreAuthorize("hasAnyRole('LANDLORD','ADMIN')")
     @Operation(summary = "Kiểm tra mã khuyến mãi cho một gói")
     public ResponseEntity<ApiResponse<CouponValidationResponse>> validate(
             @Valid @RequestBody ValidateCouponRequest request,

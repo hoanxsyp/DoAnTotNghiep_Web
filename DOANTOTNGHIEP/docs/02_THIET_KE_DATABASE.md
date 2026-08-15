@@ -1,13 +1,17 @@
 # 02 — Thiết kế Database
 
-> **Phạm vi:** đặc tả đầy đủ 46 bảng của hệ thống *Website quảng cáo và tìm kiếm phòng trọ*,
+<!-- WEBTRO_ROLE_ONLY_UPDATE_START -->
+> **Cập nhật 2026-08-09:** phân quyền hiện hành là **role-only**. Hệ thống không còn entity/repository/bảng nghiệp vụ `permissions` hay `role_permissions`; Flyway `V15__drop_permission_tables.sql` drop hai bảng này sau các migration lịch sử. Backend kiểm tra bằng `@PreAuthorize("hasRole/hasAnyRole")` và `SecurityUtils.hasRole/hasAnyRole`; JWT chỉ chứa `role`. Tenant được phép tạo tin nhưng service chỉ chấp nhận `categoryCode = ROOMMATE`; Landlord/Admin tạo được mọi loại tin. Access token 15 phút, refresh token 1 ngày, cả hai lưu `localStorage`; khi refresh token còn dưới 15 phút và access token vẫn còn hạn, frontend chủ động gọi `/api/auth/refresh` để xoay refresh token.
+<!-- WEBTRO_ROLE_ONLY_UPDATE_END -->
+
+> **Phạm vi:** đặc tả đầy đủ 43 bảng của hệ thống *Website quảng cáo và tìm kiếm phòng trọ*,
 > đủ chi tiết để viết thẳng ra file migration Flyway và entity JPA mà không cần hỏi lại.
-> (45 bảng của canonical mục 6 + `notification_preferences` — bảng bắt buộc để thỏa
+> (43 bảng của canonical mục 6 + `notification_preferences` — bảng bắt buộc để thỏa
 > `[§11.12]` *"Có thể tắt một số loại thông báo không quan trọng"*; xem §3.38 và phụ lục A.6.)
 >
 > **Nguồn ràng buộc:**
 > - `00_CANONICAL_DECISIONS.md` — hợp đồng kỹ thuật. Mọi enum / tên bảng / tên cột /
->   permission code / config key trong tài liệu này **trùng khớp 100%** với canonical.
+>   role code / config key trong tài liệu này **trùng khớp 100%** với canonical.
 > - `PHAN_TICH_NGHIEP_VU_WEBSITE_PHONG_TRO.md` — tài liệu nghiệp vụ gốc. Mọi ký hiệu
 >   `[§x.y]` tham chiếu trực tiếp tới tài liệu này.
 >
@@ -23,7 +27,7 @@
 
 1. [Nguyên tắc thiết kế](#1-nguyên-tắc-thiết-kế)
 2. [Sơ đồ ERD tổng quan](#2-sơ-đồ-erd-tổng-quan)
-3. [Đặc tả chi tiết từng bảng (46 bảng)](#3-đặc-tả-chi-tiết-từng-bảng-46-bảng)
+3. [Đặc tả chi tiết từng bảng (43 bảng)](#3-đặc-tả-chi-tiết-từng-bảng-45-bảng)
 4. [Ràng buộc toàn vẹn nghiệp vụ ở tầng DB](#4-ràng-buộc-toàn-vẹn-nghiệp-vụ-ở-tầng-db)
 5. [Chiến lược Index](#5-chiến-lược-index)
 6. [Vòng đời tin đăng ở tầng dữ liệu](#6-vòng-đời-tin-đăng-ở-tầng-dữ-liệu)
@@ -49,7 +53,8 @@ Ví dụ áp dụng:
   chuỗi `"Phường 5, Quận 3, TP.HCM"` vào `listings` `[§6.1][§10.5]`.
 - Tiện ích là quan hệ nhiều–nhiều qua `listing_amenities`, không phải cột `amenities TEXT`
   phân tách bằng dấu phẩy `[§6.2]`.
-- `User ↔ Role` nhiều–nhiều qua `user_roles`, vì `[§1.2]`: *"Chủ trọ có toàn bộ quyền cơ bản
+- `User → Role` **nhiều–một** qua cột `users.role_id` (v3, migration V13): mỗi người dùng có
+  ĐÚNG MỘT vai trò. Đề bài `[§1.2]` (*"Chủ trọ có toàn bộ quyền cơ bản
   của người thuê nếu hệ thống dùng chung tài khoản"* (canonical mục 4.1).
 
 ### 1.2. Những chỗ CỐ Ý phi chuẩn hóa (denormalize) và vì sao
@@ -330,14 +335,11 @@ Bảng độ dài chốt cho từng enum (dùng thống nhất, không được 
 Ký hiệu cardinality của mermaid dùng trong tài liệu:
 `||--o{` = 1 : 0..n · `||--|{` = 1 : 1..n · `||--o|` = 1 : 0..1 · `}o--o{` = n : m.
 
-### 2.1. (a) Auth & User & Permission
+### 2.1. (a) Auth & User (Role-only)
 
 ```mermaid
 erDiagram
-    users ||--o{ user_roles : "1 user có 0..n gán vai trò"
-    roles ||--o{ user_roles : "1 role được gán cho 0..n user"
-    roles ||--o{ role_permissions : "1 role có 0..n quyền"
-    permissions ||--o{ role_permissions : "1 quyền thuộc 0..n role"
+    roles ||--o{ users : "1 vai trò có 0..n người dùng (users.role_id)"
     users ||--o| user_profiles : "1 user có 0..1 hồ sơ cá nhân"
     users ||--o| landlord_profiles : "1 user có 0..1 hồ sơ chủ trọ"
     users ||--o{ verifications : "1 user có 0..n yêu cầu xác thực"
@@ -352,25 +354,12 @@ erDiagram
         varchar phone UK "uk_users_phone qua phone_uk"
         varchar password_hash
         varchar status "UserStatus"
+        bigint role_id FK "NOT NULL - đúng 1 vai trò"
         datetime deleted_at
     }
     roles {
         bigint id PK
         varchar code UK "ROLE_TENANT|ROLE_LANDLORD|ROLE_MODERATOR|ROLE_ADMIN"
-    }
-    permissions {
-        bigint id PK
-        varchar code UK "LISTING_CREATE ..."
-    }
-    user_roles {
-        bigint id PK
-        bigint user_id FK
-        bigint role_id FK
-    }
-    role_permissions {
-        bigint id PK
-        bigint role_id FK
-        bigint permission_id FK
     }
     user_profiles {
         bigint id PK
@@ -381,9 +370,9 @@ erDiagram
         bigint user_id FK "UK"
         decimal trust_score
         varchar verification_status "VerificationStatus"
-        boolean allow_chat "[§3.10]"
-        tinyint response_rate_percent "nullable - ty le phan hoi [§5.7]"
-        int avg_response_minutes "nullable"
+        boolean allow_chat
+        tinyint response_rate_percent
+        int avg_response_minutes
     }
     verifications {
         bigint id PK
@@ -396,6 +385,7 @@ erDiagram
         bigint user_id FK
         char token_hash UK
         char family_id
+        datetime expired_at "login/refresh + 1 ngày"
     }
     password_reset_tokens {
         bigint id PK
@@ -768,9 +758,401 @@ erDiagram
     }
 ```
 
+### 2.7. (g) ERD toàn hệ thống (tổng hợp tất cả bảng đang dùng)
+
+```mermaid
+erDiagram
+    roles ||--o{ users : "1 role có nhiều user"
+    users ||--|{ user_profiles : "1 user có 0..1 hồ sơ"
+    users ||--|{ landlord_profiles : "1 user có 0..1 hồ sơ chủ trọ"
+    users ||--o{ verifications : "1 user có nhiều mã xác thực"
+    users ||--o{ refresh_tokens : "1 user có nhiều refresh token"
+    users ||--o{ password_reset_tokens : "1 user có nhiều token reset"
+    users ||--o{ follows : "user theo dõi chủ trọ"
+    users ||--o{ follows : "chủ trọ có người theo dõi"
+
+    provinces ||--|{ districts : "1 tỉnh có nhiều quận/huyện"
+    districts ||--|{ wards : "1 quận có nhiều phường/xã"
+    provinces ||--o{ user_profiles : "1 tỉnh có nhiều hồ sơ user"
+    districts ||--o{ user_profiles : "1 quận có nhiều hồ sơ user"
+    users ||--o{ user_profiles : "user liên kết hồ sơ"
+    users ||--o{ landlord_profiles : "user có hồ sơ chủ trọ"
+    users ||--o{ listings : "chủ trọ sở hữu nhiều tin"
+    listings ||--|{ listing_images : "1 tin có nhiều ảnh"
+    listings ||--o{ listing_amenities : "1 tin có nhiều tiện ích"
+    amenities ||--o{ listing_amenities : "1 tiện ích cho nhiều tin"
+    categories ||--o{ listings : "1 danh mục có nhiều tin"
+    provinces ||--o{ listings : "1 tỉnh có nhiều tin"
+    districts ||--o{ listings : "1 quận có nhiều tin"
+    wards ||--o{ listings : "1 phường có nhiều tin"
+    users ||--o{ listing_edit_histories : "user chỉnh sửa nhiều phiên bản"
+    listings ||--o{ listing_edit_histories : "1 tin có nhiều lịch sử sửa"
+    prediction_histories ||--o{ listings : "0..1 dự đoán cho nhiều tin"
+
+    users ||--o{ favorites : "user lưu tin"
+    listings ||--o{ favorites : "tin được user lưu"
+    users ||--o{ view_histories : "user/khách xem tin"
+    listings ||--o{ view_histories : "tin có nhiều lượt xem"
+    users ||--o{ search_histories : "user tạo lịch sử tìm"
+    users ||--o{ contact_logs : "tenant tạo yêu cầu"
+    users ||--o{ contact_logs : "chủ trọ nhận yêu cầu"
+    listings ||--o{ contact_logs : "tin nhận liên hệ"
+    listings ||--o{ conversations : "tin có nhiều hội thoại"
+    users ||--o{ conversations : "tenant có nhiều hội thoại"
+    users ||--o{ conversations : "landlord có nhiều hội thoại"
+    conversations ||--|{ messages : "một hội thoại có nhiều tin nhắn"
+    users ||--o{ messages : "user gửi nhiều tin nhắn"
+    listings ||--o{ comments : "tin có nhiều bình luận"
+    users ||--o{ comments : "user viết bình luận"
+    comments ||--o{ comments : "1 comment cha có nhiều reply"
+    listings ||--o{ reviews : "tin có nhiều review"
+    users ||--o{ reviews : "tenant tạo review"
+    users ||--o{ reviews : "landlord nhận review"
+    comments ||--o{ sentiment_results : "1 comment có nhiều bản phân tích"
+
+    users ||--o{ reports : "người dùng tạo report"
+    listings ||--o{ reports : "tin có report"
+    reports ||--o{ moderation_actions : "1 report có nhiều action"
+    users ||--o{ moderation_actions : "moderator xử lý"
+    listings ||--o{ moderation_actions : "tin có action xử lý"
+    users ||--o{ violation_warnings : "user nhận warning"
+    listings ||--o{ violation_warnings : "tin tạo warning"
+    reports ||--o{ violation_warnings : "report có warning"
+
+    users ||--o{ payments : "chủ trọ tạo giao dịch"
+    listings ||--o{ payments : "tin gắn giao dịch"
+    promotion_packages ||--o{ payments : "gói có nhiều thanh toán"
+    coupons ||--o{ payments : "mã KM áp vào thanh toán"
+    payments ||--|{ promotion_subscriptions : "1 payment có gói đẩy"
+    promotion_packages ||--o{ promotion_subscriptions : "gói có nhiều lượt đẩy"
+    users ||--o{ promotion_subscriptions : "landlord tạo subscription"
+    listings ||--o{ promotion_subscriptions : "tin có nhiều subscription"
+
+    users ||--o{ notifications : "user nhận thông báo"
+    users ||--o{ notification_preferences : "user có cấu hình thông báo"
+    users ||--o{ recommendation_logs : "hệ thống gợi ý cho user"
+    listings ||--o{ recommendation_logs : "tin xuất hiện trong log gợi ý"
+    users ||--o{ prediction_histories : "landlord/chạy dự đoán"
+    listings ||--o{ prediction_histories : "tin có lịch sử dự đoán giá"
+    users ||--o{ chatbot_conversations : "user tương tác chatbot"
+    chatbot_conversations ||--|{ chatbot_messages : "phiên có nhiều message"
+    users ||--o{ audit_logs : "actor thực thi thao tác"
+
+    roles {
+        bigint id PK
+        varchar code UK
+        varchar name
+    }
+    users {
+        bigint id PK
+        bigint role_id FK
+        varchar email UK
+        varchar phone UK
+        varchar status
+        boolean locked
+    }
+    user_profiles {
+        bigint id PK
+        bigint user_id FK "UK"
+        date date_of_birth
+        bigint province_id FK
+        bigint district_id FK
+    }
+    landlord_profiles {
+        bigint id PK
+        bigint user_id FK "UK"
+        decimal trust_score
+        varchar verification_status
+    }
+    verifications {
+        bigint id PK
+        bigint user_id FK
+        varchar type
+        varchar status
+    }
+    refresh_tokens {
+        bigint id PK
+        bigint user_id FK
+        char token_hash UK
+        datetime expired_at
+    }
+    password_reset_tokens {
+        bigint id PK
+        bigint user_id FK
+        char token_hash UK
+        datetime expired_at
+    }
+    follows {
+        bigint id PK
+        bigint follower_id FK
+        bigint landlord_id FK
+    }
+    provinces {
+        bigint id PK
+        varchar code UK
+        varchar name
+    }
+    districts {
+        bigint id PK
+        bigint province_id FK
+        varchar code UK
+    }
+    wards {
+        bigint id PK
+        bigint district_id FK
+        varchar code UK
+    }
+    categories {
+        bigint id PK
+        varchar code UK
+    }
+    amenities {
+        bigint id PK
+        varchar code UK
+        varchar group_code
+    }
+    listings {
+        bigint id PK
+        bigint owner_id FK
+        bigint category_id FK
+        bigint province_id FK
+        bigint district_id FK
+        bigint ward_id FK
+        varchar status
+    }
+    listing_images {
+        bigint id PK
+        bigint listing_id FK
+        varchar url
+        boolean is_primary
+    }
+    listing_amenities {
+        bigint id PK
+        bigint listing_id FK
+        bigint amenity_id FK
+    }
+    listing_edit_histories {
+        bigint id PK
+        bigint listing_id FK
+        bigint editor_id FK
+    }
+    favorites {
+        bigint id PK
+        bigint user_id FK
+        bigint listing_id FK
+    }
+    view_histories {
+        bigint id PK
+        bigint listing_id FK
+        bigint user_id FK
+        datetime viewed_at
+    }
+    search_histories {
+        bigint id PK
+        bigint user_id FK
+        datetime created_at
+    }
+    contact_logs {
+        bigint id PK
+        bigint listing_id FK
+        bigint user_id FK
+        bigint owner_id FK
+        varchar contact_type
+    }
+    conversations {
+        bigint id PK
+        bigint tenant_id FK
+        bigint landlord_id FK
+        bigint listing_id FK
+    }
+    messages {
+        bigint id PK
+        bigint conversation_id FK
+        bigint sender_id FK
+        text content
+    }
+    comments {
+        bigint id PK
+        bigint listing_id FK
+        bigint user_id FK
+        bigint parent_id FK
+        varchar status
+    }
+    reviews {
+        bigint id PK
+        bigint listing_id FK
+        bigint user_id FK
+        bigint landlord_id FK
+        tinyint rating
+    }
+    reports {
+        bigint id PK
+        bigint reporter_id FK
+        bigint listing_id FK
+        bigint target_id
+        varchar target_type
+        bigint resolver_id FK
+        varchar status
+    }
+    moderation_actions {
+        bigint id PK
+        bigint report_id FK
+        bigint listing_id FK
+        bigint moderator_id FK
+        varchar action_type
+    }
+    violation_warnings {
+        bigint id PK
+        bigint listing_id FK
+        bigint user_id FK
+        bigint report_id FK
+    }
+    banned_keywords {
+        bigint id PK
+        varchar normalized_keyword UK
+        varchar severity
+    }
+    promotion_packages {
+        bigint id PK
+        varchar code UK
+        decimal price
+        int duration_days
+    }
+    coupons {
+        bigint id PK
+        varchar code UK
+        varchar discount_type
+    }
+    payments {
+        bigint id PK
+        bigint user_id FK
+        bigint listing_id FK
+        bigint package_id FK
+        bigint coupon_id FK
+        varchar status
+    }
+    promotion_subscriptions {
+        bigint id PK
+        bigint payment_id FK
+        bigint listing_id FK
+        bigint package_id FK
+        bigint user_id FK
+        varchar status
+    }
+    notifications {
+        bigint id PK
+        bigint user_id FK
+        varchar type
+        varchar channel
+    }
+    notification_preferences {
+        bigint id PK
+        bigint user_id FK
+        varchar notification_type
+        boolean in_app
+        boolean email
+    }
+    sentiment_results {
+        bigint id PK
+        bigint comment_id FK
+        varchar label
+        decimal score
+        boolean is_latest
+    }
+    recommendation_logs {
+        bigint id PK
+        bigint user_id FK
+        bigint listing_id FK
+        varchar source
+    }
+    prediction_histories {
+        bigint id PK
+        bigint listing_id FK
+        bigint user_id FK
+        decimal suggested_price
+        varchar confidence
+    }
+    chatbot_conversations {
+        bigint id PK
+        bigint user_id FK
+        char session_id
+    }
+    chatbot_messages {
+        bigint id PK
+        bigint conversation_id FK
+        varchar sender
+        varchar intent
+    }
+    audit_logs {
+        bigint id PK
+        bigint actor_id FK
+        varchar action
+        text target_type
+    }
+    system_configs {
+        bigint id PK
+        varchar config_key UK
+        text config_value
+    }
+    ai_configs {
+        bigint id PK
+        varchar module
+        varchar config_key
+        int version
+    }
+```
+
+### 2.8. (h) Ý nghĩa từng bảng (tóm tắt nhanh)
+
+| Bảng | Ý nghĩa nghiệp vụ |
+|---|---|
+| `roles` | Định nghĩa 4 vai trò hệ thống và metadata role. |
+| `users` | Tài khoản đăng nhập, trạng thái tài khoản, và thông tin bảo mật. |
+| `user_profiles` | Hồ sơ mở rộng cho người dùng: nghề nghiệp, ngày sinh, khu vực. |
+| `landlord_profiles` | Hồ sơ đặc thù chủ trọ: điểm uy tín, trạng thái xác thực. |
+| `verifications` | Lưu mã/phiên xác thực email, điện thoại theo user và loại kiểm tra. |
+| `refresh_tokens` | Quản lý chuỗi refresh token cho đăng nhập dài hạn. |
+| `password_reset_tokens` | Quản lý token đặt lại mật khẩu qua email. |
+| `follows` | Quan hệ theo dõi giữa user và chủ trọ. |
+| `categories` | Danh mục tin đăng, mã danh mục và cấu hình bắt buộc. |
+| `provinces` | Dữ liệu tỉnh/thành phố chuẩn hóa. |
+| `districts` | Dữ liệu quận/huyện theo tỉnh. |
+| `wards` | Dữ liệu phường/xã theo quận. |
+| `amenities` | Danh mục tiện ích chuẩn hóa cho tin phòng. |
+| `listings` | Tin đăng phòng trọ, tình trạng, địa chỉ và giá thuê. |
+| `listing_images` | Hình ảnh của từng tin đăng. |
+| `listing_amenities` | Bảng nối nhiều-nhiều giữa tin đăng và tiện ích. |
+| `listing_edit_histories` | Lịch sử chỉnh sửa quan trọng của tin đăng. |
+| `favorites` | Danh sách tin mà người dùng đã lưu. |
+| `view_histories` | Nhật ký lượt xem tin để tính lượt xem và chống đếm trùng. |
+| `search_histories` | Lịch sử tìm kiếm của user. |
+| `contact_logs` | Nhật ký liên hệ tin thuê và trạng thái tính lượt liên hệ. |
+| `conversations` | Khung chat giữa tenant và landlord cho một tin đăng. |
+| `messages` | Tin nhắn trong cuộc hội thoại chat. |
+| `comments` | Bình luận của user trên tin đăng. |
+| `reviews` | Đánh giá sao và nội dung review sau khi thuê. |
+| `reports` | Báo cáo sai phạm hoặc nội dung nghi ngờ trên hệ thống. |
+| `moderation_actions` | Hành động xử lý report của moderator. |
+| `violation_warnings` | Cảnh báo vi phạm gửi cho user/listing. |
+| `banned_keywords` | Từ khóa cấm dùng cho validation nội dung. |
+| `promotion_packages` | Gói đẩy/tăng hiển thị tin đăng. |
+| `coupons` | Mã giảm giá áp dụng thanh toán. |
+| `payments` | Giao dịch thanh toán hệ thống, trạng thái và phương thức. |
+| `promotion_subscriptions` | Kết quả kích hoạt và hiệu lực gói đã mua cho tin. |
+| `notifications` | Hàng đợi và trạng thái thông báo cho user. |
+| `notification_preferences` | Tùy chỉnh bật/tắt các loại thông báo theo user. |
+| `sentiment_results` | Kết quả phân tích cảm xúc comment theo thời điểm. |
+| `recommendation_logs` | Log quá trình gợi ý listing cho user. |
+| `prediction_histories` | Lịch sử dự đoán giá thuê theo listing. |
+| `chatbot_conversations` | Phiên trò chuyện chatbot của user. |
+| `chatbot_messages` | Message trao đổi trong từng phiên chatbot. |
+| `audit_logs` | Nhật ký thao tác hệ thống cho kiểm toán. |
+| `system_configs` | Cấu hình nền tảng dạng key-value. |
+| `ai_configs` | Cấu hình riêng theo module AI (sentiment/recommendation/chatbot/price). |
+
 ---
 
-## 3. Đặc tả chi tiết từng bảng (46 bảng)
+## 3. Đặc tả chi tiết từng bảng (43 bảng)
 
 > **Quy ước đọc bảng đặc tả:** cột `Khóa` dùng `PK` (primary key), `FK` (foreign key),
 > `UK` (thành phần của unique key), `IDX` (thành phần của index thường).
@@ -870,7 +1252,26 @@ CONSTRAINT ck_users_lock_reason CHECK (status <> 'LOCKED' OR lock_reason IS NOT 
 **Check** `ck_roles_code CHECK (code IN ('ROLE_TENANT','ROLE_LANDLORD','ROLE_MODERATOR','ROLE_ADMIN'))`
 — chốt cứng 4 role của canonical 4.1; thêm role mới là quyết định kiến trúc, phải qua migration.
 
-#### 3.3. `user_roles`
+#### 3.3. `user_roles` — **ĐÃ BỎ (v3, migration V13)**
+
+> Giữ nguyên số mục 3.3 để không phá hàng chục tham chiếu chéo `§3.x` trong tài liệu.
+>
+> Từ v3, quan hệ `User → Role` là **nhiều–một** qua cột **`users.role_id`**
+> (`BIGINT UNSIGNED NOT NULL`, FK `fk_users_roles → roles(id)` `ON DELETE RESTRICT`
+> `ON UPDATE RESTRICT`, index `idx_users_role_id`). Bảng nối `user_roles` đã bị `DROP` ở V13 sau
+> khi backfill vai trò cao nhất cho từng người dùng.
+>
+> **Vì sao bỏ hẳn thay vì thêm `UNIQUE(user_id)`:** `user_roles` dùng xóa mềm, nên một
+> `UNIQUE(user_id)` thuần sẽ vướng các dòng đã xóa mềm ngay lần đổi vai trò thứ hai; muốn tránh
+> phải thêm generated column kiểu `users.email_uk` — phức tạp hơn hẳn một cột FK. Với cột FK,
+> ràng buộc "1 vai trò/người dùng" nằm ở **chính cấu trúc bảng**.
+>
+> **`assigned_at` / `assigned_by` mất đi có sao không:** không. `audit_logs` với action
+> `ROLE_CHANGE` đã ghi đủ actor, giá trị cũ, giá trị mới và lý do ở mỗi lần đổi vai trò
+> (`AdminUserServiceImpl.updateRole`) — chi tiết hơn hai cột cũ.
+
+<details>
+<summary>Đặc tả cũ của <code>user_roles</code> (trước v3 — chỉ để tra cứu lịch sử)</summary>
 
 Bảng nối nhiều–nhiều `[§6.1] UserRole`, `[§6.2]` *"Một user có thể có một hoặc nhiều role"*.
 
@@ -895,43 +1296,20 @@ liệt kê toàn bộ Moderator.
 
 **Check** không có.
 
-#### 3.4. `permissions`
+</details>
 
-Bắt buộc theo canonical mục 6 (*"`[§11.2]` RBAC + đề bài yêu cầu Permission"*).
+#### 3.4. `permissions` và `role_permissions` (đã loại bỏ)
 
-| Cột | Kiểu | Null | Mặc định | Khóa | Mô tả nghiệp vụ | Căn cứ |
-|---|---|---|---|---|---|---|
-| `id` | `BIGINT UNSIGNED` | N | `AUTO_INCREMENT` | PK | | |
-| `code` | `VARCHAR(40)` | N | — | UK | Permission code, khớp **đúng** canonical 4.2 (dài nhất: `SYSTEM_CONFIG_MANAGE` = 21) | canonical 4.2 |
-| `name` | `VARCHAR(100)` | N | — | | Nhãn tiếng Việt trên UI phân quyền | `[§10.2]` |
-| `module` | `VARCHAR(30)` | N | — | IDX | Nhóm hiển thị: `LISTING`, `FAVORITE`, `CONTACT`, `COMMENT`, `REVIEW`, `REPORT`, `WARNING`, `USER`, `LANDLORD`, `PAYMENT`, `PACKAGE`, `CATALOG`, `AI`, `SYSTEM`, `STATISTIC`, `AUDIT` | canonical 3 (bản đồ module) |
-| `description` | `VARCHAR(255)` | Y | `NULL` | | | |
-| `created_at` … `deleted_at` | | | | | | canonical 6.1 |
+Hai bảng này không còn trong schema cuối cùng. `V1__baseline_schema.sql` và `V2__seed_roles_permissions.sql` là migration lịch sử nên tên/nội dung cũ được giữ để không phá checksum Flyway; migration `V15__drop_permission_tables.sql` chạy sau cùng và drop `role_permissions`, `permissions`.
 
-**Index** `idx_permissions_module (module)` — render màn hình phân quyền theo nhóm.
-**Unique** `uk_permissions_code (code)`.
-**FK** không có. **Check** không có (danh sách 27 code do seed V2 quản lý; đặt `CHECK` liệt kê
-27 giá trị sẽ buộc `ALTER TABLE` mỗi khi thêm quyền — trái tinh thần "permission là dữ liệu").
+Phân quyền hiện hành dựa trực tiếp vào `users.role_id`:
 
-#### 3.5. `role_permissions`
-
-Hiện thực ma trận canonical 4.2.
-
-| Cột | Kiểu | Null | Mặc định | Khóa | Mô tả nghiệp vụ | Căn cứ |
-|---|---|---|---|---|---|---|
-| `id` | `BIGINT UNSIGNED` | N | `AUTO_INCREMENT` | PK | | |
-| `role_id` | `BIGINT UNSIGNED` | N | — | FK, UK | | canonical 4.2 |
-| `permission_id` | `BIGINT UNSIGNED` | N | — | FK, UK | | canonical 4.2 |
-| `created_at` … `deleted_at` | | | | | | canonical 6.1 |
-
-**Index** `idx_role_permissions_permission_id (permission_id)` — trả lời "role nào có quyền X".
-**Unique** `uk_role_permissions_role_permission (role_id, permission_id)`.
-**Foreign key**
-
-| Tên | Cột → đích | ON DELETE | ON UPDATE | Lý do |
-|---|---|---|---|---|
-| `fk_role_permissions_roles` | `role_id → roles(id)` | `CASCADE` | `RESTRICT` | Xóa role thì gán quyền của nó vô nghĩa. (Thực tế `fk_user_roles_roles` RESTRICT đã chặn xóa role đang dùng.) |
-| `fk_role_permissions_permissions` | `permission_id → permissions(id)` | `CASCADE` | `RESTRICT` | Bỏ một permission khỏi hệ thống thì mọi liên kết tới nó phải biến mất; để lại sẽ khiến JWT chứa quyền "ma" (canonical mục 8: JWT chứa `permissions[]`). |
+| Role | Ghi chú |
+|---|---|
+| `ROLE_TENANT` | Được đăng tin `ROOMMATE`; các loại tin khác bị chặn ở `ListingServiceImpl.validateCategoryAllowedForCurrentRole`. |
+| `ROLE_LANDLORD` | Được đăng tất cả loại tin và dùng các chức năng chủ trọ/thanh toán. |
+| `ROLE_MODERATOR` | Kiểm duyệt; không quản lý tài chính/cấu hình hệ thống. |
+| `ROLE_ADMIN` | Toàn quyền quản trị. |
 
 #### 3.6. `user_profiles`
 
@@ -1041,7 +1419,7 @@ CONSTRAINT ck_landlord_profiles_response_rate CHECK (response_rate_percent IS NU
 | `status` | `VARCHAR(10)` | N | `'PENDING'` | IDX | `VerificationStatus` | canonical 5 |
 | `target_value` | `VARCHAR(190)` | Y | `NULL` | | Email/SĐT được xác thực tại thời điểm gửi (giữ nguyên kể cả user đổi email sau đó) | `[§2.1]` AUTH-06 |
 | `token_hash` | `CHAR(64)` | Y | `NULL` | UK | SHA-256 của token link xác thực email. **Không lưu token thô** | `[§11.1]` |
-| `otp_hash` | `CHAR(64)` | Y | `NULL` | | SHA-256 của OTP (xác thực SĐT) | `[§3.1]` *"OTP hết hạn"* |
+| `otp_hash` | `CHAR(64)` | Y | `NULL` | | SHA-256 của OTP (xác thực email/SĐT) | `[§3.1]` *"OTP hết hạn"* |
 | `attempt_count` | `INT UNSIGNED` | N | `0` | | Số lần nhập OTP sai → chống brute force | `[§11.10]` |
 | `evidence_url` | `VARCHAR(500)` | Y | `NULL` | | Ảnh giấy tờ khi `type='LANDLORD'` | `[§10.3]` |
 | `expires_at` | `DATETIME(6)` | N | — | IDX | Hết hạn → `status='EXPIRED'` | `[§3.1]` |
@@ -1088,7 +1466,7 @@ phát hiện tái sử dụng → thu hồi cả họ token"*).
 | `family_id` | `CHAR(36)` | N | — | IDX | Định danh **họ token**: mọi token sinh ra từ một lần đăng nhập dùng chung `family_id`. Phát hiện reuse → thu hồi cả họ | canonical 8 |
 | `parent_id` | `BIGINT UNSIGNED` | Y | `NULL` | FK | Token bị nó thay thế (rotation) → dựng được chuỗi xoay vòng | canonical 8 |
 | `issued_at` | `DATETIME(6)` | N | `CURRENT_TIMESTAMP(6)` | | | |
-| `expires_at` | `DATETIME(6)` | N | — | IDX | `issued_at + 7 ngày` | canonical 8 |
+| `expires_at` | `DATETIME(6)` | N | — | IDX | `issued_at + 1 ngày` | canonical 8 |
 | `used_at` | `DATETIME(6)` | Y | `NULL` | | Mốc token được dùng để refresh. Token **đã dùng** mà bị dùng lại = **reuse** → thu hồi họ | canonical 8 |
 | `revoked_at` | `DATETIME(6)` | Y | `NULL` | | | canonical 8 |
 | `revoked_reason` | `VARCHAR(50)` | Y | `NULL` | | `LOGOUT`, `ROTATED`, `REUSE_DETECTED`, `USER_LOCKED`, `PASSWORD_CHANGED` | canonical 8 |
@@ -1127,7 +1505,7 @@ Bắt buộc theo canonical mục 6 (`[§2.1]` AUTH-04).
 |---|---|---|---|---|---|---|
 | `id` | `BIGINT UNSIGNED` | N | `AUTO_INCREMENT` | PK | | |
 | `user_id` | `BIGINT UNSIGNED` | N | — | FK, IDX | | `[§2.1]` |
-| `token_hash` | `CHAR(64)` | N | — | UK | SHA-256 của token trong link email | `[§11.1]` |
+| `token_hash` | `CHAR(64)` | N | — | UK | SHA-256 của token trong link email; cùng bản ghi EMAIL có thể có thêm `otp_hash` để xác thực bằng mã | `[§11.1]` |
 | `expires_at` | `DATETIME(6)` | N | — | IDX | Hạn dùng | `[§3.1]` *"OTP hết hạn"* (áp dụng tương tự) |
 | `used_at` | `DATETIME(6)` | Y | `NULL` | | Dùng 1 lần duy nhất; đã dùng → từ chối | `[§2.1]` AUTH-04 |
 | `ip_address` | `VARCHAR(45)` | Y | `NULL` | | Truy vết yêu cầu bất thường | `[§11.4]` |
@@ -2957,15 +3335,15 @@ Bắt buộc theo canonical mục 6 (nhóm admin có `ai_configs`); `[§2.11]` A
 
 ---
 
-### 3.47. Bảng tổng kiểm — 46/46
+### 3.47. Bảng tổng kiểm — 45/45
 
 | # | Bảng | Nhóm | # | Bảng | Nhóm |
 |---|---|---|---|---|---|
 | 1 | `users` | auth/user | 24 | `contact_logs` | interaction |
 | 2 | `roles` | auth/user | 25 | `conversations` | interaction |
-| 3 | `user_roles` | auth/user | 26 | `messages` | interaction |
-| 4 | `permissions` | auth/user | 27 | `comments` | interaction |
-| 5 | `role_permissions` | auth/user | 28 | `reviews` | interaction |
+| 3 | *(`user_roles` — đã bỏ ở v3)* | — | 26 | `messages` | interaction |
+| 4 | `user_profiles` | auth/user | 25 | `comments` | interaction |
+| 5 | `landlord_profiles` | auth/user | 26 | `reviews` | interaction |
 | 6 | `user_profiles` | auth/user | 29 | `reports` | moderation |
 | 7 | `landlord_profiles` | auth/user | 30 | `moderation_actions` | moderation |
 | 8 | `verifications` | auth/user | 31 | `violation_warnings` | moderation |
@@ -2974,6 +3352,7 @@ Bắt buộc theo canonical mục 6 (nhóm admin có `ai_configs`); `[§2.11]` A
 | 11 | `follows` | auth/user | 34 | `coupons` | payment |
 | 12 | `categories` | catalog | 35 | `payments` | payment |
 | 13 | `provinces` | catalog | 36 | `promotion_subscriptions` | payment |
+| 15 | `V15__drop_permission_tables.sql` | Drop `role_permissions` và `permissions`; chuyển schema sang role-only | ✔ Bắt buộc sau V14 |
 | 14 | `districts` | catalog | 37 | `notifications` | notification |
 | 15 | `wards` | catalog | 38 | `notification_preferences` | notification |
 | 16 | `amenities` | catalog | 39 | `sentiment_results` | ai |
@@ -2988,7 +3367,7 @@ Bắt buộc theo canonical mục 6 (nhóm admin có `ai_configs`); `[§2.11]` A
 Khớp canonical mục 6 ở **mọi nhóm**: auth/user 11, catalog 5, listing 4, interaction 8,
 moderation 4, payment 4, ai 5, admin 3 — **giữ nguyên 100%**.
 Khác **duy nhất một** điểm: nhóm `notification` là **2** bảng thay vì 1
-(`notifications` + `notification_preferences`) ⇒ tổng **46**.
+(`notifications` + `notification_preferences`) ⇒ tổng 46, **trừ `user_roles` đã bỏ ở v3 ⇒ 45**.
 
 `notification_preferences` là bảng **[BỔ SUNG NGOÀI CANONICAL]** duy nhất của tài liệu này. Căn cứ
 bắt buộc: `[§11.12]` *"Có thể tắt một số loại thông báo không quan trọng"* — canonical mục 6 không
@@ -3074,9 +3453,9 @@ rồi `INSERT` dòng mới với `is_latest = TRUE`.
 | `uk_users_email` | `users` | `(email_uk)` | 1 email / 1 tài khoản **đang hoạt động** | `[§3.1]` |
 | `uk_users_phone` | `users` | `(phone_uk)` | 1 SĐT / 1 tài khoản **đang hoạt động** | `[§3.1]` |
 | `uk_roles_code` | `roles` | `(code)` | 4 role duy nhất | canonical 4.1 |
-| `uk_permissions_code` | `permissions` | `(code)` | | canonical 4.2 |
-| `uk_user_roles_user_role` | `user_roles` | `(user_id, role_id)` | Không gán trùng vai trò | `[§6.2]` |
-| `uk_role_permissions_role_permission` | `role_permissions` | `(role_id, permission_id)` | | canonical 4.2 |
+| `uk_permissions_code` | `permissions` | `(code)` | | Đã bị drop bởi V15 |
+
+| `uk_role_permissions_role_permission` | `role_permissions` | `(role_id, permission_id)` | | Đã bị drop bởi V15 |
 | `uk_user_profiles_user_id` | `user_profiles` | `(user_id)` | Ép 1–1 | `[§6.2]` |
 | `uk_landlord_profiles_user_id` | `landlord_profiles` | `(user_id)` | Ép 1–1 | `[§6.2]` |
 | `uk_verifications_token_hash` | `verifications` | `(token_hash)` | Token duy nhất | `[§11.1]` |
@@ -3186,6 +3565,7 @@ hằng số canonical mục 5. Đã ghi tại từng bảng ở §3. Đây là t
 | 11 | **Đánh giá yêu cầu đã liên hệ** (`review.require_contact = true`) | Cross-table (`contact_logs`) + config | `ReviewServiceImpl.create()` kiểm tra `contact_logs` tồn tại | `[§3.12]` |
 | 12 | **Khử trùng lặp lượt xem / liên hệ** (`view.dedup_minutes`=30, `contact.dedup_minutes`=60) | Cross-row + cửa sổ + config | `ViewHistoryServiceImpl` / `ContactLogServiceImpl` quyết định `is_counted` | `[§3.8][§3.10]` |
 | 13 | **Rate limit** (đăng nhập 5/15', đăng tin 10/ngày, bình luận 5/phút, report 10/ngày, tin nhắn 30/phút, chatbot 30/phút) | Đếm theo thời gian thực — thuộc về Redis, không phải DB | `RateLimitFilter` (Redis `INCR`+`EXPIRE`, canonical 1.1/8) | `[§11.10]` + canonical 8 |
+| 15 | `V15__drop_permission_tables.sql` | Drop `role_permissions` và `permissions`; chuyển schema sang role-only | ✔ Bắt buộc sau V14 |
 | 14 | **`messages.sender_id` phải là `tenant_id` hoặc `landlord_id`** của hội thoại | CHECK không truy vấn bảng khác | `MessageServiceImpl.send()` — 403 `FORBIDDEN` nếu sai | `[§2.6]` |
 | 15 | **`reports.target_id` phải trỏ tới đối tượng có thật** (đa hình) | SQL không có FK đa hình (§3.29) | `ReportServiceImpl.create()` nạp đối tượng qua service tương ứng → 404 `<X>_NOT_FOUND` | `[§3.13]` |
 | 16 | **`coupons.per_user_limit`** | Cross-table (`payments`) | `PaymentServiceImpl` + `SELECT ... FOR UPDATE` trên dòng coupon | `[§10.6]` |
@@ -3454,9 +3834,9 @@ ngram trên `TEXT` là thao tác **nặng** (đọc + tokenize toàn bộ `descr
 | `idx_users_phone_lookup` | `users` | `(phone)` | BTREE | Đăng nhập / tìm kiếm | `[§3.2][§10.2]` |
 | `uk_users_email` | `users` | `(email_uk)` | UNIQUE | Chống trùng email | `[§3.1]` |
 | `uk_users_phone` | `users` | `(phone_uk)` | UNIQUE | Chống trùng SĐT | `[§3.1]` |
-| `idx_user_roles_role_id` | `user_roles` | `(role_id)` | BTREE | Lọc theo vai trò | `[§10.2]` |
-| `idx_permissions_module` | `permissions` | `(module)` | BTREE | Render UI phân quyền | `[§10.2]` |
-| `idx_role_permissions_permission_id` | `role_permissions` | `(permission_id)` | BTREE | "Role nào có quyền X" | `[§11.2]` |
+| `idx_users_role_id` | `users` | `(role_id)` | BTREE | Lọc người dùng theo vai trò (v3) | `[§10.2]` |
+| `idx_permissions_module` | `permissions` | `(module)` | BTREE | Đã bị drop bởi V15 | `[§11.2]` |
+| `idx_role_permissions_permission_id` | `role_permissions` | `(permission_id)` | BTREE | Đã bị drop bởi V15 | `[§11.2]` |
 | `idx_landlord_profiles_verification_status` | `landlord_profiles` | `(verification_status)` | BTREE | Hàng đợi xác thực | USER-06 |
 | `idx_landlord_profiles_trust_score` | `landlord_profiles` | `(trust_score)` | BTREE | Chủ trọ rủi ro | `[§10.3]` |
 | `idx_verifications_user_type_status` | `verifications` | `(user_id, type, status)` | BTREE | Lấy yêu cầu đang chờ | `[§3.2]` |
@@ -3869,11 +4249,8 @@ spring:
     baseline-on-migrate: false
     validate-on-migrate: true
     locations: classpath:db/migration
-    placeholders:
-      adminEmail: ${ADMIN_EMAIL}
-      adminPasswordHash: ${ADMIN_PASSWORD_BCRYPT}
-      adminFullName: ${ADMIN_FULL_NAME}
-      adminPhone: ${ADMIN_PHONE}
+    # Admin không seed bằng Flyway placeholder; AdminAccountInitializer đọc
+    # ADMIN_EMAIL/ADMIN_PASSWORD và hash BCrypt khi backend khởi động.
 ```
 
 ### 7.2. Danh sách file migration theo thứ tự
@@ -3881,7 +4258,7 @@ spring:
 | # | File | Nội dung | Bắt buộc để `docker compose up` chạy được? |
 |---|---|---|---|
 | 1 | `V1__baseline_schema.sql` | **Toàn bộ 46 bảng** (45 canonical + `notification_preferences`, §3.38): `CREATE TABLE` theo đúng thứ tự phụ thuộc FK, mọi index (trừ FULLTEXT), mọi unique, mọi CHECK, mọi cột sinh. Kết thúc bằng khối `ALTER TABLE` thêm 2 FK vòng (`fk_listings_prediction_histories`). Chỉ DDL, **không** DML. | ✔ **Bắt buộc** |
-| 2 | `V2__seed_roles_permissions.sql` | 4 role + 27 permission + ma trận `role_permissions` (canonical 4.1/4.2) | ✔ **Bắt buộc** — không có role thì `AUTH-01` đăng ký thất bại (không gán được `ROLE_TENANT`); không có permission thì mọi `@PreAuthorize` từ chối |
+| 2 | `V2__seed_roles_permissions.sql` | Migration lịch sử seed role và dữ liệu permission cũ | ✔ Giữ nguyên để không phá checksum; schema cuối cùng được V15 dọn permission |
 | 3 | `V3__seed_catalog_categories_amenities.sql` | 7 category `[§0.3]` + `required_fields` theo loại `[§10.5]` + toàn bộ amenity theo 4 nhóm `[§10.5]` | ✔ **Bắt buộc** — không có category thì `LIST-01` không tạo được tin (`category_id NOT NULL`) |
 | 4 | `V4__seed_administrative_units.sql` | 63 tỉnh + ~700 quận/huyện + ~10.500 phường/xã (dữ liệu GSO) | ✔ **Bắt buộc** — `province_id`/`district_id`/`ward_id` đều `NOT NULL` trong `listings` |
 | 5 | `V5__seed_system_configs.sql` | **Toàn bộ 105 config key** = 85 key của canonical mục 9 (100%) + 16 key bổ sung (§8.6: 10 rate limit, 5 tỷ lệ phản hồi `[§5.7]`, 1 tự động ẩn theo sentiment `[§5.3]`) | ✔ **Bắt buộc** — `SystemConfigService.getInt("listing.display_days")` thiếu key → ném exception → không duyệt được tin nào |
@@ -3900,9 +4277,9 @@ nên có nhưng hệ thống vẫn khởi động và phục vụ được luồ
 #### V1 — thứ tự tạo bảng (bắt buộc theo phụ thuộc FK)
 
 ```
-1. roles, permissions, users, provinces, categories, amenities,
+1. roles, users, provinces, categories, amenities,
    promotion_packages, coupons, banned_keywords, system_configs, ai_configs
-2. districts (→provinces), user_roles, role_permissions, user_profiles,
+2. districts (→provinces), user_profiles,
    landlord_profiles, verifications, refresh_tokens, password_reset_tokens, follows
 3. wards (→districts)
 4. prediction_histories (→users, categories, provinces, districts, wards)
@@ -3969,23 +4346,18 @@ Các dòng V8 seed vào `ai_configs`:
 
 #### V9 — tài khoản admin: **KHÔNG hardcode mật khẩu**
 
-Mật khẩu **không** nằm trong file SQL, **không** nằm trong git, **không** có giá trị mặc định kiểu
-`admin123`. Dùng **Flyway placeholder** đọc từ biến môi trường:
+Mật khẩu **không** nằm trong file SQL, **không** nằm trong image, **không** có giá trị mặc định kiểu
+`admin123`. Backend đọc `ADMIN_PASSWORD` từ biến môi trường và hash BCrypt khi khởi động:
 
 ```sql
--- V9__seed_admin_account.sql
-INSERT INTO users (full_name, email, phone, password_hash, gender, status,
-                   email_verified_at, created_at, updated_at)
-VALUES ('${adminFullName}', LOWER('${adminEmail}'), '${adminPhone}',
-        '${adminPasswordHash}', 'OTHER', 'ACTIVE',
-        CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6))
-ON DUPLICATE KEY UPDATE updated_at = CURRENT_TIMESTAMP(6);
+-- Admin không insert trực tiếp bằng SQL vì password_hash cần BCrypt.
+-- Tài khoản admin được tạo bởi AdminAccountInitializer khi backend khởi động.
 
-INSERT INTO user_roles (user_id, role_id, assigned_at, created_at, updated_at)
-SELECT u.id, r.id, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6)
-FROM users u
+-- v3: vai trò nằm ngay trên users.role_id, không còn bảng nối.
+UPDATE users u
 JOIN roles r ON r.code = 'ROLE_ADMIN'
-WHERE u.email = LOWER('${adminEmail}')
+   SET u.role_id = r.id
+ WHERE u.email = LOWER('${adminEmail}')
 ON DUPLICATE KEY UPDATE updated_at = CURRENT_TIMESTAMP(6);
 ```
 
@@ -4001,22 +4373,15 @@ qua biến môi trường + file `.env`"*):
 | `ADMIN_EMAIL` | `admin@webtro.local` | |
 | `ADMIN_FULL_NAME` | `Quản trị hệ thống` | |
 | `ADMIN_PHONE` | `0900000000` | |
-| `ADMIN_PASSWORD_BCRYPT` | `$2a$12$...` | **BCrypt cost 12** (canonical mục 8), sinh trước khi deploy |
+| `ADMIN_PASSWORD` | `Admin@12345` trong `.env` dev | Mật khẩu thô truyền qua biến môi trường; backend hash bằng BCrypt cost 12 khi seed admin |
 
-**Vì sao truyền hash chứ không truyền mật khẩu thô:** file `.env` và biến môi trường container đọc
-được bằng `docker inspect`; SQL đã chạy nằm trong `flyway_schema_history` và trong binlog. Truyền
-hash ⇒ mật khẩu thô **không tồn tại** ở bất cứ đâu trong hạ tầng. `.env` chứa hash được `.gitignore`;
-repo chỉ có `.env.example` với giá trị rỗng.
+**Vì sao seed bằng Java thay vì SQL:** `PasswordEncoder`/BCrypt nằm ở tầng ứng dụng, không sinh trực
+tiếp trong MySQL migration. `AdminAccountInitializer` đọc `ADMIN_EMAIL`/`ADMIN_PASSWORD`, gọi
+`passwordEncoder.encode(...)`, lưu `users.password_hash`, và bỏ qua nếu admin đã tồn tại để không tự
+đổi mật khẩu ngoài ý muốn.
 
-`README` ghi lệnh sinh hash (không cần thêm dependency):
-
-```bash
-docker run --rm openjdk:21-slim sh -c "..."   # hoặc dùng endpoint dev-only, hoặc htpasswd -bnBC 12 "" 'matkhau'
-```
-
-**Bắt buộc:** nếu `ADMIN_PASSWORD_BCRYPT` rỗng thì `docker compose up` **fail ngay** ở bước Flyway
-(placeholder không giải được → `FlywayException`) — cố ý, để không ai vô tình chạy prod với admin
-không mật khẩu.
+**Bắt buộc:** nếu `ADMIN_PASSWORD` rỗng thì initializer bỏ qua seed admin và ghi log cảnh báo;
+`docker-compose.yml` yêu cầu biến này để fail-fast trong môi trường Docker.
 
 ---
 
@@ -4036,97 +4401,18 @@ không mật khẩu.
 > / `ROLE_TENANT` tìm tin đó). "Khách chưa đăng nhập" là trạng thái ẩn danh, không phải role.
 > Do đó **không** seed thêm role nào ngoài 4 role trên; `ck_roles_code` (§3.2) chặn ở DB.
 
-### 8.2. V2 — 27 permission (canonical 4.2)
+### 8.2. V2/V15 — Role-only sau khi bỏ permission
 
-| `code` | `name` | `module` |
-|---|---|---|
-| `LISTING_CREATE` | Tạo tin đăng | `LISTING` |
-| `LISTING_UPDATE_OWN` | Sửa tin của mình | `LISTING` |
-| `LISTING_UPDATE_ANY` | Sửa tin bất kỳ | `LISTING` |
-| `LISTING_MODERATE` | Duyệt/từ chối/gắn cờ/tạm ẩn tin | `LISTING` |
-| `LISTING_LOCK` | Khóa/mở khóa tin | `LISTING` |
-| `LISTING_VIEW_ANY` | Xem cả tin non-public | `LISTING` |
-| `FAVORITE_MANAGE` | Lưu/bỏ lưu tin | `FAVORITE` |
-| `CONTACT_CREATE` | Liên hệ chủ trọ | `CONTACT` |
-| `COMMENT_CREATE` | Bình luận | `COMMENT` |
-| `COMMENT_MODERATE` | Kiểm duyệt bình luận | `COMMENT` |
-| `REVIEW_CREATE` | Đánh giá | `REVIEW` |
-| `REVIEW_MODERATE` | Kiểm duyệt đánh giá | `REVIEW` |
-| `REPORT_CREATE` | Báo cáo vi phạm | `REPORT` |
-| `REPORT_RESOLVE` | Xử lý báo cáo | `REPORT` |
-| `WARNING_SEND` | Gửi cảnh báo vi phạm | `WARNING` |
-| `USER_MANAGE` | Khóa/mở khóa tài khoản | `USER` |
-| `USER_ROLE_ASSIGN` | Phân quyền người dùng | `USER` |
-| `LANDLORD_VERIFY` | Xác thực chủ trọ | `LANDLORD` |
-| `PAYMENT_VIEW_OWN` | Xem thanh toán của mình | `PAYMENT` |
-| `PAYMENT_MANAGE` | Quản lý thanh toán | `PAYMENT` |
-| `PACKAGE_MANAGE` | Quản lý gói dịch vụ | `PACKAGE` |
-| `CATALOG_MANAGE` | Quản lý danh mục/khu vực/tiện ích | `CATALOG` |
-| `AI_CONFIG_MANAGE` | Cấu hình AI | `AI` |
-| `AI_LOG_VIEW` | Xem log AI | `AI` |
-| `SYSTEM_CONFIG_MANAGE` | Quản lý cấu hình hệ thống | `SYSTEM` |
-| `STATISTIC_VIEW` | Xem thống kê | `STATISTIC` |
-| `AUDIT_LOG_VIEW` | Xem audit log | `AUDIT` |
+`V2__seed_roles_permissions.sql` là migration lịch sử: tên file và nội dung insert permission cũ được giữ để không phá checksum Flyway. Schema cuối cùng phải đọc cùng `V15__drop_permission_tables.sql`, migration này drop `role_permissions` và `permissions`.
 
-### 8.3. V2 — Ma trận `role_permissions` (sao chép nguyên văn canonical 4.2)
+Dữ liệu quyền hiện hành chỉ cần 4 role cố định:
 
-| Permission code | TENANT | LANDLORD | MODERATOR | ADMIN |
-|---|:--:|:--:|:--:|:--:|
-| `LISTING_CREATE` | | ✔ | | ✔ |
-| `LISTING_UPDATE_OWN` | | ✔ | | ✔ |
-| `LISTING_UPDATE_ANY` | | | | ✔ |
-| `LISTING_MODERATE` | | | ✔ | ✔ |
-| `LISTING_LOCK` | | | | ✔ |
-| `LISTING_VIEW_ANY` | | | ✔ | ✔ |
-| `FAVORITE_MANAGE` | ✔ | ✔ | | |
-| `CONTACT_CREATE` | ✔ | ✔ | | |
-| `COMMENT_CREATE` | ✔ | ✔ | | |
-| `COMMENT_MODERATE` | | | ✔ | ✔ |
-| `REVIEW_CREATE` | ✔ | ✔ | | |
-| `REVIEW_MODERATE` | | | ✔ | ✔ |
-| `REPORT_CREATE` | ✔ | ✔ | ✔ | ✔ |
-| `REPORT_RESOLVE` | | | ✔ | ✔ |
-| `WARNING_SEND` | | | ✔ | ✔ |
-| `USER_MANAGE` | | | | ✔ |
-| `USER_ROLE_ASSIGN` | | | | ✔ |
-| `LANDLORD_VERIFY` | | | ✔ | ✔ |
-| `PAYMENT_VIEW_OWN` | | ✔ | | ✔ |
-| `PAYMENT_MANAGE` | | | | ✔ |
-| `PACKAGE_MANAGE` | | | | ✔ |
-| `CATALOG_MANAGE` | | | | ✔ |
-| `AI_CONFIG_MANAGE` | | | | ✔ |
-| `AI_LOG_VIEW` | | | ✔ | ✔ |
-| `SYSTEM_CONFIG_MANAGE` | | | | ✔ |
-| `STATISTIC_VIEW` | | | | ✔ |
-| `AUDIT_LOG_VIEW` | | | | ✔ |
-
-Tổng số dòng `role_permissions`: TENANT 5 + LANDLORD 8 + MODERATOR 8 + ADMIN 25 = **46 dòng**.
-
-> Cột trống = **không có quyền**. `MODERATOR` **cố tình** không có bất kỳ permission nào về
-> `PAYMENT`, `PACKAGE`, `SYSTEM_CONFIG`, `USER_ROLE_ASSIGN`, `STATISTIC` — đúng `[§1.2]`
-> (*"Moderator… Không quản lý cấu hình hệ thống, gói dịch vụ, doanh thu hoặc phân quyền Admin"*)
-> và `[§11.2]` (*"Moderator chỉ có quyền kiểm duyệt, không quản lý cấu hình tài chính"*).
-> **Lưu ý bẫy:** `MODERATOR` **không** có `FAVORITE_MANAGE`/`CONTACT_CREATE`/`COMMENT_CREATE`/
-> `REVIEW_CREATE` — đúng ma trận canonical. `ADMIN` cũng **không** có 4 quyền này (`ADMIN` là vai
-> trò quản trị, không phải người dùng cuối). Nếu một người vừa quản trị vừa muốn dùng tính năng
-> người thuê, họ được gán **thêm** `ROLE_TENANT` — đây chính là lý do `User ↔ Role` là nhiều–nhiều
-> (canonical 4.1).
-
-Cách viết seed (idempotent, không phụ thuộc id tự tăng):
-
-```sql
-INSERT INTO role_permissions (role_id, permission_id, created_at, updated_at)
-SELECT r.id, p.id, CURRENT_TIMESTAMP(6), CURRENT_TIMESTAMP(6)
-FROM roles r JOIN permissions p
-WHERE (r.code = 'ROLE_TENANT'   AND p.code IN ('FAVORITE_MANAGE','CONTACT_CREATE','COMMENT_CREATE','REVIEW_CREATE','REPORT_CREATE'))
-   OR (r.code = 'ROLE_LANDLORD' AND p.code IN ('LISTING_CREATE','LISTING_UPDATE_OWN','FAVORITE_MANAGE','CONTACT_CREATE','COMMENT_CREATE','REVIEW_CREATE','REPORT_CREATE','PAYMENT_VIEW_OWN'))
-   OR (r.code = 'ROLE_MODERATOR' AND p.code IN ('LISTING_MODERATE','LISTING_VIEW_ANY','COMMENT_MODERATE','REVIEW_MODERATE','REPORT_CREATE','REPORT_RESOLVE','WARNING_SEND','LANDLORD_VERIFY','AI_LOG_VIEW'))
-   OR (r.code = 'ROLE_ADMIN'    AND p.code IN ('LISTING_CREATE','LISTING_UPDATE_OWN','LISTING_UPDATE_ANY','LISTING_MODERATE','LISTING_LOCK','LISTING_VIEW_ANY','COMMENT_MODERATE','REVIEW_MODERATE','REPORT_CREATE','REPORT_RESOLVE','WARNING_SEND','USER_MANAGE','USER_ROLE_ASSIGN','LANDLORD_VERIFY','PAYMENT_VIEW_OWN','PAYMENT_MANAGE','PACKAGE_MANAGE','CATALOG_MANAGE','AI_CONFIG_MANAGE','AI_LOG_VIEW','SYSTEM_CONFIG_MANAGE','STATISTIC_VIEW','AUDIT_LOG_VIEW'))
-ON DUPLICATE KEY UPDATE updated_at = CURRENT_TIMESTAMP(6);
-```
-
-(MODERATOR có 9 quyền theo liệt kê trên — `AI_LOG_VIEW` là quyền thứ 9; tổng dòng = 5+8+9+23 = **45**.
-Con số chính xác được kiểm bằng test đối chiếu trực tiếp với bảng ma trận canonical 4.2.)
+| id | code | name |
+|---:|---|---|
+| 1 | `ROLE_TENANT` | Người thuê |
+| 2 | `ROLE_LANDLORD` | Chủ trọ |
+| 3 | `ROLE_MODERATOR` | Kiểm duyệt viên |
+| 4 | `ROLE_ADMIN` | Quản trị viên |
 
 ### 8.4. V3 — 7 category `[§0.3]` + cấu hình trường bắt buộc `[§10.5]`
 
@@ -4384,12 +4670,19 @@ nêu tên bảng); bắt buộc vì `[§2.9]` PROMO-02 *"Gắn nhãn tin nổi b
 Đã đặc tả đầy đủ ở §7.3. Tóm tắt các cam kết:
 
 - **Mật khẩu KHÔNG hardcode.** Không có chuỗi mật khẩu nào trong SQL, trong git, trong image.
-- Truyền **BCrypt hash** (cost 12, canonical mục 8) qua `ADMIN_PASSWORD_BCRYPT` →
-  `.env` → `docker-compose.yml` → `spring.flyway.placeholders.adminPasswordHash` → `${adminPasswordHash}`.
+- Đọc `ADMIN_PASSWORD` từ `.env`/biến môi trường, sau đó `AdminAccountInitializer` hash BCrypt cost 12
+  bằng `PasswordEncoder` trước khi lưu `users.password_hash`.
 - Email/tên/SĐT cũng qua biến môi trường (`ADMIN_EMAIL`, `ADMIN_FULL_NAME`, `ADMIN_PHONE`).
-- Thiếu biến ⇒ Flyway **fail ngay lúc boot** — không có đường chạy hệ thống với admin không mật khẩu.
+- Thiếu/rỗng `ADMIN_PASSWORD` ⇒ initializer bỏ qua seed admin và ghi log cảnh báo; `docker-compose.yml`
+  yêu cầu biến này để fail-fast trong môi trường Docker.
 - Tài khoản tạo với `status='ACTIVE'`, `email_verified_at = now()` (không cần xác thực email vì
-  đây là tài khoản hạ tầng), gán `ROLE_ADMIN` qua `user_roles`.
+  đây là tài khoản hạ tầng), gán `ROLE_ADMIN` bằng cột `users.role_id` (v3 — bảng nối `user_roles`
+  đã bỏ).
+
+> **Lưu ý đối chiếu source:** cách seed admin *thực tế đang chạy* là
+> `config/AdminAccountInitializer.java` (`ApplicationRunner`, đọc `ADMIN_EMAIL`/`ADMIN_PASSWORD`,
+> băm BCrypt trong ứng dụng). `V8__seed_admin_note.sql` chỉ ghi chú lý do không seed mật khẩu admin
+> trực tiếp bằng SQL.
 - Không seed `landlord_profiles` cho admin — admin không phải chủ trọ.
 - V9 **không** seed Moderator: Admin tự tạo và gán `ROLE_MODERATOR` qua `/admin/nguoi-dung`
   (`USER_ROLE_ASSIGN`), thao tác này ghi `audit_logs(ROLE_CHANGE)` `[§11.4]`.
@@ -5350,7 +5643,7 @@ ADR-17
 | Index `idx_view_histories_viewed_at` | Phục vụ riêng `DataRetentionJob` | §10.2 |
 | Tham số MySQL `ngram_token_size = 2` | Trong `my.cnf` của container `mysql` | ADR-05 — §5.5 |
 | Tham số MySQL `log_bin` + `binlog_expire_logs_seconds = 604800` | Point-in-time recovery | `[§11.5]` *"Có kế hoạch khôi phục dữ liệu"* — §10.4 |
-| Flyway placeholders `adminEmail`, `adminPasswordHash`, `adminFullName`, `adminPhone` | Seed admin không hardcode | Canonical 1.3 (*"Không hardcode… password ở bất kỳ đâu"*) — §7.3 |
+| `AdminAccountInitializer` đọc `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_FULL_NAME`, `ADMIN_PHONE` | Seed admin không hardcode SQL/image; password được BCrypt lúc chạy | Canonical 1.3 (*"Không hardcode… password ở bất kỳ đâu"*) — §7.3 |
 
 ### A.5. Diễn giải chốt cho chỗ tài liệu gốc mơ hồ
 

@@ -5,7 +5,7 @@ import com.webtro.common.PageResponse;
 import com.webtro.common.enums.UserStatus;
 import com.webtro.modules.admin.dto.request.LockUserRequest;
 import com.webtro.modules.admin.dto.request.UnlockUserRequest;
-import com.webtro.modules.admin.dto.request.UpdateRolesRequest;
+import com.webtro.modules.admin.dto.request.UpdateRoleRequest;
 import com.webtro.modules.admin.dto.response.AdminUserDetailResponse;
 import com.webtro.modules.admin.dto.response.AdminUserResponse;
 import com.webtro.modules.admin.dto.response.UserActionResponse;
@@ -48,7 +48,7 @@ public class AdminUserController {
     private final AdminUserService adminUserService;
 
     @GetMapping
-    @PreAuthorize("hasAuthority('USER_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Quản lý người dùng", description = "Tìm/lọc theo từ khóa, vai trò, trạng thái, xác thực, thời gian.")
     public ResponseEntity<ApiResponse<PageResponse<AdminUserResponse>>> searchUsers(
             @RequestParam(required = false) String keyword,
@@ -68,7 +68,7 @@ public class AdminUserController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasAuthority('USER_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Chi tiết người dùng", description = "Hồ sơ, vai trò, trạng thái và số liệu liên quan của một người dùng.")
     public ResponseEntity<ApiResponse<AdminUserDetailResponse>> getUserDetail(@PathVariable Long id) {
         AdminUserDetailResponse data = adminUserService.getUserDetail(id);
@@ -76,7 +76,7 @@ public class AdminUserController {
     }
 
     @PutMapping("/{id}/lock")
-    @PreAuthorize("hasAuthority('USER_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Khóa tài khoản", description = "Bắt buộc lý do; thu hồi phiên; tùy chọn khóa tin; ghi audit.")
     public ResponseEntity<ApiResponse<UserActionResponse>> lockUser(
             @PathVariable Long id,
@@ -87,7 +87,7 @@ public class AdminUserController {
     }
 
     @PutMapping("/{id}/unlock")
-    @PreAuthorize("hasAuthority('USER_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Mở khóa tài khoản", description = "LOCKED → ACTIVE/PENDING_VERIFY; ghi audit.")
     public ResponseEntity<ApiResponse<UserActionResponse>> unlockUser(
             @PathVariable Long id,
@@ -97,14 +97,14 @@ public class AdminUserController {
         return ResponseEntity.ok(ApiResponse.success(data, "Đã mở khóa tài khoản"));
     }
 
-    @PutMapping("/{id}/roles")
-    @PreAuthorize("hasAuthority('USER_ROLE_ASSIGN')")
-    @Operation(summary = "Cập nhật vai trò", description = "Thay thế toàn bộ tập vai trò; ghi audit; thu hồi phiên.")
-    public ResponseEntity<ApiResponse<UserActionResponse>> updateRoles(
+    @PutMapping("/{id}/role")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Đổi vai trò", description = "Thay thế vai trò duy nhất của người dùng; ghi audit; thu hồi phiên.")
+    public ResponseEntity<ApiResponse<UserActionResponse>> updateRole(
             @PathVariable Long id,
-            @Valid @RequestBody UpdateRolesRequest request,
+            @Valid @RequestBody UpdateRoleRequest request,
             @AuthenticationPrincipal CustomUserDetails principal) {
-        UserActionResponse data = adminUserService.updateRoles(id, request, principal.getId());
+        UserActionResponse data = adminUserService.updateRole(id, request, principal.getId());
         return ResponseEntity.ok(ApiResponse.success(data, "Đã cập nhật vai trò người dùng"));
     }
 }

@@ -48,7 +48,7 @@ public class AdminBannedKeywordController {
 
     /** Danh sách từ khóa cấm. */
     @GetMapping
-    @PreAuthorize("hasAnyAuthority('SYSTEM_CONFIG_MANAGE','CATALOG_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Danh sách từ khóa cấm")
     public ResponseEntity<ApiResponse<PageResponse<BannedKeywordResponse>>> list(
             @RequestParam(required = false) String keyword,
@@ -63,7 +63,7 @@ public class AdminBannedKeywordController {
 
     /** Thêm từ khóa cấm. */
     @PostMapping
-    @PreAuthorize("hasAnyAuthority('SYSTEM_CONFIG_MANAGE','CATALOG_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Thêm từ khóa cấm")
     public ResponseEntity<ApiResponse<BannedKeywordResponse>> create(
             @Valid @RequestBody BannedKeywordRequest request,
@@ -75,7 +75,7 @@ public class AdminBannedKeywordController {
 
     /** Sửa từ khóa cấm. */
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyAuthority('SYSTEM_CONFIG_MANAGE','CATALOG_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Sửa từ khóa cấm")
     public ResponseEntity<ApiResponse<BannedKeywordResponse>> update(
             @PathVariable Long id,
@@ -87,7 +87,7 @@ public class AdminBannedKeywordController {
 
     /** Gỡ (xóa mềm) từ khóa cấm. */
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyAuthority('SYSTEM_CONFIG_MANAGE','CATALOG_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Gỡ từ khóa cấm")
     public ResponseEntity<Void> delete(
             @PathVariable Long id,
@@ -98,7 +98,7 @@ public class AdminBannedKeywordController {
 
     /** Tạm bật/tắt từ khóa cấm. */
     @PutMapping("/{id}/toggle")
-    @PreAuthorize("hasAnyAuthority('SYSTEM_CONFIG_MANAGE','CATALOG_MANAGE')")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Bật/tắt từ khóa cấm")
     public ResponseEntity<ApiResponse<ToggleBannedKeywordResponse>> toggle(
             @PathVariable Long id,

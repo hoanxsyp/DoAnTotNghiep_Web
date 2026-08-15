@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link as RouterLink } from 'react-router-dom';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useForm, Controller } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
@@ -70,9 +70,12 @@ const ChecklistRow = ({ ok, text }) => (
 );
 
 const RegisterPage = () => {
+  const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [successEmail, setSuccessEmail] = useState(null);
+  const [emailOtp, setEmailOtp] = useState('');
+  const [verifyingOtp, setVerifyingOtp] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
 
   const {
@@ -117,12 +120,19 @@ const RegisterPage = () => {
   const onSubmit = async (values) => {
     setSubmitError(null);
     try {
+      // Hợp đồng API (RegisterRequest): requestedRole là enum TENANT|LANDLORD (không có tiền tố
+      // ROLE_), và confirmPassword/acceptTerms là bắt buộc. Chọn chủ trọ thì phải kèm thông tin
+      // liên hệ để backend dựng hồ sơ chủ trọ.
+      const asLandlord = values.role === ROLES.LANDLORD;
       await authApi.register({
         fullName: values.fullName,
         email: values.email,
         phone: values.phone,
         password: values.password,
-        role: values.role,
+        confirmPassword: values.confirmPassword,
+        requestedRole: asLandlord ? 'LANDLORD' : 'TENANT',
+        acceptTerms: values.acceptTerms,
+        ...(asLandlord ? { contactName: values.fullName, contactPhone: values.phone } : {}),
       });
       setSuccessEmail(values.email);
       setResendCooldown(60);
@@ -145,9 +155,28 @@ const RegisterPage = () => {
     try {
       await authApi.resendVerification({ email: successEmail });
       notify.success('Đã gửi lại email xác thực.');
+      setEmailOtp('');
       setResendCooldown(60);
     } catch (e) {
       notify.apiError(e);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    const otp = emailOtp.trim();
+    if (!/^\d{6}$/.test(otp)) {
+      notify.warning('Vui lòng nhập mã OTP 6 chữ số.');
+      return;
+    }
+    setVerifyingOtp(true);
+    try {
+      await authApi.verifyEmail({ email: successEmail, otp });
+      notify.success('Xác thực email thành công. Vui lòng đăng nhập.');
+      navigate('/dang-nhap', { replace: true });
+    } catch (e) {
+      notify.apiError(e);
+    } finally {
+      setVerifyingOtp(false);
     }
   };
 
@@ -163,10 +192,24 @@ const RegisterPage = () => {
           kích hoạt tài khoản.
         </Typography>
         <Stack spacing={1.5} sx={{ mt: 3 }}>
+          <TextField
+            label="Mã OTP"
+            value={emailOtp}
+            onChange={(e) => setEmailOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            inputProps={{ inputMode: 'numeric', maxLength: 6 }}
+            fullWidth
+          />
+          <Button
+            variant="contained"
+            onClick={handleVerifyOtp}
+            disabled={verifyingOtp || emailOtp.length !== 6}
+          >
+            {verifyingOtp ? 'Đang xác thực...' : 'Xác thực bằng OTP'}
+          </Button>
           <Button variant="outlined" onClick={handleResend} disabled={resendCooldown > 0}>
             {resendCooldown > 0 ? `Gửi lại (${resendCooldown}s)` : 'Gửi lại email'}
           </Button>
-          <Button variant="contained" component={RouterLink} to="/dang-nhap">
+          <Button component={RouterLink} to="/dang-nhap">
             Về trang đăng nhập
           </Button>
         </Stack>

@@ -33,8 +33,8 @@ public class RegisterResponse {
     @Schema(description = "Trạng thái tài khoản", example = "PENDING_VERIFY")
     private String status;
 
-    @Schema(description = "Danh sách vai trò được gán", example = "[\"ROLE_TENANT\",\"ROLE_LANDLORD\"]")
-    private List<String> roles;
+    @Schema(description = "Vai trò được gán", example = "ROLE_TENANT")
+    private String role;
 
     @Schema(description = "Đã gửi email xác thực hay chưa", example = "true")
     private boolean verificationEmailSent;

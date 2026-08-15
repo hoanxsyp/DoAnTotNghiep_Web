@@ -1,5 +1,9 @@
 # 04 — Thiết kế giao diện (Frontend Design)
 
+<!-- WEBTRO_ROLE_ONLY_UPDATE_START -->
+> **Cập nhật 2026-08-09:** phân quyền hiện hành là **role-only**. Hệ thống không còn entity/repository/bảng nghiệp vụ `permissions` hay `role_permissions`; Flyway `V15__drop_permission_tables.sql` drop hai bảng này sau các migration lịch sử. Backend kiểm tra bằng `@PreAuthorize("hasRole/hasAnyRole")` và `SecurityUtils.hasRole/hasAnyRole`; JWT chỉ chứa `role`. Tenant được phép tạo tin nhưng service chỉ chấp nhận `categoryCode = ROOMMATE`; Landlord/Admin tạo được mọi loại tin. Access token 15 phút, refresh token 1 ngày, cả hai lưu `localStorage`; khi refresh token còn dưới 15 phút và access token vẫn còn hạn, frontend chủ động gọi `/api/auth/refresh` để xoay refresh token.
+<!-- WEBTRO_ROLE_ONLY_UPDATE_END -->
+
 > Tài liệu này đặc tả toàn bộ giao diện của `frontend_webtro/`. Mọi enum, tên route, permission
 > code, config key trong tài liệu này **bắt buộc** trùng khớp `00_CANONICAL_DECISIONS.md`.
 > Ký hiệu `[§x.y]` tham chiếu `PHAN_TICH_NGHIEP_VU_WEBSITE_PHONG_TRO.md`.
@@ -557,7 +561,7 @@ graph TD
     QL --> L10["ho-so-chu-tro"]
   end
 
-  subgraph ADMIN["AdminLayout — /admin/* · RoleRoute[ROLE_ADMIN, ROLE_MODERATOR] + PermissionRoute"]
+  subgraph ADMIN["AdminLayout — /admin/* · RoleRoute[ROLE_ADMIN, ROLE_MODERATOR]"]
     ROOT --> AD["/admin"]
     AD --> A1["dashboard"]
     AD --> A2["nguoi-dung"]
@@ -626,7 +630,7 @@ graph TD
 | 31 | `/quan-ly/goi-dich-vu` | Gói dịch vụ | `RoleRoute[ROLE_LANDLORD, ROLE_ADMIN]` | `LandlordLayout` | `[§2.9]` PAY-01,02 |
 | 32 | `/quan-ly/thanh-toan` | Thanh toán của tôi | `PAYMENT_VIEW_OWN` | `LandlordLayout` | `[§2.9]` PAY-06 |
 | 33 | `/quan-ly/ho-so-chu-tro` | Hồ sơ chủ trọ | `RoleRoute[ROLE_LANDLORD, ROLE_ADMIN]` | `LandlordLayout` | `[§7.3]` |
-| 34 | `/admin/dashboard` | Dashboard | `RoleRoute[ROLE_ADMIN, ROLE_MODERATOR]` | `AdminLayout` | `[§10.1]` ADM-01 |
+| 34 | `/admin/dashboard` | Dashboard | `RoleRoute[ROLE_ADMIN]` | `AdminLayout` | `[§10.1]` ADM-01; API 4.12.1 yêu cầu `STATISTIC_VIEW` chỉ Admin |
 | 35 | `/admin/nguoi-dung` | Quản lý người dùng | `USER_MANAGE` | `AdminLayout` | `[§10.2]` ADM-02 |
 | 36 | `/admin/nguoi-dung/:id` `*` | Chi tiết người dùng | `USER_MANAGE` | `AdminLayout` | `[§10.2]` |
 | 37 | `/admin/chu-tro` | Quản lý chủ trọ | `LANDLORD_VERIFY` | `AdminLayout` | `[§10.3]` ADM-03 |
@@ -657,209 +661,66 @@ graph TD
 | `/tai-khoan/tin-nhan/:conversationId` | `[§12.5]` có `GET /api/conversations/{id}/messages` — cần URL riêng cho từng hội thoại để chia sẻ/refresh không mất ngữ cảnh. Ở `xs` đây là màn hình độc lập (master-detail), không thể gộp vào `/tai-khoan/tin-nhan`. |
 | `/admin/nguoi-dung/:id` | `[§10.2]` yêu cầu *"Xem chi tiết hồ sơ"*, *"Xem lịch sử hoạt động"*, *"Xem report liên quan"* — quá nhiều nội dung cho một Dialog. |
 | `/admin/tin-dang/:id` | `[§10.4]` yêu cầu *"Xem lịch sử chỉnh sửa"* + *"Xem thống kê từng tin"* + duyệt/khóa trong cùng ngữ cảnh. |
-| `/403` | Canonical mục 12 định nghĩa `RoleRoute`/`PermissionRoute` nhưng không nói điều hướng đi đâu khi thiếu quyền. Cần một đích đến tường minh — xem mục 3.5. |
+| `/403` | Canonical mục 12 định nghĩa `RoleRoute` nhưng không nói điều hướng đi đâu khi thiếu quyền. Cần một đích đến tường minh — xem mục 3.5. |
 
-### 3.4. Cơ chế guard
+### 3.4. Cơ chế guard role-only
 
-Ba guard là component bọc, đặt trong `src/routes/guards/`. Chúng **xếp chồng** được.
-
-```jsx
-// src/routes/guards/ProtectedRoute.jsx — yêu cầu ĐÃ ĐĂNG NHẬP
-export default function ProtectedRoute({ children }) {
-  const { isAuthenticated, bootstrapped } = useSelector((s) => s.auth);
-  const location = useLocation();
-
-  // Chưa xong bước khôi phục phiên (mục 7.3) -> KHÔNG redirect vội, nếu không
-  // người dùng F5 giữa trang riêng tư sẽ bị đá về /dang-nhap dù vẫn còn phiên.
-  if (!bootstrapped) return <FullPageLoader />;
-
-  if (!isAuthenticated) {
-    // Nhớ đích đến để đăng nhập xong quay lại đúng chỗ.
-    return <Navigate to="/dang-nhap" replace state={{ from: location }} />;
-  }
-  return children ?? <Outlet />;
-}
-```
+Frontend chỉ dùng `ProtectedRoute` và `RoleRoute`. `PermissionRoute` đã bị loại bỏ vì backend không còn bảng permission, JWT không còn `permissions[]`.
 
 ```jsx
-// src/routes/guards/RoleRoute.jsx — yêu cầu CÓ ÍT NHẤT MỘT role trong danh sách
 export default function RoleRoute({ roles, children }) {
-  const userRoles = useSelector((s) => s.auth.user?.roles ?? []);
-  const ok = roles.some((r) => userRoles.includes(r));
+  const userRole = useSelector((s) => s.auth.user?.role ?? null);
+  const ok = roles.includes(userRole);
   if (!ok) return <Navigate to="/403" replace />;
   return children ?? <Outlet />;
 }
 ```
 
-```jsx
-// src/routes/guards/PermissionRoute.jsx — yêu cầu CÓ ĐỦ TẤT CẢ permission
-export default function PermissionRoute({ permissions, children }) {
-  const userPerms = useSelector((s) => s.auth.user?.permissions ?? []);
-  const ok = permissions.every((p) => userPerms.includes(p));
-  if (!ok) return <Navigate to="/403" replace />;
-  return children ?? <Outlet />;
-}
-```
+Menu dashboard được lọc theo role trong `config/menus.js`:
 
-```jsx
-// src/routes/guards/GuestOnlyRoute.jsx — chỉ cho khách CHƯA đăng nhập
-export default function GuestOnlyRoute({ children }) {
-  const { isAuthenticated, bootstrapped } = useSelector((s) => s.auth);
-  if (!bootstrapped) return <FullPageLoader />;
-  if (isAuthenticated) return <Navigate to="/" replace />;
-  return children ?? <Outlet />;
-}
-```
-
-Ngữ nghĩa chốt: **`RoleRoute` = OR** (đủ một role), **`PermissionRoute` = AND** (đủ mọi
-permission). Lý do: một trang admin thường mở cho cả `ROLE_ADMIN` lẫn `ROLE_MODERATOR` (OR),
-nhưng khi đã liệt kê nhiều permission thì là yêu cầu tổ hợp (AND). Trường hợp cần OR trên
-permission → dùng hook `useHasAnyPermission()` bên trong màn hình, không dùng guard.
-
-`roles` và `permissions` lấy từ **payload JWT** (canonical mục 8: token chứa `roles[]`,
-`permissions[]`), giải mã bằng `jwt-decode` lúc đăng nhập/khôi phục phiên và cất trong
-`auth.user`.
+- Tenant có mục quản lý tin đăng và đăng tin ở ghép.
+- Landlord/Admin có đủ menu quản lý chủ trọ.
+- Moderator/Admin dùng chung layout `/admin`, nhưng menu render theo role.
 
 ### 3.5. Hành vi khi không đủ quyền
 
 | Tình huống | Hành vi frontend | Ghi chú |
 |---|---|---|
-| Chưa đăng nhập, vào route `ProtectedRoute` | Redirect `/dang-nhap`, lưu `state.from`. Đăng nhập xong → `navigate(from, { replace: true })` | Không hiện toast (không phải lỗi, là luồng bình thường) |
-| Đã đăng nhập nhưng thiếu role/permission | Redirect `/403` (màn hình "Bạn không có quyền truy cập trang này" + nút "Về trang chủ" + nút "Quay lại") | Không hiện toast — chuyển trang đã đủ rõ |
-| API trả **401** `UNAUTHORIZED` | Interceptor thử refresh token **một lần**. Thành công → replay request, người dùng không thấy gì. Thất bại → `dispatch(logout())`, redirect `/dang-nhap`, toast *"Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại."* | Xem mục 7.4 |
-| API trả **403** `FORBIDDEN` | Toast error *"Bạn không có quyền thực hiện thao tác này."*, **không** redirect (người dùng đang ở trang hợp lệ, chỉ thao tác bị chặn) | Đây là lưới an toàn cho `[§11.2]` |
-| Menu/nút không đủ quyền | **Không render** (không dùng `disabled`). Sidebar admin lọc item theo permission trước khi render | Chỉ là UX. `[§11.2]`: *"API cần kiểm tra quyền ở backend, không chỉ ẩn nút ở frontend"* — ẩn nút **không** thay thế `@PreAuthorize` |
+| Chưa đăng nhập, vào route riêng tư | Redirect `/dang-nhap`, lưu `state.from`. | Bình thường, không toast lỗi. |
+| Đã đăng nhập nhưng role không được phép | Redirect `/403`. | Backend vẫn là nguồn bảo mật thật. |
+| API trả 401 | Interceptor gọi `/auth/refresh` một lần; thành công thì replay request, thất bại mới clear localStorage/logout. | Phiên hết khi cả access và refresh đều không dùng được. |
+| Refresh token còn dưới 15 phút, access còn hạn | Request interceptor chủ động gọi `/auth/refresh`, cập nhật token mới rồi tiếp tục request. | Nếu refresh chủ động lỗi nhưng access vẫn còn hạn, request hiện tại vẫn dùng access cũ. |
+| API trả 403 | Toast lỗi quyền, không redirect bắt buộc. | Thao tác bị chặn ở backend. |
 
-**Luật cứng:** frontend ẩn nút chỉ để đỡ rối mắt. Mọi thao tác vẫn phải bị backend chặn bằng
-`@PreAuthorize` (canonical mục 4.2). Không được coi guard frontend là biện pháp bảo mật.
-
-### 3.6. Khai báo router
-
-`src/routes/index.jsx` dùng `createBrowserRouter` (canonical mục 1.2). Mọi trang lazy-load
-(mục 11.1):
+### 3.6. Khai báo router liên quan phân quyền
 
 ```jsx
-import { createBrowserRouter, Navigate } from 'react-router-dom';
-import { lazy } from 'react';
-
-const HomePage = lazy(() => import('@/pages/public/HomePage'));
-const SearchPage = lazy(() => import('@/pages/public/SearchPage'));
-// ... các trang khác
-
-export const router = createBrowserRouter([
-  {
-    element: <PublicLayout />,
-    errorElement: <RouteErrorBoundary />, // bắt lỗi render + lỗi loader
-    children: [
-      { index: true, element: <HomePage /> },
-      { path: 'tim-kiem', element: <SearchPage /> },
-      { path: 'tin/:slugId', element: <ListingDetailPage /> },
-      { path: 'chu-tro/:id', element: <LandlordPublicProfilePage /> },
-      { path: 'gioi-thieu', element: <AboutPage /> },
-      { path: 'dieu-khoan', element: <TermsPage /> },
-      { path: '403', element: <ForbiddenPage /> },
-      { path: '404', element: <NotFoundPage /> },
-      { path: '*', element: <NotFoundPage /> },
-    ],
-  },
-  {
-    element: <AuthLayout />,
-    children: [
-      { element: <GuestOnlyRoute />, children: [
-        { path: 'dang-nhap', element: <LoginPage /> },
-        { path: 'dang-ky', element: <RegisterPage /> },
-        { path: 'quen-mat-khau', element: <ForgotPasswordPage /> },
-        { path: 'dat-lai-mat-khau', element: <ResetPasswordPage /> },
-      ]},
-      // Xác thực email KHÔNG bọc GuestOnlyRoute: người dùng có thể đã đăng nhập
-      // ở trạng thái PENDING_VERIFY rồi mới bấm link trong email.
-      { path: 'xac-thuc-email', element: <VerifyEmailPage /> },
-    ],
-  },
-  {
-    path: 'tai-khoan',
-    element: <ProtectedRoute><TenantLayout /></ProtectedRoute>,
-    children: [
-      { index: true, element: <Navigate to="ho-so" replace /> },
-      { path: 'ho-so', element: <ProfilePage /> },
-      { path: 'tin-da-luu', element: <FavoritesPage /> },
-      { path: 'lich-su-xem', element: <ViewHistoryPage /> },
-      { path: 'tin-nhan', element: <MessagesPage /> },
-      { path: 'tin-nhan/:conversationId', element: <MessagesPage /> },
-      { path: 'thong-bao', element: <NotificationsPage /> },
-      { path: 'bao-cao-cua-toi', element: <MyReportsPage /> },
-      { path: 'danh-gia-cua-toi', element: <MyReviewsPage /> },
-      { path: 'dang-theo-doi', element: <FollowingPage /> },
-      { path: 'doi-mat-khau', element: <ChangePasswordPage /> },
-    ],
-  },
-  {
-    path: 'quan-ly',
-    element: (
-      <ProtectedRoute>
-        <RoleRoute roles={['ROLE_LANDLORD', 'ROLE_ADMIN']}>
-          <LandlordLayout />
-        </RoleRoute>
-      </ProtectedRoute>
-    ),
-    children: [
-      { index: true, element: <Navigate to="tong-quan" replace /> },
-      { path: 'tong-quan', element: <LandlordDashboardPage /> },
-      { path: 'tin-dang', element: <MyListingsPage /> },
-      { path: 'tin-dang/tao',
-        element: <PermissionRoute permissions={['LISTING_CREATE']}>
-                   <ListingFormPage mode="create" />
-                 </PermissionRoute> },
-      { path: 'tin-dang/:id/sua',
-        element: <PermissionRoute permissions={['LISTING_UPDATE_OWN']}>
-                   <ListingFormPage mode="edit" />
-                 </PermissionRoute> },
-      { path: 'tin-dang/:id/thong-ke', element: <ListingStatsPage /> },
-      { path: 'nguoi-lien-he', element: <ContactsPage /> },
-      { path: 'tin-nhan', element: <LandlordMessagesPage /> },
-      { path: 'goi-dich-vu', element: <PackagesPage /> },
-      { path: 'thanh-toan',
-        element: <PermissionRoute permissions={['PAYMENT_VIEW_OWN']}>
-                   <MyPaymentsPage />
-                 </PermissionRoute> },
-      { path: 'ho-so-chu-tro', element: <LandlordProfilePage /> },
-    ],
-  },
-  {
-    path: 'admin',
-    element: (
-      <ProtectedRoute>
-        <RoleRoute roles={['ROLE_ADMIN', 'ROLE_MODERATOR']}>
-          <AdminLayout />
-        </RoleRoute>
-      </ProtectedRoute>
-    ),
-    children: [
-      { index: true, element: <Navigate to="dashboard" replace /> },
-      { path: 'dashboard', element: <AdminDashboardPage /> },
-      { path: 'nguoi-dung', element: <PermissionRoute permissions={['USER_MANAGE']}><AdminUsersPage /></PermissionRoute> },
-      { path: 'nguoi-dung/:id', element: <PermissionRoute permissions={['USER_MANAGE']}><AdminUserDetailPage /></PermissionRoute> },
-      { path: 'chu-tro', element: <PermissionRoute permissions={['LANDLORD_VERIFY']}><AdminLandlordsPage /></PermissionRoute> },
-      { path: 'tin-dang', element: <PermissionRoute permissions={['LISTING_VIEW_ANY']}><AdminListingsPage /></PermissionRoute> },
-      { path: 'tin-dang/:id', element: <PermissionRoute permissions={['LISTING_VIEW_ANY']}><AdminListingDetailPage /></PermissionRoute> },
-      { path: 'kiem-duyet', element: <PermissionRoute permissions={['LISTING_MODERATE']}><ModerationQueuePage /></PermissionRoute> },
-      { path: 'bao-cao', element: <PermissionRoute permissions={['REPORT_RESOLVE']}><AdminReportsPage /></PermissionRoute> },
-      { path: 'binh-luan', element: <PermissionRoute permissions={['COMMENT_MODERATE']}><AdminCommentsPage /></PermissionRoute> },
-      { path: 'danh-gia', element: <PermissionRoute permissions={['REVIEW_MODERATE']}><AdminReviewsPage /></PermissionRoute> },
-      { path: 'danh-muc', element: <PermissionRoute permissions={['CATALOG_MANAGE']}><AdminCategoriesPage /></PermissionRoute> },
-      { path: 'khu-vuc', element: <PermissionRoute permissions={['CATALOG_MANAGE']}><AdminAreasPage /></PermissionRoute> },
-      { path: 'tien-ich', element: <PermissionRoute permissions={['CATALOG_MANAGE']}><AdminAmenitiesPage /></PermissionRoute> },
-      { path: 'goi-dich-vu', element: <PermissionRoute permissions={['PACKAGE_MANAGE']}><AdminPackagesPage /></PermissionRoute> },
-      { path: 'thanh-toan', element: <PermissionRoute permissions={['PAYMENT_MANAGE']}><AdminPaymentsPage /></PermissionRoute> },
-      { path: 'ai/log', element: <PermissionRoute permissions={['AI_LOG_VIEW']}><AdminAiLogPage /></PermissionRoute> },
-      { path: 'ai/cau-hinh', element: <PermissionRoute permissions={['AI_CONFIG_MANAGE']}><AdminAiConfigPage /></PermissionRoute> },
-      { path: 'thong-ke', element: <PermissionRoute permissions={['STATISTIC_VIEW']}><AdminStatisticsPage /></PermissionRoute> },
-      { path: 'cau-hinh', element: <PermissionRoute permissions={['SYSTEM_CONFIG_MANAGE']}><AdminSystemConfigPage /></PermissionRoute> },
-      { path: 'audit-log', element: <PermissionRoute permissions={['AUDIT_LOG_VIEW']}><AdminAuditLogPage /></PermissionRoute> },
-    ],
-  },
-]);
+{
+  element: (
+    <RoleRoute roles={[ROLES.TENANT, ROLES.LANDLORD, ROLES.ADMIN]}>
+      <ListingManagementLayout />
+    </RoleRoute>
+  ),
+  children: [
+    { path: '/quan-ly/tin-dang', element: load(MyListingsPage) },
+    { path: '/quan-ly/tin-dang/tao', element: load(CreateListingPage) },
+    { path: '/quan-ly/tin-dang/:id/sua', element: load(EditListingPage) },
+    { path: '/quan-ly/goi-dich-vu', element: loadForRoles([ROLES.LANDLORD, ROLES.ADMIN], LandlordPackagesPage) },
+    { path: '/quan-ly/thanh-toan', element: loadForRoles([ROLES.LANDLORD, ROLES.ADMIN], LandlordPaymentsPage) },
+    { path: '/quan-ly/ho-so-chu-tro', element: loadForRoles([ROLES.LANDLORD, ROLES.ADMIN], LandlordProfileEditPage) },
+  ],
+}
 ```
+
+Trong `ListingWizard`, danh mục hiển thị được lọc theo role:
+
+```jsx
+const visibleCategories = role === ROLES.TENANT
+  ? categories.filter((category) => category.code === 'ROOMMATE')
+  : categories;
+```
+
+---
 
 ### 3.7. Quy ước URL chi tiết tin `[§11.8]`
 
@@ -1107,7 +968,7 @@ Cấu hình menu — nguồn sự thật duy nhất, dùng permission code canon
 ```js
 // src/layouts/admin/adminMenu.js
 export const ADMIN_MENU = [
-  { type: 'item', label: 'Dashboard', to: '/admin/dashboard', icon: 'dashboard' },
+  { type: 'item', label: 'Dashboard', to: '/admin/dashboard', icon: 'dashboard', permission: 'STATISTIC_VIEW' },
   { type: 'group', label: 'Người dùng', items: [
     { label: 'Người dùng', to: '/admin/nguoi-dung', icon: 'people',   permission: 'USER_MANAGE' },
     { label: 'Chủ trọ',    to: '/admin/chu-tro',    icon: 'verified', permission: 'LANDLORD_VERIFY' },
@@ -1160,7 +1021,7 @@ Kết quả với `ROLE_MODERATOR` (theo bảng permission canonical mục 4.2 �
 `LISTING_MODERATE`, `LISTING_VIEW_ANY`, `COMMENT_MODERATE`, `REVIEW_MODERATE`, `REPORT_CREATE`,
 `REPORT_RESOLVE`, `WARNING_SEND`, `LANDLORD_VERIFY`, `AI_LOG_VIEW`):
 
-- **Thấy:** Dashboard, Chủ trọ, Tin đăng, Kiểm duyệt, Báo cáo, Bình luận, Đánh giá, Log AI.
+- **Thấy:** Chủ trọ, Tin đăng, Kiểm duyệt, Báo cáo, Bình luận, Đánh giá, Log AI.
 - **Không thấy:** Người dùng (`USER_MANAGE`), toàn bộ nhóm Danh mục (`CATALOG_MANAGE`), toàn bộ
   nhóm **Tài chính**, Cấu hình AI, Thống kê, Cấu hình, Audit log — đúng `[§1.2]`
   *"Không quản lý cấu hình hệ thống, gói dịch vụ, doanh thu hoặc phân quyền Admin"*.
@@ -1812,7 +1673,7 @@ grid tin 1 cột.
 
 **API:** `POST /api/auth/login` body `{ emailOrPhone, password, captchaToken?, rememberDevice }`
 → `data: { accessToken, refreshToken, tokenType, expiresIn, refreshExpiresIn, user: { id,
-fullName, email, avatarUrl, roles[], permissions[], status, landlordVerified, lastLoginAt } }`
+fullName, email, avatarUrl, role, status, landlordVerified, lastLoginAt } }`
 (03 mục 4.1.2). Captcha: `GET /api/auth/captcha` → `{ captchaId, imageBase64, expiresIn }`;
 `captchaToken` gửi lên = `"{captchaId}:{mã người dùng nhập}"`.
 
@@ -1857,7 +1718,7 @@ export const loginSchema = yup.object({
 
 **Tương tác & điều hướng**
 - Enter trong ô bất kỳ → submit.
-- "Ghi nhớ" chọn → refresh token lưu `localStorage`; không chọn → `sessionStorage` (mục 7.3).
+- Token luôn lưu `localStorage` (mục 7.3) — phiên giữ qua F5 và qua lần mở trình duyệt sau.
 - **Captcha:** khối ẩn mặc định (`captchaRequired = false`) — người dùng đăng nhập đúng ngay lần
   đầu **không bao giờ thấy** captcha, đúng tinh thần `[§11.10]` *"Captcha cho hành vi nghi ngờ"*.
   Bấm `[⟳]` → gọi lại `GET /api/auth/captcha`, xóa trắng ô nhập. Ảnh captcha hết hạn (`expiresIn`
@@ -1869,7 +1730,7 @@ export const loginSchema = yup.object({
   `aria-describedby` trỏ tới thông báo lỗi.
 - Sau khi đăng nhập, thứ tự ưu tiên đích đến:
   1. `location.state.from` (nếu bị guard đá về đây) → quay lại đúng chỗ.
-  2. Có `ROLE_ADMIN`/`ROLE_MODERATOR` → `/admin/dashboard`.
+  2. Có `ROLE_ADMIN` → `/admin/dashboard`; có `ROLE_MODERATOR` → `/admin/kiem-duyet`.
   3. Có `ROLE_LANDLORD` → `/quan-ly/tong-quan`.
   4. Còn lại → `/`.
   Căn cứ `[§3.2]` *"Người dùng được chuyển về trang phù hợp"*.
@@ -2105,7 +1966,8 @@ component, F5 mất — chấp nhận được vì BE đã có rate limit riêng
 | **Route** | `/xac-thuc-email?token=<uuid>` · **Guard** không (xem 3.6) |
 | **Use case** | `[§2.1]` AUTH-06; `[§3.1]` bước 5–6 |
 
-Đây là màn hình **tự động** — người dùng tới từ link trong email, không nhập gì.
+Luồng xác thực hỗ trợ hai cách: người dùng tới từ link trong email thì màn hình **tự động** xác thực theo
+`token`; sau đăng ký, người dùng cũng có thể nhập OTP 6 số ngay trên màn hình "Kiểm tra email".
 
 **Wireframe (3 trạng thái)**
 
@@ -2125,7 +1987,7 @@ component, F5 mất — chấp nhận được vì BE đã có rate limit riêng
 └────────────────┘      └────────────────┘        └────────────────┘
 ```
 
-**API:** `POST /api/auth/verify-email` body `{ token }` `[§12.1]`. Gửi lại:
+**API:** `POST /api/auth/verify-email` body `{ token }` hoặc `{ email, otp }` `[§12.1]`. Gửi lại:
 `POST /api/auth/resend-verification` body `{ email }`.
 
 **Trạng thái**
@@ -4199,7 +4061,7 @@ Quy ước dùng chung cho **mọi** màn hình 5.4 (không lặp lại ở từ
 
 | | |
 |---|---|
-| **Route** | `/admin/dashboard` · **Quyền** `RoleRoute[ROLE_ADMIN, ROLE_MODERATOR]` |
+| **Route** | `/admin/dashboard` · **Quyền** `RoleRoute[ROLE_ADMIN]` (`STATISTIC_VIEW`, chỉ Admin theo API 4.12.1) |
 | **Use case** | `[§10.1]` ADM-01; `[§4.3]` *"Xem dashboard"* |
 
 **Wireframe (Admin — thấy đủ 10 chỉ số)**
@@ -4271,38 +4133,16 @@ Quy ước dùng chung cho **mọi** màn hình 5.4 (không lặp lại ở từ
 | 9 | *"Top khu vực có nhiều tin"* | Khối ⑨ | `STATISTIC_VIEW` |
 | 10 | *"Top danh mục phổ biến"* | Khối ⑩ | `STATISTIC_VIEW` |
 
-**Dashboard của Moderator — khác biệt bắt buộc.** Moderator **không** có `STATISTIC_VIEW`,
-`PAYMENT_MANAGE` (canonical mục 4.2) → theo `[§1.2]` *"Moderator chỉ có quyền kiểm duyệt, không
-quản lý cấu hình tài chính"*, dashboard của họ **ẩn** khối ①②⑥⑦⑨⑩, chỉ còn:
+**Moderator không có Dashboard tổng quan.** Moderator không có `STATISTIC_VIEW`/`PAYMENT_MANAGE` theo canonical mục 4.2, nên không truy cập `/admin/dashboard`. Sau đăng nhập, Moderator được điều hướng tới `/admin/kiem-duyet`; các chỉ số/luồng kiểm duyệt nằm ở các trang riêng như `/admin/chu-tro`, `/admin/tin-dang`, `/admin/kiem-duyet`, `/admin/bao-cao`, `/admin/binh-luan`, `/admin/danh-gia`, `/admin/ai/log`.
 
-```
-┌────────────────────────────────────────────────────────────────────────────┐
-│ PageHeader <h1>Dashboard</h1>                                              │
-├────────────────────────────────────────────────────────────────────────────┤
-│ ┌──────────┬──────────┬──────────┬──────────┐                              │
-│ │ 🟠 7     │ 🚩 7     │ 🟡 4     │ 🤖 3     │                              │
-│ │ Tin chờ  │ Báo cáo  │ Tin cần  │ Cảnh báo │                              │
-│ │ duyệt    │ chờ xử lý│ kiểm tra │ AI mới   │                              │
-│ │[Duyệt →] │[Xử lý →] │[Xem →]   │[Xem →]   │                              │
-│ └──────────┴──────────┴──────────┴──────────┘                              │
-├────────────────────────────────────────────────────────────────────────────┤
-│ ⑤ TÌNH TRẠNG TIN ĐĂNG   (LISTING_VIEW_ANY — Moderator CÓ quyền này)        │
-├────────────────────────────────────────────────────────────────────────────┤
-│ ⑧ 🤖 CẢNH BÁO AI        (AI_LOG_VIEW — Moderator CÓ quyền này)             │
-└────────────────────────────────────────────────────────────────────────────┘
-```
-
-Hiện thực: **không** viết 2 trang riêng. Một trang, mỗi khối bọc trong
-`<Can permission="...">` (component helper, mục 6) → khối tự biến mất nếu thiếu quyền. BE cũng
-chỉ trả các field mà người gọi có quyền xem (không dựa vào FE ẩn).
+Hiện thực: backend trả `403 FORBIDDEN` cho `GET /api/admin/dashboard` nếu principal không phải Admin; frontend ẩn menu Dashboard với Moderator và chặn route con bằng `RoleRoute[ROLE_ADMIN]`.
 
 **Mobile:** StatCard 2×2; khối ⑤ cuộn ngang; chart cao 180px; ⑨⑩ xếp dọc.
 
 **Component:** `StatCard`, `ChartCard`, `AiAlertList`, `TopRankBar`, `Can`, `EmptyState`,
 `LoadingSkeleton`, `Select`.
 
-**API:** `GET /api/admin/dashboard?range=today|7d|30d` `[§12.10]` → BE trả object chỉ chứa các
-khối người gọi có quyền. Cảnh báo AI: `GET /api/admin/ai/logs?type=ALERT&size=3` `[§12.9]`.
+**API:** `GET /api/admin/dashboard` `[§12.10]`/API 4.12.1 -> chỉ Admin (`STATISTIC_VIEW`). Cảnh báo AI cho Moderator: `GET /api/admin/ai/logs?type=ALERT&size=3` `[§12.9]`.
 
 **Trạng thái**
 
@@ -4351,7 +4191,7 @@ status=PENDING`). Đổi khoảng thời gian → refetch. Cảnh báo AI bấm 
 └────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Menu `[⋮]`: "Xem chi tiết" · "Cấp/thu hồi vai trò" (`USER_ROLE_ASSIGN`) · "Khóa tài khoản" /
+Menu `[⋮]`: "Xem chi tiết" · "Đổi vai trò" (`USER_ROLE_ASSIGN`) · "Khóa tài khoản" /
 "Mở khóa" (`USER_MANAGE`) · "Xem report liên quan".
 
 **Dialog khóa tài khoản** — `[§10.2]` *"Khóa tài khoản phải có lý do"*:
@@ -4382,29 +4222,30 @@ Menu `[⋮]`: "Xem chi tiết" · "Cấp/thu hồi vai trò" (`USER_ROLE_ASSIGN`
 └──────────────────────────────────────────────────┘
 ```
 
-**Dialog phân quyền** — `[§10.2]` *"Thao tác phân quyền cần ghi audit log"*:
+**Dialog đổi vai trò** — `[§10.2]` *"Thao tác phân quyền cần ghi audit log"*.
+Mỗi người dùng có **đúng một** vai trò → dùng `RadioGroup` (chọn một), không phải `Checkbox`:
 
 ```
 ┌──────────────────────────────────────────────────┐
 │ Vai trò của: Nguyễn Văn B (#1025)           [✕] │
 ├──────────────────────────────────────────────────┤
-│ ☑ Người thuê        (ROLE_TENANT)                │
-│ ☑ Chủ trọ           (ROLE_LANDLORD)              │
-│ ☐ Kiểm duyệt viên   (ROLE_MODERATOR)             │
-│ ☐ Quản trị viên     (ROLE_ADMIN)                 │
+│ ○ Người thuê        (ROLE_TENANT)                │
+│ ◉ Chủ trọ           (ROLE_LANDLORD)              │
+│ ○ Kiểm duyệt viên   (ROLE_MODERATOR)             │
+│ ○ Quản trị viên     (ROLE_ADMIN)                 │
 │                                                  │
 │ ⚠ Cấp quyền Quản trị viên cho phép người này     │
 │   toàn quyền hệ thống, kể cả tài chính và cấu    │
 │   hình. Thao tác này được ghi vào audit log.     │
 │                                                  │
-│ Lý do thay đổi *                                 │
+│ Lý do thay đổi *  (10–500 ký tự)                 │
 │ ┌──────────────────────────────────────────────┐ │
 │ └──────────────────────────────────────────────┘ │
 │                        [Hủy]  [Lưu vai trò]      │
 └──────────────────────────────────────────────────┘
 ```
 
-**Component:** `DataTable`, `StatusChip`, `Chip`, `Dialog`, `Select`, `TextField`, `Checkbox`,
+**Component:** `DataTable`, `StatusChip`, `Chip`, `Dialog`, `Select`, `TextField`, `RadioGroup`,
 `ConfirmDialog`, `EmptyState`, `LoadingSkeleton`.
 
 **API**
@@ -4414,7 +4255,7 @@ Menu `[⋮]`: "Xem chi tiết" · "Cấp/thu hồi vai trò" (`USER_ROLE_ASSIGN`
 | Danh sách | `GET /api/admin/users?keyword=&role=&status=&from=&to=&page=0&size=20&sort=createdAt,desc` `[§12.10]` |
 | Khóa | `PUT /api/admin/users/{id}/lock` body `{ reason, description, notifyUser }` `[§12.10]` |
 | Mở khóa | `PUT /api/admin/users/{id}/unlock` body `{ reason }` `[§12.10]` |
-| Cập nhật role | `PUT /api/admin/users/{id}/roles` body `{ roles: [...], reason }` `[§12.10]` |
+| Đổi vai trò | `PUT /api/admin/users/{id}/role` body `{ role, reason }` `[§12.10]` |
 | Xuất Excel | `GET /api/admin/users/export?...` **[BỔ SUNG NGOÀI CANONICAL]** |
 
 **Trạng thái**
@@ -4424,7 +4265,7 @@ Menu `[⋮]`: "Xem chi tiết" · "Cấp/thu hồi vai trò" (`USER_ROLE_ASSIGN`
 | Empty | *"Chưa có người dùng nào."* (thực tế không xảy ra — luôn có Admin) |
 | Success (khóa) | Toast success *"Đã khóa tài khoản {tên}."*, dòng đổi `StatusChip` = "Bị khóa", refetch. |
 | Error 422 (tự khóa mình) | Toast error *"Bạn không thể khóa tài khoản của chính mình."* — FE cũng **disable sẵn** nút khóa ở dòng của chính mình. |
-| Error 403 (thiếu `USER_ROLE_ASSIGN`) | Mục "Cấp/thu hồi vai trò" **không render** trong Menu. Moderator không thấy cả trang này (thiếu `USER_MANAGE`). |
+| Error 403 (thiếu `USER_ROLE_ASSIGN`) | Mục "Đổi vai trò" **không render** trong Menu. Moderator không thấy cả trang này (thiếu `USER_MANAGE`). |
 
 **Validation**
 
@@ -4432,7 +4273,8 @@ Menu `[⋮]`: "Xem chi tiết" · "Cấp/thu hồi vai trò" (`USER_ROLE_ASSIGN`
 |---|---|
 | `reason` (khóa) | bắt buộc `[§10.2]` |
 | `description` | bắt buộc, 10–500 ký tự |
-| `roles` | ≥1 role; **không** cho bỏ hết role |
+| `role` | bắt buộc chọn đúng **một** vai trò (`RadioGroup`, không phải `Checkbox`) |
+| `reason` (đổi vai trò) | bắt buộc, 10–500 ký tự — ghi vào `audit_logs(ROLE_CHANGE)` |
 
 **Không có nút Xóa người dùng** — `[§10.2]` *"Không xóa cứng user có giao dịch, tin đăng hoặc
 report"*. `UserStatus.DELETED` chỉ đạt được khi **chính người dùng** tự xóa tài khoản (5.2.1).
@@ -6419,7 +6261,7 @@ export const store = configureStore({
 
 | Slice | State | Vì sao **phải** ở Redux |
 |---|---|---|
-| `auth` | `{ user: { id, fullName, email, avatarUrl, roles[], permissions[], status } \| null, accessToken, isAuthenticated, bootstrapped, loading, error }` | Đọc ở **mọi** layout, mọi guard, mọi component `Can`. Prop-drilling qua 5+ cấp là không khả thi. |
+| `auth` | `{ user: { id, fullName, email, avatarUrl, role, status } \| null, isAuthenticated, bootstrapped, loading, error }` (token KHÔNG nằm trong Redux — xem 7.3) | Đọc ở **mọi** layout, mọi guard, mọi component `Can`. Prop-drilling qua 5+ cấp là không khả thi. |
 | `ui` | `{ themeMode: 'light'\|'dark', adminSidebarCollapsed, mobileDrawerOpen, globalLoading, confirmDialog }` | `themeMode` quyết định `ThemeProvider` ở gốc cây; sidebar state chia sẻ giữa layout và header. |
 | `catalog` | `{ categories[], amenities[], provinces[], districtsByProvince: {}, wardsByDistrict: {}, loading: {}, loadedAt }` | Dữ liệu tra cứu **bất biến trong phiên**, dùng ở `SearchFilterPanel`, `AddressSelector`, `AmenityPicker`, form tạo tin, nhiều trang admin. Cache ở đây = hiện thực `[§11.11]` *"Cache danh mục, khu vực, tiện ích"* phía client. |
 | `notification` | `{ unreadCount, recent[], loading, lastFetchedAt }` | `NotificationBell` ở header **mọi** layout + badge ở sidebar. Một nguồn duy nhất, poll một chỗ. |
@@ -6437,7 +6279,7 @@ hook `useApi` theo phong cách React Query, đặt trong component**, không nh�
 
 | Loại dữ liệu | Nơi ở | Lý do |
 |---|---|---|
-| Phiên đăng nhập, quyền | **Redux** `auth` | Xuyên suốt app, quyết định điều hướng |
+| Phiên đăng nhập, role | **Redux** `auth` | Xuyên suốt app, quyết định điều hướng |
 | Theme, sidebar, dialog toàn cục | **Redux** `ui` | Ảnh hưởng gốc cây |
 | Danh mục / khu vực / tiện ích | **Redux** `catalog` | Cache dài, nhiều nơi dùng `[§11.11]` |
 | Số chưa đọc (thông báo, tin nhắn) | **Redux** | Hiện ở layout, cập nhật từ nhiều nguồn |
@@ -6541,22 +6383,27 @@ export function useMutation(mutationFn, { onSuccess, onError } = {}) {
 
 ### 7.3. Khôi phục phiên & luồng token
 
-Canonical mục 8: access token JWT 15 phút; refresh token 7 ngày, opaque UUID, **rotation** +
+Canonical mục 8: access token JWT 15 phút; refresh token 1 ngày, opaque UUID, **rotation** +
 **reuse detection**.
 
 **Nơi lưu:**
 
 | Token | Nơi lưu | Lý do |
 |---|---|---|
-| `accessToken` | **Redux (bộ nhớ)** — `auth.accessToken` | Sống 15 phút. Không đưa vào `localStorage`: XSS đọc được `localStorage`. Ở bộ nhớ thì F5 mất, nhưng refresh token dựng lại được. |
-| `refreshToken` | `localStorage` nếu tick "Ghi nhớ", ngược lại `sessionStorage` | Cần sống qua F5. Đây là đánh đổi có ý thức — xem ADR-12. |
+| `accessToken` | `localStorage`, key `webtro_access_token` | Sống 15 phút. Để ở storage thì F5 dùng được ngay, không phải chờ một vòng `/auth/refresh`. |
+| `refreshToken` | `localStorage`, key `webtro_refresh_token` | Cần sống qua F5. Gửi trong **body** khi refresh/logout/đổi mật khẩu. |
 
-> **Ghi rõ hạn chế:** cách an toàn nhất là refresh token trong cookie `HttpOnly` + `SameSite`,
-> nhưng canonical mục 8 chốt *"API stateless dùng Bearer token → `csrf().disable()` là đúng
-> (không có cookie session)"*. Dùng cookie sẽ mâu thuẫn với hợp đồng kỹ thuật và kéo theo phải
-> bật CSRF. Do đó theo canonical: refresh token ở storage, và bù lại bằng (a) rotation +
-> reuse detection ở BE (canonical mục 8) giới hạn thiệt hại khi lộ, (b) cấm tuyệt đối
-> `dangerouslySetInnerHTML` (mục 6.2) để chặn XSS từ gốc.
+Quản lý tập trung ở `services/tokenService.js` (cache trong biến module để interceptor không đọc
+`localStorage` mỗi request). **Token không nằm trong Redux** — `authSlice` chỉ giữ `user`.
+
+> **Ghi rõ hạn chế (canonical §8, §17.3):** `localStorage` đọc được bằng JavaScript nên một lỗ XSS
+> lấy được cả refresh token. Đây là đánh đổi có ý thức, bù lại bằng: (a) rotation + reuse detection
+> ở BE — dùng lại token cũ là thu hồi cả họ token; (b) `JWT_REFRESH_TTL` hạ được qua biến môi
+> trường; (c) cấm tuyệt đối `dangerouslySetInnerHTML` (mục 6.2) + strip HTML ở BE để chặn XSS từ
+> gốc. Hệ thống **không dùng cookie** nên cũng không có bề mặt CSRF.
+>
+> **Bẫy cài đặt:** sau mỗi lần `/auth/refresh` phải ghi đè **cả hai** token — backend xoay vòng
+> refresh token, gửi lại token cũ ở lần sau sẽ bị coi là tái sử dụng và mất phiên.
 
 **Bootstrap khi mở app:**
 
@@ -7425,7 +7272,7 @@ vô hạn cho kết quả tìm kiếm.
 |---|---|---|---|
 | **ADR-01** | **Filter tìm kiếm sống trong URL query string, không trong Redux** | Redux `searchSlice`; local state | (a) `[§11.8]` coi trọng URL thân thiện → link tìm kiếm chia sẻ được; (b) back/forward trình duyệt hoạt động đúng; (c) F5 không mất filter; (d) tránh đồng bộ 2 chiều Redux↔URL vốn luôn lệch. Chi phí: phải parse string → number/array, gói trong `useSearchFilters()` một lần. |
 | **ADR-02** | **Dữ liệu server dùng hook `useApi` cục bộ, KHÔNG nhét vào Redux** | RTK Query; Redux slice cho từng danh sách | Canonical mục 1.2 **không** có RTK Query/React Query. Nhét danh sách vào Redux buộc phải tự viết cache key, invalidate, stale, race handling — tức viết lại React Query bằng tay, nhiều code sai hơn. `useApi` + `AbortController` giải quyết ở tầng component, dữ liệu chết theo màn hình. Redux chỉ giữ 6 slice thực sự toàn cục (mục 7.1). |
-| **ADR-03** | **`accessToken` trong bộ nhớ (Redux), `refreshToken` trong `localStorage`/`sessionStorage`** | Cả hai trong `localStorage`; refresh token trong cookie `HttpOnly` | Cookie `HttpOnly` an toàn hơn **nhưng mâu thuẫn canonical mục 8**: *"API stateless dùng Bearer token → `csrf().disable()` là đúng (không có cookie session)"* — dùng cookie buộc phải bật CSRF, phá hợp đồng kỹ thuật. Theo canonical, giảm rủi ro bằng: access token 15 phút chỉ ở RAM (XSS không đọc được `localStorage` để lấy nó), refresh token có **rotation + reuse detection** ở BE giới hạn thiệt hại, và **cấm tuyệt đối** `dangerouslySetInnerHTML` (ADR-04) để chặn XSS từ gốc. |
+| **ADR-03** (chốt v3) | **Cả `accessToken` và `refreshToken` trong `localStorage`** (`webtro_access_token` / `webtro_refresh_token`), quản lý ở `services/tokenService.js` | Access token trong Redux/bộ nhớ; refresh token trong cookie `HttpOnly` | Backend **không đặt cookie nào** (canonical §8, §17.3) nên `csrf().disable()` đúng tuyệt đối — không có thông tin xác thực nào trình duyệt tự đính kèm. Chấp nhận rủi ro XSS đọc được refresh token, bù bằng: **rotation + reuse detection** ở BE (dùng lại token cũ → thu hồi cả họ token), `JWT_REFRESH_TTL` hạ được qua biến môi trường, và **cấm tuyệt đối** `dangerouslySetInnerHTML` (ADR-04) + strip HTML ở BE. Đổi lại: phiên giữ qua F5 không cần vòng refresh, và không phụ thuộc hành vi cookie của trình duyệt khi FE/BE khác host. |
 | **ADR-04** | **`RichTextViewer` render plain text bằng JSX, cấm `dangerouslySetInnerHTML` toàn codebase + ESLint `react/no-danger: error`** | DOMPurify + `dangerouslySetInnerHTML`; `react-markdown` | Canonical mục 8 nói thẳng: *"escape output ở React (mặc định), **không** dùng `dangerouslySetInnerHTML` ở bất kỳ đâu"*. BE đã strip toàn bộ HTML (*"allowlist rỗng cho mô tả"*) → nội dung tới FE là plain text, **không có nhu cầu** parse HTML. Thêm DOMPurify là thêm dependency ngoài canonical **và** thêm bề mặt tấn công cho thứ không cần. ESLint rule biến quy tắc thành ràng buộc CI, không phụ thuộc trí nhớ người review. |
 | **ADR-05** | **Cảnh báo lệch giá là `Alert` cảnh báo mềm, KHÔNG phải lỗi validation, KHÔNG chặn submit** | Yup rule chặn khi lệch > 35%; disable nút "Gửi duyệt" | Ba nguồn nói cùng một điều: `[§3.3]` *"Tin có giá quá bất thường... không bị chặn tự động"*; `[§9.4]` *"Không chặn đăng tin chỉ vì giá khác dự đoán"*; canonical 10.4 bước 6 *"cảnh báo mềm, **tuyệt đối không chặn đăng tin**"*. Giá thị trường có ngoại lệ thật (phòng cũ, vị trí xấu, chủ muốn cho thuê nhanh). Chặn = từ chối tin hợp lệ. Cờ lệch giá dùng để Moderator **ưu tiên xem**, không để cấm. |
 | **ADR-06** | **Không optimistic update cho mọi thao tác đổi trạng thái tin và thao tác admin — luôn refetch** | Optimistic toàn bộ cho UI mượt | Trạng thái tin do `ListingStateMachine` ở BE quyết (canonical 5.1) với các luật FE không thể biết trước: `LOCKED` chặn `RENEW`/`SUBMIT`/`SOFT_DELETE`; `UNLOCK` → `HIDDEN` (**không** phải `ACTIVE`); `RESUBMIT_AFTER_EDIT` phụ thuộc trường nào bị sửa. Đoán ở FE sẽ hiển thị sai rồi giật về — tệ hơn chờ 200ms. Optimistic **chỉ** dùng cho thao tác đơn giản, có thể đảo ngược: lưu tin, đọc thông báo, theo dõi, gửi tin nhắn (mục 7.2). |
@@ -7435,7 +7282,7 @@ vô hạn cho kết quả tìm kiếm.
 | **ADR-10** | **Chat dùng polling 10s, không WebSocket** | STOMP/SockJS; SSE | `[§13.2]` nói thẳng: *"Chat nội bộ: Chỉ cần nhắn tin cơ bản, **không cần realtime phức tạp** nếu thiếu thời gian"*. Canonical mục 1.2 **không** có dependency WebSocket → thêm là vi phạm hợp đồng kỹ thuật. Polling 10s (chỉ khi tab hiển thị) đủ cho nghiệp vụ hỏi-đáp thuê trọ, không ai cần độ trễ dưới giây. Chi phí: vài request/phút/người dùng đang mở chat — chấp nhận được ở quy mô đồ án. |
 | **ADR-11** | **`AdminLayout` tối ưu cho `md+`; `xs` dùng được nhưng không phải trải nghiệm chính** | Thiết kế mobile-first đầy đủ cho cả 18 trang admin | `[§11.7]` yêu cầu responsive nhưng nêu rõ ưu tiên: *"Mobile ưu tiên **tìm kiếm nhanh, bộ lọc dễ dùng, nút liên hệ rõ**"* và *"Form **đăng tin** cần chia bước"* — toàn bộ là nghiệp vụ **người thuê và chủ trọ**. `[§4.3]` mô tả quy trình Admin là công việc bàn giấy (duyệt tin, xem dashboard, đối soát). Đầu tư 18 trang admin cho mobile là phân bổ công sức sai chỗ. Vẫn đảm bảo: `xs` **không vỡ layout**, bảng → card (mục 9.2), thao tác cốt lõi (duyệt/từ chối) làm được trên điện thoại. |
 | **ADR-12** | **Font `Be Vietnam Pro` self-host qua `@fontsource`, không Google Fonts CDN** | Roboto mặc định MUI; Google Fonts CDN | Roboto có tiếng Việt nhưng dấu mũ + dấu thanh chồng nhau (`ế`, `ộ`, `ữ`) bị chật ở 14px — cỡ chữ chính trên mobile, mà `[§11.7]` ưu tiên mobile. Be Vietnam Pro thiết kế riêng cho tiếng Việt, đủ 134 ký tự có dấu, SIL OFL. Self-host vì canonical 13.5 yêu cầu `docker compose up --build` chạy được toàn hệ thống — phụ thuộc CDN thì máy chấm offline sẽ fallback font xấu. Chi phí: +2 dependency asset (`@fontsource/*`), đã ghi **[BỔ SUNG NGOÀI CANONICAL]** ở mục 2.2. |
-| **ADR-13** | **`RoleRoute` = OR (đủ một role); `PermissionRoute` = AND (đủ mọi permission)** | Cả hai AND; cả hai OR; thêm prop `mode` cho cả hai | Canonical mục 12 định nghĩa 2 guard nhưng không nói ngữ nghĩa. Chọn theo cách dùng thực tế: `/admin/*` mở cho **cả** `ROLE_ADMIN` **hoặc** `ROLE_MODERATOR` → OR là tự nhiên. Liệt kê nhiều permission thường là yêu cầu tổ hợp → AND. Thêm prop `mode` cho cả hai làm API guard rườm rà mà 95% trường hợp không cần; khi cần OR trên permission thì dùng hook `useHasAnyPermission()` trong màn hình. Ngữ nghĩa ghi rõ ở mục 3.4 để không ai đoán sai. |
+| **ADR-13** | **`RoleRoute` = OR (đủ một role); `PermissionRoute` đã loại bỏ** | Backend role-only, JWT chỉ có `role`; frontend lọc menu/route bằng role để khớp chính sách hiện hành. | Role guard tập trung trong router/menu config; không còn hook/route permission. |
 | **ADR-14** | **Ngưỡng nghiệp vụ (trust, lệch giá, hạn sửa, hạn mức gia hạn) do BE trả kèm response dưới dạng cờ/level, FE KHÔNG tự so sánh** | FE gọi `/api/system-configs/public` rồi tự so ngưỡng | Canonical 13.4: *"Không hardcode ngưỡng — đọc từ `SystemConfig`"*. Nếu FE tự so, logic ngưỡng bị **nhân đôi** ở 2 nơi (FE + BE) → Admin đổi `trust.threshold.risky` mà FE cache config cũ thì hiển thị mâu thuẫn với hành vi BE. Do đó API trả sẵn `trustLevel`, `canEdit`, `editableUntil`, `freeRenewRemaining`, `autoHideRemaining`, `priceDeviationFlag`. FE chỉ đọc config công khai cho **validation form** (`listing.title.min/max`…) — nơi bắt buộc phải biết giới hạn để báo lỗi sớm, và BE vẫn validate lại (canonical 13.2). |
 | **ADR-15** | **Tin non-public + không có `LISTING_VIEW_ANY` → trả 404, KHÔNG phải 403** | Hiện 403 "Bạn không có quyền xem tin này" | Hiện 403 xác nhận với người lạ rằng **tin đó tồn tại** — rò rỉ thông tin. Kẻ tấn công có thể dò id để đếm tin bị khóa/ẩn, hoặc biết tin của đối thủ đang bị kiểm duyệt. `[§11.1]` *"Không lộ thông tin nhạy cảm trong API response"*. Áp dụng tương tự: hồ sơ user `LOCKED`/`DELETED` → 404 (5.1.4), và "Quên mật khẩu" luôn báo thành công dù email không tồn tại (5.1.7). |
 | **ADR-16** | **Trang chủ hiển thị "Tin đăng nổi bật" thay vì "Gợi ý cho bạn" khi chưa có hồ sơ hành vi** | Luôn gọi là "Gợi ý cho bạn" | `[§9.2]` cold start cho khách mới trả về *"tin mới nhất, tin phổ biến"* — đó **không phải** gợi ý cá nhân hóa. Gắn nhãn "Gợi ý cho bạn" cho danh sách chung là nói dối người dùng, và họ nhận ra ngay (thấy tin ở tỉnh khác). Đổi tiêu đề theo cờ `personalized` do BE trả (BE biết có `UserPreferenceProfile` hay không). Trung thực về năng lực AI cũng đúng tinh thần `[§9.4]` *"Không hiển thị AI như nguồn đảm bảo chính xác tuyệt đối"*. |
@@ -7541,7 +7388,7 @@ Toàn bộ danh sách ở mục 8.1 ngoài 8 mã chuẩn canonical 7.2. Chúng t
 | Loading | Mục 5 (mọi màn hình có trạng thái loading), component `LoadingSkeleton` (6.1), mục 11.3 |
 | Toast | Mục 8.2 — quy ước success/error/warning/info + khi nào **không** toast |
 | Error handling | Mục 8.1 (bản đồ errorCode), 8.3 (field-level từ `errors[]`), 7.4 (interceptor 401/403/429), `ErrorState` + `ErrorBoundary` (6.1) |
-| Route guard | Mục 3.4 (`ProtectedRoute`, `RoleRoute`, `PermissionRoute`, `GuestOnlyRoute`), 3.5 (hành vi khi thiếu quyền), 3.6 (khai báo router đầy đủ) |
+| Route guard | Mục 3.4 (`ProtectedRoute`, `RoleRoute`, `GuestOnlyRoute`), 3.5 (hành vi khi thiếu quyền), 3.6 (khai báo router đầy đủ) |
 | Responsive | Mục 1.2 (mobile-first), 2.6 (breakpoints), 4.x (responsive từng layout), mục 9 (bảng số cột đầy đủ + quy tắc bảng→card + ma trận kiểm thử) |
 
 > *"Không còn TODO, FIXME, 'demo', 'giả sử', code rỗng"* — tài liệu này không chứa mục nào bỏ

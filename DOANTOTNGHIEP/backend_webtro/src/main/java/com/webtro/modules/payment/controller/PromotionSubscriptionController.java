@@ -3,7 +3,6 @@ package com.webtro.modules.payment.controller;
 import com.webtro.common.ApiResponse;
 import com.webtro.common.PageResponse;
 import com.webtro.common.enums.SubscriptionStatus;
-import com.webtro.constant.PermissionCode;
 import com.webtro.modules.payment.dto.response.PromotionSubscriptionResponse;
 import com.webtro.modules.payment.service.PromotionService;
 import com.webtro.security.CustomUserDetails;
@@ -35,7 +34,7 @@ public class PromotionSubscriptionController {
     private final PromotionService promotionService;
 
     @GetMapping("/my")
-    @PreAuthorize("hasAuthority('" + PermissionCode.PAYMENT_VIEW_OWN + "')")
+    @PreAuthorize("hasAnyRole('LANDLORD','ADMIN')")
     @Operation(summary = "Gói đẩy tin đã mua của tôi")
     public ResponseEntity<ApiResponse<PageResponse<PromotionSubscriptionResponse>>> mySubscriptions(
             @RequestParam(required = false) List<SubscriptionStatus> status,

@@ -102,7 +102,7 @@ public class UserController {
     }
 
     @GetMapping("/me/landlord-profile")
-    @PreAuthorize("hasAuthority('LISTING_CREATE')")
+    @PreAuthorize("hasAnyRole('LANDLORD','ADMIN')")
     @Operation(summary = "Xem hồ sơ chủ trọ của tôi", description = "Thông tin liên hệ, uy tín, trạng thái xác minh của chủ trọ")
     public ResponseEntity<ApiResponse<MyLandlordProfileResponse>> getMyLandlordProfile(
             @AuthenticationPrincipal CustomUserDetails currentUser) {
@@ -111,7 +111,7 @@ public class UserController {
     }
 
     @PutMapping("/me/landlord-profile")
-    @PreAuthorize("hasAuthority('LISTING_CREATE')")
+    @PreAuthorize("hasAnyRole('LANDLORD','ADMIN')")
     @Operation(summary = "Cập nhật hồ sơ chủ trọ", description = "Cập nhật thông tin liên hệ, cơ sở, bật/tắt chat (mục 4.2.11)")
     public ResponseEntity<ApiResponse<MyLandlordProfileResponse>> updateMyLandlordProfile(
             @AuthenticationPrincipal CustomUserDetails currentUser,
@@ -121,7 +121,7 @@ public class UserController {
     }
 
     @PostMapping("/me/landlord-verification")
-    @PreAuthorize("hasAuthority('LISTING_CREATE')")
+    @PreAuthorize("hasAnyRole('LANDLORD','ADMIN')")
     @Operation(summary = "Gửi yêu cầu xác thực chủ trọ", description = "Gửi yêu cầu để Admin/Moderator xác minh thủ công (USER-06)")
     public ResponseEntity<ApiResponse<LandlordVerificationResponse>> submitLandlordVerification(
             @AuthenticationPrincipal CustomUserDetails currentUser,

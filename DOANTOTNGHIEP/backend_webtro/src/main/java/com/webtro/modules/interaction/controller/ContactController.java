@@ -45,7 +45,7 @@ public class ContactController {
     private final ContactService contactService;
 
     @GetMapping("/listings/{id}/contact-info")
-    @PreAuthorize("hasAuthority('CONTACT_CREATE')")
+    @PreAuthorize("hasAnyRole('TENANT','LANDLORD','ADMIN')")
     @Operation(summary = "Xem thông tin liên hệ của tin (ghi nhận lượt liên hệ)")
     public ResponseEntity<ApiResponse<ContactInfoResponse>> getContactInfo(
             @PathVariable Long id, @AuthenticationPrincipal CustomUserDetails user) {
@@ -54,7 +54,7 @@ public class ContactController {
     }
 
     @PostMapping("/listings/{id}/contact")
-    @PreAuthorize("hasAuthority('CONTACT_CREATE')")
+    @PreAuthorize("hasAnyRole('TENANT','LANDLORD','ADMIN')")
     @Operation(summary = "Gửi yêu cầu liên hệ chủ tin")
     public ResponseEntity<ApiResponse<ContactResultResponse>> createContact(
             @PathVariable Long id, @Valid @RequestBody CreateContactRequest request,
@@ -69,7 +69,7 @@ public class ContactController {
     }
 
     @GetMapping("/landlord/contacts")
-    @PreAuthorize("hasAuthority('LISTING_CREATE')")
+    @PreAuthorize("hasAnyRole('TENANT','LANDLORD','ADMIN')")
     @Operation(summary = "Chủ trọ xem danh sách người liên hệ tin của mình")
     public ResponseEntity<ApiResponse<LandlordContactPageResponse>> listLandlordContacts(
             @RequestParam(required = false) Long listingId,

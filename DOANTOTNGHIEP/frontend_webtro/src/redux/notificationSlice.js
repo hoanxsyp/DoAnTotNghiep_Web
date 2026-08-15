@@ -14,6 +14,12 @@ export const fetchRecent = createAsyncThunk('notification/recent', async () => {
   return notificationApi.getRecent();
 });
 
+const normalizeUnreadCount = (payload) => {
+  if (typeof payload === 'number') return payload;
+  if (!payload || typeof payload !== 'object') return 0;
+  return Number(payload.unreadCount || 0) + Number(payload.unreadMessageCount || 0);
+};
+
 const notificationSlice = createSlice({
   name: 'notification',
   initialState: {
@@ -31,7 +37,7 @@ const notificationSlice = createSlice({
   extraReducers: (builder) => {
     builder
       .addCase(fetchUnreadCount.fulfilled, (state, action) => {
-        state.unreadCount = action.payload ?? 0;
+        state.unreadCount = normalizeUnreadCount(action.payload);
       })
       .addCase(fetchRecent.fulfilled, (state, action) => {
         state.recent = action.payload?.items ?? action.payload ?? [];

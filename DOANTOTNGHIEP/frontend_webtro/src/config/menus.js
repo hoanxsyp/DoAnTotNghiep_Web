@@ -30,26 +30,25 @@ import PersonIcon from '@mui/icons-material/Person';
 import AddBoxIcon from '@mui/icons-material/AddBox';
 import ContactPhoneIcon from '@mui/icons-material/ContactPhone';
 import StorefrontIcon from '@mui/icons-material/Storefront';
-import { PERMISSIONS } from '@/constants';
+import { ROLES } from '@/constants';
 
 /**
  * Nguồn sự thật duy nhất cho sidebar của 3 khu vực dashboard (canonical mục 12, docs/04 §4.5).
  *
  * Cấu trúc mỗi menu = mảng nhóm; mỗi nhóm có `heading` (tiêu đề nhóm, có thể null cho nhóm gốc),
  * `base` (đường dẫn gốc để tô sáng đúng mục), và `items[]` gồm `label`, `path`, `icon` (React node)
- * và tùy chọn `permission` — permission cần để mục hiện ra.
+ * và tùy chọn `roles` — role được thấy mục đó.
  *
- * DashboardLayout nhận menu ĐÃ LỌC theo quyền. Dùng `buildAdminMenu(permissions)` để lọc: mục thiếu
- * quyền bị bỏ; nhóm rỗng sau khi lọc thì bỏ luôn cả nhóm (không để tiêu đề trống lơ lửng). Nhờ đó
- * Moderator KHÔNG thấy nhóm Tài chính / Cấu hình hệ thống (canonical §1.2). Ẩn menu chỉ là UX —
- * backend luôn kiểm tra quyền lại (luật F6).
+ * DashboardLayout nhận menu ĐÃ LỌC theo role. Nhóm rỗng sau khi lọc thì bỏ luôn cả nhóm. Nhờ đó
+ * Moderator KHÔNG thấy nhóm Tài chính / Cấu hình hệ thống. Ẩn menu chỉ là UX — backend luôn kiểm
+ * tra lại (luật F6).
  */
-
-// `LISTING_VIEW_ANY` chưa nằm trong PERMISSIONS (constants) nên khai báo hằng cục bộ để tránh lỗi.
-const LISTING_VIEW_ANY = 'LISTING_VIEW_ANY';
 
 /** Tạo icon element từ component (menus.js là .js nên không dùng JSX trực tiếp). */
 const icon = (Component) => createElement(Component, { fontSize: 'small' });
+
+const ADMIN_ONLY = [ROLES.ADMIN];
+const MODERATION_ROLES = [ROLES.MODERATOR, ROLES.ADMIN];
 
 // ===================== TENANT (/tai-khoan/*) =====================
 export const tenantMenu = [
@@ -58,6 +57,8 @@ export const tenantMenu = [
     base: '/tai-khoan',
     items: [
       { label: 'Hồ sơ', path: '/tai-khoan/ho-so', icon: icon(PersonIcon) },
+      { label: 'Tin đã đăng', path: '/quan-ly/tin-dang', icon: icon(ArticleIcon) },
+      { label: 'Đăng tin ở ghép', path: '/quan-ly/tin-dang/tao', icon: icon(AddBoxIcon) },
       { label: 'Tin đã lưu', path: '/tai-khoan/tin-da-luu', icon: icon(BookmarkIcon) },
       { label: 'Lịch sử xem', path: '/tai-khoan/lich-su-xem', icon: icon(VisibilityIcon) },
       { label: 'Tin nhắn', path: '/tai-khoan/tin-nhan', icon: icon(ChatIcon) },
@@ -100,42 +101,54 @@ export const landlordMenu = [
   },
 ];
 
+export const listingManagerMenu = [
+  {
+    heading: 'Tin đăng',
+    base: '/quan-ly',
+    items: [
+      { label: 'Tin đăng', path: '/quan-ly/tin-dang', icon: icon(ArticleIcon) },
+      { label: 'Đăng tin ở ghép', path: '/quan-ly/tin-dang/tao', icon: icon(AddBoxIcon) },
+      { label: 'Người liên hệ', path: '/quan-ly/nguoi-lien-he', icon: icon(ContactPhoneIcon) },
+    ],
+  },
+];
+
 // ===================== ADMIN / MODERATOR (/admin/*) =====================
 export const adminMenu = [
   {
     heading: null,
     base: '/admin',
     items: [
-      { label: 'Dashboard', path: '/admin/dashboard', icon: icon(DashboardIcon) },
+      { label: 'Dashboard', path: '/admin/dashboard', icon: icon(DashboardIcon), roles: ADMIN_ONLY },
     ],
   },
   {
     heading: 'Người dùng',
     base: '/admin',
     items: [
-      { label: 'Người dùng', path: '/admin/nguoi-dung', icon: icon(PeopleIcon), permission: PERMISSIONS.USER_MANAGE },
-      { label: 'Chủ trọ', path: '/admin/chu-tro', icon: icon(VerifiedUserIcon), permission: PERMISSIONS.LANDLORD_VERIFY },
+      { label: 'Người dùng', path: '/admin/nguoi-dung', icon: icon(PeopleIcon), roles: ADMIN_ONLY },
+      { label: 'Chủ trọ', path: '/admin/chu-tro', icon: icon(VerifiedUserIcon), roles: MODERATION_ROLES },
     ],
   },
   {
     heading: 'Nội dung',
     base: '/admin',
     items: [
-      { label: 'Tin đăng', path: '/admin/tin-dang', icon: icon(ArticleIcon), permission: LISTING_VIEW_ANY },
-      { label: 'Kiểm duyệt', path: '/admin/kiem-duyet', icon: icon(FactCheckIcon), permission: PERMISSIONS.LISTING_MODERATE },
-      { label: 'Báo cáo', path: '/admin/bao-cao', icon: icon(FlagIcon), permission: PERMISSIONS.REPORT_RESOLVE },
-      { label: 'Bình luận', path: '/admin/binh-luan', icon: icon(CommentIcon), permission: PERMISSIONS.COMMENT_MODERATE },
-      { label: 'Đánh giá', path: '/admin/danh-gia', icon: icon(StarIcon), permission: PERMISSIONS.REVIEW_MODERATE },
+      { label: 'Tin đăng', path: '/admin/tin-dang', icon: icon(ArticleIcon), roles: MODERATION_ROLES },
+      { label: 'Kiểm duyệt', path: '/admin/kiem-duyet', icon: icon(FactCheckIcon), roles: MODERATION_ROLES },
+      { label: 'Báo cáo', path: '/admin/bao-cao', icon: icon(FlagIcon), roles: MODERATION_ROLES },
+      { label: 'Bình luận', path: '/admin/binh-luan', icon: icon(CommentIcon), roles: MODERATION_ROLES },
+      { label: 'Đánh giá', path: '/admin/danh-gia', icon: icon(StarIcon), roles: MODERATION_ROLES },
     ],
   },
   {
     heading: 'Danh mục',
     base: '/admin',
     items: [
-      { label: 'Danh mục', path: '/admin/danh-muc', icon: icon(CategoryIcon), permission: PERMISSIONS.CATALOG_MANAGE },
-      { label: 'Khu vực', path: '/admin/khu-vuc', icon: icon(MapIcon), permission: PERMISSIONS.CATALOG_MANAGE },
-      { label: 'Tiện ích', path: '/admin/tien-ich', icon: icon(ChecklistIcon), permission: PERMISSIONS.CATALOG_MANAGE },
-      { label: 'Từ khóa cấm', path: '/admin/tu-khoa-cam', icon: icon(BlockIcon), permission: PERMISSIONS.SYSTEM_CONFIG_MANAGE },
+      { label: 'Danh mục', path: '/admin/danh-muc', icon: icon(CategoryIcon), roles: ADMIN_ONLY },
+      { label: 'Khu vực', path: '/admin/khu-vuc', icon: icon(MapIcon), roles: ADMIN_ONLY },
+      { label: 'Tiện ích', path: '/admin/tien-ich', icon: icon(ChecklistIcon), roles: ADMIN_ONLY },
+      { label: 'Từ khóa cấm', path: '/admin/tu-khoa-cam', icon: icon(BlockIcon), roles: ADMIN_ONLY },
     ],
   },
   {
@@ -143,44 +156,48 @@ export const adminMenu = [
     base: '/admin',
     // Moderator KHÔNG có PACKAGE_MANAGE / PAYMENT_MANAGE -> cả nhóm biến mất (canonical §1.2).
     items: [
-      { label: 'Gói dịch vụ', path: '/admin/goi-dich-vu', icon: icon(SellIcon), permission: PERMISSIONS.PACKAGE_MANAGE },
-      { label: 'Thanh toán', path: '/admin/thanh-toan', icon: icon(PaymentIcon), permission: PERMISSIONS.PAYMENT_MANAGE },
+      { label: 'Gói dịch vụ', path: '/admin/goi-dich-vu', icon: icon(SellIcon), roles: ADMIN_ONLY },
+      { label: 'Thanh toán', path: '/admin/thanh-toan', icon: icon(PaymentIcon), roles: ADMIN_ONLY },
     ],
   },
   {
     heading: 'AI',
     base: '/admin',
     items: [
-      { label: 'Log AI', path: '/admin/ai/log', icon: icon(PsychologyIcon), permission: PERMISSIONS.AI_LOG_VIEW },
-      { label: 'Cấu hình AI', path: '/admin/ai/cau-hinh', icon: icon(TuneIcon), permission: PERMISSIONS.AI_CONFIG_MANAGE },
+      { label: 'Log AI', path: '/admin/ai/log', icon: icon(PsychologyIcon), roles: MODERATION_ROLES },
+      { label: 'Cấu hình AI', path: '/admin/ai/cau-hinh', icon: icon(TuneIcon), roles: ADMIN_ONLY },
     ],
   },
   {
     heading: 'Hệ thống',
     base: '/admin',
     items: [
-      { label: 'Thống kê', path: '/admin/thong-ke', icon: icon(BarChartIcon), permission: PERMISSIONS.STATISTIC_VIEW },
-      { label: 'Cấu hình', path: '/admin/cau-hinh', icon: icon(SettingsIcon), permission: PERMISSIONS.SYSTEM_CONFIG_MANAGE },
-      { label: 'Audit log', path: '/admin/audit-log', icon: icon(HistoryIcon), permission: PERMISSIONS.AUDIT_LOG_VIEW },
+      { label: 'Thống kê', path: '/admin/thong-ke', icon: icon(BarChartIcon), roles: ADMIN_ONLY },
+      { label: 'Cấu hình', path: '/admin/cau-hinh', icon: icon(SettingsIcon), roles: ADMIN_ONLY },
+      { label: 'Audit log', path: '/admin/audit-log', icon: icon(HistoryIcon), roles: ADMIN_ONLY },
     ],
   },
 ];
 
 /**
- * Lọc một menu theo danh sách permission của người dùng. Mục không có `permission` luôn hiện;
+ * Lọc một menu theo role của người dùng. Mục không có `roles` luôn hiện;
  * nhóm rỗng sau khi lọc bị loại bỏ hoàn toàn.
  */
-export const filterMenuByPermissions = (menu, permissions = []) =>
+export const filterMenuByRole = (menu, role) =>
   menu
     .map((group) => {
       const items = group.items.filter(
-        (item) => !item.permission || permissions.includes(item.permission),
+        (item) => !item.roles || item.roles.includes(role),
       );
       return items.length ? { ...group, items } : null;
     })
     .filter(Boolean);
 
-/** Menu admin đã lọc theo quyền — truyền thẳng vào DashboardLayout. */
-export const buildAdminMenu = (permissions = []) => filterMenuByPermissions(adminMenu, permissions);
+/** Menu admin đã lọc theo role — truyền thẳng vào DashboardLayout. */
+export const buildAdminMenu = (role) => filterMenuByRole(adminMenu, role);
 
-export default { tenantMenu, landlordMenu, adminMenu, filterMenuByPermissions, buildAdminMenu };
+/** Menu quản lý tin: Tenant chỉ thấy phần tin; Landlord/Admin thấy đầy đủ. */
+export const buildListingManagementMenu = (role) =>
+  role === ROLES.TENANT ? listingManagerMenu : landlordMenu;
+
+export default { tenantMenu, landlordMenu, listingManagerMenu, adminMenu, filterMenuByRole, buildAdminMenu, buildListingManagementMenu };

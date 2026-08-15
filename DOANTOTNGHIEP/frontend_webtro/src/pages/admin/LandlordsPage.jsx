@@ -47,9 +47,15 @@ const LandlordsPage = () => {
   const openMenu = (e, row) => { setMenuAnchor(e.currentTarget); setActive(row); };
 
   const run = async (fn, successMsg, payload) => {
+    const id = active?.userId ?? active?.id;
+    if (!id) {
+      notify.error('Không xác định được ID chủ trọ. Vui lòng tải lại danh sách.');
+      return;
+    }
+
     setSubmitting(true);
     try {
-      await fn(active.id, payload);
+      await fn(id, payload);
       notify.success(successMsg);
       setDialog(null);
       reload();
@@ -113,6 +119,7 @@ const LandlordsPage = () => {
       <AdminDataTable
         columns={columns}
         rows={items}
+        rowKey={(row) => row.userId}
         loading={loading}
         error={error}
         onRetry={reload}

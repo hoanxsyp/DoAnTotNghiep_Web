@@ -29,7 +29,7 @@ public class AdminStatisticController {
     private final AdminDashboardService adminDashboardService;
 
     @GetMapping
-    @PreAuthorize("hasAuthority('STATISTIC_VIEW')")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Thống kê chi tiết", description = "Chuỗi theo ngày + tổng + tỷ lệ duyệt/từ chối/thuê thành công theo khoảng ngày.")
     public ResponseEntity<ApiResponse<StatisticsResponse>> getStatistics(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -40,7 +40,7 @@ public class AdminStatisticController {
     }
 
     @GetMapping("/revenue")
-    @PreAuthorize("hasAuthority('STATISTIC_VIEW')")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Thống kê doanh thu",
             description = "Doanh thu từ giao dịch SUCCESS theo khoảng ngày; nhóm theo ngày (DAY) hoặc tháng (MONTH); "
                     + "kèm tổng doanh thu, số giao dịch và phân rã doanh thu theo gói dịch vụ.")

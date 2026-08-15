@@ -9,6 +9,15 @@ giá thuê.
 > seed 1 tỉnh (Thành phố Hà Nội) với 12 quận nội thành và các phường thực tế; người dùng chỉ
 > chọn/đăng/tìm tin trong phạm vi này.
 
+> **Nguyên tắc phân quyền:** mỗi tài khoản có **đúng một vai trò**
+> (`ROLE_TENANT` / `ROLE_LANDLORD` / `ROLE_MODERATOR` / `ROLE_ADMIN`), lưu ở cột `users.role_id`.
+> Không có bảng `permissions`/`role_permissions`; hai người cùng role luôn có cùng quyền hạn. Backend kiểm tra trực tiếp bằng role.
+>
+> **Quy tắc đăng tin:** `ROLE_TENANT` được tạo tin nhưng chỉ với loại `ROOMMATE` (tìm người ở ghép).
+> `ROLE_LANDLORD` và `ROLE_ADMIN` tạo được tất cả loại tin.
+>
+> **Phiên đăng nhập:** access token 15 phút và refresh token 1 ngày đều lưu trong `localStorage`.
+> Khi refresh token còn dưới 15 phút mà access token vẫn còn hạn, frontend chủ động gọi `/auth/refresh` để sinh refresh token mới. Phiên chỉ hết hạn khi cả access token và refresh token đều hết hạn/không còn dùng được.
 | Thành phần | Công nghệ |
 |---|---|
 | Backend | Java 21, Spring Boot 3.3.5, Spring Security, Spring Data JPA, Flyway, JWT |
@@ -63,18 +72,19 @@ Dừng: `docker compose down` — Xóa sạch cả dữ liệu: `docker compose 
 — không có hash nào được nhúng sẵn trong migration.
 
 **Dữ liệu mẫu THẬT** được gieo vào DB lúc khởi động lần đầu (khi DB trống, `SEED_DEMO_ENABLED=true`):
-19 người dùng, 28 tin đăng (kèm ảnh sinh tự động), 30 bình luận, 20 đánh giá, 40 lưu tin, 12 theo
-dõi, 5 báo cáo, 5 giao dịch thanh toán + đẩy tin. Đây là dữ liệu ghi thật vào DB (không phải mock ở
+19 người dùng (1 kiểm duyệt viên + 6 chủ trọ + 12 người thuê — **mỗi tài khoản đúng một vai trò**),
+tin đăng kèm ảnh sinh tự động, bình luận, đánh giá, lưu tin, theo dõi, báo cáo, giao dịch thanh
+toán + đẩy tin. Đây là dữ liệu ghi thật vào DB (không phải mock ở
 frontend), idempotent — chỉ chạy khi DB chưa có tin đăng nào. Tắt bằng `SEED_DEMO_ENABLED=false`.
 
-Tài khoản mẫu để đăng nhập thử (mật khẩu chung **`Test@1234`**):
+Tài khoản mẫu để đăng nhập thử:
 
-| Vai trò | Email |
-|---|---|
-| Quản trị | `admin@webtro.local` (mật khẩu = `ADMIN_PASSWORD` trong `.env`) |
-| Kiểm duyệt | `moderator@webtro.local` |
-| Chủ trọ | `landlord1@webtro.local` … `landlord6@webtro.local` |
-| Người thuê | `tenant1@webtro.local` … `tenant12@webtro.local` |
+| Vai trò | Email | Mật khẩu |
+|---|---|---|
+| Quản trị | `admin@webtro.local` | `ADMIN_PASSWORD` trong `.env` (hiện tại `Admin@12345`) |
+| Kiểm duyệt | `moderator@webtro.local` | `Test@1234` |
+| Chủ trọ | `landlord1@webtro.local` … `landlord6@webtro.local` | `Test@1234` |
+| Người thuê | `tenant1@webtro.local` … `tenant12@webtro.local` | `Test@1234` |
 
 > Muốn gieo lại từ đầu: `docker compose down -v` (xóa DB) rồi `docker compose up --build`.
 
@@ -90,7 +100,10 @@ DOANTOTNGHIEP/
 │   ├── 01_KIEN_TRUC_HE_THONG.md            #   Thiết kế kiến trúc
 │   ├── 02_THIET_KE_DATABASE.md             #   Thiết kế database
 │   ├── 03_THIET_KE_API.md                  #   Thiết kế API
-│   └── 04_THIET_KE_GIAO_DIEN.md            #   Thiết kế giao diện
+│   ├── 04_THIET_KE_GIAO_DIEN.md            #   Thiết kế giao diện
+│   ├── 05_TONG_KET_TRIEN_KHAI.md           #   Tổng kết & hướng dẫn vận hành
+│   ├── 06_PHAN_CONG_REVIEW_HE_THONG.md     #   Phân công review 3 người
+│   └── 07_BAN_GIAO_SESSION.md              #   Bàn giao trạng thái dự án
 ├── backend_webtro/                         # Spring Boot API
 ├── frontend_webtro/                        # ReactJS SPA
 ├── docker-compose.yml
@@ -129,7 +142,7 @@ compose (đang publish ra cổng `3307`), hãy đặt `DB_PORT=3307` khi chạy.
 - **Schema thuộc quyền Flyway**: `ddl-auto=validate`, sai lệch entity ↔ migration làm ứng dụng
   fail ngay lúc khởi động thay vì âm thầm hỏng dữ liệu.
 - **Xóa mềm toàn hệ thống**: không xóa cứng dữ liệu nghiệp vụ.
-- **Phân quyền ở backend**: RBAC hai tầng Role → Permission, kiểm tra bằng `@PreAuthorize`,
+- **Phân quyền ở backend**: RBAC role-only, kiểm tra bằng `@PreAuthorize("hasRole/hasAnyRole")`,
   không chỉ ẩn nút ở frontend.
 - **AI hỗ trợ, không thay thế kiểm duyệt con người**: AI chỉ đề xuất và cảnh báo, mọi quyết
   định nặng (khóa tin, khóa tài khoản) đều cần Admin/Moderator xác nhận.

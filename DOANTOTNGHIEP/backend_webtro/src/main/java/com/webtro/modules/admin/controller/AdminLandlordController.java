@@ -45,7 +45,7 @@ public class AdminLandlordController {
     private final AdminUserService adminUserService;
 
     @GetMapping
-    @PreAuthorize("hasAuthority('LANDLORD_VERIFY')")
+    @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Quản lý chủ trọ",
             description = "Danh sách chủ trọ kèm điểm uy tín, số tin, số report; lọc theo trạng thái xác thực, khoảng uy tín, trạng thái hạn chế đăng tin.")
     public ResponseEntity<ApiResponse<PageResponse<AdminLandlordResponse>>> listLandlords(
@@ -62,7 +62,7 @@ public class AdminLandlordController {
     }
 
     @PutMapping("/{id}/verify")
-    @PreAuthorize("hasAuthority('LANDLORD_VERIFY')")
+    @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Xác thực chủ trọ",
             description = "Đặt trạng thái xác thực = VERIFIED cho hồ sơ chủ trọ; ghi audit; thông báo cho chủ trọ.")
     public ResponseEntity<ApiResponse<LandlordVerificationActionResponse>> verifyLandlord(
@@ -74,7 +74,7 @@ public class AdminLandlordController {
     }
 
     @PutMapping("/{id}/unverify")
-    @PreAuthorize("hasAuthority('LANDLORD_VERIFY')")
+    @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Hủy xác thực chủ trọ",
             description = "Đưa hồ sơ chủ trọ về trạng thái PENDING (hàng đợi chờ duyệt); ghi audit; thông báo cho chủ trọ.")
     public ResponseEntity<ApiResponse<LandlordVerificationActionResponse>> unverifyLandlord(
@@ -87,7 +87,7 @@ public class AdminLandlordController {
     }
 
     @PutMapping("/{id}/reject-verification")
-    @PreAuthorize("hasAuthority('LANDLORD_VERIFY')")
+    @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Từ chối xác thực chủ trọ",
             description = "Từ chối yêu cầu xác thực chủ trọ đang chờ duyệt (đặt REJECTED); bắt buộc lý do; ghi audit; thông báo cho chủ trọ.")
     public ResponseEntity<ApiResponse<LandlordVerificationActionResponse>> rejectVerification(
@@ -100,7 +100,7 @@ public class AdminLandlordController {
     }
 
     @PutMapping("/{id}/restrict-posting")
-    @PreAuthorize("hasAuthority('LANDLORD_VERIFY') or hasAuthority('USER_MANAGE')")
+    @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Tạm hạn chế đăng tin của chủ trọ",
             description = "Đặt hạn chế đăng tin tới thời điểm chỉ định (posting_restricted_until) + lý do; ghi audit; thông báo cho chủ trọ.")
     public ResponseEntity<ApiResponse<LandlordPostingRestrictionResponse>> restrictPosting(

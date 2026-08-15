@@ -39,7 +39,7 @@ public class FavoriteController {
     private final FavoriteService favoriteService;
 
     @PostMapping
-    @PreAuthorize("hasAuthority('FAVORITE_MANAGE')")
+    @PreAuthorize("hasAnyRole('TENANT','LANDLORD','ADMIN')")
     @Operation(summary = "Lưu tin vào danh sách yêu thích")
     public ResponseEntity<ApiResponse<FavoriteToggleResponse>> addFavorite(
             @Valid @RequestBody CreateFavoriteRequest request,
@@ -50,7 +50,7 @@ public class FavoriteController {
     }
 
     @DeleteMapping("/{listingId}")
-    @PreAuthorize("hasAuthority('FAVORITE_MANAGE')")
+    @PreAuthorize("hasAnyRole('TENANT','LANDLORD','ADMIN')")
     @Operation(summary = "Bỏ lưu tin")
     public ResponseEntity<Void> removeFavorite(@PathVariable Long listingId,
                                                @AuthenticationPrincipal CustomUserDetails user) {
@@ -59,7 +59,7 @@ public class FavoriteController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAuthority('FAVORITE_MANAGE')")
+    @PreAuthorize("hasAnyRole('TENANT','LANDLORD','ADMIN')")
     @Operation(summary = "Danh sách tin đã lưu")
     public ResponseEntity<ApiResponse<PageResponse<FavoriteResponse>>> listFavorites(
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable,

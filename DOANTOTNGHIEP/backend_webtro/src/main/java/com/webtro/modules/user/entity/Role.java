@@ -16,6 +16,10 @@ import lombok.experimental.SuperBuilder;
 /**
  * Vai trò người dùng (RBAC tầng 1) [§1.1][§6.1] — bảng {@code roles} (mục 1 của V1 baseline).
  *
+ * <p>Quan hệ với {@link User} là MỘT-NHIỀU: một vai trò có nhiều người dùng, nhưng mỗi người dùng
+ * chỉ mang đúng một vai trò ({@code users.role_id}, từ V13). Phân quyền dựa trực tiếp trên mã role,
+ * không còn bảng permission hay cơ chế cấp quyền riêng cho từng người dùng.
+ *
  * <p>Bảng nghiệp vụ (có audit + xóa mềm) nên kế thừa {@link AuditableEntity}.
  * Cột {@code code} lưu VARCHAR với ràng buộc CHECK ở DB
  * ({@code ROLE_TENANT}/{@code ROLE_LANDLORD}/{@code ROLE_MODERATOR}/{@code ROLE_ADMIN});

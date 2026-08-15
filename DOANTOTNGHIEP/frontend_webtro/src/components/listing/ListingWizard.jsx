@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
+import { useSelector } from 'react-redux';
 import dayjs from 'dayjs';
 import {
   Box, Card, CardContent, Stepper, Step, StepLabel, Grid, TextField, MenuItem, Button, Stack,
@@ -14,7 +15,8 @@ import AddressSelector from '@/components/filter/AddressSelector';
 import ImageUploader from '@/components/listing/ImageUploader';
 import notify from '@/utils/toast';
 import { formatPrice, formatCurrency } from '@/utils/format';
-import { CATEGORY_CODES, FURNITURE_STATUS, GENDER_REQUIREMENT } from '@/constants';
+import { CATEGORY_CODES, FURNITURE_STATUS, GENDER_REQUIREMENT, ROLES } from '@/constants';
+import { selectRole } from '@/redux/authSlice';
 
 const STEPS = ['Loại tin', 'Thông tin cơ bản', 'Địa chỉ', 'Giá & tiện ích', 'Hình ảnh', 'Xem lại'];
 
@@ -36,6 +38,7 @@ const DEFAULTS = {
  * mode: 'create' | 'edit'. Ở 'edit' truyền listingId + initialData (đã map từ chi tiết tin).
  */
 export default function ListingWizard({ mode = 'create', listingId, initialData, onDone }) {
+  const role = useSelector(selectRole);
   const [activeStep, setActiveStep] = useState(0);
   const [categories, setCategories] = useState([]);
   const [amenities, setAmenities] = useState([]);
@@ -51,6 +54,10 @@ export default function ListingWizard({ mode = 'create', listingId, initialData,
   } = useForm({ defaultValues: { ...DEFAULTS, ...(initialData?.values || {}) }, mode: 'onTouched' });
 
   const categoryId = watch('categoryId');
+  const visibleCategories = useMemo(
+    () => (role === ROLES.TENANT ? categories.filter((c) => c.code === 'ROOMMATE') : categories),
+    [categories, role],
+  );
   const selectedCategory = categories.find((c) => String(c.id) === String(categoryId));
   const isRoommate = selectedCategory?.code === 'ROOMMATE';
   const needRoomCount = ROOM_REQUIRED.includes(selectedCategory?.code);
@@ -203,7 +210,7 @@ export default function ListingWizard({ mode = 'create', listingId, initialData,
           {/* ---- Bước 1: Loại tin ---- */}
           {activeStep === 0 && (
             <Grid container spacing={2}>
-              {categories.map((c) => (
+              {visibleCategories.map((c) => (
                 <Grid item xs={6} sm={4} md={3} key={c.id}>
                   <Controller name="categoryId" control={control} rules={{ required: 'Vui lòng chọn loại tin' }} render={({ field }) => (
                     <Card

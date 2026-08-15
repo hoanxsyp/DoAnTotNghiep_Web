@@ -44,7 +44,7 @@ public class AdminCommentController {
 
     /** Danh sách bình luận cho kiểm duyệt: lọc theo trạng thái/cảm xúc/spam/từ khóa/tin. */
     @GetMapping
-    @PreAuthorize("hasAuthority('COMMENT_MODERATE')")
+    @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Danh sách bình luận (kiểm duyệt)",
             description = "Lọc theo trạng thái, nhãn cảm xúc, cờ spam, từ khóa nội dung và tin; phân trang.")
     public ResponseEntity<ApiResponse<PageResponse<AdminCommentResponse>>> list(
@@ -61,7 +61,7 @@ public class AdminCommentController {
 
     /** Ẩn bình luận vi phạm (kèm lý do bắt buộc). */
     @PutMapping("/{id}/hide")
-    @PreAuthorize("hasAuthority('COMMENT_MODERATE')")
+    @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Ẩn bình luận vi phạm")
     public ResponseEntity<ApiResponse<AdminCommentResponse>> hide(
             @PathVariable Long id,
@@ -73,7 +73,7 @@ public class AdminCommentController {
 
     /** Khôi phục bình luận đã ẩn. */
     @PutMapping("/{id}/unhide")
-    @PreAuthorize("hasAuthority('COMMENT_MODERATE')")
+    @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Khôi phục bình luận đã ẩn")
     public ResponseEntity<ApiResponse<AdminCommentResponse>> unhide(
             @PathVariable Long id,
@@ -84,7 +84,7 @@ public class AdminCommentController {
 
     /** Đánh dấu bình luận là spam (loại khỏi công thức tính điểm uy tín). */
     @PutMapping("/{id}/spam")
-    @PreAuthorize("hasAuthority('COMMENT_MODERATE')")
+    @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Đánh dấu bình luận spam")
     public ResponseEntity<ApiResponse<AdminCommentResponse>> markSpam(
             @PathVariable Long id,
@@ -95,7 +95,7 @@ public class AdminCommentController {
 
     /** Kiểm duyệt bình luận hàng loạt: ẩn (HIDE) hoặc đánh dấu spam (SPAM). */
     @PutMapping("/bulk")
-    @PreAuthorize("hasAuthority('COMMENT_MODERATE')")
+    @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Kiểm duyệt bình luận hàng loạt",
             description = "Áp một hành động (HIDE/SPAM) cho nhiều bình luận; mỗi bình luận xử lý độc lập; trả về danh sách thành công và thất bại.")
     public ResponseEntity<ApiResponse<BulkActionResponse>> bulkModerate(

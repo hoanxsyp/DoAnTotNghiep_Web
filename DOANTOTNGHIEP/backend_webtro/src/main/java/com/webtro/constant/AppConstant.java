@@ -20,13 +20,12 @@ public final class AppConstant {
     /** Prefix chuẩn của mọi endpoint. */
     public static final String API_PREFIX = "/api";
 
-    /** Tên cookie chứa refresh token (canonical mục 8). */
-    public static final String REFRESH_TOKEN_COOKIE = "refresh_token";
-    public static final String REFRESH_TOKEN_COOKIE_PATH = "/api/auth";
-
-    /** Claim tùy biến trong JWT. */
-    public static final String JWT_CLAIM_ROLES = "roles";
-    public static final String JWT_CLAIM_PERMISSIONS = "permissions";
+    /**
+     * Claim tùy biến trong JWT.
+     *
+     * <p>{@code role} là CHUỖI đơn (không phải mảng): mỗi người dùng chỉ có một vai trò.
+     */
+    public static final String JWT_CLAIM_ROLE = "role";
     public static final String JWT_CLAIM_EMAIL = "email";
 
     /** Prefix key Redis. */

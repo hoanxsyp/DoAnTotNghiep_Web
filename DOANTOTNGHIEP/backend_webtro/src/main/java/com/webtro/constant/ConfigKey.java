@@ -22,7 +22,6 @@ public final class ConfigKey {
     public static final String LISTING_EXPIRY_REMINDER_DAYS = "listing.expiry.reminder_days";
     public static final String LISTING_RENEW_FREE_PER_MONTH = "listing.renew.free_per_month";
     public static final String LISTING_NEED_REVIEW_PUBLICLY_VISIBLE = "listing.need_review.publicly_visible";
-    public static final String LISTING_AUTO_APPROVE_TRUSTED_LANDLORD = "listing.auto_approve.trusted_landlord";
 
     // ========================== Moderation ==========================
     public static final String MOD_AUTOHIDE_REPORT_COUNT = "moderation.autohide.report_count";
@@ -129,7 +128,6 @@ public final class ConfigKey {
     public static final String SECURITY_REFRESH_GRACE_SECONDS = "security.refresh.grace_seconds";
 
     // ============================= Spam =============================
-    public static final String SPAM_LISTING_NEW_ACCOUNT_DAILY = "spam.listing.new_account_daily";
     public static final String SPAM_LISTING_DAILY = "spam.listing.daily";
     public static final String SPAM_COMMENT_PER_MINUTE = "spam.comment.per_minute";
     public static final String SPAM_REPORT_DAILY = "spam.report.daily";

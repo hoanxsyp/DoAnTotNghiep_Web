@@ -2,7 +2,6 @@ package com.webtro.modules.payment.controller;
 
 import com.webtro.common.ApiResponse;
 import com.webtro.common.PageResponse;
-import com.webtro.constant.PermissionCode;
 import com.webtro.modules.payment.dto.request.CouponRequest;
 import com.webtro.modules.payment.dto.response.CouponResponse;
 import com.webtro.modules.payment.service.PromotionService;
@@ -34,7 +33,7 @@ import java.net.URI;
 @RestController
 @RequestMapping("/api/admin/coupons")
 @RequiredArgsConstructor
-@PreAuthorize("hasAuthority('" + PermissionCode.PACKAGE_MANAGE + "')")
+@PreAuthorize("hasRole('ADMIN')")
 @Tag(name = "18. Admin - Payment", description = "Quản trị gói dịch vụ, thanh toán, coupon")
 public class AdminCouponController {
 

@@ -45,7 +45,7 @@ public class ReportController {
      * kèm ảnh bằng chứng.
      */
     @PostMapping(consumes = {MediaType.MULTIPART_FORM_DATA_VALUE, MediaType.APPLICATION_FORM_URLENCODED_VALUE})
-    @PreAuthorize("hasAuthority('REPORT_CREATE')")
+    @PreAuthorize("hasAnyRole('TENANT','LANDLORD','MODERATOR','ADMIN')")
     @Operation(summary = "Tạo báo cáo vi phạm",
             description = "Chống trùng theo (đối tượng, lý do); rate limit spam.report.daily; "
                     + "vượt ngưỡng 5 báo cáo/5 tài khoản/24h thì tự gắn cờ tin NEED_REVIEW.")
@@ -60,7 +60,7 @@ public class ReportController {
 
     /** Danh sách báo cáo của tôi. */
     @GetMapping("/my")
-    @PreAuthorize("hasAuthority('REPORT_CREATE')")
+    @PreAuthorize("hasAnyRole('TENANT','LANDLORD','MODERATOR','ADMIN')")
     @Operation(summary = "Báo cáo của tôi")
     public ResponseEntity<ApiResponse<PageResponse<MyReportResponse>>> myReports(
             @RequestParam(required = false) List<ReportStatus> status,

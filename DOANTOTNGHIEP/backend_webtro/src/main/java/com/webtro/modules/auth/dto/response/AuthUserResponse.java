@@ -8,11 +8,10 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.time.Instant;
-import java.util.List;
 
 /**
  * Thông tin người dùng đính kèm khi đăng nhập (docs/03 mục 4.1.2) — dùng để frontend dựng phiên
- * làm việc và hiển thị quyền (ẩn/hiện nút; quyền thực thi vẫn kiểm ở backend).
+ * làm việc và hiển thị theo vai trò; quyền thực thi vẫn kiểm ở backend.
  */
 @Getter
 @Setter
@@ -37,11 +36,8 @@ public class AuthUserResponse {
     @Schema(description = "Trạng thái tài khoản", example = "ACTIVE")
     private String status;
 
-    @Schema(description = "Danh sách vai trò", example = "[\"ROLE_TENANT\",\"ROLE_LANDLORD\"]")
-    private List<String> roles;
-
-    @Schema(description = "Danh sách permission suy ra từ vai trò")
-    private List<String> permissions;
+    @Schema(description = "Vai trò duy nhất của người dùng", example = "ROLE_TENANT")
+    private String role;
 
     @Schema(description = "Chủ trọ đã được xác minh hay chưa (null nếu không phải chủ trọ)", nullable = true)
     private Boolean landlordVerified;

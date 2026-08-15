@@ -8,8 +8,8 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Kết quả làm mới token ({@code POST /api/auth/refresh}). {@code refreshExpiresIn} là số giây còn
- * lại của HỌ token (không reset về 7 ngày) — docs/03 mục 4.1.3.
+ * Kết quả làm mới token ({@code POST /api/auth/refresh}). Mỗi lần refresh thành công sẽ xoay token
+ * và cấp refresh token mới có hạn theo TTL hiện tại.
  */
 @Getter
 @Setter
@@ -22,7 +22,7 @@ public class TokenResponse {
     @Schema(description = "JWT access token mới")
     private String accessToken;
 
-    @Schema(description = "Refresh token mới (cũng được đặt trong cookie httpOnly)")
+    @Schema(description = "Refresh token mới để client lưu trong localStorage")
     private String refreshToken;
 
     @Schema(description = "Loại token", example = "Bearer")
@@ -31,6 +31,6 @@ public class TokenResponse {
     @Schema(description = "Số giây hiệu lực của access token", example = "900")
     private long expiresIn;
 
-    @Schema(description = "Số giây còn lại của họ refresh token", example = "518400")
+    @Schema(description = "Số giây hiệu lực còn lại của refresh token mới", example = "86400")
     private long refreshExpiresIn;
 }

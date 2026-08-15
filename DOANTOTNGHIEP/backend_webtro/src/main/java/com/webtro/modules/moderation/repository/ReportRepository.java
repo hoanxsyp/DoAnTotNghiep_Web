@@ -7,6 +7,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
@@ -33,4 +35,17 @@ public interface ReportRepository extends JpaRepository<Report, Long>, JpaSpecif
 
     /** Đếm số báo cáo chưa xóa mềm trỏ tới một đối tượng (phục vụ ngưỡng tự ẩn). */
     long countByTargetTypeAndTargetIdAndDeletedAtIsNull(ReportTargetType targetType, Long targetId);
+
+    /** Count owner's listings that still have pending reports. */
+    @Query(value = """
+            SELECT COUNT(DISTINCT r.listing_id)
+            FROM reports r
+            JOIN listings l ON l.id = r.listing_id
+            WHERE l.owner_id = :ownerId
+              AND l.deleted_at IS NULL
+              AND r.deleted_at IS NULL
+              AND r.status = 'PENDING'
+              AND r.listing_id IS NOT NULL
+            """, nativeQuery = true)
+    long countPendingReportedListingsForOwner(@Param("ownerId") Long ownerId);
 }

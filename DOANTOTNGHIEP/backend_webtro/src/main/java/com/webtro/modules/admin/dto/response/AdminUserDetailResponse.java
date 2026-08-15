@@ -35,7 +35,7 @@ public class AdminUserDetailResponse {
     private String avatarUrl;
     private String gender;
 
-    private List<String> roles;
+    private String role;
     private String status;
     private String statusLabel;
     private Boolean emailVerified;

@@ -1,6 +1,7 @@
 package com.webtro.modules.user.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.webtro.modules.listing.dto.response.ListingSummaryResponse;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -9,11 +10,16 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 
 /**
- * Tổng quan chủ trọ ({@code GET /api/landlord/dashboard}): số tin theo trạng thái, tổng lượt
- * xem/lưu/liên hệ, điểm uy tín và tỷ lệ phản hồi.
+ * Landlord overview for {@code GET /api/landlord/dashboard}.
+ *
+ * <p>The first group of fields matches the frontend contract in docs/03 section 4.4.23. The legacy
+ * aggregate fields are kept for backward compatibility with any caller that already consumed this endpoint.
  */
 @Getter
 @Setter
@@ -21,42 +27,66 @@ import java.util.Map;
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
-@Schema(name = "LandlordDashboardResponse", description = "Tổng quan chủ trọ")
+@Schema(name = "LandlordDashboardResponse", description = "Tong quan chu tro")
 public class LandlordDashboardResponse {
 
-    /** Tổng số tin (mọi trạng thái, chưa xóa mềm). */
+    private long activeCount;
+    private long pendingCount;
+    private long viewCount30d;
+    private long contactCount30d;
+    private Deltas deltas;
+    private List<ChartPoint> chart;
+    private List<ListingSummaryResponse> topListings;
+    private List<ActionItem> actionItems;
+    private String landlordVerificationStatus;
+    private Instant generatedAt;
+
     private long totalListings;
-
-    /** Số tin theo từng trạng thái (khóa = tên trạng thái). */
     private Map<String, Long> listingsByStatus;
-
-    /** Tổng lượt xem tất cả tin. */
     private long totalViews;
-
-    /** Tổng lượt lưu tất cả tin. */
     private long totalFavorites;
-
-    /** Tổng lượt liên hệ tất cả tin. */
     private long totalContacts;
-
-    /** Điểm uy tín (0-100). */
     private Integer trustScore;
-
-    /** Nhãn uy tín (Tốt/Bình thường/Rủi ro/Cần kiểm duyệt). */
     private String trustLabel;
-
-    /** Tỷ lệ phản hồi (%) — null nếu chưa có dữ liệu. */
     private Integer responseRatePercent;
-
-    /** Điểm đánh giá trung bình (0-5). */
     private BigDecimal averageRating;
-
-    /** Số lượt đánh giá. */
     private Integer reviewCount;
-
-    /** Số báo cáo hợp lệ đã nhận. */
     private Integer validReportCount;
-
-    /** Số lần bị cảnh báo vi phạm. */
     private Integer warningCount;
+
+    @Getter
+    @Setter
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class Deltas {
+        private Integer activeCount;
+        private Integer pendingCount;
+        private BigDecimal viewCountPercent;
+        private BigDecimal contactCountPercent;
+    }
+
+    @Getter
+    @Setter
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class ChartPoint {
+        private LocalDate date;
+        private long views;
+        private long contacts;
+    }
+
+    @Getter
+    @Setter
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class ActionItem {
+        private String type;
+        private String severity;
+        private long count;
+        private String message;
+        private String actionUrl;
+    }
 }

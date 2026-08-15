@@ -2,7 +2,7 @@ package com.webtro.modules.ai.controller;
 
 import com.webtro.common.ApiResponse;
 import com.webtro.common.PageResponse;
-import com.webtro.constant.PermissionCode;
+import com.webtro.constant.RoleCode;
 import com.webtro.modules.ai.dto.request.PricePredictionRequest;
 import com.webtro.modules.ai.dto.response.PricePredictionHistoryResponse;
 import com.webtro.modules.ai.dto.response.PricePredictionResponse;
@@ -25,8 +25,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * API dự đoán giá thuê (AI-06, docs/03 mục 7.4). Dự đoán cần quyền {@code LISTING_CREATE}; xem lịch
- * sử cần chủ tin ({@code LISTING_UPDATE_OWN}) hoặc {@code AI_LOG_VIEW}.
+ * API dự đoán giá thuê (AI-06, docs/03 mục 7.4). Dự đoán dành cho Tenant/Landlord/Admin; xem lịch
+ * sử dành cho chủ tin hoặc Moderator/Admin.
  */
 @Tag(name = "AI - Dự đoán giá", description = "Ước lượng giá thuê tham khảo (không chặn đăng tin)")
 @RestController
@@ -41,7 +41,7 @@ public class AiPriceController {
                     + "AI_INSUFFICIENT_DATA. Lệch giá lớn → cảnh báo mềm, KHÔNG chặn đăng tin. "
                     + "Lưu PredictionHistory mọi lần.")
     @PostMapping
-    @PreAuthorize("hasAuthority('LISTING_CREATE')")
+    @PreAuthorize("hasAnyRole('TENANT','LANDLORD','ADMIN')")
     public ResponseEntity<ApiResponse<PricePredictionResponse>> predict(
             @Valid @RequestBody PricePredictionRequest request,
             @AuthenticationPrincipal CustomUserDetails principal) {
@@ -52,12 +52,12 @@ public class AiPriceController {
     @Operation(summary = "Lịch sử dự đoán giá của một tin",
             description = "Chủ tin (LISTING_UPDATE_OWN) hoặc người có AI_LOG_VIEW.")
     @GetMapping("/histories")
-    @PreAuthorize("hasAnyAuthority('LISTING_UPDATE_OWN','AI_LOG_VIEW')")
+    @PreAuthorize("hasAnyRole('TENANT','LANDLORD','MODERATOR','ADMIN')")
     public ResponseEntity<ApiResponse<PageResponse<PricePredictionHistoryResponse>>> histories(
             @RequestParam Long listingId,
             @PageableDefault(size = 20, sort = "createdAt") Pageable pageable,
             @AuthenticationPrincipal CustomUserDetails principal) {
-        boolean hasLogView = principal.hasPermission(PermissionCode.AI_LOG_VIEW);
+        boolean hasLogView = principal.hasRole(RoleCode.MODERATOR) || principal.hasRole(RoleCode.ADMIN);
         PageResponse<PricePredictionHistoryResponse> data =
                 priceEstimationService.history(listingId, principal.getId(), hasLogView, pageable);
         return ResponseEntity.ok(ApiResponse.success(data, "Lấy lịch sử dự đoán giá thành công"));

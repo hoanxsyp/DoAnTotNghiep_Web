@@ -36,7 +36,7 @@ public class AdminAuditLogController {
     private final AuditLogService auditLogService;
 
     @GetMapping
-    @PreAuthorize("hasAuthority('AUDIT_LOG_VIEW')")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Nhật ký kiểm toán",
             description = "Lọc theo hành động, người thực hiện, đối tượng và khoảng thời gian (trần 90 ngày).")
     public ResponseEntity<ApiResponse<PageResponse<AuditLogResponse>>> query(

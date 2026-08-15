@@ -1,4 +1,4 @@
-﻿# =====================================================================
+# =====================================================================
 #  Website quang cao va tim kiem phong tro - Backend configuration
 # ---------------------------------------------------------------------
 #  FILE CAU HINH DUY NHAT. Moi thu (code / fixbug / deploy) deu o day.
@@ -243,7 +243,7 @@ app:
     secret: ${JWT_SECRET:}
     issuer: ${JWT_ISSUER:webtro-api}
     access-token-ttl: ${JWT_ACCESS_TTL:PT15M}
-    refresh-token-ttl: ${JWT_REFRESH_TTL:P7D}
+    refresh-token-ttl: ${JWT_REFRESH_TTL:P1D}
 
   # --------------------------------- CORS -----------------------------
   cors:

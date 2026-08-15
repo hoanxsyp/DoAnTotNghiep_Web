@@ -25,7 +25,7 @@ public class AdminDashboardController {
     private final AdminDashboardService adminDashboardService;
 
     @GetMapping
-    @PreAuthorize("hasAuthority('STATISTIC_VIEW')")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Dashboard tổng quan", description = "10 chỉ số: người dùng, tin, report, doanh thu, thanh toán, AI, top khu vực/danh mục.")
     public ResponseEntity<ApiResponse<DashboardResponse>> getDashboard() {
         return ResponseEntity.ok(ApiResponse.success(

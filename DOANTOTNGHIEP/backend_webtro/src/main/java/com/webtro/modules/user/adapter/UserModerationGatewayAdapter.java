@@ -75,7 +75,7 @@ public class UserModerationGatewayAdapter implements UserModerationGateway {
         int trustScore = landlordProfileRepository.findByUser_IdAndDeletedAtIsNull(user.getId())
                 .map(lp -> toInt(lp.getTrustScore()))
                 .orElse(DEFAULT_TRUST_SCORE);
-        boolean isAdmin = roleRepository.findRoleCodesByUserId(user.getId()).contains(RoleCode.ADMIN);
+        boolean isAdmin = user.getRole() != null && RoleCode.ADMIN.equals(user.getRole().getCode());
         return new UserRef(user.getId(), user.getFullName(), user.getEmail(),
                 user.getCreatedAt(), trustScore, isAdmin);
     }

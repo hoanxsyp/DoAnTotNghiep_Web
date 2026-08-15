@@ -10,15 +10,16 @@ import lombok.Setter;
 /**
  * Yêu cầu đăng xuất (AUTH-03) — {@code POST /api/auth/logout}.
  *
- * <p>Refresh token ưu tiên đọc từ cookie; body chỉ là dự phòng nên không bắt buộc. Logout là
- * idempotent: token không tồn tại vẫn trả 204 (docs/03 mục 4.1.4).
+ * <p>Client gửi refresh token đang giữ trong {@code localStorage}. Trường này KHÔNG bắt buộc vì
+ * logout là idempotent: thiếu token, hoặc token không tồn tại, vẫn trả 204 (docs/03 mục 4.1.4) —
+ * access token trong header vẫn bị đưa vào blacklist.
  */
 @Getter
 @Setter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Schema(name = "LogoutRequest", description = "Refresh token của thiết bị hiện tại (dự phòng khi không dùng cookie)")
+@Schema(name = "LogoutRequest", description = "Refresh token của thiết bị hiện tại")
 public class LogoutRequest {
 
     @Schema(description = "Refresh token của thiết bị hiện tại", nullable = true)

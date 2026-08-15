@@ -8,8 +8,8 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * Kết quả đăng nhập (AUTH-02). Access token giữ trong bộ nhớ phía client; refresh token đồng thời
- * được đặt vào cookie httpOnly (canonical mục 8) và trả trong body theo hợp đồng docs/03 mục 4.1.2.
+ * Kết quả đăng nhập (AUTH-02). Access token và refresh token đều trả trong body để client lưu trong
+ * localStorage; backend không đặt cookie.
  */
 @Getter
 @Setter
@@ -22,7 +22,7 @@ public class LoginResponse {
     @Schema(description = "JWT access token (15 phút)")
     private String accessToken;
 
-    @Schema(description = "Refresh token opaque (cũng được đặt trong cookie httpOnly)")
+    @Schema(description = "Refresh token opaque để client lưu trong localStorage")
     private String refreshToken;
 
     @Schema(description = "Loại token", example = "Bearer")
@@ -31,7 +31,7 @@ public class LoginResponse {
     @Schema(description = "Số giây hiệu lực của access token", example = "900")
     private long expiresIn;
 
-    @Schema(description = "Số giây hiệu lực còn lại của refresh token", example = "604800")
+    @Schema(description = "Số giây hiệu lực còn lại của refresh token", example = "86400")
     private long refreshExpiresIn;
 
     @Schema(description = "Thông tin người dùng")

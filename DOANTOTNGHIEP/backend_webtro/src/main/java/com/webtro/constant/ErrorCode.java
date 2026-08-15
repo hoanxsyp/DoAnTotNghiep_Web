@@ -112,7 +112,6 @@ public enum ErrorCode {
     PROVINCE_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy tỉnh/thành phố"),
     DISTRICT_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy quận/huyện"),
     WARD_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy phường/xã"),
-    LISTING_QUOTA_NEW_ACCOUNT(HttpStatus.TOO_MANY_REQUESTS, "Tài khoản mới chỉ được đăng tối đa 3 tin mỗi ngày"),
     LISTING_QUOTA_DAILY(HttpStatus.TOO_MANY_REQUESTS, "Bạn đã đạt giới hạn 10 tin mỗi ngày"),
     LANDLORD_NOT_VERIFIED(HttpStatus.FORBIDDEN, "Tài khoản chủ trọ chưa được xác thực nên chưa thể đăng tin công khai"), // LƯU Ý: doc có 2 status, chọn theo bảng tổng
     LISTING_POSTING_SUSPENDED(HttpStatus.FORBIDDEN, "Chức năng đăng tin của bạn đang bị tạm khóa do vi phạm"),

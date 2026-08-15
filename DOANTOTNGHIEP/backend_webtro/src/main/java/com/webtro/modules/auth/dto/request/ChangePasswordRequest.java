@@ -33,4 +33,8 @@ public class ChangePasswordRequest {
     @Schema(description = "Nhập lại mật khẩu mới")
     @NotBlank(message = "Vui lòng xác nhận mật khẩu mới")
     private String confirmPassword;
+
+    @Schema(description = "Refresh token của thiết bị hiện tại — gửi kèm để KHÔNG bị đăng xuất khỏi "
+            + "chính thiết bị đang thao tác (các thiết bị khác vẫn bị thu hồi)", nullable = true)
+    private String refreshToken;
 }

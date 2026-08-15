@@ -63,13 +63,11 @@ import com.webtro.modules.user.entity.LandlordProfile;
 import com.webtro.modules.user.entity.Role;
 import com.webtro.modules.user.entity.User;
 import com.webtro.modules.user.entity.UserProfile;
-import com.webtro.modules.user.entity.UserRole;
 import com.webtro.modules.user.repository.FollowRepository;
 import com.webtro.modules.user.repository.LandlordProfileRepository;
 import com.webtro.modules.user.repository.RoleRepository;
 import com.webtro.modules.user.repository.UserProfileRepository;
 import com.webtro.modules.user.repository.UserRepository;
-import com.webtro.modules.user.repository.UserRoleRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
@@ -144,7 +142,6 @@ public class DemoDataInitializer implements ApplicationRunner {
     // user module
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
-    private final UserRoleRepository userRoleRepository;
     private final UserProfileRepository userProfileRepository;
     private final LandlordProfileRepository landlordProfileRepository;
     private final FollowRepository followRepository;
@@ -223,10 +220,10 @@ public class DemoDataInitializer implements ApplicationRunner {
         // ============================ 1. NGƯỜI DÙNG ============================
         // 1.1 Moderator
         User moderator = createUser("moderator", "Nguyễn Văn Kiểm Duyệt", "0902000001",
-                Gender.MALE, passwordHash, now);
-        assignRole(moderator, moderatorRole, now);
+                Gender.MALE, passwordHash, now, moderatorRole);
 
-        // 1.2 Chủ trọ (6) + LandlordProfile; 2 người đầu kiêm luôn vai trò người thuê
+        // 1.2 Chủ trọ (6) + LandlordProfile. Mỗi tài khoản đúng MỘT vai trò: ROLE_LANDLORD đã bao
+        //     gồm trọn quyền của người thuê nên chủ trọ vẫn lưu tin / liên hệ / bình luận được.
         String[] landlordNames = {
                 "Trần Thị Hồng Loan", "Phạm Văn Cường", "Lê Thị Mai Anh",
                 "Hoàng Minh Đức", "Vũ Thị Thu Hà", "Đặng Quốc Bảo"
@@ -239,11 +236,7 @@ public class DemoDataInitializer implements ApplicationRunner {
         for (int i = 0; i < landlordNames.length; i++) {
             User u = createUser("landlord" + (i + 1), landlordNames[i],
                     String.format("090300%04d", i + 1),
-                    (i % 2 == 0) ? Gender.FEMALE : Gender.MALE, passwordHash, now);
-            assignRole(u, landlordRole, now);
-            if (i < 2) {
-                assignRole(u, tenantRole, now); // vài chủ trọ cũng là người thuê
-            }
+                    (i % 2 == 0) ? Gender.FEMALE : Gender.MALE, passwordHash, now, landlordRole);
             boolean verified = (i % 2 == 0); // một nửa đã xác minh
             LandlordProfile profile = LandlordProfile.builder()
                     .user(u)
@@ -293,8 +286,7 @@ public class DemoDataInitializer implements ApplicationRunner {
         for (int i = 0; i < tenantNames.length; i++) {
             User u = createUser("tenant" + (i + 1), tenantNames[i],
                     String.format("090400%04d", i + 1),
-                    (i % 2 == 0) ? Gender.FEMALE : Gender.MALE, passwordHash, now);
-            assignRole(u, tenantRole, now);
+                    (i % 2 == 0) ? Gender.FEMALE : Gender.MALE, passwordHash, now, tenantRole);
             LocationRef loc = locations.get(i % locations.size());
             UserProfile profile = UserProfile.builder()
                     .user(u)
@@ -735,7 +727,7 @@ public class DemoDataInitializer implements ApplicationRunner {
     // =====================================================================================
 
     private User createUser(String localPart, String fullName, String phone, Gender gender,
-                            String passwordHash, Instant now) {
+                            String passwordHash, Instant now, Role role) {
         User user = User.builder()
                 .fullName(fullName)
                 .email(localPart + DOMAIN)
@@ -744,17 +736,10 @@ public class DemoDataInitializer implements ApplicationRunner {
                 .gender(gender)
                 .status(UserStatus.ACTIVE)
                 .emailVerifiedAt(now)
+                .role(role)
                 .failedLoginCount(0)
                 .build();
         return userRepository.save(user);
-    }
-
-    private void assignRole(User user, Role role, Instant now) {
-        userRoleRepository.save(UserRole.builder()
-                .user(user)
-                .role(role)
-                .assignedAt(now)
-                .build());
     }
 
     private Role requireRole(String code) {

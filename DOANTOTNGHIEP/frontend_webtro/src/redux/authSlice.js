@@ -3,36 +3,50 @@ import authApi from '@/api/authApi';
 import tokenService from '@/services/tokenService';
 
 /**
- * State xác thực toàn cục. Chỉ giữ thông tin cần nhiều trang (canonical luật F4). Access token
- * KHÔNG nằm trong Redux (nó ở tokenService — memory); ở đây chỉ mirror `user` + cờ trạng thái để
+ * State xác thực toàn cục. Chỉ giữ thông tin cần nhiều trang (canonical luật F4). Token KHÔNG nằm
+ * trong Redux (chúng ở tokenService — localStorage); ở đây chỉ mirror `user` + cờ trạng thái để
  * component render theo quyền.
+ *
+ * `user.role` là MỘT chuỗi (mỗi người dùng đúng một vai trò). Frontend chỉ ẩn/hiện theo role;
+ * quyền thực thi thật luôn kiểm lại ở backend.
  */
 
 export const login = createAsyncThunk('auth/login', async (credentials, { rejectWithValue }) => {
   try {
     const data = await authApi.login(credentials);
-    tokenService.set(data.accessToken);
+    tokenService.setTokens(data);
     return data.user;
   } catch (err) {
     return rejectWithValue(err);
   }
 });
 
-/** Gọi lúc mở app: dùng cookie refresh để khôi phục phiên sau F5 (canonical mục 4.3). */
+/**
+ * Gọi lúc mở app để khôi phục phiên. Access token đã nằm sẵn trong localStorage nên thường chỉ cần
+ * gọi /users/me; chỉ khi access token hết hạn mới phải làm mới (interceptor tự lo, hoặc làm mới
+ * tường minh khi không còn access token).
+ */
 export const bootstrapAuth = createAsyncThunk('auth/bootstrap', async (_, { rejectWithValue }) => {
   try {
-    const data = await authApi.refresh();
-    tokenService.set(data.accessToken);
-    const me = await authApi.me();
-    return me;
+    tokenService.syncFromStorage();
+    if (!tokenService.has() && !tokenService.hasRefresh()) {
+      // Chưa từng đăng nhập — không gọi API, tránh một request 401 vô nghĩa mỗi lần mở trang.
+      return rejectWithValue(null);
+    }
+    if (!tokenService.has()) {
+      const data = await authApi.refresh({ refreshToken: tokenService.getRefresh() });
+      tokenService.setTokens(data);
+    }
+    return await authApi.me();
   } catch (err) {
+    tokenService.clear();
     return rejectWithValue(err);
   }
 });
 
 export const logout = createAsyncThunk('auth/logout', async () => {
   try {
-    await authApi.logout();
+    await authApi.logout({ refreshToken: tokenService.getRefresh() });
   } finally {
     tokenService.clear();
   }
@@ -54,6 +68,7 @@ const authSlice = createSlice({
     clearSession(state) {
       state.user = null;
       state.isAuthenticated = false;
+      state.bootstrapped = true;
       tokenService.clear();
     },
     setUser(state, action) {
@@ -71,6 +86,7 @@ const authSlice = createSlice({
         state.status = 'succeeded';
         state.user = action.payload;
         state.isAuthenticated = true;
+        state.bootstrapped = true;
       })
       .addCase(login.rejected, (state, action) => {
         state.status = 'failed';
@@ -99,7 +115,7 @@ export const { clearSession, setUser } = authSlice.actions;
 export const selectCurrentUser = (state) => state.auth.user;
 export const selectIsAuthenticated = (state) => state.auth.isAuthenticated;
 export const selectAuthBootstrapped = (state) => state.auth.bootstrapped;
-export const selectRoles = (state) => state.auth.user?.roles ?? [];
-export const selectPermissions = (state) => state.auth.user?.permissions ?? [];
+/** Vai trò DUY NHẤT của người dùng (chuỗi) hoặc null khi chưa đăng nhập. */
+export const selectRole = (state) => state.auth.user?.role ?? null;
 
 export default authSlice.reducer;

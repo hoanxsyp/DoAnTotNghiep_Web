@@ -35,7 +35,7 @@ public class JwtProperties {
     private Duration accessTokenTtl = Duration.ofMinutes(15);
 
     @NotNull
-    private Duration refreshTokenTtl = Duration.ofDays(7);
+    private Duration refreshTokenTtl = Duration.ofDays(1);
 
     @PostConstruct
     void validate() {

@@ -39,7 +39,7 @@ public class AdminReviewController {
 
     /** Danh sách đánh giá cho kiểm duyệt: lọc theo trạng thái/số sao/tin/chủ trọ/từ khóa. */
     @GetMapping
-    @PreAuthorize("hasAuthority('REVIEW_MODERATE')")
+    @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Danh sách đánh giá (kiểm duyệt)",
             description = "Lọc theo trạng thái, số sao, tin, chủ trọ và từ khóa nội dung; phân trang.")
     public ResponseEntity<ApiResponse<PageResponse<AdminReviewResponse>>> list(
@@ -56,7 +56,7 @@ public class AdminReviewController {
 
     /** Ẩn đánh giá vi phạm (kèm lý do bắt buộc). */
     @PutMapping("/{id}/hide")
-    @PreAuthorize("hasAuthority('REVIEW_MODERATE')")
+    @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Ẩn đánh giá vi phạm")
     public ResponseEntity<ApiResponse<AdminReviewResponse>> hide(
             @PathVariable Long id,
@@ -68,7 +68,7 @@ public class AdminReviewController {
 
     /** Khôi phục đánh giá đã ẩn. */
     @PutMapping("/{id}/unhide")
-    @PreAuthorize("hasAuthority('REVIEW_MODERATE')")
+    @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Khôi phục đánh giá đã ẩn")
     public ResponseEntity<ApiResponse<AdminReviewResponse>> unhide(
             @PathVariable Long id,

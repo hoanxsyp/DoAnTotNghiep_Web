@@ -29,8 +29,8 @@ public class UserActionResponse {
     private String previousStatus;
     private String reason;
 
-    private List<String> previousRoles;
-    private List<String> roles;
+    private String previousRole;
+    private String role;
     private Boolean landlordProfileCreated;
 
     private Integer lockedListingCount;

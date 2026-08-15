@@ -23,9 +23,10 @@ const schema = yup.object({
 /** Đích đến sau đăng nhập (docs/04 mục 5.1.5): from -> admin -> landlord -> trang chủ. */
 const resolveDestination = (user, from) => {
   if (from) return from;
-  const roles = user?.roles ?? [];
-  if (roles.includes(ROLES.ADMIN) || roles.includes(ROLES.MODERATOR)) return '/admin/dashboard';
-  if (roles.includes(ROLES.LANDLORD)) return '/quan-ly/tong-quan';
+  const role = user?.role ?? null;
+  if (role === ROLES.ADMIN) return '/admin/dashboard';
+  if (role === ROLES.MODERATOR) return '/admin/kiem-duyet';
+  if (role === ROLES.LANDLORD) return '/quan-ly/tong-quan';
   return '/';
 };
 

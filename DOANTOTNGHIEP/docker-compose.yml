@@ -139,7 +139,7 @@ services:
       JWT_SECRET:      "${JWT_SECRET:?Thieu JWT_SECRET trong .env - sinh bang lenh openssl rand -base64 48}"
       JWT_ISSUER:      ${JWT_ISSUER:-webtro-api}
       JWT_ACCESS_TTL:  ${JWT_ACCESS_TTL:-PT15M}
-      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-P7D}
+      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-P1D}
 
       # --- CORS / Frontend ---
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost,http://localhost:5173}
