@@ -1,0 +1,62 @@
+{
+  "model_type": "LightGBM (monotonic)",
+  "framework": "lightgbm",
+  "features": {
+    "numeric": [
+      "area_m2",
+      "number_of_amenities",
+      "distance_to_center_km",
+      "floor",
+      "posted_month",
+      "listing_age_days",
+      "latitude",
+      "longitude"
+    ],
+    "categorical": [
+      "district",
+      "ward",
+      "room_type"
+    ],
+    "binary": [
+      "has_dieu_hoa",
+      "has_khep_kin",
+      "has_ban_cong",
+      "has_thang_may",
+      "has_full_do",
+      "has_gac",
+      "has_may_giat",
+      "has_nong_lanh",
+      "has_wifi",
+      "has_de_xe",
+      "has_coordinates"
+    ]
+  },
+  "target": "price_million",
+  "monotone": "area + number_of_amenities + tất cả has_* -> tăng",
+  "metrics_holdout": {
+    "MAE": 0.5421,
+    "RMSE": 0.7584,
+    "R2": 0.6721,
+    "MAPE": 18.948
+  },
+  "mae_by_district": {
+    "Ba Đình": 0.5449,
+    "Bắc Từ Liêm": 0.4769,
+    "Cầu Giấy": 0.5726,
+    "Hai Bà Trưng": 0.46,
+    "Hoàn Kiếm": 0.7256,
+    "Hoàng Mai": 0.5174,
+    "Hà Đông": 0.5169,
+    "Long Biên": 0.471,
+    "Nam Từ Liêm": 0.6456,
+    "Thanh Xuân": 0.5801,
+    "Tây Hồ": 0.5744,
+    "Đống Đa": 0.5572
+  },
+  "validation": {
+    "strategy": "GroupShuffleSplit by phone",
+    "n_groups": 3582
+  },
+  "n_samples": 5175,
+  "trained_at": "2026-07-21"
+}

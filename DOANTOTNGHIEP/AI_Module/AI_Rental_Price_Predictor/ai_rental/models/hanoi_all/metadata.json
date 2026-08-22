@@ -1,0 +1,108 @@
+{
+  "name": "hanoi_all",
+  "model_type": "LightGBM",
+  "params": {
+    "learning_rate": 0.03,
+    "max_depth": 7,
+    "n_estimators": 400,
+    "num_leaves": 31
+  },
+  "features": {
+    "numeric": [
+      "area_m2",
+      "number_of_amenities",
+      "distance_to_center_km",
+      "floor",
+      "posted_month",
+      "listing_age_days",
+      "latitude",
+      "longitude"
+    ],
+    "categorical": [
+      "district",
+      "ward",
+      "room_type"
+    ],
+    "binary": [
+      "has_dieu_hoa",
+      "has_khep_kin",
+      "has_ban_cong",
+      "has_thang_may",
+      "has_full_do",
+      "has_gac",
+      "has_may_giat",
+      "has_nong_lanh",
+      "has_wifi",
+      "has_de_xe",
+      "has_coordinates"
+    ]
+  },
+  "target": "price_million",
+  "metrics_holdout": {
+    "MAE": 0.5284,
+    "RMSE": 0.7441,
+    "R2": 0.6843,
+    "MAPE": 18.3807
+  },
+  "metrics_temporal": {
+    "MAE": 0.7201,
+    "RMSE": 0.9747,
+    "R2": 0.451,
+    "MAPE": 18.9241
+  },
+  "temporal_cutoff": "2025-06-17",
+  "mae_by_district": {
+    "Ba Đình": 0.5068,
+    "Bắc Từ Liêm": 0.4413,
+    "Cầu Giấy": 0.5931,
+    "Hai Bà Trưng": 0.4194,
+    "Hoàn Kiếm": 0.6918,
+    "Hoàng Mai": 0.5287,
+    "Hà Đông": 0.4583,
+    "Long Biên": 0.4362,
+    "Nam Từ Liêm": 0.7287,
+    "Thanh Xuân": 0.5471,
+    "Tây Hồ": 0.6053,
+    "Đống Đa": 0.5467
+  },
+  "validation": {
+    "strategy": "GroupKFold / GroupShuffleSplit by building group",
+    "n_groups": 3582
+  },
+  "recency": {
+    "half_life_days": 365,
+    "minimum_weight": 0.05,
+    "reference_date": "2026-07-05"
+  },
+  "cv_table": [
+    {
+      "Model": "LightGBM",
+      "MAE": 0.5449,
+      "RMSE": 0.752,
+      "R2": 0.6562,
+      "MAPE%": 18.9652,
+      "MAE_train": 0.3883,
+      "R2_std": 0.0116
+    },
+    {
+      "Model": "RandomForest",
+      "MAE": 0.5514,
+      "RMSE": 0.7582,
+      "R2": 0.6505,
+      "MAPE%": 19.384,
+      "MAE_train": 0.3524,
+      "R2_std": 0.0119
+    },
+    {
+      "Model": "Ridge",
+      "MAE": 0.5964,
+      "RMSE": 0.7956,
+      "R2": 0.6149,
+      "MAPE%": 21.2388,
+      "MAE_train": 0.5823,
+      "R2_std": 0.0169
+    }
+  ],
+  "n_samples": 5175,
+  "trained_at": "2026-07-21"
+}

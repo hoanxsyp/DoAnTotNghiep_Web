@@ -1,0 +1,17 @@
+# IDE metadata
+.idea/
+
+# Python generated files
+__pycache__/
+*.py[cod]
+
+# Local environments and secrets
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+
+# Operating-system files
+.DS_Store
+Thumbs.db

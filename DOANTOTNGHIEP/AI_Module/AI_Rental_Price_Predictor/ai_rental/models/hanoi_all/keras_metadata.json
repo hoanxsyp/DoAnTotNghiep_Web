@@ -1,0 +1,39 @@
+{
+  "model_type": "Keras (MLP)",
+  "framework": "tensorflow 2.21.0",
+  "features": {
+    "numeric": [
+      "area_m2",
+      "number_of_amenities",
+      "distance_to_center_km",
+      "floor"
+    ],
+    "categorical": [
+      "district",
+      "ward",
+      "room_type"
+    ],
+    "binary": [
+      "has_dieu_hoa",
+      "has_khep_kin",
+      "has_ban_cong",
+      "has_thang_may",
+      "has_full_do",
+      "has_gac",
+      "has_may_giat",
+      "has_nong_lanh",
+      "has_wifi",
+      "has_de_xe"
+    ]
+  },
+  "target": "price_million",
+  "input_dim": 86,
+  "metrics_holdout": {
+    "MAE": 0.6127,
+    "RMSE": 0.8156,
+    "R2": 0.5527,
+    "MAPE": 22.1888
+  },
+  "n_samples": 5288,
+  "trained_at": "2026-07-06"
+}

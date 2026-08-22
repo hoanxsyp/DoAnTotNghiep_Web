@@ -1,0 +1,15 @@
+# Không đưa dữ liệu thô / cache / môi trường vào build context (nhẹ & nhanh)
+data/raw/
+data/processed/*.parquet
+data/processed/quan-*.csv
+data/processed/*-*.csv
+!data/processed/hanoi_all_clean.csv
+data/datasets/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+notebooks/
+venv/
+venv_tf/
+.git/
+*.log

@@ -1,0 +1,45 @@
+# Chạy CẢ 2 MODULE + giao diện chung bằng 1 lệnh:  docker compose up --build
+#   - sentiment-api : Phân tích cảm xúc (Flask + Keras)  -> http://localhost:5000
+#   - rental-api    : Dự đoán giá thuê   (FastAPI + Keras) -> http://localhost:8000/docs
+#   - ui            : Trang chủ chung    (Streamlit)      -> http://localhost:8501
+#
+# Kiến trúc: ui gọi 2 API qua HTTP (không import model) -> tách bạch rõ vai trò.
+services:
+
+  # ---------- Module 1: Phân tích cảm xúc ----------
+  # ---------- Module 2: API dự đoán giá thuê ----------
+  rental-api:
+    build:
+      context: ./ai_rental
+      dockerfile: Dockerfile
+    image: rental-api:latest
+    container_name: rental-api
+    ports:
+      - "8000:8000"
+    environment:
+      PYTHONUNBUFFERED: "1"
+      TF_CPP_MIN_LOG_LEVEL: "2"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  # ---------- Giao diện CHUNG (gọi cả 2 API qua HTTP) ----------
+  ui:
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+    image: rental-ui:latest
+    container_name: ui
+    ports:
+      - "8501:8501"
+    environment:
+      PYTHONUNBUFFERED: "1"
+      RENTAL_API_URL: "http://rental-api:8000"        # gọi API giá thuê qua mạng nội bộ compose
+      SENTIMENT_API_URL: "http://sentiment-api:5000"  # gọi API cảm xúc
+    depends_on:
+      - rental-api
+    restart: unless-stopped

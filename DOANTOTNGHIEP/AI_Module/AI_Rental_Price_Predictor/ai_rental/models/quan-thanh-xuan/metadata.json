@@ -1,0 +1,29 @@
+{
+  "district": "quan-thanh-xuan",
+  "model_type": "CatBoost",
+  "features": [
+    "area_m2",
+    "number_of_amenities",
+    "ward",
+    "room_type",
+    "has_dieu_hoa",
+    "has_khep_kin",
+    "has_ban_cong",
+    "has_thang_may",
+    "has_full_do",
+    "has_gac",
+    "has_may_giat",
+    "has_nong_lanh",
+    "has_wifi",
+    "has_de_xe"
+  ],
+  "target": "price_million",
+  "metrics_holdout": {
+    "MAE": 0.7319,
+    "RMSE": 0.9952,
+    "R2": 0.5139,
+    "MAPE": 23.6189
+  },
+  "n_samples": 693,
+  "trained_at": "2026-07-05"
+}

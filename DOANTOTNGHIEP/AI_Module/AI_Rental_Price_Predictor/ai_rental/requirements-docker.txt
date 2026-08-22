@@ -1,0 +1,10 @@
+# Chỉ thư viện cần để PHỤC VỤ model monotonic (LightGBM) — nhẹ, KHÔNG TF/keras.
+# (Backend keras chỉ dùng ở local; xem predict_core.py / RENTAL_BACKEND.)
+# Pin đúng version đã tạo artifacts để đảm bảo unpickle preprocessor + model.
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pandas==3.0.3
+numpy==2.4.4
+scikit-learn==1.8.0
+joblib==1.5.3
+lightgbm==4.6.0
