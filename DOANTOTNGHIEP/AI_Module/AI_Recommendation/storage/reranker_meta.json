@@ -1,0 +1,9 @@
+{
+  "cv_auc_mean": 0.7852,
+  "cv_auc_std": 0.0206,
+  "cv_ap_mean": 0.5885,
+  "n_samples": 4930,
+  "n_features": 32,
+  "pos_rate": 0.2,
+  "train_time_sec": 1.7
+}

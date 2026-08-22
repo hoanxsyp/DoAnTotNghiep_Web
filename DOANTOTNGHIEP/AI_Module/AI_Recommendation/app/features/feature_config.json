@@ -1,0 +1,59 @@
+{
+  "_comment": "Them field moi vao day, chay lai indexer la xong. Khong can sua code.",
+
+  "numerical": [
+    {
+      "field": "price",
+      "min": 500000,
+      "max": 20000000,
+      "weight": 2.0
+    },
+    {
+      "field": "area",
+      "min": 10.0,
+      "max": 100.0,
+      "weight": 1.5
+    }
+  ],
+
+  "categorical": [
+    {
+      "field": "city",
+      "weight": 1.0,
+      "vocab": ["Da Nang", "Ha Noi", "Ho Chi Minh"]
+    },
+    {
+      "field": "district",
+      "weight": 1.2,
+      "vocab": [
+        "Ba Đình", "Bắc Từ Liêm", "Cầu Giấy", "Đống Đa", "Đông Anh",
+        "Gia Lâm", "Hai Bà Trưng", "Hà Đông", "Hoài Đức", "Hoàn Kiếm",
+        "Hoàng Mai", "Huyện Bình Chánh", "Huyện Củ Chi", "Huyện Hoà Vang",
+        "Huyện Hóc Môn", "Huyện Nhà Bè", "Long Biên", "Nam Từ Liêm",
+        "Quận 1", "Quận 10", "Quận 11", "Quận 12", "Quận 2", "Quận 3",
+        "Quận 4", "Quận 5", "Quận 6", "Quận 7", "Quận 8", "Quận 9",
+        "Quận Bình Tân", "Quận Bình Thạnh", "Quận Cẩm Lệ", "Quận Gò Vấp",
+        "Quận Hải Châu", "Quận Liên Chiểu", "Quận Ngũ Hành Sơn",
+        "Quận Phú Nhuận", "Quận Sơn Trà", "Quận Tân Bình", "Quận Tân Phú",
+        "Quận Thanh Khê", "Quận Thủ Đức", "Sóc Sơn", "Tây Hồ",
+        "Thanh Xuân", "Thường Tín"
+      ]
+    },
+    {
+      "field": "room_type",
+      "weight": 1.0,
+      "vocab": ["can_ho_dich_vu", "chung_cu_mini", "nha_tro", "phong_tro"]
+    }
+  ],
+
+  "multi_label": [
+    {
+      "field": "amenities",
+      "weight": 0.8,
+      "vocab": [
+        "ban_cong", "bep", "cho_de_xe", "dieu_hoa",
+        "may_giat", "may_nuoc_nong", "tu_lanh", "wc_rieng", "wifi"
+      ]
+    }
+  ]
+}

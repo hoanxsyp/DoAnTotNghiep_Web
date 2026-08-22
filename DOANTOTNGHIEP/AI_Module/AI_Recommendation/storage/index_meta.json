@@ -1,0 +1,9 @@
+{
+  "built_at": "2026-05-04T13:41:11",
+  "n_rooms": 12958,
+  "vector_dim": 65,
+  "index_type": "IndexIVFFlat",
+  "build_time_sec": 0.268,
+  "nlist": 455,
+  "nprobe": 16
+}

@@ -1,0 +1,29 @@
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+storage/*.index
+storage/*.pkl
+*.faiss
+
+# Personal working documents
+Bao_Cao_Do_An_AI_Room_Recommendation.docx
+Bao_Cao_Tien_Do_70_Phan_Tram.docx
+Bao_Cao_Tien_Do_v2.docx
+model_filter_diagram.html
+
+# Local editor and assistant settings
+.claude/
+.vscode/
+.idea/
+
+# OS-generated files
+.DS_Store
+Thumbs.db
