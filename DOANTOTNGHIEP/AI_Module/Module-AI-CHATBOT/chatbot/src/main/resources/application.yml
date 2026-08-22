@@ -1,0 +1,88 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: roomfinder-chat
+
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:roomfinder}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Ho_Chi_Minh&characterEncoding=UTF-8
+    username: ${DB_USER:root}
+    password: ${DB_PASSWORD:root}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: false
+    open-in-view: false
+    # schema.sql/data.sql chạy SAU khi JPA khởi tạo
+    defer-datasource-initialization: true
+
+  sql:
+    init:
+      mode: always
+      encoding: UTF-8
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 2000ms
+
+  # Hợp đồng API dùng snake_case (§7.1): session_id, active_filters, nlu_confidence...
+  # Áp cho cả request-binding lẫn response, và cho JSON NLU do LLM trả về.
+  jackson:
+    property-naming-strategy: SNAKE_CASE
+    default-property-inclusion: non_null
+
+# Cấu hình riêng của module chatbot
+roomfinder:
+  chat:
+    context-ttl-minutes: 30
+    top-k: 5
+    default-radius-m: 1500
+    # Ngưỡng bật fast-path (bỏ qua LLM) — §6.3
+    fast-path:
+      confidence-threshold: 0.90
+    # Rule "rẻ hơn nữa đi" — §4.2
+    cheaper-step-percent: 20
+  # NLU PhoBERT (GĐ2, §11 bước 2.4) — gọi nlu-service (FastAPI).
+  # Chết/timeout → fallback LLM → rule-based; enabled=false để về hẳn GĐ1.
+  nlu:
+    enabled: ${NLU_ENABLED:true}
+    url: ${NLU_URL:http://localhost:8000}
+    timeout-ms: 300
+  # Geocoding fallback (TODO.md "Tầng 2") — khi bảng poi nội bộ miss.
+  # OSM Nominatim, miễn phí; enabled=false để tắt hẳn (POI lạ sẽ luôn miss).
+  geocoding:
+    enabled: ${GEOCODING_ENABLED:true}
+    base-url: https://nominatim.openstreetmap.org
+    timeout-ms: 3000
+    user-agent: "RoomFinderChatbot-Thesis/1.0"
+    min-lat: 20.55
+    max-lat: 21.40
+    min-lon: 105.25
+    max-lon: 106.05
+  llm:
+    provider: gemini
+    gemini:
+      api-key: ${GEMINI_API_KEY:}
+      # Đo trên free tier của key này: 2.5-flash = 5 RPM; 3.1-flash-lite = 15 RPM.
+      # 2.0-flash và 2.5-flash-lite trả 404 "no longer available to new users".
+      # LƯU Ý khi đổi model: 429 KHÔNG chứng minh model còn sống — quota cạn thì
+      # API trả 429 che mất 404. Chỉ tin khi gọi thật ra HTTP 200.
+      model: gemini-3.1-flash-lite
+      base-url: https://generativelanguage.googleapis.com/v1beta
+      temperature-nlu: 0.0
+      temperature-nlg: 0.3
+      max-output-tokens: 300
+      top-p: 0.9
+      timeout-ms: 8000
+
+logging:
+  level:
+    com.roomfinder.chat: INFO

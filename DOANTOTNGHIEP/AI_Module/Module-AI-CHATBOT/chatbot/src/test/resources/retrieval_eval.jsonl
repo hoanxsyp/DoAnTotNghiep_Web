@@ -1,0 +1,30 @@
+{"id": "q01", "desc": "Phòng dưới 3 triệu ở Thanh Xuân", "filters": {"price_max": 3000000, "location": "Thanh Xuân"}, "relevant_ids": [42, 4, 1, 2]}
+{"id": "q02", "desc": "Phòng Thanh Xuân có máy giặt", "filters": {"location": "Thanh Xuân", "utilities": ["washing_machine"]}, "relevant_ids": [3, 5, 33]}
+{"id": "q03", "desc": "Chung cư mini ở Thanh Xuân", "filters": {"location": "Thanh Xuân", "room_type": "CHUNG_CU_MINI"}, "relevant_ids": [3, 5]}
+{"id": "q04", "desc": "Phòng Thanh Xuân dưới 3 triệu có điều hòa", "filters": {"price_max": 3000000, "location": "Thanh Xuân", "utilities": ["air_conditioner"]}, "relevant_ids": [42, 1, 2]}
+{"id": "q05", "desc": "Phòng Cầu Giấy dưới 3 triệu", "filters": {"price_max": 3000000, "location": "Cầu Giấy"}, "relevant_ids": [21, 37, 17, 6]}
+{"id": "q06", "desc": "Phòng Cầu Giấy có điều hòa và máy giặt", "filters": {"location": "Cầu Giấy", "utilities": ["air_conditioner", "washing_machine"]}, "relevant_ids": [21, 37, 17, 56]}
+{"id": "q07", "desc": "Nhà nguyên căn ở Cầu Giấy", "filters": {"location": "Cầu Giấy", "room_type": "NHA_NGUYEN_CAN"}, "relevant_ids": [37, 35, 56]}
+{"id": "q08", "desc": "Phòng Hà Đông dưới 3 triệu", "filters": {"price_max": 3000000, "location": "Hà Đông"}, "relevant_ids": [7, 18]}
+{"id": "q09", "desc": "Phòng Hà Đông có điều hòa", "filters": {"location": "Hà Đông", "utilities": ["air_conditioner"]}, "relevant_ids": [31, 32]}
+{"id": "q10", "desc": "Phòng Đống Đa dưới 2.5 triệu", "filters": {"price_max": 2500000, "location": "Đống Đa"}, "relevant_ids": [19, 44, 22, 40]}
+{"id": "q11", "desc": "Chung cư mini Đống Đa", "filters": {"location": "Đống Đa", "room_type": "CHUNG_CU_MINI"}, "relevant_ids": [44, 22, 40, 46, 45]}
+{"id": "q12", "desc": "Phòng Hai Bà Trưng có máy giặt", "filters": {"location": "Hai Bà Trưng", "utilities": ["washing_machine"]}, "relevant_ids": [48, 47, 8]}
+{"id": "q13", "desc": "Phòng Ba Đình có điều hòa dưới 3.3 triệu", "filters": {"price_max": 3300000, "location": "Ba Đình", "utilities": ["air_conditioner"]}, "relevant_ids": [39, 27, 53]}
+{"id": "q14", "desc": "Phòng Hoàn Kiếm dưới 2 triệu", "filters": {"price_max": 2000000, "location": "Hoàn Kiếm"}, "relevant_ids": [29, 54, 59]}
+{"id": "q15", "desc": "Nhà nguyên căn Hoàn Kiếm", "filters": {"location": "Hoàn Kiếm", "room_type": "NHA_NGUYEN_CAN"}, "relevant_ids": [54, 59, 16]}
+{"id": "q16", "desc": "Phòng Bắc Từ Liêm dưới 2.5 triệu", "filters": {"price_max": 2500000, "location": "Bắc Từ Liêm"}, "relevant_ids": [52, 34, 25, 24, 36]}
+{"id": "q17", "desc": "Phòng Nam Từ Liêm", "filters": {"location": "Nam Từ Liêm"}, "relevant_ids": [13, 51, 58]}
+{"id": "q18", "desc": "Phòng Long Biên", "filters": {"location": "Long Biên"}, "relevant_ids": [30, 12]}
+{"id": "q19", "desc": "Phòng Hoàng Mai có điều hòa", "filters": {"location": "Hoàng Mai", "utilities": ["air_conditioner"]}, "relevant_ids": [41, 49]}
+{"id": "q20", "desc": "Phòng dưới 1.8 triệu có máy giặt", "filters": {"price_max": 1800000, "utilities": ["washing_machine"]}, "relevant_ids": [52, 21, 37, 54]}
+{"id": "q21", "desc": "Phòng trên 42m2 dưới 3 triệu", "filters": {"price_max": 3000000, "area_min": 42}, "relevant_ids": [22, 24, 36, 48]}
+{"id": "q22", "desc": "Chung cư mini có máy giặt dưới 3 triệu", "filters": {"price_max": 3000000, "utilities": ["washing_machine"], "room_type": "CHUNG_CU_MINI"}, "relevant_ids": [17, 36, 48]}
+{"id": "q23", "desc": "Phòng dưới 1.8 triệu có điều hòa và chỗ để xe", "filters": {"price_max": 1800000, "utilities": ["air_conditioner", "parking"]}, "relevant_ids": [21, 29, 34, 37, 42]}
+{"id": "q24", "desc": "Phòng gần PTIT dưới 3 triệu", "filters": {"price_max": 3000000, "poi": "PTIT", "radius_m": 1500}, "relevant_ids": [18, 1, 4, 2, 7]}
+{"id": "q25", "desc": "Phòng gần PTIT có điều hòa", "filters": {"utilities": ["air_conditioner"], "poi": "PTIT", "radius_m": 1500}, "relevant_ids": [1, 31, 2]}
+{"id": "q26", "desc": "Phòng gần PTIT (bán kính 1km)", "filters": {"poi": "PTIT", "radius_m": 1000}, "relevant_ids": [18, 1]}
+{"id": "q27", "desc": "Phòng gần Bách Khoa dưới 4.5 triệu", "filters": {"price_max": 4500000, "poi": "Bách Khoa", "radius_m": 1500}, "relevant_ids": [47, 50, 48, 23, 19]}
+{"id": "q28", "desc": "Phòng gần Bến xe Mỹ Đình", "filters": {"poi": "Mỹ Đình", "radius_m": 1500}, "relevant_ids": [17, 37, 56, 14, 6]}
+{"id": "q29", "desc": "Phòng Thanh Xuân trên 25m2", "filters": {"location": "Thanh Xuân", "area_min": 25}, "relevant_ids": [42, 2, 3, 5]}
+{"id": "q30", "desc": "Nhà nguyên căn dưới 2 triệu", "filters": {"price_max": 2000000, "room_type": "NHA_NGUYEN_CAN"}, "relevant_ids": [52, 37, 54, 59]}

@@ -1,0 +1,28 @@
+{"text": "em tăng được lên 3tr5, có đồ cơ bản càng tốt ạ", "intent": "refine_search"}
+{"text": "Em muốn tìm phòng trọ khoảng 3tr2 quay đầu 1/8 chuyển vào ở luôn ạ", "intent": "search_room"}
+{"text": "em tìm trọ 2ng khvuc Yên Hoà , Trần Duy Hưng , Nguyễn Chí Thanh đầu t8 chuyển vào ạ", "intent": "search_room"}
+{"text": "giờ giấc không cần tự do hẳn đâu, trước 12h là được", "intent": "refine_search"}
+{"text": "Tìm trọ 2tr5-3tr/1thang , gần Dh thuỷ lợi", "intent": "search_room"}
+{"text": "em đổi sang tìm quanh Cầu Giấy nhé, bán kính tầm 3km", "intent": "refine_search"}
+{"text": "E tìm phòng ở đoạn Thái thịnh, Tc 3tr5-4tr", "intent": "search_room"}
+{"text": "tìm trọ 3 nữ giá 3tr5 quay đầu qua tháng ở luôn có chỗ để xe, nóng lạnh khu vực thanh xuân", "intent": "search_room"}
+{"text": "theo các bác thêm 500k lấy phòng có ban công đáng không", "intent": "compare_rooms"}
+{"text": "Mình cần phòng 2n1k quanh Thanh Xuân, ngã tư sở đổ lại, ưu tiên mặt đường hoặc ngõ to đỗ đc oto tài chính 9tr, đầu t8 vào ở,", "intent": "search_room"}
+{"text": "Còn ko em ở luôn ạ", "intent": "room_detail"}
+{"text": "máy giặt dùng chung hay mỗi phòng một máy thế ạ", "intent": "room_detail"}
+{"text": "nếu phòng chưa có người cọc thì hẹn em chiều mai với", "intent": "book_appointment"}
+{"text": "Cần tìm phòng 2 người ở Nguyễn Chí Thanh - Trần Duy Hưng. Budget 5tr/ tháng quay đầu ạ.", "intent": "search_room"}
+{"text": "em cần vào luôn đầu tuần sau nhé mọi người", "intent": "refine_search"}
+{"text": "phòng còn thì cho em hẹn xem tối nay với", "intent": "book_appointment"}
+{"text": "trưa mai em tranh thủ chạy qua được không bạn", "intent": "book_appointment"}
+{"text": "em muốn tìm phòng 2 người ở Khương Đình ạ gần đường Vũ Tông Phan thì càng tốt ạ", "intent": "search_room"}
+{"text": "E muốn tìm phòng quanh kv thanh xuân loanh quanh 4-4.5", "intent": "search_room"}
+{"text": "bác gửi em định vị với, lát em chạy qua", "intent": "book_appointment"}
+{"text": "căn đầu gần nhưng không có thang máy, căn sau xa hơn mà đủ đồ", "intent": "compare_rooms"}
+{"text": "Mình cần tìm trọ khu vực Tây Sơn, Đống đa.", "intent": "search_room"}
+{"text": "Xuất hiện muộn tí ngon r. Mình vẫn còn hợp đồng nhà tí", "intent": "out_of_scope"}
+{"text": "1 phòng chung chủ nhưng rẻ, 1 phòng riêng chủ mà đắt hơn 700k", "intent": "compare_rooms"}
+{"text": "phòng khoảng bao nhiêu mét thế ạ", "intent": "room_detail"}
+{"text": "phòng A mới hơn, phòng B rộng hơn, khó chọn ghê", "intent": "compare_rooms"}
+{"text": "phòng này còn không bác ơi", "intent": "room_detail"}
+{"text": "tìm ccmn 4tr3 quay đầu ở khương đình hoặc triều khúc", "intent": "search_room"}
