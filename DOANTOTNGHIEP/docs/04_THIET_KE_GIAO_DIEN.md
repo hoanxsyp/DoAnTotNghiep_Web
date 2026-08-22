@@ -2532,22 +2532,22 @@ Nhóm Tab: **Tin đăng** = `LISTING_*`; **Tương tác** = `NEW_CONTACT`, `NEW_
 **Tương tác:** bấm thông báo → đánh dấu đã đọc **rồi** điều hướng theo bảng trên. Menu `[⋮]`:
 "Đánh dấu chưa đọc" / "Xóa thông báo". Kênh `IN_APP` hiển thị ở đây; kênh `EMAIL`
 (`NotificationChannel`, canonical mục 5) do BE gửi — FE không hiển thị nội dung email, nhưng
-**có** cho người dùng bật/tắt kênh này qua Dialog "Cài đặt thông báo" bên dưới.
+**có** cho người dùng bật/tắt kênh này qua tab "Thiết lập" trong cùng trang.
 
 ##### Cài đặt thông báo `[§11.12]`
 
-Căn cứ `[§11.12]` *"Có thể tắt một số loại thông báo không quan trọng"*. Nút `[⚙]` trên
-`PageHeader` (IconButton, `aria-label="Cài đặt thông báo"`, tooltip *"Cài đặt thông báo"*) mở
-`NotificationPreferencesDialog` (`maxWidth="sm"`, `fullWidth`; mobile → `fullScreen`).
+Căn cứ `[§11.12]` *"Có thể tắt một số loại thông báo không quan trọng"*. Trang
+`/tai-khoan/thong-bao` có tab "Thiết lập" bên cạnh "Tất cả" và "Chưa đọc". Tab này nạp
+`GET /api/notifications/preferences`, render các dòng BE trả về, cho sửa `inApp`/`email` với
+loại `optional = true`, và khóa các loại `optional = false`.
 
-**Wireframe (Dialog)**
+**Wireframe (Tab thiết lập)**
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│ Cài đặt thông báo                                    [✕] │
+│ [ Tất cả ] [ Chưa đọc ] [ Thiết lập ]                    │
 ├──────────────────────────────────────────────────────────┤
-│ Chọn loại thông báo bạn muốn nhận và kênh nhận.          │
-│ Một số loại quan trọng không thể tắt.                    │
+│ Kênh nhận thông báo                         [Tải lại] [Lưu]│
 │                                                          │
 │ Loại thông báo                    Trên web    Email      │
 │ ─────────────────────────────────────────────────────    │
@@ -2571,7 +2571,6 @@ Căn cứ `[§11.12]` *"Có thể tắt một số loại thông báo không qua
 │   Tin bị báo cáo nhiều              [==•] 🔒   [==•] 🔒  │
 │   Cảnh báo AI                       [==•] 🔒   [==•] 🔒  │
 ├──────────────────────────────────────────────────────────┤
-│                              [Hủy]  [Lưu cài đặt]        │
 └──────────────────────────────────────────────────────────┘
 ```
 
@@ -2598,40 +2597,37 @@ Giá trị `optional = false` hiện tại (03 mục 4.10.6) gồm 10 loại:
 | `REPORT_THRESHOLD` | Tin bị báo cáo nhiều | Hệ thống | `false` | `disabled`, luôn bật |
 | `AI_NEGATIVE_ALERT` | Cảnh báo AI | Hệ thống | `false` | `disabled`, luôn bật |
 
-Loại có `optional = false` → cả 2 `Switch` render `disabled` + icon 🔒 kèm `Tooltip`:
-*"Đây là thông báo quan trọng, không thể tắt."* Bọc `Switch` disabled trong `<span>` để `Tooltip`
-vẫn bắt được sự kiện hover (MUI không bắn event trên phần tử `disabled`).
+Loại có `optional = false` → cả 2 `Switch` render `disabled`, hiển thị chip "Bắt buộc" và tooltip
+*"Thông báo bắt buộc"*. Bọc `Switch` disabled trong `<span>` để `Tooltip` vẫn bắt được sự kiện hover
+(MUI không bắn event trên phần tử `disabled`).
 
 > Chỉ có **2 kênh** `IN_APP` và `EMAIL` (`NotificationChannel`, canonical mục 5) — không có
 > push/SMS (`[§13.3]` đã loại bỏ). Vì vậy bảng đúng 2 cột Switch.
 
-**Component:** `Dialog`, `Switch`, `Tooltip`, `List` + `ListSubheader`, `Button`,
-`LoadingSkeleton`, `ErrorState`.
+**Component:** `Tabs`, `Table`, `Switch`, `Tooltip`, `Chip`, `Button`, `LoadingSkeleton`, `EmptyState`.
 
-**API:** `GET /api/notifications/preferences` khi Dialog mở (03 mục 4.10.6) →
+**API:** `GET /api/notifications/preferences` khi mở tab "Thiết lập" (03 mục 4.10.6) →
 `data.preferences[]: { type, typeLabel, inApp, email, optional }`.
 `PUT /api/notifications/preferences` khi bấm "Lưu cài đặt" (03 mục 4.10.7), body
-`{ preferences: [{ type, inApp, email }] }` — **chỉ gửi các loại đã đổi** so với snapshot lúc mở
+`{ preferences: [{ type, inApp, email }] }` — **chỉ gửi các loại đã đổi** so với snapshot lúc nạp
 (giảm payload và tránh vô tình ghi đè loại BE vừa thêm mới).
 
 **Trạng thái**
 
 | Trạng thái | Thể hiện |
 |---|---|
-| Loading (mở Dialog) | 16 dòng skeleton (`height: 40`), nút "Lưu cài đặt" `disabled`. |
-| Empty | Không xảy ra trong thực tế (BE luôn trả đủ 16 loại). Phòng thủ: nếu `preferences[]` rỗng → `EmptyState` ⚙ *"Không tải được cài đặt thông báo."* + nút "Thử lại". |
-| Error (GET lỗi) | `ErrorState` trong thân Dialog + nút "Thử lại"; giữ Dialog mở, không đóng đột ngột. |
+| Loading (mở tab) | 8 dòng skeleton, nút "Lưu" `disabled`. |
+| Empty | Không xảy ra trong thực tế (BE luôn trả danh sách loại cấu hình được). Phòng thủ: nếu `preferences[]` rỗng → `EmptyState` *"Không tải được cài đặt thông báo."*. |
+| Error (GET lỗi) | `Alert severity="error"` trong tab + toast lỗi; có nút "Tải lại". |
 | Loading (đang lưu) | Nút "Lưu cài đặt" `disabled` + spinner 16px; toàn bộ `Switch` `disabled`. |
-| Error 422 `NOTIFICATION_TYPE_NOT_OPTIONAL` | `<Alert severity="error">` đầu Dialog: *"Không thể tắt loại thông báo quan trọng này."* → revert Switch của `type` trong `error.details` về `true`, đồng thời set `disabled` cho dòng đó (đồng bộ lại với chính sách BE). Không đóng Dialog. |
+| Error 422 `NOTIFICATION_TYPE_NOT_OPTIONAL` | `<Alert severity="error">` đầu tab: *"Không lưu được cài đặt thông báo."*; người dùng bấm "Tải lại" để đồng bộ lại chính sách BE. |
 | Error 429 `RATE_LIMIT_EXCEEDED` | Alert error: *"Bạn đã đổi cài đặt quá nhiều lần. Vui lòng thử lại sau."* — 03 mục 4.10.7 giới hạn 20 lần/giờ/user. |
-| Success | Toast success *"Đã lưu cài đặt thông báo."* → đóng Dialog → `invalidateQueries(['notification', 'preferences'])`. |
+| Success | Toast success *"Đã lưu cài đặt thông báo."* → cập nhật snapshot từ response 200. |
 
 **Tương tác**
 - Gạt `Switch` → cập nhật state cục bộ (**không** gọi API ngay); chỉ `PUT` khi bấm "Lưu cài đặt"
   → tránh spam 16×2 request và tránh chạm trần rate limit 20/giờ.
-- Có thay đổi chưa lưu + bấm "Hủy"/`Esc`/backdrop → `ConfirmDialog` *"Bạn có thay đổi chưa được
-  lưu. Thoát mà không lưu?"*
-- Không có thay đổi → nút "Lưu cài đặt" `disabled` (tránh request thừa).
+- Không có thay đổi → nút "Lưu" `disabled` (tránh request thừa).
 - Tắt `inApp` của một loại **không** xóa thông báo cũ đã nhận — chỉ ngăn phát sinh mới.
 
 ---
@@ -3482,9 +3478,8 @@ duyệt lại"* → khi tin `ACTIVE` và người dùng đổi một trong: `tit
 | Tin `CLOSED` | Alert warning *"Tin đã đóng. Bạn không thể chỉnh sửa tin đã đóng."* + chỉ cho xem. |
 | Success | Toast success *"Đã cập nhật tin đăng."* hoặc *"Đã gửi duyệt lại. Tin sẽ hiển thị sau khi được duyệt."* → `/quan-ly/tin-dang`. |
 
-**Lịch sử chỉnh sửa** `[§3.4]` *"Mọi thay đổi quan trọng cần lưu lịch sử chỉnh sửa"*: BE tự ghi
-`ListingEditHistory` (canonical mục 6). FE **không** gọi API riêng. Chủ trọ không xem được lịch
-sử này — chỉ Admin xem ở `/admin/tin-dang/:id` `[§10.4]` *"Xem lịch sử chỉnh sửa"*.
+**Lịch sử chỉnh sửa**: hệ thống đã bỏ bảng/endpoint lịch sử chỉnh sửa riêng. FE chỉ hiển thị kết quả
+`moderationImpact` ngay sau lần sửa hiện tại nếu thay đổi cần duyệt lại.
 
 ---
 
@@ -4553,23 +4548,7 @@ và mức độ vi phạm"* — `severity` ∈ `ReportSeverity` (`LOW`/`MEDIUM`/
 └──────────────────────────────────────┴─────────────────────────────────────┘
 ```
 
-**Tab "Lịch sử sửa"** — hiện thực `[§10.4]` *"Xem lịch sử chỉnh sửa"* + `[§3.4]` *"Mọi thay đổi
-quan trọng cần lưu lịch sử chỉnh sửa"*, đọc `ListingEditHistory` (canonical mục 6):
-
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│ 18/07/2026 14:32 — Trần Văn X (chủ trọ)                                │
-│  Giá:      2.400.000 đ  →  1.200.000 đ   ⚠ trường nhạy cảm             │
-│  Tiêu đề:  "Phòng trọ Q.Bình Tân" → "Phòng trọ giá rẻ Q.Bình Tân"      │
-│  → Tin chuyển về Chờ duyệt (RESUBMIT_AFTER_EDIT)                        │
-├────────────────────────────────────────────────────────────────────────┤
-│ 15/07/2026 09:10 — Trần Văn X (chủ trọ)                                │
-│  Ảnh: thêm 2 ảnh, xóa 1 ảnh                                            │
-└────────────────────────────────────────────────────────────────────────┘
-```
-
-Hiển thị **diff từng trường** (giá trị cũ → mới), đánh dấu trường nhạy cảm — đây là thông tin
-quan trọng nhất để phát hiện chiêu "đăng giá thật, duyệt xong sửa giá ảo".
+**Tab "Lịch sử sửa"**: đã bỏ khỏi phạm vi hiện tại vì backend không còn bảng/API lịch sử chỉnh sửa riêng.
 
 **Tab "Hành động KD"** — `ModerationAction` (canonical mục 6), đủ 10 `ModerationActionType`:
 `APPROVE` → "Duyệt tin" · `REJECT` → "Từ chối" · `HIDE` → "Tạm ẩn" · `UNHIDE` → "Bỏ ẩn" ·
@@ -4577,11 +4556,7 @@ quan trọng nhất để phát hiện chiêu "đăng giá thật, duyệt xong 
 cầu sửa" · `FLAG_NEED_REVIEW` → "Gắn cần kiểm tra" · `DISMISS` → "Bỏ qua".
 
 **API:** `GET /api/admin/listings/{id}`, `/comments`, `/reviews`, `/reports`, `/stats`,
-`/moderation-actions` **[BỔ SUNG NGOÀI CANONICAL]**. Riêng tab "Lịch sử chỉnh sửa" `[§10.4]` gọi
-`GET /api/listings/{id}/edit-histories` (03 mục 4.4.22 — **không** có tiền tố `admin`): endpoint
-này đã có **phân quyền kép** `LISTING_UPDATE_OWN` + OWNER **hoặc** `LISTING_VIEW_ANY`, tức Admin/
-Moderator dùng chung đường dẫn với chủ trọ. Tạo thêm bản sao dưới `/api/admin/**` là trùng lặp vô
-ích và phải bảo trì hai chỗ.
+`/moderation-actions` **[BỔ SUNG NGOÀI CANONICAL]**. Tab/API lịch sử chỉnh sửa riêng đã bị bỏ.
 
 **Trạng thái:** mỗi tab tải lazy. Tin `DELETED` → banner *"Tin này đã bị xóa mềm."* nhưng
 **vẫn xem được** `[§3.6]`. Nút hành động ẩn/hiện theo `ListingStatus` (bảng state machine
@@ -5947,12 +5922,12 @@ Admin/Moderator 18 · Chatbot 1.
 | 30 | `PasswordField` | `name`, `label`, `showStrength` (bool), `showChecklist` (bool), `...TextFieldProps` | Ô mật khẩu + nút 👁 hiện/ẩn (`aria-label` "Hiện mật khẩu"/"Ẩn mật khẩu"). `showStrength` → `LinearProgress` + nhãn. `showChecklist` → 3 dòng ✓/✗ realtime (≥8 ký tự, có chữ, có số — `[§3.1]`). | 5.1.5, 5.1.6, 5.1.8, 5.2.9 |
 | 31 | `ErrorBoundary` | `fallback` (node), `onError` (fn), `children` | Bắt lỗi render React. Fallback: *"Đã có lỗi xảy ra"* + "Tải lại trang" + "Về trang chủ". Bọc mỗi route (`errorElement` của React Router) và bọc `ChatbotWidget` riêng (widget lỗi không được làm sập trang). | `src/routes`, `App.jsx` |
 | 32 | `CaptchaField` | `name` (str, mặc định `'captchaToken'`), `visible` (bool), `error` (str), `onRefresh` (fn), `autoFocus` (bool) | Khối captcha: ảnh PNG base64 (`<img alt="Mã xác nhận bằng hình ảnh">`), nút `[⟳]` làm mới, nút `[🔊]` nghe mã (a11y), ô nhập mã. Tự gọi `GET /api/auth/captcha` khi `visible` chuyển `false → true` và khi bấm `[⟳]`; giữ `captchaId` trong state nội bộ, trả ra `"{captchaId}:{mã nhập}"` qua `react-hook-form`. `visible = false` → render `null` **và** xóa giá trị field (tránh gửi token cũ). Ảnh hết hạn sau `expiresIn` (300s) → hiện lớp phủ *"Mã đã hết hạn — bấm ⟳ để lấy mã mới"*. | 5.1.5 |
-| 33 | `NotificationPreferencesDialog` | `open` (bool), `onClose` (fn) | Dialog cài đặt thông báo `[§11.12]`: bảng 16 `NotificationType` × 2 cột `Switch` (In-app / Email), nhóm theo Tin đăng / Tương tác / Hệ thống. Loại `optional = false` → `Switch` `disabled` + 🔒 + Tooltip *"Đây là thông báo quan trọng, không thể tắt."* (bọc `<span>` để Tooltip bắt hover). `GET /api/notifications/preferences` khi mở, `PUT` khi lưu — chỉ gửi phần đã đổi. Đủ 4 trạng thái loading/empty/error/success. | 5.2.5 |
+| 33 | `NotificationPreferencesSection` | trong `NotificationsPage` | Tab "Thiết lập" của trang thông báo `[§11.12]`: bảng các `NotificationType` do BE trả về × 2 cột `Switch` (Trên app / Email), nhóm theo Tin đăng / Tương tác / Hệ thống. Loại `optional = false` → `Switch` `disabled` + chip "Bắt buộc" + Tooltip *"Thông báo bắt buộc"*. `GET /api/notifications/preferences` khi mở tab, `PUT` khi lưu — chỉ gửi phần đã đổi. Đủ trạng thái loading/empty/error/success. | 5.2.5 |
 
 **Tổng: 33 component dùng lại** — đủ 22 component bắt buộc theo đề bài + 11 component bổ trợ
 (`PriceSuggestionPanel`, `FavoriteButton`, `MaskedPhoneButton`, `ReportDialog`, `Can`,
 `PageHeader`, `ErrorState`, `PasswordField`, `ErrorBoundary`, `CaptchaField`,
-`NotificationPreferencesDialog`).
+`NotificationPreferencesSection`).
 
 ### 6.2. `RichTextViewer` — chống XSS, KHÔNG `dangerouslySetInnerHTML`
 
@@ -7340,7 +7315,7 @@ phải có để hiện thực chức năng đã nêu trong tài liệu nghiệp
 | Payment | `GET /api/promotion-subscriptions/my`, `POST /api/coupons/validate`, `PUT /api/admin/payments/{id}/refund`, `POST /api/admin/payments/reconcile` (hàng loạt) | `[§10.6]` khuyến mãi; `[§10.7]` đối soát + hoàn tiền — đối soát **theo giao dịch** dùng `POST /api/admin/payments/{id}/reconcile` (03 mục 4.17, không còn là bổ sung); chỉ bản hàng loạt là mới, cần thêm vào 03 §4.17 với quyền `PAYMENT_MANAGE` |
 | Admin — user | `GET /api/admin/users/{id}`, `/listings`, `/audit-logs`, `/reports` | `[§10.2]` xem chi tiết/hoạt động/report — cảnh báo vi phạm dùng endpoint phẳng `GET /api/admin/warnings?userId={id}` + `POST /api/admin/warnings` (03 mục 4.16.5–4.16.6, `[§2.8]` RPT-05), **không** lồng dưới `/users/{id}` |
 | Admin — landlord | `GET /api/admin/landlords`, `/{id}`, `PUT /{id}/verify`, `/reject-verification`, `/unverify`, `/restrict-posting` | `[§10.3]` — 6 chức năng, `[§12]` thiếu hoàn toàn |
-| Admin — listing | `PUT /api/admin/listings/{id}/unlock`, `/hide`, `/unhide`, `/request-edit`, `PUT /api/admin/listings/bulk`, `GET /api/admin/listings/{id}/moderation-actions` | canonical 5.1 `UNLOCK`; `[§7.4]`. Gắn/gỡ cờ dùng `PUT /api/admin/listings/{id}/flag-need-review` + `/clear-need-review` (03 mục 4.14.8–4.14.9, khớp sự kiện `FLAG_NEED_REVIEW`/`CLEAR_NEED_REVIEW` canonical 5.1 — **không** còn là bổ sung). Lịch sử chỉnh sửa `[§10.4]` dùng `GET /api/listings/{id}/edit-histories` (03 mục 4.4.22 — phân quyền kép `LISTING_UPDATE_OWN` + OWNER **hoặc** `LISTING_VIEW_ANY` đã bao cả Admin; **không** tạo bản sao dưới `/api/admin/**`) |
+| Admin — listing | `PUT /api/admin/listings/{id}/unlock`, `/hide`, `/unhide`, `/request-edit`, `PUT /api/admin/listings/bulk`, `GET /api/admin/listings/{id}/moderation-actions` | canonical 5.1 `UNLOCK`; `[§7.4]`. Gắn/gỡ cờ dùng `PUT /api/admin/listings/{id}/flag-need-review` + `/clear-need-review` (03 mục 4.14.8–4.14.9, khớp sự kiện `FLAG_NEED_REVIEW`/`CLEAR_NEED_REVIEW` canonical 5.1 — **không** còn là bổ sung). Không còn tab/API lịch sử chỉnh sửa riêng. |
 | Admin — moderation | `GET /api/admin/moderation/queue` | `[§4.3]`, `[§7.4]` — gom tín hiệu, tránh N+1 request |
 | Admin — report | `GET /api/admin/reports/target/{targetType}/{targetId}`, `PUT /api/admin/reports/resolve-group` | `[§3.13]` + `[§10.8]` gom nhóm — tên path param khớp cột `target_type`/`target_id` (02 §3.29) và field JSON `targetType`/`targetId` trong DTO report của 03 |
 | Admin — comment/review | `GET /api/admin/comments`, `/reviews`, `PUT .../hide`, `/unhide`, `/mark-spam`, `PUT .../bulk` | `[§10.9]`; `[§9.1]` loại spam khỏi thống kê. Phân tích lại sentiment dùng `POST /api/admin/ai/sentiment/reanalyze` body `{ commentId }` (03 mục 4.19.4 — thuộc module `ai` theo canonical mục 3, **không** còn là bổ sung) |

@@ -22,7 +22,7 @@ import java.time.Instant;
  * Đánh giá (sao + nội dung) của người thuê cho tin/chủ trọ — bảng {@code reviews}.
  *
  * <p>Mỗi người chỉ đánh giá một tin một lần ({@code uk_reviews_user_listing}). FK chéo module
- * ({@code listingId}, {@code userId}, {@code landlordId}, {@code hiddenBy}) giữ {@code Long}.
+ * ({@code listingId}, {@code userId}, {@code hiddenBy}) giữ {@code Long}; landlord suy ra từ listing.
  * Theo doc 02, {@code rating} (TINYINT UNSIGNED) map sang {@code Integer}.
  */
 @Entity
@@ -33,7 +33,6 @@ import java.time.Instant;
                 columnNames = {"user_id", "listing_id"}),
         indexes = {
                 @Index(name = "idx_reviews_listing_id_status_created_at", columnList = "listing_id, status, created_at"),
-                @Index(name = "idx_reviews_landlord_id_status", columnList = "landlord_id, status"),
                 @Index(name = "idx_reviews_rating_status", columnList = "rating, status"),
                 @Index(name = "idx_reviews_user_id", columnList = "user_id")
         })
@@ -53,8 +52,6 @@ public class Review extends AuditableEntity {
     private Long userId;
 
     /** Chủ trọ được đánh giá (FK users.id — chéo module, giữ Long). */
-    @Column(name = "landlord_id", nullable = false)
-    private Long landlordId;
 
     /** Số sao 1–5 (TINYINT UNSIGNED → Integer theo doc 02). */
     @Column(name = "rating", nullable = false)

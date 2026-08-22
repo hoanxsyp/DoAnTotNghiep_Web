@@ -26,11 +26,10 @@ public class SentimentMapper {
     private final ObjectMapper objectMapper;
 
     /** Dựng entity mới (is_latest = true) từ kết quả phân tích thành công. */
-    public SentimentResult toEntity(Long commentId, Long listingId, SentimentOutcome outcome,
+    public SentimentResult toEntity(Long commentId, SentimentOutcome outcome,
                                     String analyzerVersion, int processingMs, int retryCount) {
         return SentimentResult.builder()
                 .commentId(commentId)
-                .listingId(listingId)
                 .label(outcome.label())
                 .score(outcome.score())
                 .confidence(outcome.confidence())
@@ -49,11 +48,10 @@ public class SentimentMapper {
     }
 
     /** Entity trạng thái PENDING_ANALYSIS khi engine lỗi/timeout (§9.1). */
-    public SentimentResult toPending(Long commentId, Long listingId, String analyzerVersion,
+    public SentimentResult toPending(Long commentId, String analyzerVersion,
                                      String errorMessage, int retryCount) {
         return SentimentResult.builder()
                 .commentId(commentId)
-                .listingId(listingId)
                 .label(com.webtro.common.enums.SentimentLabel.PENDING_ANALYSIS)
                 .suggestedAction(com.webtro.common.enums.SentimentAction.NONE)
                 .weight(java.math.BigDecimal.ZERO)

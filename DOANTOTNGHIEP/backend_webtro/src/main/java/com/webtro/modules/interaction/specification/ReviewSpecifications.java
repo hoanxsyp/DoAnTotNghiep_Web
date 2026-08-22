@@ -2,6 +2,9 @@ package com.webtro.modules.interaction.specification;
 
 import com.webtro.common.enums.ReviewStatus;
 import com.webtro.modules.interaction.entity.Review;
+import com.webtro.modules.listing.entity.Listing;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
 import org.springframework.data.jpa.domain.Specification;
 
 /**
@@ -35,7 +38,15 @@ public final class ReviewSpecifications {
 
     /** Lọc đánh giá về một chủ trọ. */
     public static Specification<Review> landlordIdEq(Long landlordId) {
-        return (root, q, cb) -> cb.equal(root.get("landlordId"), landlordId);
+        return (root, q, cb) -> {
+            Subquery<Long> sub = q.subquery(Long.class);
+            Root<Listing> listing = sub.from(Listing.class);
+            sub.select(listing.get("id"));
+            sub.where(
+                    cb.equal(listing.get("id"), root.get("listingId")),
+                    cb.equal(listing.get("ownerId"), landlordId));
+            return cb.exists(sub);
+        };
     }
 
     /** Tìm theo từ khóa trong nội dung (không phân biệt hoa thường). */

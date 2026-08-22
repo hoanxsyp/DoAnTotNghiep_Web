@@ -10,6 +10,10 @@ import com.webtro.constant.ErrorCode;
 import com.webtro.exception.BusinessException;
 import com.webtro.exception.ResourceNotFoundException;
 import com.webtro.modules.admin.service.SystemConfigService;
+import com.webtro.modules.catalog.entity.District;
+import com.webtro.modules.catalog.entity.Province;
+import com.webtro.modules.catalog.entity.Ward;
+import com.webtro.modules.catalog.repository.WardRepository;
 import com.webtro.modules.listing.dto.response.ListingSummaryResponse;
 import com.webtro.modules.listing.entity.Listing;
 import com.webtro.modules.listing.mapper.ListingMapper;
@@ -69,6 +73,7 @@ public class ListingSearchServiceImpl implements ListingSearchService {
     private final SystemConfigService systemConfigService;
     private final ApplicationEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
+    private final WardRepository wardRepository;
 
     // ---------------------------------------------------------------------
     //  SRCH-01..08 — tìm kiếm & lọc
@@ -270,7 +275,8 @@ public class ListingSearchServiceImpl implements ListingSearchService {
         specs.add(ListingSpecifications.statusIn(publicStatuses));
         specs.add(ListingSpecifications.notExpired(now));
         specs.add(ListingSpecifications.idNot(base.getId()));
-        addIfPresent(specs, ListingSpecifications.provinceId(base.getProvinceId()));
+        LocationIds baseLocation = locationOf(base.getWardId());
+        addIfPresent(specs, ListingSpecifications.provinceId(baseLocation.provinceId()));
         addIfPresent(specs, ListingSpecifications.priceFrom(priceLow));
         addIfPresent(specs, ListingSpecifications.priceTo(priceHigh));
         specs.add(ListingSpecifications.orderBy(ListingSortOption.TRUST_DESC, now));
@@ -305,7 +311,9 @@ public class ListingSearchServiceImpl implements ListingSearchService {
         double score = 0.0;
         List<String> reasons = new ArrayList<>();
 
-        if (base.getDistrictId() != null && base.getDistrictId().equals(candidate.getDistrictId())) {
+        LocationIds baseLocation = locationOf(base.getWardId());
+        LocationIds candidateLocation = locationOf(candidate.getWardId());
+        if (baseLocation.districtId() != null && baseLocation.districtId().equals(candidateLocation.districtId())) {
             score += 0.40;
             reasons.add("Cùng quận/huyện");
         } else {
@@ -365,4 +373,15 @@ public class ListingSearchServiceImpl implements ListingSearchService {
         return value.multiply(BigDecimal.valueOf(factor));
     }
 
+    private LocationIds locationOf(Long wardId) {
+        Ward ward = wardId == null ? null : wardRepository.findById(wardId).orElse(null);
+        District district = ward == null ? null : ward.getDistrict();
+        Province province = district == null ? null : district.getProvince();
+        return new LocationIds(
+                province == null ? null : province.getId(),
+                district == null ? null : district.getId());
+    }
+
+    private record LocationIds(Long provinceId, Long districtId) {
+    }
 }

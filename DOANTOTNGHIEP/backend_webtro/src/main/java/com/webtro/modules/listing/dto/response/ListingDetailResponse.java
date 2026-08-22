@@ -99,5 +99,4 @@ public class ListingDetailResponse {
 
     /** Chỉ xuất hiện ở response sửa tin (LIST-03) khi có thay đổi ảnh hưởng kiểm duyệt. */
     private ModerationImpactResponse moderationImpact;
-    private Long editHistoryId;
 }

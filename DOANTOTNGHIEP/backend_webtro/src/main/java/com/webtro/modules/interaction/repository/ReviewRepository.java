@@ -6,6 +6,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
@@ -27,7 +29,25 @@ public interface ReviewRepository extends JpaRepository<Review, Long>, JpaSpecif
     Page<Review> findByListingIdAndStatusAndDeletedAtIsNull(Long listingId, ReviewStatus status, Pageable pageable);
 
     /** Danh sách đánh giá hiển thị của một chủ trọ. */
-    Page<Review> findByLandlordIdAndStatusAndDeletedAtIsNull(Long landlordId, ReviewStatus status, Pageable pageable);
+    @Query(value = """
+            SELECT r
+            FROM Review r, Listing l
+            WHERE l.id = r.listingId
+              AND l.ownerId = :landlordId
+              AND r.status = :status
+              AND r.deletedAt IS NULL
+            ORDER BY r.createdAt DESC
+            """,
+            countQuery = """
+            SELECT COUNT(r)
+            FROM Review r, Listing l
+            WHERE l.id = r.listingId
+              AND l.ownerId = :landlordId
+              AND r.status = :status
+              AND r.deletedAt IS NULL
+            """)
+    Page<Review> findByLandlordIdAndStatusAndDeletedAtIsNull(
+            @Param("landlordId") Long landlordId, @Param("status") ReviewStatus status, Pageable pageable);
 
     /** Đếm đánh giá hiển thị của một tin (đồng bộ {@code listings.review_count}). */
     long countByListingIdAndStatusAndDeletedAtIsNull(Long listingId, ReviewStatus status);

@@ -27,6 +27,7 @@ import com.webtro.modules.ai.repository.ChatbotMessageRepository;
 import com.webtro.modules.ai.repository.PredictionHistoryRepository;
 import com.webtro.modules.ai.repository.RecommendationLogRepository;
 import com.webtro.modules.ai.repository.SentimentResultRepository;
+import com.webtro.modules.ai.spi.CommentDataGateway;
 import com.webtro.modules.listing.entity.Listing;
 import com.webtro.modules.listing.repository.ListingRepository;
 import lombok.RequiredArgsConstructor;
@@ -71,6 +72,7 @@ public class AdminAiServiceImpl implements AdminAiService {
     private final RecommendationLogRepository recommendationLogRepository;
     private final PredictionHistoryRepository predictionHistoryRepository;
     private final ChatbotMessageRepository chatbotMessageRepository;
+    private final CommentDataGateway commentDataGateway;
     private final ListingRepository listingRepository;
 
     // ============================ Cấu hình ============================
@@ -215,7 +217,7 @@ public class AdminAiServiceImpl implements AdminAiService {
                 .id(e.getId())
                 .createdAt(e.getCreatedAt())
                 .commentId(e.getCommentId())
-                .listingId(e.getListingId())
+                .listingId(listingIdOfComment(e.getCommentId()))
                 .label(e.getLabel() != null ? e.getLabel().name() : null)
                 .score(e.getScore())
                 .confidence(e.getConfidence())
@@ -225,6 +227,15 @@ public class AdminAiServiceImpl implements AdminAiService {
                 .retryCount(e.getRetryCount())
                 .errorMessage(e.getErrorMessage())
                 .build();
+    }
+
+    private Long listingIdOfComment(Long commentId) {
+        if (commentId == null) {
+            return null;
+        }
+        return commentDataGateway.findComment(commentId)
+                .map(CommentDataGateway.CommentSnapshot::listingId)
+                .orElse(null);
     }
 
     private AiLogItemResponse mapRecommendation(RecommendationLog e) {

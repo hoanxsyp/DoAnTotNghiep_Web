@@ -4,6 +4,10 @@ import com.webtro.common.enums.NotificationType;
 import com.webtro.config.properties.AppProperties;
 import com.webtro.constant.ConfigKey;
 import com.webtro.modules.admin.service.SystemConfigService;
+import com.webtro.modules.catalog.entity.District;
+import com.webtro.modules.catalog.entity.Province;
+import com.webtro.modules.catalog.entity.Ward;
+import com.webtro.modules.catalog.repository.WardRepository;
 import com.webtro.modules.interaction.entity.ViewHistory;
 import com.webtro.modules.interaction.repository.ViewHistoryRepository;
 import com.webtro.modules.listing.entity.Listing;
@@ -64,6 +68,7 @@ public class NewMatchingListingNotifyJob {
     private final NotificationService notificationService;
     private final SystemConfigService config;
     private final AppProperties appProperties;
+    private final WardRepository wardRepository;
 
     @Scheduled(cron = "0 30 7 * * *", zone = "UTC")
     public void run() {
@@ -186,11 +191,12 @@ public class NewMatchingListingNotifyJob {
         double priceMax = Double.MIN_VALUE;
         boolean hasPrice = false;
         for (Listing l : viewed) {
-            if (l.getDistrictId() != null) {
-                districts.add(l.getDistrictId());
+            LocationIds location = locationOf(l.getWardId());
+            if (location.districtId() != null) {
+                districts.add(location.districtId());
             }
-            if (l.getProvinceId() != null) {
-                provinces.add(l.getProvinceId());
+            if (location.provinceId() != null) {
+                provinces.add(location.provinceId());
             }
             BigDecimal p = l.getPrice();
             if (p != null) {
@@ -209,9 +215,10 @@ public class NewMatchingListingNotifyJob {
     /** Điểm khớp ∈ [0,1] = W_LOCATION·khớpKhuVực + W_PRICE·khớpGiá. */
     private double score(Preference pref, Listing listing) {
         double locationScore;
-        if (listing.getDistrictId() != null && pref.districtIds().contains(listing.getDistrictId())) {
+        LocationIds location = locationOf(listing.getWardId());
+        if (location.districtId() != null && pref.districtIds().contains(location.districtId())) {
             locationScore = 1.0;
-        } else if (listing.getProvinceId() != null && pref.provinceIds().contains(listing.getProvinceId())) {
+        } else if (location.provinceId() != null && pref.provinceIds().contains(location.provinceId())) {
             locationScore = 0.5;
         } else {
             locationScore = 0.0;
@@ -230,6 +237,18 @@ public class NewMatchingListingNotifyJob {
     private String safeTitle(Listing listing) {
         String title = listing.getTitle();
         return title == null ? ("#" + listing.getId()) : title;
+    }
+
+    private LocationIds locationOf(Long wardId) {
+        Ward ward = wardId == null ? null : wardRepository.findById(wardId).orElse(null);
+        District district = ward == null ? null : ward.getDistrict();
+        Province province = district == null ? null : district.getProvince();
+        return new LocationIds(
+                province == null ? null : province.getId(),
+                district == null ? null : district.getId());
+    }
+
+    private record LocationIds(Long provinceId, Long districtId) {
     }
 
     /** Sở thích suy ra từ lịch sử xem. */

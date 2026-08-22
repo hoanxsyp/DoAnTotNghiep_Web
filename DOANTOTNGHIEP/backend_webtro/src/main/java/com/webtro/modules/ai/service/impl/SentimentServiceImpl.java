@@ -172,7 +172,7 @@ public class SentimentServiceImpl implements SentimentService {
             sentimentResultRepository.saveAndFlush(old);
         }
 
-        SentimentResult entity = mapper.toEntity(snapshot.id(), snapshot.listingId(), outcome,
+        SentimentResult entity = mapper.toEntity(snapshot.id(), outcome,
                 analyzer.version(), processingMs, retryCount);
         sentimentResultRepository.save(entity);
 
@@ -200,7 +200,7 @@ public class SentimentServiceImpl implements SentimentService {
             sentimentResultRepository.saveAndFlush(old);
         }
         sentimentResultRepository.save(
-                mapper.toPending(snapshot.id(), snapshot.listingId(), analyzer.version(), error, retryCount));
+                mapper.toPending(snapshot.id(), analyzer.version(), error, retryCount));
     }
 
     /**

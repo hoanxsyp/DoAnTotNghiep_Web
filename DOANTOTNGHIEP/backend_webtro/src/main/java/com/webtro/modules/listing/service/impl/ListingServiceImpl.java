@@ -38,13 +38,13 @@ import com.webtro.modules.listing.dto.response.ModerationImpactResponse;
 import com.webtro.modules.listing.dto.response.RenewResponse;
 import com.webtro.modules.listing.entity.Listing;
 import com.webtro.modules.listing.entity.ListingAmenity;
-import com.webtro.modules.listing.entity.ListingEditHistory;
 import com.webtro.modules.listing.entity.ListingImage;
 import com.webtro.modules.listing.mapper.ListingMapper;
 import com.webtro.modules.listing.repository.ListingAmenityRepository;
-import com.webtro.modules.listing.repository.ListingEditHistoryRepository;
 import com.webtro.modules.listing.repository.ListingImageRepository;
 import com.webtro.modules.listing.repository.ListingRepository;
+import com.webtro.modules.listing.service.ListingCategoryCountPublisher;
+import com.webtro.modules.listing.service.ListingOwnerStatsPublisher;
 import com.webtro.modules.listing.service.ListingService;
 import com.webtro.modules.listing.service.ListingVisibilityService;
 import com.webtro.modules.listing.service.TrustScoreService;
@@ -84,7 +84,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
-import java.util.UUID;
 
 /**
  * Cài đặt nghiệp vụ tin đăng (docs/03 mục 4.4). Mọi chuyển trạng thái đi qua
@@ -101,10 +100,11 @@ public class ListingServiceImpl implements ListingService {
     private final ListingRepository listingRepository;
     private final ListingImageRepository imageRepository;
     private final ListingAmenityRepository amenityLinkRepository;
-    private final ListingEditHistoryRepository editHistoryRepository;
 
     private final ListingStateMachine stateMachine;
     private final ListingVisibilityService visibilityService;
+    private final ListingCategoryCountPublisher categoryCountPublisher;
+    private final ListingOwnerStatsPublisher ownerStatsPublisher;
     private final TrustScoreService trustScoreService;
     private final ListingMapper mapper;
 
@@ -157,8 +157,6 @@ public class ListingServiceImpl implements ListingService {
                 .depositAmount(defaultZero(req.getDepositAmount()))
                 .electricityPrice(req.getElectricityPrice())
                 .waterPrice(req.getWaterPrice())
-                .provinceId(req.getProvinceId())
-                .districtId(req.getDistrictId())
                 .wardId(req.getWardId())
                 .addressDetail(addressDetail)
                 .latitude(req.getLatitude())
@@ -181,10 +179,9 @@ public class ListingServiceImpl implements ListingService {
                 .status(ListingStatus.DRAFT)
                 .build();
         listing = listingRepository.save(listing);
+        ownerStatsPublisher.publishIfChanged(null, listing);
 
         replaceAmenities(listing, req.getAmenityIds());
-        recordHistory(listing, "__create__", null, ListingStatus.DRAFT.name(),
-                false, null, ListingStatus.DRAFT, UUID.randomUUID().toString());
 
         int displayDays = config.getInt(ConfigKey.LISTING_DISPLAY_DAYS);
         String statusName = listing.getStatus().name();
@@ -240,16 +237,18 @@ public class ListingServiceImpl implements ListingService {
         String newDescription = HtmlSanitizer.stripAllHtml(req.getDescription());
         String newAddress = HtmlSanitizer.stripAllHtml(req.getAddressDetail());
 
-        String batchId = UUID.randomUUID().toString();
         ListingStatus statusBefore = listing.getStatus();
+        ListingCategoryCountPublisher.Snapshot categoryCountBefore = categoryCountPublisher.snapshot(listing);
+        ListingOwnerStatsPublisher.Snapshot ownerStatsBefore = ownerStatsPublisher.snapshot(listing);
         List<Change> changes = new ArrayList<>();
 
         // ----- Trường nhạy cảm (đổi trên tin ACTIVE → duyệt lại) -----
         detect(changes, "title", listing.getTitle(), newTitle, true);
         detect(changes, "description", listing.getDescription(), newDescription, true);
         detect(changes, "price", str(listing.getPrice()), str(req.getPrice()), true);
-        detect(changes, "provinceId", str(listing.getProvinceId()), str(req.getProvinceId()), true);
-        detect(changes, "districtId", str(listing.getDistrictId()), str(req.getDistrictId()), true);
+        LocationParts currentLocation = locationOf(listing.getWardId());
+        detect(changes, "provinceId", str(currentLocation.provinceId()), str(req.getProvinceId()), true);
+        detect(changes, "districtId", str(currentLocation.districtId()), str(req.getDistrictId()), true);
         detect(changes, "wardId", str(listing.getWardId()), str(req.getWardId()), true);
         detect(changes, "addressDetail", listing.getAddressDetail(), newAddress, true);
         // ----- Trường nhỏ (giữ nguyên trạng thái) -----
@@ -267,8 +266,6 @@ public class ListingServiceImpl implements ListingService {
         listing.setDepositAmount(defaultZero(req.getDepositAmount()));
         listing.setElectricityPrice(req.getElectricityPrice());
         listing.setWaterPrice(req.getWaterPrice());
-        listing.setProvinceId(req.getProvinceId());
-        listing.setDistrictId(req.getDistrictId());
         listing.setWardId(req.getWardId());
         listing.setAddressDetail(newAddress);
         listing.setLatitude(req.getLatitude());
@@ -305,13 +302,8 @@ public class ListingServiceImpl implements ListingService {
         }
         ListingStatus statusAfter = listing.getStatus();
         listingRepository.save(listing);
-
-        Long lastHistoryId = null;
-        for (Change c : changes) {
-            ListingEditHistory h = recordHistory(listing, c.field(), c.oldValue(), c.newValue(),
-                    c.sensitive(), statusBefore, statusAfter, batchId);
-            lastHistoryId = h.getId();
-        }
+        categoryCountPublisher.publishIfChanged(categoryCountBefore, listing);
+        ownerStatsPublisher.publishIfChanged(ownerStatsBefore, listing);
 
         ListingDetailResponse detail = mapper.toDetail(listing, true, true);
         List<String> sensitiveFields = changes.stream().filter(Change::sensitive)
@@ -325,7 +317,6 @@ public class ListingServiceImpl implements ListingService {
                         ? "Thay đổi tiêu đề, mô tả, giá, địa chỉ hoặc ảnh chính cần kiểm duyệt lại"
                         : null)
                 .build());
-        detail.setEditHistoryId(lastHistoryId);
         return detail;
     }
 
@@ -337,10 +328,14 @@ public class ListingServiceImpl implements ListingService {
         if (listing.getStatus() == ListingStatus.LOCKED) {
             throw new BusinessRuleException(ErrorCode.LISTING_LOCKED_CANNOT_DELETE);
         }
+        ListingCategoryCountPublisher.Snapshot categoryCountBefore = categoryCountPublisher.snapshot(listing);
+        ListingOwnerStatsPublisher.Snapshot ownerStatsBefore = ownerStatsPublisher.snapshot(listing);
         ListingStatus target = stateMachine.transition(listing.getStatus(), ListingEvent.SOFT_DELETE);
         listing.setStatus(target);
         listing.softDelete();
         listingRepository.save(listing);
+        categoryCountPublisher.publishIfChanged(categoryCountBefore, listing);
+        ownerStatsPublisher.publishIfChanged(ownerStatsBefore, listing);
     }
 
     // ==================================================================
@@ -388,9 +383,13 @@ public class ListingServiceImpl implements ListingService {
             throw new ConflictException(ErrorCode.LISTING_ALREADY_HIDDEN);
         }
         ListingStatus before = listing.getStatus();
+        ListingCategoryCountPublisher.Snapshot categoryCountBefore = categoryCountPublisher.snapshot(listing);
+        ListingOwnerStatsPublisher.Snapshot ownerStatsBefore = ownerStatsPublisher.snapshot(listing);
         ListingStatus target = stateMachine.transition(before, ListingEvent.HIDE_BY_OWNER);
         listing.setStatus(target);
         listingRepository.save(listing);
+        categoryCountPublisher.publishIfChanged(categoryCountBefore, listing);
+        ownerStatsPublisher.publishIfChanged(ownerStatsBefore, listing);
 
         boolean canUnhide = listing.getExpiredAt() != null && listing.getExpiredAt().isAfter(Instant.now());
         return ListingActionResponse.builder()
@@ -412,9 +411,13 @@ public class ListingServiceImpl implements ListingService {
             throw new BusinessRuleException(ErrorCode.LISTING_ALREADY_EXPIRED);
         }
         ListingStatus before = listing.getStatus();
+        ListingCategoryCountPublisher.Snapshot categoryCountBefore = categoryCountPublisher.snapshot(listing);
+        ListingOwnerStatsPublisher.Snapshot ownerStatsBefore = ownerStatsPublisher.snapshot(listing);
         ListingStatus target = stateMachine.transition(before, ListingEvent.UNHIDE_BY_OWNER);
         listing.setStatus(target);
         listingRepository.save(listing);
+        categoryCountPublisher.publishIfChanged(categoryCountBefore, listing);
+        ownerStatsPublisher.publishIfChanged(ownerStatsBefore, listing);
 
         return ListingActionResponse.builder()
                 .id(listing.getId())
@@ -435,9 +438,13 @@ public class ListingServiceImpl implements ListingService {
             throw new ConflictException(ErrorCode.LISTING_ALREADY_CLOSED);
         }
         ListingStatus before = listing.getStatus();
+        ListingCategoryCountPublisher.Snapshot categoryCountBefore = categoryCountPublisher.snapshot(listing);
+        ListingOwnerStatsPublisher.Snapshot ownerStatsBefore = ownerStatsPublisher.snapshot(listing);
         ListingStatus target = stateMachine.transition(before, ListingEvent.CLOSE);
         listing.setStatus(target);
         listingRepository.save(listing);
+        categoryCountPublisher.publishIfChanged(categoryCountBefore, listing);
+        ownerStatsPublisher.publishIfChanged(ownerStatsBefore, listing);
 
         return ListingActionResponse.builder()
                 .id(listing.getId())
@@ -486,6 +493,8 @@ public class ListingServiceImpl implements ListingService {
 
         // ----- Gia hạn miễn phí -----
         ListingStatus before = listing.getStatus();
+        ListingCategoryCountPublisher.Snapshot categoryCountBefore = categoryCountPublisher.snapshot(listing);
+        ListingOwnerStatsPublisher.Snapshot ownerStatsBefore = ownerStatsPublisher.snapshot(listing);
         Instant previousExpiredAt = listing.getExpiredAt();
         ListingStatus target = stateMachine.transition(before, ListingEvent.RENEW);
         listing.setStatus(target);
@@ -495,6 +504,8 @@ public class ListingServiceImpl implements ListingService {
         listing.setExpiredAt(base.plus(Duration.ofDays(displayDays)));
         listing.setRenewCount(nz(listing.getRenewCount()) + 1);
         listingRepository.save(listing);
+        categoryCountPublisher.publishIfChanged(categoryCountBefore, listing);
+        ownerStatsPublisher.publishIfChanged(ownerStatsBefore, listing);
 
         profile.setFreeRenewUsedThisMonth(freeUsed + 1);
         landlordProfileRepository.save(profile);
@@ -772,12 +783,14 @@ public class ListingServiceImpl implements ListingService {
         imageRepository.saveAll(images);
 
         ListingStatus before = listing.getStatus();
+        ListingCategoryCountPublisher.Snapshot categoryCountBefore = categoryCountPublisher.snapshot(listing);
+        ListingOwnerStatsPublisher.Snapshot ownerStatsBefore = ownerStatsPublisher.snapshot(listing);
         boolean requiresReapproval = before == ListingStatus.ACTIVE;
         if (requiresReapproval) {
             listing.setStatus(stateMachine.transition(before, ListingEvent.RESUBMIT_AFTER_EDIT));
             listingRepository.save(listing);
-            recordHistory(listing, "primaryImage", null, String.valueOf(imageId),
-                    true, before, listing.getStatus(), UUID.randomUUID().toString());
+            categoryCountPublisher.publishIfChanged(categoryCountBefore, listing);
+            ownerStatsPublisher.publishIfChanged(ownerStatsBefore, listing);
         }
         return ModerationImpactResponse.builder()
                 .requiresReapproval(requiresReapproval)
@@ -939,6 +952,18 @@ public class ListingServiceImpl implements ListingService {
         if (ward.getDistrict() == null || !Objects.equals(ward.getDistrict().getId(), districtId)) {
             throw new BusinessRuleException(ErrorCode.ADDRESS_HIERARCHY_MISMATCH);
         }
+    }
+
+    private LocationParts locationOf(Long wardId) {
+        Ward ward = wardId == null ? null : wardRepository.findById(wardId).orElse(null);
+        District district = ward == null ? null : ward.getDistrict();
+        Province province = district == null ? null : district.getProvince();
+        return new LocationParts(
+                province == null ? null : province.getId(),
+                district == null ? null : district.getId());
+    }
+
+    private record LocationParts(Long provinceId, Long districtId) {
     }
 
     private void validateAmenities(List<Long> amenityIds) {
@@ -1126,24 +1151,6 @@ public class ListingServiceImpl implements ListingService {
                     .build();
             amenityLinkRepository.save(link);
         }
-    }
-
-    private ListingEditHistory recordHistory(Listing listing, String field, String oldValue,
-                                             String newValue, boolean sensitive,
-                                             ListingStatus statusBefore, ListingStatus statusAfter,
-                                             String batchId) {
-        ListingEditHistory history = ListingEditHistory.builder()
-                .listing(listing)
-                .editorId(SecurityUtils.getCurrentUserId().orElse(null))
-                .fieldName(field.length() > 50 ? field.substring(0, 50) : field)
-                .oldValue(oldValue)
-                .newValue(newValue)
-                .isSensitiveChange(sensitive)
-                .statusBefore(statusBefore)
-                .statusAfter(statusAfter)
-                .editBatchId(batchId)
-                .build();
-        return editHistoryRepository.save(history);
     }
 
     private String uniqueSlug(String title) {

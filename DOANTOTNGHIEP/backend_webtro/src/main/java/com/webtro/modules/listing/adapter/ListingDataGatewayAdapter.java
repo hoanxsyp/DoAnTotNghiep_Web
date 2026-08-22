@@ -7,13 +7,13 @@ import com.webtro.modules.catalog.entity.District;
 import com.webtro.modules.catalog.entity.Province;
 import com.webtro.modules.catalog.entity.Ward;
 import com.webtro.modules.catalog.repository.CategoryRepository;
-import com.webtro.modules.catalog.repository.DistrictRepository;
-import com.webtro.modules.catalog.repository.ProvinceRepository;
 import com.webtro.modules.catalog.repository.WardRepository;
 import com.webtro.modules.listing.entity.Listing;
 import com.webtro.modules.listing.repository.ListingAmenityRepository;
 import com.webtro.modules.listing.repository.ListingImageRepository;
 import com.webtro.modules.listing.repository.ListingRepository;
+import com.webtro.modules.listing.service.ListingCategoryCountPublisher;
+import com.webtro.modules.listing.service.ListingOwnerStatsPublisher;
 import com.webtro.modules.listing.service.ListingVisibilityService;
 import com.webtro.modules.listing.service.TrustScoreService;
 import com.webtro.modules.listing.statemachine.ListingEvent;
@@ -55,10 +55,10 @@ public class ListingDataGatewayAdapter implements ListingDataGateway {
     private final ListingImageRepository imageRepository;
     private final ListingAmenityRepository amenityLinkRepository;
     private final CategoryRepository categoryRepository;
-    private final ProvinceRepository provinceRepository;
-    private final DistrictRepository districtRepository;
     private final WardRepository wardRepository;
     private final ListingVisibilityService visibilityService;
+    private final ListingCategoryCountPublisher categoryCountPublisher;
+    private final ListingOwnerStatsPublisher ownerStatsPublisher;
     private final ListingStateMachine stateMachine;
     private final TrustScoreService trustScoreService;
 
@@ -100,10 +100,10 @@ public class ListingDataGatewayAdapter implements ListingDataGateway {
             ps.add(cb.isNull(root.get("deletedAt")));
             ps.add(root.get("status").in(visibilityService.publicStatuses()));
             if (query.provinceId() != null) {
-                ps.add(cb.equal(root.get("provinceId"), query.provinceId()));
+                ps.add(cb.exists(wardLocationSubquery(root, cq, cb, "district.province.id", query.provinceId())));
             }
             if (query.districtId() != null) {
-                ps.add(cb.equal(root.get("districtId"), query.districtId()));
+                ps.add(cb.exists(wardLocationSubquery(root, cq, cb, "district.id", query.districtId())));
             }
             if (query.wardId() != null) {
                 ps.add(cb.equal(root.get("wardId"), query.wardId()));
@@ -161,12 +161,13 @@ public class ListingDataGatewayAdapter implements ListingDataGateway {
                     }
                     case DISTRICT -> {
                         if (query.districtId() != null) {
-                            ps.add(cb.equal(root.get("districtId"), query.districtId()));
+                            ps.add(cb.exists(wardLocationSubquery(root, cq, cb, "district.id", query.districtId())));
                         }
                     }
                     case PROVINCE -> {
                         if (query.provinceId() != null) {
-                            ps.add(cb.equal(root.get("provinceId"), query.provinceId()));
+                            ps.add(cb.exists(wardLocationSubquery(root, cq, cb,
+                                    "district.province.id", query.provinceId())));
                         }
                     }
                     default -> {
@@ -222,10 +223,14 @@ public class ListingDataGatewayAdapter implements ListingDataGateway {
         if (!stateMachine.canTransition(l.getStatus(), ListingEvent.FLAG_NEED_REVIEW)) {
             return false;
         }
+        ListingCategoryCountPublisher.Snapshot categoryCountBefore = categoryCountPublisher.snapshot(l);
+        ListingOwnerStatsPublisher.Snapshot ownerStatsBefore = ownerStatsPublisher.snapshot(l);
         l.setStatus(stateMachine.transition(l.getStatus(), ListingEvent.FLAG_NEED_REVIEW));
         l.setNeedReviewCount(nz(l.getNeedReviewCount()) + 1);
         l.setLastNeedReviewAt(Instant.now());
         listingRepository.save(l);
+        categoryCountPublisher.publishIfChanged(categoryCountBefore, l);
+        ownerStatsPublisher.publishIfChanged(ownerStatsBefore, l);
         return true;
     }
 
@@ -260,11 +265,12 @@ public class ListingDataGatewayAdapter implements ListingDataGateway {
     // ==================================================================
 
     private ListingAttr toAttr(Listing l, Category category) {
+        LocationParts location = locationOf(l.getWardId());
         return new ListingAttr(
                 l.getId(),
                 l.getOwnerId(),
-                l.getProvinceId(),
-                l.getDistrictId(),
+                location.province() == null ? null : location.province().getId(),
+                location.district() == null ? null : location.district().getId(),
                 l.getWardId(),
                 l.getCategoryId(),
                 category == null ? null : category.getCode(),
@@ -291,11 +297,12 @@ public class ListingDataGatewayAdapter implements ListingDataGateway {
     }
 
     private ComparableListing toComparable(Listing l) {
+        LocationParts location = locationOf(l.getWardId());
         return new ComparableListing(
                 l.getId(),
                 l.getWardId(),
-                l.getDistrictId(),
-                l.getProvinceId(),
+                location.district() == null ? null : location.district().getId(),
+                location.province() == null ? null : location.province().getId(),
                 l.getPrice(),
                 l.getArea(),
                 l.getFurnitureStatus(),
@@ -331,10 +338,40 @@ public class ListingDataGatewayAdapter implements ListingDataGateway {
     }
 
     private String shortAddress(Listing l) {
-        String ward = wardRepository.findById(l.getWardId()).map(Ward::getName).orElse(null);
-        String district = districtRepository.findById(l.getDistrictId()).map(District::getName).orElse(null);
-        String province = provinceRepository.findById(l.getProvinceId()).map(Province::getName).orElse(null);
-        return joinNonBlank(ward, district, province);
+        LocationParts location = locationOf(l.getWardId());
+        return joinNonBlank(
+                location.ward() == null ? null : location.ward().getName(),
+                location.district() == null ? null : location.district().getName(),
+                location.province() == null ? null : location.province().getName());
+    }
+
+    private LocationParts locationOf(Long wardId) {
+        Ward ward = wardId == null ? null : wardRepository.findById(wardId).orElse(null);
+        District district = ward == null ? null : ward.getDistrict();
+        Province province = district == null ? null : district.getProvince();
+        return new LocationParts(province, district, ward);
+    }
+
+    private jakarta.persistence.criteria.Subquery<Long> wardLocationSubquery(
+            jakarta.persistence.criteria.Root<Listing> root,
+            jakarta.persistence.criteria.CriteriaQuery<?> query,
+            jakarta.persistence.criteria.CriteriaBuilder cb,
+            String path,
+            Long expectedId) {
+        jakarta.persistence.criteria.Subquery<Long> sub = query.subquery(Long.class);
+        jakarta.persistence.criteria.Root<Ward> ward = sub.from(Ward.class);
+        sub.select(ward.get("id"));
+        jakarta.persistence.criteria.Path<?> current = ward;
+        for (String part : path.split("\\.")) {
+            current = current.get(part);
+        }
+        sub.where(
+                cb.equal(ward.get("id"), root.get("wardId")),
+                cb.equal(current, expectedId));
+        return sub;
+    }
+
+    private record LocationParts(Province province, District district, Ward ward) {
     }
 
     private static String joinNonBlank(String... parts) {

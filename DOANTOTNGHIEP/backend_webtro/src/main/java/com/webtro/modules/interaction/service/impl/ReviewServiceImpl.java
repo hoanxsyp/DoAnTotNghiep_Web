@@ -175,7 +175,6 @@ public class ReviewServiceImpl implements ReviewService {
         Review review = Review.builder()
                 .listingId(listingId)
                 .userId(userId)
-                .landlordId(listing.ownerId())
                 .rating(request.getRating())
                 .content(content)
                 .status(ReviewStatus.VISIBLE)
@@ -227,11 +226,11 @@ public class ReviewServiceImpl implements ReviewService {
 
         ListingGateway.ListingBrief listing = listingGateway.getBrief(r.getListingId());
         BigDecimal listingAvg = applyListingAggregateOnChange(listing, oldRating, request.getRating());
-        BigDecimal landlordAvg = applyLandlordAggregateOnChange(r.getLandlordId(), oldRating, request.getRating());
+        BigDecimal landlordAvg = applyLandlordAggregateOnChange(listing.ownerId(), oldRating, request.getRating());
         int listingCount = (int) reviewRepository
                 .countByListingIdAndStatusAndDeletedAtIsNull(r.getListingId(), ReviewStatus.VISIBLE);
 
-        recalcTrust(r.getListingId(), r.getLandlordId());
+        recalcTrust(r.getListingId(), listing.ownerId());
 
         UserGateway.UserBrief author = userGateway.findBrief(userId).orElse(null);
         ReviewResponse resp = single(r, author, userId);
@@ -275,8 +274,8 @@ public class ReviewServiceImpl implements ReviewService {
         // Sau khi bản ghi rời khỏi tập VISIBLE → tính lại trung bình.
         ListingGateway.ListingBrief listing = listingGateway.getBrief(r.getListingId());
         applyListingAggregateOnRemove(listing, r.getRating());
-        applyLandlordAggregateOnRemove(r.getLandlordId(), r.getRating());
-        recalcTrust(r.getListingId(), r.getLandlordId());
+        applyLandlordAggregateOnRemove(listing.ownerId(), r.getRating());
+        recalcTrust(r.getListingId(), listing.ownerId());
     }
 
     @Override
@@ -307,8 +306,8 @@ public class ReviewServiceImpl implements ReviewService {
         if (wasVisible) {
             ListingGateway.ListingBrief listing = listingGateway.getBrief(r.getListingId());
             applyListingAggregateOnRemove(listing, r.getRating());
-            applyLandlordAggregateOnRemove(r.getLandlordId(), r.getRating());
-            recalcTrust(r.getListingId(), r.getLandlordId());
+            applyLandlordAggregateOnRemove(listing.ownerId(), r.getRating());
+            recalcTrust(r.getListingId(), listing.ownerId());
         }
     }
 
@@ -338,9 +337,13 @@ public class ReviewServiceImpl implements ReviewService {
         Page<Review> page = reviewRepository.findAll(spec, pageable);
         List<Long> userIds = page.getContent().stream().map(Review::getUserId).distinct().toList();
         Map<Long, UserGateway.UserBrief> authors = userGateway.getBriefs(userIds);
+        Map<Long, ListingGateway.ListingBrief> listings = listingGateway.getBriefs(
+                page.getContent().stream().map(Review::getListingId).distinct().toList());
 
         return PageResponse.from(page, r -> reviewMapper.toAdminResponse(
-                r, reviewMapper.toAuthor(authors.get(r.getUserId()))));
+                r,
+                reviewMapper.toAuthor(authors.get(r.getUserId())),
+                listings.get(r.getListingId()) == null ? null : listings.get(r.getListingId()).ownerId()));
     }
 
     @Override
@@ -374,8 +377,8 @@ public class ReviewServiceImpl implements ReviewService {
         // Đánh giá quay lại tập VISIBLE → cộng lại vào trung bình sao của tin/chủ trọ + uy tín.
         ListingGateway.ListingBrief listing = listingGateway.getBrief(r.getListingId());
         applyListingAggregateOnAdd(listing, r.getRating());
-        applyLandlordAggregateOnAdd(r.getLandlordId(), r.getRating());
-        recalcTrust(r.getListingId(), r.getLandlordId());
+        applyLandlordAggregateOnAdd(listing.ownerId(), r.getRating());
+        recalcTrust(r.getListingId(), listing.ownerId());
 
         auditLogService.record(AuditAction.REVIEW_UNHIDE, AuditActorType.USER, moderatorId,
                 "REVIEW", reviewId, "Khôi phục đánh giá bị ẩn");
@@ -386,7 +389,8 @@ public class ReviewServiceImpl implements ReviewService {
 
     private AdminReviewResponse buildAdmin(Review r) {
         AuthorResponse author = reviewMapper.toAuthor(userGateway.findBrief(r.getUserId()).orElse(null));
-        return reviewMapper.toAdminResponse(r, author);
+        ListingGateway.ListingBrief listing = listingGateway.getBrief(r.getListingId());
+        return reviewMapper.toAdminResponse(r, author, listing.ownerId());
     }
 
     private Review aliveById(Long reviewId) {

@@ -20,13 +20,12 @@ import lombok.experimental.SuperBuilder;
  *
  * <p>Ghi lại mỗi lần xem SĐT / gửi form / khởi tạo chat ({@link ContactType}). Chống trùng lặp
  * theo cửa sổ {@code contact.dedup_minutes} qua {@code isCounted}.
- * FK chéo module ({@code listingId}, {@code userId}, {@code ownerId}) giữ dạng {@code Long}.
+ * FK chéo module ({@code listingId}, {@code userId}) giữ dạng {@code Long}; owner suy ra từ listing.
  */
 @Entity
 @Table(
         name = "contact_logs",
         indexes = {
-                @Index(name = "idx_contact_logs_owner_id_created_at", columnList = "owner_id, created_at"),
                 @Index(name = "idx_contact_logs_listing_id_created_at", columnList = "listing_id, created_at"),
                 @Index(name = "idx_contact_logs_dedup", columnList = "listing_id, user_id, created_at"),
                 @Index(name = "idx_contact_logs_user_id_created_at", columnList = "user_id, created_at")
@@ -47,8 +46,6 @@ public class ContactLog extends AuditableEntity {
     private Long userId;
 
     /** Chủ tin nhận liên hệ (FK users.id — chéo module, giữ Long). */
-    @Column(name = "owner_id", nullable = false)
-    private Long ownerId;
 
     /** Hình thức liên hệ. */
     @Enumerated(EnumType.STRING)

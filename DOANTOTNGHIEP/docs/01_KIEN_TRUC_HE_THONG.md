@@ -353,7 +353,7 @@ sequenceDiagram
 | 1 | **auth** | Đăng ký, đăng nhập, đăng xuất, refresh + rotation + reuse detection, quên/đổi mật khẩu, xác thực email/phone, gán role, khóa/mở khóa tài khoản. Phát hành và thu hồi token. | `roles`, `refresh_tokens`, `password_reset_tokens`, `verifications` | `AUTH-01` đăng ký, `AUTH-02` đăng nhập, `AUTH-03` đăng xuất, `AUTH-04` quên mật khẩu, `AUTH-05` đổi mật khẩu, `AUTH-06` xác thực email/SĐT, `AUTH-07` phân quyền theo vai trò, `AUTH-08` khóa/mở khóa tài khoản `[§2.1]` |
 | 2 | **user** | Hồ sơ cá nhân, hồ sơ chủ trọ, thông tin liên hệ, xem hồ sơ công khai, theo dõi chủ trọ, trạng thái xác thực chủ trọ, điểm uy tín chủ trọ. | `users`, `user_profiles`, `landlord_profiles`, `follows` | `USER-01` xem hồ sơ, `USER-02` cập nhật hồ sơ, `USER-03` quản lý thông tin liên hệ, `USER-04` xem hồ sơ chủ trọ, `USER-05` theo dõi/bỏ theo dõi, `USER-06` quản lý trạng thái xác thực chủ trọ `[§2.2]`; `FOLLOW-01`, `FOLLOW-02` `[§2.5]` |
 | 3 | **catalog** | Dữ liệu tra cứu ít đổi, dùng chung: loại tin `[§0.3]`, cây hành chính tỉnh/huyện/xã, tiện ích theo nhóm. Là module bị phụ thuộc nhiều nhất, **không phụ thuộc ai**. | `categories`, `provinces`, `districts`, `wards`, `amenities` | `ADM-05` quản lý danh mục, `ADM-06` quản lý khu vực, `ADM-07` quản lý tiện ích `[§2.12]`; `[§10.5]` |
-| 4 | **listing** | Vòng đời tin đăng (state machine), CRUD tin, ảnh, tiện ích của tin, gia hạn, lịch sử chỉnh sửa, thống kê tin, quy tắc hiển thị công khai. **Chủ sở hữu `ListingStateMachine` và `ListingVisibilityService`.** | `listings`, `listing_images`, `listing_amenities`, `listing_edit_histories` | `LIST-01` tạo nháp, `LIST-02` đăng tin, `LIST-03` sửa tin, `LIST-04` gửi duyệt, `LIST-05` duyệt/từ chối (thực thi state), `LIST-06` ẩn, `LIST-07` đóng, `LIST-08` xóa mềm, `LIST-09` gia hạn, `LIST-10` thống kê tin, `LIST-11` quản lý ảnh, `LIST-12` quản lý tiện ích `[§2.3]` |
+| 4 | **listing** | Vòng đời tin đăng (state machine), CRUD tin, ảnh, tiện ích của tin, gia hạn, thống kê tin, quy tắc hiển thị công khai. **Chủ sở hữu `ListingStateMachine` và `ListingVisibilityService`.** | `listings`, `listing_images`, `listing_amenities` | `LIST-01` tạo nháp, `LIST-02` đăng tin, `LIST-03` sửa tin, `LIST-04` gửi duyệt, `LIST-05` duyệt/từ chối (thực thi state), `LIST-06` ẩn, `LIST-07` đóng, `LIST-08` xóa mềm, `LIST-09` gia hạn, `LIST-10` thống kê tin, `LIST-11` quản lý ảnh, `LIST-12` quản lý tiện ích `[§2.3]` |
 | 5 | **search** | Truy vấn tìm kiếm + lọc + sắp xếp + phân trang, tin liên quan, gợi ý mở rộng khi ít kết quả, ghi lịch sử tìm kiếm, xen tin được đẩy mà vẫn giữ tính liên quan `[§3.7]`. **Chỉ đọc**, không sở hữu entity nghiệp vụ. | *(không sở hữu entity riêng; đọc `listings` qua `ListingQueryService`; ghi `search_histories` qua module `interaction`)* | `SRCH-01` từ khóa, `SRCH-02` khu vực, `SRCH-03` giá, `SRCH-04` diện tích, `SRCH-05` loại tin, `SRCH-06` tiện ích, `SRCH-07` lọc ở ghép theo giới tính/số người, `SRCH-08` sắp xếp, `SRCH-09` tin liên quan `[§2.4]` |
 | 6 | **interaction** | Lưu tin, lịch sử xem, lịch sử tìm kiếm, ghi nhận liên hệ, chat nội bộ, bình luận, đánh giá. Là **nguồn dữ liệu hành vi** cho recommendation `[§9.2]`. | `favorites`, `view_histories`, `search_histories`, `contact_logs`, `conversations`, `messages`, `comments`, `reviews` | `FAV-01..03` `[§2.5]`; `HIST-01` ghi lịch sử xem, `HIST-02` xem lịch sử `[§2.5]`; `CONT-01..05` `[§2.6]`; `CMT-01..04`, `REV-01..03` `[§2.7]` |
 | 7 | **moderation** | Báo cáo vi phạm, xử lý report, hành động kiểm duyệt, cảnh báo vi phạm, từ khóa cấm, ngưỡng tự động ẩn `[§5.3]`, ngưỡng khóa `[§5.4]`. | `reports`, `moderation_actions`, `violation_warnings`, `banned_keywords` | `RPT-01` báo cáo tin, `RPT-02` báo cáo bình luận, `RPT-03` báo cáo người dùng, `RPT-04` xử lý báo cáo, `RPT-05` gửi cảnh báo vi phạm, `RPT-06` khóa tin/tài khoản `[§2.8]`; `CMT-04`, `REV-03` (quyết định kiểm duyệt) `[§2.7]` |
@@ -649,17 +649,17 @@ backend_webtro/
     │   │       ├── listing/
     │   │       │   ├── controller/    ListingController · ListingImageController · ListingStatsController
     │   │       │   ├── service/       ListingService · ListingQueryService · ListingImageService
-    │   │       │   │                  ListingVisibilityService · ListingStatsService · ListingEditHistoryService
+    │   │       │   │                  ListingVisibilityService · ListingStatsService
     │   │       │   ├── service/impl/  (…Impl)
     │   │       │   ├── statemachine/  ListingStateMachine · ListingTransition (canonical §5.1)
     │   │       │   ├── repository/    ListingRepository · ListingImageRepository
-    │   │       │   │                  ListingAmenityRepository · ListingEditHistoryRepository
-    │   │       │   ├── entity/        Listing · ListingImage · ListingAmenity · ListingEditHistory
+    │   │       │   │                  ListingAmenityRepository
+    │   │       │   ├── entity/        Listing · ListingImage · ListingAmenity
     │   │       │   ├── dto/request/   CreateListingRequest · UpdateListingRequest · RejectListingRequest
     │   │       │   │                  LockListingRequest · RenewListingRequest · UploadImageRequest
     │   │       │   ├── dto/response/  ListingResponse · ListingDetailResponse · ListingSummaryResponse
-    │   │       │   │                  ListingImageResponse · ListingStatsResponse · ListingEditHistoryResponse
-    │   │       │   └── mapper/        ListingMapper · ListingImageMapper · ListingEditHistoryMapper
+    │   │       │   │                  ListingImageResponse · ListingStatsResponse
+    │   │       │   └── mapper/        ListingMapper · ListingImageMapper
     │   │       │
     │   │       ├── search/
     │   │       │   ├── controller/    SearchController
@@ -2384,11 +2384,10 @@ Hạ tầng: Redis 7.4 + `spring-boot-starter-data-redis` (Lettuce), `CacheManag
 | *(bổ sung trong canonical)* | `SYSTEM_CONFIG_CHANGE` | `[§10.1]`, ADM-14 |
 | *(bổ sung trong canonical)* | `PAYMENT_REFUND` | `[§10.7]` *"Đánh dấu hoàn tiền thủ công"* |
 
-> Ngoài `audit_logs`, hệ thống còn có **2 sổ chuyên biệt** — không trùng lặp mà bổ sung:
+> Ngoài `audit_logs`, hệ thống còn có **1 sổ chuyên biệt** — không trùng lặp mà bổ sung:
 > - `moderation_actions` `[§6.1]` — chi tiết nghiệp vụ kiểm duyệt (`ModerationActionType`, `ModerationResult`, lý do, report gốc) `[§10.8]`
-> - `listing_edit_histories` `[§3.4]` — nội dung **trước/sau** mỗi lần sửa, phục vụ `[§10.4]` *"Xem lịch sử chỉnh sửa"*
 >
-> `audit_logs` là **sổ cái duy nhất, đồng nhất** cho câu hỏi "ai làm gì" xuyên mọi module; 2 sổ kia là chi tiết chuyên sâu của từng nghiệp vụ. Một thao tác khóa tin ghi **cả hai**: `moderation_actions` (chi tiết) + `audit_logs` (sổ cái).
+> `audit_logs` là **sổ cái duy nhất, đồng nhất** cho câu hỏi "ai làm gì" xuyên mọi module; `moderation_actions` là chi tiết chuyên sâu của nghiệp vụ kiểm duyệt. Một thao tác khóa tin ghi **cả hai**: `moderation_actions` (chi tiết) + `audit_logs` (sổ cái).
 
 ### 10.3. Cấu trúc `AuditLog`
 

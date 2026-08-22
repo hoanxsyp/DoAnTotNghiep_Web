@@ -7,12 +7,12 @@ import com.webtro.exception.ResourceNotFoundException;
 import com.webtro.modules.catalog.entity.District;
 import com.webtro.modules.catalog.entity.Province;
 import com.webtro.modules.catalog.entity.Ward;
-import com.webtro.modules.catalog.repository.DistrictRepository;
-import com.webtro.modules.catalog.repository.ProvinceRepository;
 import com.webtro.modules.catalog.repository.WardRepository;
 import com.webtro.modules.listing.entity.Listing;
 import com.webtro.modules.listing.repository.ListingImageRepository;
 import com.webtro.modules.listing.repository.ListingRepository;
+import com.webtro.modules.listing.service.ListingCategoryCountPublisher;
+import com.webtro.modules.listing.service.ListingOwnerStatsPublisher;
 import com.webtro.modules.listing.statemachine.ListingEvent;
 import com.webtro.modules.listing.statemachine.ListingStateMachine;
 import com.webtro.modules.moderation.spi.ListingModerationGateway;
@@ -33,10 +33,10 @@ public class ListingModerationGatewayAdapter implements ListingModerationGateway
 
     private final ListingRepository listingRepository;
     private final ListingImageRepository imageRepository;
-    private final ProvinceRepository provinceRepository;
-    private final DistrictRepository districtRepository;
     private final WardRepository wardRepository;
     private final ListingStateMachine stateMachine;
+    private final ListingCategoryCountPublisher categoryCountPublisher;
+    private final ListingOwnerStatsPublisher ownerStatsPublisher;
 
     @Override
     @Transactional(readOnly = true)
@@ -60,10 +60,14 @@ public class ListingModerationGatewayAdapter implements ListingModerationGateway
             if (!stateMachine.canTransition(l.getStatus(), ListingEvent.FLAG_NEED_REVIEW)) {
                 return;
             }
+            ListingCategoryCountPublisher.Snapshot categoryCountBefore = categoryCountPublisher.snapshot(l);
+            ListingOwnerStatsPublisher.Snapshot ownerStatsBefore = ownerStatsPublisher.snapshot(l);
             l.setStatus(stateMachine.transition(l.getStatus(), ListingEvent.FLAG_NEED_REVIEW));
             l.setNeedReviewCount(nz(l.getNeedReviewCount()) + 1);
             l.setLastNeedReviewAt(Instant.now());
             listingRepository.save(l);
+            categoryCountPublisher.publishIfChanged(categoryCountBefore, l);
+            ownerStatsPublisher.publishIfChanged(ownerStatsBefore, l);
         });
     }
 
@@ -75,8 +79,12 @@ public class ListingModerationGatewayAdapter implements ListingModerationGateway
             if (!stateMachine.canTransition(l.getStatus(), ListingEvent.CLEAR_NEED_REVIEW)) {
                 return;
             }
+            ListingCategoryCountPublisher.Snapshot categoryCountBefore = categoryCountPublisher.snapshot(l);
+            ListingOwnerStatsPublisher.Snapshot ownerStatsBefore = ownerStatsPublisher.snapshot(l);
             l.setStatus(stateMachine.transition(l.getStatus(), ListingEvent.CLEAR_NEED_REVIEW));
             listingRepository.save(l);
+            categoryCountPublisher.publishIfChanged(categoryCountBefore, l);
+            ownerStatsPublisher.publishIfChanged(ownerStatsBefore, l);
         });
     }
 
@@ -86,11 +94,15 @@ public class ListingModerationGatewayAdapter implements ListingModerationGateway
         Listing l = listingRepository.findAliveById(listingId)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.LISTING_NOT_FOUND));
         ListingStatus before = l.getStatus();
+        ListingCategoryCountPublisher.Snapshot categoryCountBefore = categoryCountPublisher.snapshot(l);
+        ListingOwnerStatsPublisher.Snapshot ownerStatsBefore = ownerStatsPublisher.snapshot(l);
         // ACTIVE/NEED_REVIEW → HIDDEN, ghi auto_hidden_at để chủ trọ không tự bật lại.
         l.setStatus(stateMachine.transition(before, ListingEvent.AUTO_HIDE_BY_SYSTEM));
         l.setAutoHiddenAt(Instant.now());
         l.setAutoHideReason(trim(reason, 500));
         listingRepository.save(l);
+        categoryCountPublisher.publishIfChanged(categoryCountBefore, l);
+        ownerStatsPublisher.publishIfChanged(ownerStatsBefore, l);
         return before;
     }
 
@@ -100,11 +112,15 @@ public class ListingModerationGatewayAdapter implements ListingModerationGateway
         Listing l = listingRepository.findAliveById(listingId)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.LISTING_NOT_FOUND));
         ListingStatus before = l.getStatus();
+        ListingCategoryCountPublisher.Snapshot categoryCountBefore = categoryCountPublisher.snapshot(l);
+        ListingOwnerStatsPublisher.Snapshot ownerStatsBefore = ownerStatsPublisher.snapshot(l);
         // → LOCKED, bắt buộc lý do + mức độ.
         l.setStatus(stateMachine.transition(before, ListingEvent.LOCK));
         l.setLockReason(trim(reason, 500));
         l.setLockSeverity(severity);
         listingRepository.save(l);
+        categoryCountPublisher.publishIfChanged(categoryCountBefore, l);
+        ownerStatsPublisher.publishIfChanged(ownerStatsBefore, l);
         return before;
     }
 
@@ -141,10 +157,21 @@ public class ListingModerationGatewayAdapter implements ListingModerationGateway
     }
 
     private String shortAddress(Listing l) {
-        String ward = wardRepository.findById(l.getWardId()).map(Ward::getName).orElse(null);
-        String district = districtRepository.findById(l.getDistrictId()).map(District::getName).orElse(null);
-        String province = provinceRepository.findById(l.getProvinceId()).map(Province::getName).orElse(null);
-        return joinNonBlank(ward, district, province);
+        LocationParts location = locationOf(l.getWardId());
+        return joinNonBlank(
+                location.ward() == null ? null : location.ward().getName(),
+                location.district() == null ? null : location.district().getName(),
+                location.province() == null ? null : location.province().getName());
+    }
+
+    private LocationParts locationOf(Long wardId) {
+        Ward ward = wardId == null ? null : wardRepository.findById(wardId).orElse(null);
+        District district = ward == null ? null : ward.getDistrict();
+        Province province = district == null ? null : district.getProvince();
+        return new LocationParts(province, district, ward);
+    }
+
+    private record LocationParts(Province province, District district, Ward ward) {
     }
 
     private static String joinNonBlank(String... parts) {

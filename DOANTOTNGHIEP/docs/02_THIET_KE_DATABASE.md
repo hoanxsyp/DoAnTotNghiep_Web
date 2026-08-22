@@ -4,9 +4,9 @@
 > **Cập nhật 2026-08-09:** phân quyền hiện hành là **role-only**. Hệ thống không còn entity/repository/bảng nghiệp vụ `permissions` hay `role_permissions`; Flyway `V15__drop_permission_tables.sql` drop hai bảng này sau các migration lịch sử. Backend kiểm tra bằng `@PreAuthorize("hasRole/hasAnyRole")` và `SecurityUtils.hasRole/hasAnyRole`; JWT chỉ chứa `role`. Tenant được phép tạo tin nhưng service chỉ chấp nhận `categoryCode = ROOMMATE`; Landlord/Admin tạo được mọi loại tin. Access token 15 phút, refresh token 1 ngày, cả hai lưu `localStorage`; khi refresh token còn dưới 15 phút và access token vẫn còn hạn, frontend chủ động gọi `/api/auth/refresh` để xoay refresh token.
 <!-- WEBTRO_ROLE_ONLY_UPDATE_END -->
 
-> **Phạm vi:** đặc tả đầy đủ 43 bảng của hệ thống *Website quảng cáo và tìm kiếm phòng trọ*,
+> **Phạm vi:** đặc tả đầy đủ 42 bảng hiện hành của hệ thống *Website quảng cáo và tìm kiếm phòng trọ*,
 > đủ chi tiết để viết thẳng ra file migration Flyway và entity JPA mà không cần hỏi lại.
-> (43 bảng của canonical mục 6 + `notification_preferences` — bảng bắt buộc để thỏa
+> (42 bảng hiện hành: đã cộng `notification_preferences`, đã bỏ `user_roles`, `permissions`, `role_permissions`, `listing_edit_histories`).
 > `[§11.12]` *"Có thể tắt một số loại thông báo không quan trọng"*; xem §3.38 và phụ lục A.6.)
 >
 > **Nguồn ràng buộc:**
@@ -27,7 +27,7 @@
 
 1. [Nguyên tắc thiết kế](#1-nguyên-tắc-thiết-kế)
 2. [Sơ đồ ERD tổng quan](#2-sơ-đồ-erd-tổng-quan)
-3. [Đặc tả chi tiết từng bảng (43 bảng)](#3-đặc-tả-chi-tiết-từng-bảng-45-bảng)
+3. [Đặc tả chi tiết từng bảng (42 bảng hiện hành)](#3-dac-ta-chi-tiet-tung-bang-42-bang-hien-hanh)
 4. [Ràng buộc toàn vẹn nghiệp vụ ở tầng DB](#4-ràng-buộc-toàn-vẹn-nghiệp-vụ-ở-tầng-db)
 5. [Chiến lược Index](#5-chiến-lược-index)
 6. [Vòng đời tin đăng ở tầng dữ liệu](#6-vòng-đời-tin-đăng-ở-tầng-dữ-liệu)
@@ -75,7 +75,7 @@ các cột đếm sẵn sau.
 | `listings` | `average_rating`, `review_count` | `AVG/COUNT(reviews WHERE status='VISIBLE')` | Tính lại trong transaction tạo/sửa/ẩn review | `[§3.12][§8.6]` |
 | `listings` | `trust_score` | Công thức `[§5.8]` | Tính lại khi có sự kiện `[§5.7]` + `TrustScoreRecalcJob` | `[§5.8]` |
 | `listings` | `need_review_count` | `COUNT(moderation_actions WHERE action_type='FLAG_NEED_REVIEW')` | Tăng khi state machine chuyển sang `NEED_REVIEW` | `[§9.1]` (ngưỡng "NeedReview 3 lần trong 30 ngày") |
-| `landlord_profiles` | `total_listings`, `total_active_listings`, `average_rating`, `review_count`, `trust_score`, `locked_listing_count`, `warning_count` | tổng hợp từ `listings`/`reviews`/`violation_warnings` | `TrustScoreRecalcJob` 02:00 + cập nhật tức thời khi có sự kiện | `[§10.3][§5.7]` |
+| `landlord_profiles` | `total_listings`, `total_active_listings`, `average_rating`, `review_count`, `trust_score`, `locked_listing_count`, `warning_count` | tổng hợp từ `listings`/`reviews`/`violation_warnings` | Listing events cập nhật `total_listings`/`total_active_listings`, V18 backfill dữ liệu cũ; `TrustScoreRecalcJob` xử lý trust/review theo lịch và sự kiện | `[§10.3][§5.7]` |
 | `landlord_profiles` | `response_rate_percent`, `avg_response_minutes`, `response_conversation_count` | `conversations` (`created_at`, `first_response_at`) trong cửa sổ `trust.response_rate.window_days` | **Chỉ** `TrustScoreRecalcJob` 02:00 (§9.8) — cửa sổ trượt nên giá trị đổi theo thời gian **kể cả khi không có sự kiện**, không thể duy trì bằng UPDATE tăng dần | `[§5.7]` *"Chủ trọ phản hồi người thuê nhanh và đầy đủ nếu có module chat"* |
 | `conversations` | `last_message_at`, `last_message_preview`, `tenant_unread_count`, `landlord_unread_count` | `messages` | Cập nhật trong transaction gửi/đọc tin nhắn | `[§2.6]` |
 | `reports` | `listing_id` | suy ra từ `target_type` + `target_id` | Gán khi tạo report (kể cả report bình luận thì lấy `comment.listing_id`) | `[§3.13]` *"gom nhóm để xử lý"* |
@@ -332,70 +332,139 @@ Bảng độ dài chốt cho từng enum (dùng thống nhất, không được 
 
 ## 2. Sơ đồ ERD tổng quan
 
-Ký hiệu cardinality của mermaid dùng trong tài liệu:
-`||--o{` = 1 : 0..n · `||--|{` = 1 : 1..n · `||--o|` = 1 : 0..1 · `}o--o{` = n : m.
+> Nguồn: schema Flyway hiện hành = `V1__baseline_schema.sql` cộng thay đổi V13/V15/V16, sau khi đã bỏ `listing_edit_histories`.
+> Các cột audit được cố ý lược khỏi mọi bảng trong ERD: `created_at`, `updated_at`, `created_by`, `updated_by`, `deleted_at`.
+> Các mốc thời gian nghiệp vụ vẫn được giữ, ví dụ `viewed_at`, `paid_at`, `issued_at`, `analyzed_at`.
+
+Ký hiệu cardinality: `||--o{` = 1 : 0..n; `||--|{` = 1 : 1..n; `||--o|` = 1 : 0..1; `}o--o{` = n : m.
+
+Để tránh đường quan hệ đè lên bảng không liên quan, ERD không dùng một sơ đồ lớn 42 bảng. Thay vào đó, mỗi lát chỉ chứa các bảng liên quan trực tiếp; đường nối có thể dài nhưng luôn nằm trong lát nhỏ hơn, dễ đọc hơn.
 
 ### 2.1. (a) Auth & User (Role-only)
 
 ```mermaid
 erDiagram
-    roles ||--o{ users : "1 vai trò có 0..n người dùng (users.role_id)"
-    users ||--o| user_profiles : "1 user có 0..1 hồ sơ cá nhân"
-    users ||--o| landlord_profiles : "1 user có 0..1 hồ sơ chủ trọ"
-    users ||--o{ verifications : "1 user có 0..n yêu cầu xác thực"
-    users ||--o{ refresh_tokens : "1 user có 0..n refresh token"
-    users ||--o{ password_reset_tokens : "1 user có 0..n token đặt lại MK"
-    users ||--o{ follows : "follower: 1 user theo dõi 0..n chủ trọ"
-    users ||--o{ follows : "landlord: 1 chủ trọ có 0..n người theo dõi"
+    roles ||--o{ users : "1 role co 0..n user; moi user co dung 1 role"
+    users ||--o| user_profiles : "1 user co 0..1 profile ca nhan"
+    users ||--o| landlord_profiles : "1 user co 0..1 landlord profile"
+    users ||--o{ verifications : "1 user co 0..n phien xac thuc"
+    users ||--o{ refresh_tokens : "1 user co 0..n refresh token"
+    refresh_tokens ||--o{ refresh_tokens : "1 token cha co 0..n token con khi rotate"
+    users ||--o{ password_reset_tokens : "1 user co 0..n token dat lai mat khau"
+    users ||--o{ follows : "follower_id: 1 user co the theo doi 0..n landlord"
+    users ||--o{ follows : "landlord_id: 1 landlord co the co 0..n follower"
 
-    users {
-        bigint id PK
-        varchar email UK "uk_users_email qua email_uk"
-        varchar phone UK "uk_users_phone qua phone_uk"
-        varchar password_hash
-        varchar status "UserStatus"
-        bigint role_id FK "NOT NULL - đúng 1 vai trò"
-        datetime deleted_at
-    }
     roles {
         bigint id PK
-        varchar code UK "ROLE_TENANT|ROLE_LANDLORD|ROLE_MODERATOR|ROLE_ADMIN"
+        varchar code UK
+        varchar name
+        varchar description
+        boolean is_system
+        int display_order
+    }
+    users {
+        bigint id PK
+        varchar full_name
+        varchar email UK
+        varchar phone UK
+        varchar password_hash
+        varchar avatar_url
+        varchar gender
+        varchar status
+        bigint role_id FK
+        datetime email_verified_at
+        datetime phone_verified_at
+        datetime last_login_at
+        int failed_login_count
+        datetime locked_until
+        varchar lock_reason
+        bigint locked_by
+        datetime locked_at
+        datetime comment_restricted_until
+        datetime contact_restricted_until
     }
     user_profiles {
         bigint id PK
-        bigint user_id FK "UK"
+        bigint user_id FK,UK
+        date date_of_birth
+        varchar bio
+        varchar occupation
+        varchar address_detail
+        varchar preferred_gender_requirement
     }
     landlord_profiles {
         bigint id PK
-        bigint user_id FK "UK"
-        decimal trust_score
-        varchar verification_status "VerificationStatus"
+        bigint user_id FK,UK
+        varchar display_name
+        varchar contact_name
+        varchar contact_phone
+        varchar contact_email
+        varchar company_name
+        varchar address
         boolean allow_chat
-        tinyint response_rate_percent
+        varchar verification_status
+        datetime verified_at
+        bigint verified_by
+        varchar verification_note
+        decimal trust_score
+        int response_rate_percent
         int avg_response_minutes
+        int response_conversation_count
+        decimal average_rating
+        int review_count
+        int total_listings
+        int total_active_listings
+        int valid_report_count
+        int warning_count
+        int locked_listing_count
+        int free_renew_used_this_month
+        date free_renew_reset_at
+        datetime posting_restricted_until
+        varchar restrict_reason
     }
     verifications {
         bigint id PK
         bigint user_id FK
-        varchar type "VerificationType"
-        varchar status "VerificationStatus"
+        varchar type
+        varchar status
+        varchar target_value
+        varchar token_hash UK
+        varchar otp_hash
+        int attempt_count
+        varchar evidence_url
+        datetime expires_at
+        datetime verified_at
+        bigint reviewed_by
+        datetime reviewed_at
+        varchar reject_reason
     }
     refresh_tokens {
         bigint id PK
         bigint user_id FK
-        char token_hash UK
-        char family_id
-        datetime expired_at "login/refresh + 1 ngày"
+        varchar token_hash UK
+        varchar family_id
+        bigint parent_id FK
+        datetime issued_at
+        datetime expires_at
+        datetime used_at
+        datetime revoked_at
+        varchar revoked_reason
+        varchar user_agent
+        varchar ip_address
     }
     password_reset_tokens {
         bigint id PK
         bigint user_id FK
-        char token_hash UK
+        varchar token_hash UK
+        datetime expires_at
+        datetime used_at
+        varchar ip_address
     }
     follows {
         bigint id PK
         bigint follower_id FK
         bigint landlord_id FK
+        boolean notify_new_listing
     }
 ```
 
@@ -403,625 +472,834 @@ erDiagram
 
 ```mermaid
 erDiagram
-    provinces ||--|{ districts : "1 tỉnh có 1..n quận/huyện"
-    districts ||--|{ wards : "1 quận/huyện có 1..n phường/xã"
-    provinces ||--o{ listings : "1 tỉnh có 0..n tin"
-    districts ||--o{ listings : "1 quận có 0..n tin"
-    wards ||--o{ listings : "1 phường có 0..n tin"
-    categories ||--o{ listings : "1 danh mục có 0..n tin"
-    users ||--o{ listings : "owner: 1 chủ trọ có 0..n tin"
-    listings ||--|{ listing_images : "1 tin có 1..n ảnh [§3.3]"
-    listings ||--o{ listing_amenities : "1 tin có 0..n liên kết tiện ích"
-    amenities ||--o{ listing_amenities : "1 tiện ích thuộc 0..n tin"
-    listings ||--o{ listing_edit_histories : "1 tin có 0..n bản ghi sửa"
-    users ||--o{ listing_edit_histories : "editor: 1 user sửa 0..n lần"
-    prediction_histories ||--o{ listings : "0..1 dự đoán giá gắn vào tin"
+    provinces ||--|{ districts : "1 province co 1..n district"
+    districts ||--|{ wards : "1 district co 1..n ward"
+    users ||--o{ listings : "owner_id: 1 user/landlord co the co 0..n listing"
+    categories ||--o{ listings : "1 category co 0..n listing; moi listing thuoc 1 category"
+    wards ||--o{ listings : "1 ward co 0..n listing"
+    prediction_histories ||--o{ listings : "price_prediction_id: 1 prediction co the duoc gan cho 0..n listing"
+    listings ||--o{ listing_images : "1 listing co 0..n image; moi image thuoc 1 listing"
+    listings ||--o{ listing_amenities : "1 listing co 0..n amenity link"
+    amenities ||--o{ listing_amenities : "1 amenity xuat hien trong 0..n listing"
 
+    users {
+        bigint id PK
+        varchar full_name
+        varchar email UK
+        varchar phone UK
+        varchar password_hash
+        varchar avatar_url
+        varchar gender
+        varchar status
+        bigint role_id FK
+        datetime email_verified_at
+        datetime phone_verified_at
+        datetime last_login_at
+        int failed_login_count
+        datetime locked_until
+        varchar lock_reason
+        bigint locked_by
+        datetime locked_at
+        datetime comment_restricted_until
+        datetime contact_restricted_until
+    }
+    categories {
+        bigint id PK
+        varchar code UK
+        varchar name
+        varchar slug UK
+        varchar description
+        varchar icon
+        json required_fields
+        json optional_fields
+        int display_order
+        boolean is_active
+        int listing_count
+    }
     provinces {
         bigint id PK
         varchar code UK
         varchar name
+        varchar short_name
+        varchar type
+        varchar slug UK
+        varchar search_name
+        decimal latitude
+        decimal longitude
+        int display_order
+        boolean is_active
+        int listing_count
     }
     districts {
         bigint id PK
         bigint province_id FK
         varchar code UK
+        varchar name
+        varchar type
+        varchar slug UK
+        varchar search_name
+        decimal latitude
+        decimal longitude
+        int display_order
+        boolean is_active
+        int listing_count
     }
     wards {
         bigint id PK
         bigint district_id FK
         varchar code UK
-    }
-    categories {
-        bigint id PK
-        varchar code UK "CategoryCode"
-        json required_fields
+        varchar name
+        varchar type
+        varchar slug UK
+        varchar search_name
+        decimal latitude
+        decimal longitude
+        boolean is_active
+        int listing_count
     }
     amenities {
         bigint id PK
         varchar code UK
-        varchar group_code "AmenityGroup"
+        varchar name
+        varchar group_code
+        varchar icon
+        boolean is_filterable
         decimal price_impact_ratio
-    }
-    listings {
-        bigint id PK
-        bigint owner_id FK
-        bigint category_id FK
-        bigint province_id FK
-        bigint district_id FK
-        bigint ward_id FK
-        bigint price_prediction_id FK
-        varchar slug UK
-        decimal price
-        decimal area
-        varchar status "ListingStatus"
-        decimal trust_score
-        boolean is_promoted
-        datetime expired_at
-        datetime auto_hidden_at "nullable - he thong tu dong an [§5.3]"
-        datetime deleted_at
-    }
-    listing_images {
-        bigint id PK
-        bigint listing_id FK
-        boolean is_primary
-    }
-    listing_amenities {
-        bigint id PK
-        bigint listing_id FK
-        bigint amenity_id FK
-    }
-    listing_edit_histories {
-        bigint id PK
-        bigint listing_id FK
-        bigint editor_id FK
-        boolean is_sensitive_change
-    }
-```
-
-### 2.3. (c) Interaction
-
-```mermaid
-erDiagram
-    users ||--o{ favorites : "1 user lưu 0..n tin"
-    listings ||--o{ favorites : "1 tin được 0..n user lưu"
-    users ||--o{ view_histories : "1 user (hoặc khách) xem 0..n lượt"
-    listings ||--o{ view_histories : "1 tin có 0..n lượt xem"
-    users ||--o{ search_histories : "1 user có 0..n lượt tìm"
-    users ||--o{ contact_logs : "tenant: 1 user liên hệ 0..n lượt"
-    users ||--o{ contact_logs : "owner: 1 chủ trọ nhận 0..n lượt"
-    listings ||--o{ contact_logs : "1 tin có 0..n lượt liên hệ"
-    listings ||--o{ conversations : "1 tin có 0..n hội thoại"
-    users ||--o{ conversations : "tenant: 1 user có 0..n hội thoại"
-    users ||--o{ conversations : "landlord: 1 chủ trọ có 0..n hội thoại"
-    conversations ||--|{ messages : "1 hội thoại có 1..n tin nhắn"
-    users ||--o{ messages : "sender: 1 user gửi 0..n tin nhắn"
-    listings ||--o{ comments : "1 tin có 0..n bình luận"
-    users ||--o{ comments : "1 user viết 0..n bình luận"
-    comments ||--o{ comments : "1 bình luận cha có 0..n trả lời"
-    listings ||--o{ reviews : "1 tin có 0..n đánh giá"
-    users ||--o{ reviews : "1 user viết 0..n đánh giá"
-    users ||--o{ reviews : "landlord: 1 chủ trọ nhận 0..n đánh giá"
-
-    favorites {
-        bigint id PK
-        bigint user_id FK "uk_favorites_user_listing"
-        bigint listing_id FK
-    }
-    view_histories {
-        bigint id PK
-        bigint listing_id FK
-        bigint user_id FK "nullable - khách ẩn danh"
-        boolean is_counted
-        datetime viewed_at
-    }
-    search_histories {
-        bigint id PK
-        bigint user_id FK "nullable"
-        json criteria
-        int result_count
-    }
-    contact_logs {
-        bigint id PK
-        bigint listing_id FK
-        bigint user_id FK
-        bigint owner_id FK
-        varchar contact_type "ContactType"
-        boolean is_counted
-    }
-    conversations {
-        bigint id PK
-        bigint listing_id FK
-        bigint tenant_id FK
-        bigint landlord_id FK
-        varchar status "ConversationStatus"
-        datetime first_response_at "nullable - moc chu tro tra loi dau tien [§5.7]"
-    }
-    messages {
-        bigint id PK
-        bigint conversation_id FK
-        bigint sender_id FK
-    }
-    comments {
-        bigint id PK
-        bigint listing_id FK
-        bigint user_id FK
-        bigint parent_id FK
-        varchar status "CommentStatus"
-        varchar sentiment_label "SentimentLabel"
-    }
-    reviews {
-        bigint id PK
-        bigint listing_id FK "uk_reviews_user_listing"
-        bigint user_id FK
-        bigint landlord_id FK
-        tinyint rating
-        varchar status "ReviewStatus"
-    }
-```
-
-### 2.4. (d) Moderation
-
-```mermaid
-erDiagram
-    users ||--o{ reports : "reporter: 1 user tạo 0..n báo cáo"
-    listings ||--o{ reports : "0..1 tin liên quan tới 0..n báo cáo"
-    users ||--o{ reports : "resolver: 1 moderator xử lý 0..n báo cáo"
-    reports ||--o{ moderation_actions : "1 báo cáo có 0..n hành động xử lý [§6.2]"
-    users ||--o{ moderation_actions : "moderator: 1 user thực hiện 0..n hành động"
-    listings ||--o{ moderation_actions : "0..1 tin bị 0..n hành động"
-    users ||--o{ violation_warnings : "1 user nhận 0..n cảnh báo"
-    listings ||--o{ violation_warnings : "0..1 tin sinh 0..n cảnh báo"
-    reports ||--o{ violation_warnings : "0..1 báo cáo sinh 0..n cảnh báo"
-    users ||--o{ violation_warnings : "issuer: 1 moderator gửi 0..n cảnh báo"
-
-    reports {
-        bigint id PK
-        bigint reporter_id FK
-        varchar target_type "ReportTargetType"
-        bigint target_id
-        bigint listing_id FK "denormalize để gom nhóm [§3.13]"
-        varchar reason "ReportReason"
-        varchar status "ReportStatus"
-        varchar severity "ReportSeverity"
-        boolean is_valid
-    }
-    moderation_actions {
-        bigint id PK
-        bigint moderator_id FK
-        bigint report_id FK "nullable"
-        bigint listing_id FK "nullable"
-        varchar action_type "ModerationActionType"
-        varchar result "ModerationResult"
-        varchar reason
-    }
-    violation_warnings {
-        bigint id PK
-        bigint user_id FK
-        bigint listing_id FK "nullable"
-        bigint report_id FK "nullable"
-        varchar severity "ReportSeverity"
-        datetime created_at "đếm 3 lần / 30 ngày [§5.4]"
-    }
-    banned_keywords {
-        bigint id PK
-        varchar normalized_keyword UK
-        varchar severity "BannedKeywordSeverity"
-        varchar applies_to "BannedKeywordScope"
-    }
-```
-
-> `banned_keywords` là **bảng độc lập** (không FK) — nó là từ điển cấu hình do Admin quản lý
-> `[§11.10]` *"Chặn từ khóa cấm"*, được nạp vào cache Redis và dùng bởi validator
-> `@NoBannedKeyword` (canonical mục 3).
-
-### 2.5. (e) Payment & Promotion
-
-```mermaid
-erDiagram
-    users ||--o{ payments : "1 chủ trọ có 0..n giao dịch"
-    listings ||--o{ payments : "0..1 tin gắn 0..n giao dịch [§6.2]"
-    promotion_packages ||--o{ payments : "1 gói có 0..n giao dịch"
-    coupons ||--o{ payments : "0..1 mã KM dùng ở 0..n giao dịch"
-    payments ||--o| promotion_subscriptions : "1 giao dịch SUCCESS sinh 0..1 gói đã mua"
-    promotion_packages ||--o{ promotion_subscriptions : "1 gói có 0..n lượt đăng ký [§6.2]"
-    listings ||--o{ promotion_subscriptions : "1 tin có 0..n lượt đẩy"
-    users ||--o{ promotion_subscriptions : "1 chủ trọ có 0..n lượt đẩy"
-
-    promotion_packages {
-        bigint id PK
-        varchar code UK
-        decimal price
-        int duration_days
-        int priority "<= promotion.max_priority [§10.6]"
+        int display_order
         boolean is_active
-    }
-    coupons {
-        bigint id PK
-        varchar code UK
-        varchar discount_type "CouponDiscountType"
-        decimal discount_value
-        int usage_limit
-        int used_count
-    }
-    payments {
-        bigint id PK
-        bigint user_id FK
-        bigint listing_id FK "nullable"
-        bigint package_id FK "nullable"
-        bigint coupon_id FK "nullable"
-        decimal amount
-        decimal final_amount
-        varchar transaction_code UK "[§3.14] mã duy nhất"
-        varchar payment_method "PaymentMethod"
-        varchar status "PaymentStatus"
-        datetime paid_at
-    }
-    promotion_subscriptions {
-        bigint id PK
-        bigint payment_id FK "UK"
-        bigint listing_id FK
-        bigint package_id FK
-        bigint user_id FK
-        int priority
-        varchar status "SubscriptionStatus"
-        datetime start_at
-        datetime end_at
-    }
-```
-
-### 2.6. (f) AI & Notification & Admin
-
-```mermaid
-erDiagram
-    comments ||--o{ sentiment_results : "1 bình luận có 0..n phiên bản phân tích [§6.2]"
-    users ||--o{ recommendation_logs : "0..1 user nhận 0..n log gợi ý"
-    listings ||--o{ recommendation_logs : "1 tin xuất hiện trong 0..n log gợi ý"
-    listings ||--o{ prediction_histories : "0..1 tin có 0..n lần dự đoán giá [§6.2]"
-    users ||--o{ prediction_histories : "1 chủ trọ yêu cầu 0..n lần dự đoán"
-    users ||--o{ chatbot_conversations : "0..1 user có 0..n phiên chatbot"
-    chatbot_conversations ||--|{ chatbot_messages : "1 phiên có 1..n tin nhắn"
-    users ||--o{ notifications : "1 user nhận 0..n thông báo"
-    users ||--o{ notification_preferences : "1 user có 0..16 cài đặt thông báo [§11.12]"
-    users ||--o{ audit_logs : "0..1 actor thực hiện 0..n thao tác [§6.2]"
-
-    sentiment_results {
-        bigint id PK
-        bigint comment_id FK
-        varchar label "SentimentLabel"
-        decimal score
-        decimal confidence
-        varchar suggested_action "SentimentAction"
-        boolean is_latest
-    }
-    recommendation_logs {
-        bigint id PK
-        bigint user_id FK "nullable"
-        bigint listing_id FK
-        varchar source "RecommendationSource"
-        decimal score
-        int rank_position
     }
     prediction_histories {
         bigint id PK
-        bigint listing_id FK "nullable"
+        bigint listing_id FK
         bigint user_id FK
+        bigint category_id FK
+        bigint ward_id FK
+        decimal area
+        int room_count
+        int toilet_count
+        varchar furniture_status
+        json amenity_ids
         decimal suggested_price
-        varchar confidence "PriceConfidence"
+        decimal price_low
+        decimal price_median
+        decimal price_high
+        decimal price_per_sqm
+        int sample_size
+        varchar scope_used
+        varchar confidence
+        decimal dispersion_ratio
+        json adjustment_detail
+        varchar explanation
+        decimal input_price
+        decimal deviation_ratio
         boolean is_flagged
-    }
-    chatbot_conversations {
-        bigint id PK
-        bigint user_id FK "nullable"
-        char session_id
-        json collected_filters
-    }
-    chatbot_messages {
-        bigint id PK
-        bigint conversation_id FK
-        varchar sender "ChatbotSender"
-        varchar intent "ChatbotIntent"
-    }
-    notifications {
-        bigint id PK
-        bigint user_id FK
-        varchar type "NotificationType"
-        varchar channel "NotificationChannel"
-        boolean is_read
-    }
-    notification_preferences {
-        bigint id PK
-        bigint user_id FK "UK voi notification_type"
-        varchar notification_type "NotificationType - UK"
-        boolean in_app
-        boolean email
-    }
-    audit_logs {
-        bigint id PK
-        bigint actor_id FK "nullable - SYSTEM"
-        varchar action "AuditAction"
-        json old_value
-        json new_value
-    }
-    system_configs {
-        bigint id PK
-        varchar config_key UK
-        text config_value
-        varchar value_type "ConfigValueType"
-    }
-    ai_configs {
-        bigint id PK
-        varchar module "AiModule"
-        varchar config_key
-        json config_value
-        int version
-    }
-```
-
-### 2.7. (g) ERD toàn hệ thống (tổng hợp tất cả bảng đang dùng)
-
-```mermaid
-erDiagram
-    roles ||--o{ users : "1 role có nhiều user"
-    users ||--|{ user_profiles : "1 user có 0..1 hồ sơ"
-    users ||--|{ landlord_profiles : "1 user có 0..1 hồ sơ chủ trọ"
-    users ||--o{ verifications : "1 user có nhiều mã xác thực"
-    users ||--o{ refresh_tokens : "1 user có nhiều refresh token"
-    users ||--o{ password_reset_tokens : "1 user có nhiều token reset"
-    users ||--o{ follows : "user theo dõi chủ trọ"
-    users ||--o{ follows : "chủ trọ có người theo dõi"
-
-    provinces ||--|{ districts : "1 tỉnh có nhiều quận/huyện"
-    districts ||--|{ wards : "1 quận có nhiều phường/xã"
-    provinces ||--o{ user_profiles : "1 tỉnh có nhiều hồ sơ user"
-    districts ||--o{ user_profiles : "1 quận có nhiều hồ sơ user"
-    users ||--o{ user_profiles : "user liên kết hồ sơ"
-    users ||--o{ landlord_profiles : "user có hồ sơ chủ trọ"
-    users ||--o{ listings : "chủ trọ sở hữu nhiều tin"
-    listings ||--|{ listing_images : "1 tin có nhiều ảnh"
-    listings ||--o{ listing_amenities : "1 tin có nhiều tiện ích"
-    amenities ||--o{ listing_amenities : "1 tiện ích cho nhiều tin"
-    categories ||--o{ listings : "1 danh mục có nhiều tin"
-    provinces ||--o{ listings : "1 tỉnh có nhiều tin"
-    districts ||--o{ listings : "1 quận có nhiều tin"
-    wards ||--o{ listings : "1 phường có nhiều tin"
-    users ||--o{ listing_edit_histories : "user chỉnh sửa nhiều phiên bản"
-    listings ||--o{ listing_edit_histories : "1 tin có nhiều lịch sử sửa"
-    prediction_histories ||--o{ listings : "0..1 dự đoán cho nhiều tin"
-
-    users ||--o{ favorites : "user lưu tin"
-    listings ||--o{ favorites : "tin được user lưu"
-    users ||--o{ view_histories : "user/khách xem tin"
-    listings ||--o{ view_histories : "tin có nhiều lượt xem"
-    users ||--o{ search_histories : "user tạo lịch sử tìm"
-    users ||--o{ contact_logs : "tenant tạo yêu cầu"
-    users ||--o{ contact_logs : "chủ trọ nhận yêu cầu"
-    listings ||--o{ contact_logs : "tin nhận liên hệ"
-    listings ||--o{ conversations : "tin có nhiều hội thoại"
-    users ||--o{ conversations : "tenant có nhiều hội thoại"
-    users ||--o{ conversations : "landlord có nhiều hội thoại"
-    conversations ||--|{ messages : "một hội thoại có nhiều tin nhắn"
-    users ||--o{ messages : "user gửi nhiều tin nhắn"
-    listings ||--o{ comments : "tin có nhiều bình luận"
-    users ||--o{ comments : "user viết bình luận"
-    comments ||--o{ comments : "1 comment cha có nhiều reply"
-    listings ||--o{ reviews : "tin có nhiều review"
-    users ||--o{ reviews : "tenant tạo review"
-    users ||--o{ reviews : "landlord nhận review"
-    comments ||--o{ sentiment_results : "1 comment có nhiều bản phân tích"
-
-    users ||--o{ reports : "người dùng tạo report"
-    listings ||--o{ reports : "tin có report"
-    reports ||--o{ moderation_actions : "1 report có nhiều action"
-    users ||--o{ moderation_actions : "moderator xử lý"
-    listings ||--o{ moderation_actions : "tin có action xử lý"
-    users ||--o{ violation_warnings : "user nhận warning"
-    listings ||--o{ violation_warnings : "tin tạo warning"
-    reports ||--o{ violation_warnings : "report có warning"
-
-    users ||--o{ payments : "chủ trọ tạo giao dịch"
-    listings ||--o{ payments : "tin gắn giao dịch"
-    promotion_packages ||--o{ payments : "gói có nhiều thanh toán"
-    coupons ||--o{ payments : "mã KM áp vào thanh toán"
-    payments ||--|{ promotion_subscriptions : "1 payment có gói đẩy"
-    promotion_packages ||--o{ promotion_subscriptions : "gói có nhiều lượt đẩy"
-    users ||--o{ promotion_subscriptions : "landlord tạo subscription"
-    listings ||--o{ promotion_subscriptions : "tin có nhiều subscription"
-
-    users ||--o{ notifications : "user nhận thông báo"
-    users ||--o{ notification_preferences : "user có cấu hình thông báo"
-    users ||--o{ recommendation_logs : "hệ thống gợi ý cho user"
-    listings ||--o{ recommendation_logs : "tin xuất hiện trong log gợi ý"
-    users ||--o{ prediction_histories : "landlord/chạy dự đoán"
-    listings ||--o{ prediction_histories : "tin có lịch sử dự đoán giá"
-    users ||--o{ chatbot_conversations : "user tương tác chatbot"
-    chatbot_conversations ||--|{ chatbot_messages : "phiên có nhiều message"
-    users ||--o{ audit_logs : "actor thực thi thao tác"
-
-    roles {
-        bigint id PK
-        varchar code UK
-        varchar name
-    }
-    users {
-        bigint id PK
-        bigint role_id FK
-        varchar email UK
-        varchar phone UK
-        varchar status
-        boolean locked
-    }
-    user_profiles {
-        bigint id PK
-        bigint user_id FK "UK"
-        date date_of_birth
-        bigint province_id FK
-        bigint district_id FK
-    }
-    landlord_profiles {
-        bigint id PK
-        bigint user_id FK "UK"
-        decimal trust_score
-        varchar verification_status
-    }
-    verifications {
-        bigint id PK
-        bigint user_id FK
-        varchar type
-        varchar status
-    }
-    refresh_tokens {
-        bigint id PK
-        bigint user_id FK
-        char token_hash UK
-        datetime expired_at
-    }
-    password_reset_tokens {
-        bigint id PK
-        bigint user_id FK
-        char token_hash UK
-        datetime expired_at
-    }
-    follows {
-        bigint id PK
-        bigint follower_id FK
-        bigint landlord_id FK
-    }
-    provinces {
-        bigint id PK
-        varchar code UK
-        varchar name
-    }
-    districts {
-        bigint id PK
-        bigint province_id FK
-        varchar code UK
-    }
-    wards {
-        bigint id PK
-        bigint district_id FK
-        varchar code UK
-    }
-    categories {
-        bigint id PK
-        varchar code UK
-    }
-    amenities {
-        bigint id PK
-        varchar code UK
-        varchar group_code
+        boolean is_applied
+        varchar estimator_version
     }
     listings {
         bigint id PK
         bigint owner_id FK
         bigint category_id FK
-        bigint province_id FK
-        bigint district_id FK
+        varchar title
+        varchar slug UK
+        text description
+        decimal price
+        decimal area
+        decimal deposit_amount
+        decimal electricity_price
+        decimal water_price
         bigint ward_id FK
+        varchar address_detail
+        decimal latitude
+        decimal longitude
+        int room_count
+        int toilet_count
+        varchar toilet_type
+        int max_occupants
+        int current_occupants
+        varchar gender_requirement
+        boolean pet_allowed
+        boolean parking_available
+        varchar curfew_type
+        varchar furniture_status
+        date available_from
         varchar status
+        varchar reject_reason
+        varchar lock_reason
+        varchar lock_severity
+        datetime auto_hidden_at
+        varchar auto_hide_reason
+        decimal trust_score
+        decimal average_rating
+        int review_count
+        int view_count
+        int favorite_count
+        int contact_count
+        int comment_count
+        int negative_comment_count
+        int positive_comment_count
+        int need_review_count
+        datetime last_need_review_at
+        bigint price_prediction_id FK
+        boolean price_deviation_flag
+        boolean is_promoted
+        datetime promoted_until
+        int promotion_priority
+        datetime published_at
+        datetime expired_at
+        datetime expiry_reminder_sent_at
+        int renew_count
+        int floor_count
     }
     listing_images {
         bigint id PK
         bigint listing_id FK
         varchar url
+        varchar thumbnail_url
         boolean is_primary
+        int display_order
+        varchar original_name
+        int file_size
+        varchar content_type
+        int width
+        int height
     }
     listing_amenities {
         bigint id PK
         bigint listing_id FK
         bigint amenity_id FK
     }
-    listing_edit_histories {
+```
+
+### 2.3. (c) Interaction
+
+#### 2.3.1. Lưu tin, xem tin, tìm kiếm và liên hệ
+
+```mermaid
+erDiagram
+    users ||--o{ favorites : "1 user co 0..n favorite"
+    listings ||--o{ favorites : "1 listing duoc 0..n user luu"
+    users ||--o{ view_histories : "1 user co 0..n view; user_id co the null voi khach an danh"
+    listings ||--o{ view_histories : "1 listing co 0..n view history"
+    users ||--o{ search_histories : "1 user co 0..n search; user_id co the null"
+    users ||--o{ contact_logs : "user_id: 1 tenant co 0..n contact log"
+    listings ||--o{ contact_logs : "1 listing co 0..n contact log"
+
+    users {
         bigint id PK
-        bigint listing_id FK
-        bigint editor_id FK
+        varchar full_name
+        varchar email UK
+        varchar phone UK
+        varchar password_hash
+        varchar avatar_url
+        varchar gender
+        varchar status
+        bigint role_id FK
+        datetime email_verified_at
+        datetime phone_verified_at
+        datetime last_login_at
+        int failed_login_count
+        datetime locked_until
+        varchar lock_reason
+        bigint locked_by
+        datetime locked_at
+        datetime comment_restricted_until
+        datetime contact_restricted_until
+    }
+    listings {
+        bigint id PK
+        bigint owner_id FK
+        bigint category_id FK
+        varchar title
+        varchar slug UK
+        text description
+        decimal price
+        decimal area
+        decimal deposit_amount
+        decimal electricity_price
+        decimal water_price
+        bigint ward_id FK
+        varchar address_detail
+        decimal latitude
+        decimal longitude
+        int room_count
+        int toilet_count
+        varchar toilet_type
+        int max_occupants
+        int current_occupants
+        varchar gender_requirement
+        boolean pet_allowed
+        boolean parking_available
+        varchar curfew_type
+        varchar furniture_status
+        date available_from
+        varchar status
+        varchar reject_reason
+        varchar lock_reason
+        varchar lock_severity
+        datetime auto_hidden_at
+        varchar auto_hide_reason
+        decimal trust_score
+        decimal average_rating
+        int review_count
+        int view_count
+        int favorite_count
+        int contact_count
+        int comment_count
+        int negative_comment_count
+        int positive_comment_count
+        int need_review_count
+        datetime last_need_review_at
+        bigint price_prediction_id FK
+        boolean price_deviation_flag
+        boolean is_promoted
+        datetime promoted_until
+        int promotion_priority
+        datetime published_at
+        datetime expired_at
+        datetime expiry_reminder_sent_at
+        int renew_count
+        int floor_count
     }
     favorites {
         bigint id PK
         bigint user_id FK
         bigint listing_id FK
+        varchar note
     }
     view_histories {
         bigint id PK
         bigint listing_id FK
         bigint user_id FK
+        varchar session_id
+        varchar ip_address
+        varchar user_agent
+        varchar referrer
+        boolean is_counted
         datetime viewed_at
     }
     search_histories {
         bigint id PK
         bigint user_id FK
-        datetime created_at
+        varchar keyword
+        json criteria
+        int result_count
+        varchar session_id
+        varchar ip_address
     }
     contact_logs {
         bigint id PK
         bigint listing_id FK
         bigint user_id FK
-        bigint owner_id FK
         varchar contact_type
+        varchar message
+        varchar contact_name
+        varchar contact_phone
+        boolean is_counted
+        boolean is_read_by_owner
+        varchar ip_address
+    }
+```
+
+#### 2.3.2. Hội thoại và tin nhắn
+
+```mermaid
+erDiagram
+    listings ||--o{ conversations : "1 listing co 0..n conversation"
+    users ||--o{ conversations : "tenant_id: 1 user co 0..n conversation dang tenant"
+    conversations ||--o{ messages : "1 conversation co 0..n message"
+    users ||--o{ messages : "sender_id: 1 user gui 0..n message"
+
+    users {
+        bigint id PK
+        varchar full_name
+        varchar email UK
+        varchar phone UK
+        varchar password_hash
+        varchar avatar_url
+        varchar gender
+        varchar status
+        bigint role_id FK
+        datetime email_verified_at
+        datetime phone_verified_at
+        datetime last_login_at
+        int failed_login_count
+        datetime locked_until
+        varchar lock_reason
+        bigint locked_by
+        datetime locked_at
+        datetime comment_restricted_until
+        datetime contact_restricted_until
+    }
+    listings {
+        bigint id PK
+        bigint owner_id FK
+        bigint category_id FK
+        varchar title
+        varchar slug UK
+        text description
+        decimal price
+        decimal area
+        decimal deposit_amount
+        decimal electricity_price
+        decimal water_price
+        bigint ward_id FK
+        varchar address_detail
+        decimal latitude
+        decimal longitude
+        int room_count
+        int toilet_count
+        varchar toilet_type
+        int max_occupants
+        int current_occupants
+        varchar gender_requirement
+        boolean pet_allowed
+        boolean parking_available
+        varchar curfew_type
+        varchar furniture_status
+        date available_from
+        varchar status
+        varchar reject_reason
+        varchar lock_reason
+        varchar lock_severity
+        datetime auto_hidden_at
+        varchar auto_hide_reason
+        decimal trust_score
+        decimal average_rating
+        int review_count
+        int view_count
+        int favorite_count
+        int contact_count
+        int comment_count
+        int negative_comment_count
+        int positive_comment_count
+        int need_review_count
+        datetime last_need_review_at
+        bigint price_prediction_id FK
+        boolean price_deviation_flag
+        boolean is_promoted
+        datetime promoted_until
+        int promotion_priority
+        datetime published_at
+        datetime expired_at
+        datetime expiry_reminder_sent_at
+        int renew_count
+        int floor_count
     }
     conversations {
         bigint id PK
-        bigint tenant_id FK
-        bigint landlord_id FK
         bigint listing_id FK
+        bigint tenant_id FK
+        varchar status
+        datetime first_response_at
+        datetime last_message_at
+        varchar last_message_preview
+        int tenant_unread_count
+        int landlord_unread_count
+        int message_count
     }
     messages {
         bigint id PK
         bigint conversation_id FK
         bigint sender_id FK
-        text content
+        varchar content
+        boolean is_read
+        datetime read_at
+    }
+```
+
+#### 2.3.3. Bình luận và đánh giá
+
+```mermaid
+erDiagram
+    listings ||--o{ comments : "1 listing co 0..n comment"
+    users ||--o{ comments : "1 user co the viet 0..n comment"
+    comments ||--o{ comments : "1 comment cha co 0..n reply"
+    listings ||--o{ reviews : "1 listing co 0..n review"
+    users ||--o{ reviews : "user_id: 1 tenant co the viet 0..n review"
+
+    users {
+        bigint id PK
+        varchar full_name
+        varchar email UK
+        varchar phone UK
+        varchar password_hash
+        varchar avatar_url
+        varchar gender
+        varchar status
+        bigint role_id FK
+        datetime email_verified_at
+        datetime phone_verified_at
+        datetime last_login_at
+        int failed_login_count
+        datetime locked_until
+        varchar lock_reason
+        bigint locked_by
+        datetime locked_at
+        datetime comment_restricted_until
+        datetime contact_restricted_until
+    }
+    listings {
+        bigint id PK
+        bigint owner_id FK
+        bigint category_id FK
+        varchar title
+        varchar slug UK
+        text description
+        decimal price
+        decimal area
+        decimal deposit_amount
+        decimal electricity_price
+        decimal water_price
+        bigint ward_id FK
+        varchar address_detail
+        decimal latitude
+        decimal longitude
+        int room_count
+        int toilet_count
+        varchar toilet_type
+        int max_occupants
+        int current_occupants
+        varchar gender_requirement
+        boolean pet_allowed
+        boolean parking_available
+        varchar curfew_type
+        varchar furniture_status
+        date available_from
+        varchar status
+        varchar reject_reason
+        varchar lock_reason
+        varchar lock_severity
+        datetime auto_hidden_at
+        varchar auto_hide_reason
+        decimal trust_score
+        decimal average_rating
+        int review_count
+        int view_count
+        int favorite_count
+        int contact_count
+        int comment_count
+        int negative_comment_count
+        int positive_comment_count
+        int need_review_count
+        datetime last_need_review_at
+        bigint price_prediction_id FK
+        boolean price_deviation_flag
+        boolean is_promoted
+        datetime promoted_until
+        int promotion_priority
+        datetime published_at
+        datetime expired_at
+        datetime expiry_reminder_sent_at
+        int renew_count
+        int floor_count
     }
     comments {
         bigint id PK
         bigint listing_id FK
         bigint user_id FK
         bigint parent_id FK
+        varchar content
         varchar status
+        varchar sentiment_label
+        decimal sentiment_score
+        decimal sentiment_confidence
+        decimal sentiment_weight
+        boolean is_risk_comment
+        boolean is_spam
+        boolean is_owner_reply
+        int reply_count
+        boolean contains_banned_keyword
+        varchar hidden_reason
+        bigint hidden_by
+        datetime hidden_at
+        datetime edited_at
     }
     reviews {
         bigint id PK
         bigint listing_id FK
         bigint user_id FK
-        bigint landlord_id FK
-        tinyint rating
+        int rating
+        varchar content
+        varchar status
+        boolean is_verified_contact
+        varchar hidden_reason
+        bigint hidden_by
+        datetime hidden_at
+        datetime edited_at
+    }
+```
+
+### 2.4. (d) Moderation & Compliance
+
+```mermaid
+erDiagram
+    users ||--o{ reports : "reporter_id: 1 user tao 0..n report"
+    users ||--o{ reports : "resolved_by: 1 moderator xu ly 0..n report; co the null"
+    listings ||--o{ reports : "1 listing co 0..n report; listing_id co the null"
+    reports ||--o{ moderation_actions : "1 report co 0..n moderation action"
+    users ||--o{ moderation_actions : "moderator_id: 1 moderator thuc hien 0..n action"
+    listings ||--o{ moderation_actions : "1 listing co 0..n moderation action"
+    users ||--o{ violation_warnings : "user_id: 1 user nhan 0..n warning"
+    users ||--o{ violation_warnings : "issued_by: 1 moderator/gui he thong tao 0..n warning; co the null"
+    listings ||--o{ violation_warnings : "1 listing sinh 0..n warning; listing_id co the null"
+    reports ||--o{ violation_warnings : "1 report sinh 0..n warning; report_id co the null"
+    moderation_actions ||--o{ violation_warnings : "1 action co the sinh 0..n warning"
+
+    users {
+        bigint id PK
+        varchar full_name
+        varchar email UK
+        varchar phone UK
+        varchar password_hash
+        varchar avatar_url
+        varchar gender
+        varchar status
+        bigint role_id FK
+        datetime email_verified_at
+        datetime phone_verified_at
+        datetime last_login_at
+        int failed_login_count
+        datetime locked_until
+        varchar lock_reason
+        bigint locked_by
+        datetime locked_at
+        datetime comment_restricted_until
+        datetime contact_restricted_until
+    }
+    listings {
+        bigint id PK
+        bigint owner_id FK
+        bigint category_id FK
+        varchar title
+        varchar slug UK
+        text description
+        decimal price
+        decimal area
+        decimal deposit_amount
+        decimal electricity_price
+        decimal water_price
+        bigint ward_id FK
+        varchar address_detail
+        decimal latitude
+        decimal longitude
+        int room_count
+        int toilet_count
+        varchar toilet_type
+        int max_occupants
+        int current_occupants
+        varchar gender_requirement
+        boolean pet_allowed
+        boolean parking_available
+        varchar curfew_type
+        varchar furniture_status
+        date available_from
+        varchar status
+        varchar reject_reason
+        varchar lock_reason
+        varchar lock_severity
+        datetime auto_hidden_at
+        varchar auto_hide_reason
+        decimal trust_score
+        decimal average_rating
+        int review_count
+        int view_count
+        int favorite_count
+        int contact_count
+        int comment_count
+        int negative_comment_count
+        int positive_comment_count
+        int need_review_count
+        datetime last_need_review_at
+        bigint price_prediction_id FK
+        boolean price_deviation_flag
+        boolean is_promoted
+        datetime promoted_until
+        int promotion_priority
+        datetime published_at
+        datetime expired_at
+        datetime expiry_reminder_sent_at
+        int renew_count
+        int floor_count
     }
     reports {
         bigint id PK
         bigint reporter_id FK
-        bigint listing_id FK
-        bigint target_id
         varchar target_type
-        bigint resolver_id FK
+        bigint target_id
+        bigint listing_id FK
+        varchar reason
+        varchar description
+        varchar evidence_image_url
         varchar status
+        varchar severity
+        boolean is_valid
+        varchar resolution_note
+        bigint resolved_by FK
+        datetime resolved_at
+        varchar dedup_key
     }
     moderation_actions {
         bigint id PK
-        bigint report_id FK
-        bigint listing_id FK
         bigint moderator_id FK
+        boolean is_system
+        bigint report_id FK
+        varchar target_type
+        bigint target_id
+        bigint listing_id FK
         varchar action_type
+        varchar result
+        varchar reason
+        varchar note
+        varchar previous_status
+        varchar new_status
     }
     violation_warnings {
         bigint id PK
-        bigint listing_id FK
         bigint user_id FK
+        bigint listing_id FK
         bigint report_id FK
+        bigint moderation_action_id FK
+        varchar severity
+        varchar reason
+        varchar content
+        bigint issued_by FK
+        boolean is_system
+        datetime acknowledged_at
     }
     banned_keywords {
         bigint id PK
+        varchar keyword
         varchar normalized_keyword UK
         varchar severity
+        varchar applies_to
+        boolean is_regex
+        varchar category
+        varchar note
+        boolean is_active
+        int hit_count
+    }
+```
+
+> `banned_keywords` l? b?ng t? ?i?n ??c l?p. B?ng n?y kh?ng c? FK nghi?p v? v? ???c logic validation/moderation n?p ?? ki?m tra n?i dung.
+
+### 2.5. (e) Payment & Promotion
+
+```mermaid
+erDiagram
+    users ||--o{ payments : "1 user co 0..n payment"
+    listings ||--o{ payments : "1 listing co 0..n payment; listing_id co the null"
+    promotion_packages ||--o{ payments : "1 package co 0..n payment"
+    coupons ||--o{ payments : "1 coupon duoc dung trong 0..n payment"
+    payments ||--o| promotion_subscriptions : "1 payment thanh cong sinh 0..1 subscription"
+    listings ||--o{ promotion_subscriptions : "1 listing co 0..n promotion subscription"
+    promotion_packages ||--o{ promotion_subscriptions : "1 package co 0..n subscription"
+    users ||--o{ promotion_subscriptions : "1 user/landlord co 0..n subscription"
+
+    users {
+        bigint id PK
+        varchar full_name
+        varchar email UK
+        varchar phone UK
+        varchar password_hash
+        varchar avatar_url
+        varchar gender
+        varchar status
+        bigint role_id FK
+        datetime email_verified_at
+        datetime phone_verified_at
+        datetime last_login_at
+        int failed_login_count
+        datetime locked_until
+        varchar lock_reason
+        bigint locked_by
+        datetime locked_at
+        datetime comment_restricted_until
+        datetime contact_restricted_until
+    }
+    listings {
+        bigint id PK
+        bigint owner_id FK
+        bigint category_id FK
+        varchar title
+        varchar slug UK
+        text description
+        decimal price
+        decimal area
+        decimal deposit_amount
+        decimal electricity_price
+        decimal water_price
+        bigint ward_id FK
+        varchar address_detail
+        decimal latitude
+        decimal longitude
+        int room_count
+        int toilet_count
+        varchar toilet_type
+        int max_occupants
+        int current_occupants
+        varchar gender_requirement
+        boolean pet_allowed
+        boolean parking_available
+        varchar curfew_type
+        varchar furniture_status
+        date available_from
+        varchar status
+        varchar reject_reason
+        varchar lock_reason
+        varchar lock_severity
+        datetime auto_hidden_at
+        varchar auto_hide_reason
+        decimal trust_score
+        decimal average_rating
+        int review_count
+        int view_count
+        int favorite_count
+        int contact_count
+        int comment_count
+        int negative_comment_count
+        int positive_comment_count
+        int need_review_count
+        datetime last_need_review_at
+        bigint price_prediction_id FK
+        boolean price_deviation_flag
+        boolean is_promoted
+        datetime promoted_until
+        int promotion_priority
+        datetime published_at
+        datetime expired_at
+        datetime expiry_reminder_sent_at
+        int renew_count
+        int floor_count
     }
     promotion_packages {
         bigint id PK
         varchar code UK
+        varchar name
+        varchar description
         decimal price
         int duration_days
+        int priority
+        varchar badge_label
+        varchar badge_color
+        boolean is_active
+        int display_order
+        int purchase_count
     }
     coupons {
         bigint id PK
         varchar code UK
+        varchar description
         varchar discount_type
+        decimal discount_value
+        decimal max_discount_amount
+        decimal min_order_amount
+        int usage_limit
+        int used_count
+        int per_user_limit
+        datetime start_at
+        datetime end_at
+        boolean is_active
     }
     payments {
         bigint id PK
@@ -1029,21 +1307,455 @@ erDiagram
         bigint listing_id FK
         bigint package_id FK
         bigint coupon_id FK
+        decimal amount
+        decimal discount_amount
+        decimal final_amount
+        varchar currency
+        varchar payment_method
+        varchar transaction_code UK
+        varchar gateway_txn_ref
+        json gateway_response
         varchar status
+        varchar failure_reason
+        datetime paid_at
+        datetime expires_at
+        datetime refunded_at
+        decimal refund_amount
+        varchar refund_note
+        bigint refunded_by
+        varchar client_ip
     }
     promotion_subscriptions {
         bigint id PK
-        bigint payment_id FK
+        bigint payment_id FK,UK
         bigint listing_id FK
         bigint package_id FK
         bigint user_id FK
+        int priority
         varchar status
+        datetime start_at
+        datetime end_at
+        varchar cancelled_reason
+    }
+```
+
+### 2.6. (f) AI & Notification & Admin
+
+#### 2.6.1. Sentiment và recommendation
+
+```mermaid
+erDiagram
+    comments ||--o{ sentiment_results : "1 comment co 0..n phien ban phan tich sentiment"
+    users ||--o{ recommendation_logs : "1 user co 0..n recommendation log; user_id co the null"
+    listings ||--o{ recommendation_logs : "1 listing xuat hien trong 0..n recommendation log"
+
+    users {
+        bigint id PK
+        varchar full_name
+        varchar email UK
+        varchar phone UK
+        varchar password_hash
+        varchar avatar_url
+        varchar gender
+        varchar status
+        bigint role_id FK
+        datetime email_verified_at
+        datetime phone_verified_at
+        datetime last_login_at
+        int failed_login_count
+        datetime locked_until
+        varchar lock_reason
+        bigint locked_by
+        datetime locked_at
+        datetime comment_restricted_until
+        datetime contact_restricted_until
+    }
+    listings {
+        bigint id PK
+        bigint owner_id FK
+        bigint category_id FK
+        varchar title
+        varchar slug UK
+        text description
+        decimal price
+        decimal area
+        decimal deposit_amount
+        decimal electricity_price
+        decimal water_price
+        bigint ward_id FK
+        varchar address_detail
+        decimal latitude
+        decimal longitude
+        int room_count
+        int toilet_count
+        varchar toilet_type
+        int max_occupants
+        int current_occupants
+        varchar gender_requirement
+        boolean pet_allowed
+        boolean parking_available
+        varchar curfew_type
+        varchar furniture_status
+        date available_from
+        varchar status
+        varchar reject_reason
+        varchar lock_reason
+        varchar lock_severity
+        datetime auto_hidden_at
+        varchar auto_hide_reason
+        decimal trust_score
+        decimal average_rating
+        int review_count
+        int view_count
+        int favorite_count
+        int contact_count
+        int comment_count
+        int negative_comment_count
+        int positive_comment_count
+        int need_review_count
+        datetime last_need_review_at
+        bigint price_prediction_id FK
+        boolean price_deviation_flag
+        boolean is_promoted
+        datetime promoted_until
+        int promotion_priority
+        datetime published_at
+        datetime expired_at
+        datetime expiry_reminder_sent_at
+        int renew_count
+        int floor_count
+    }
+    comments {
+        bigint id PK
+        bigint listing_id FK
+        bigint user_id FK
+        bigint parent_id FK
+        varchar content
+        varchar status
+        varchar sentiment_label
+        decimal sentiment_score
+        decimal sentiment_confidence
+        decimal sentiment_weight
+        boolean is_risk_comment
+        boolean is_spam
+        boolean is_owner_reply
+        int reply_count
+        boolean contains_banned_keyword
+        varchar hidden_reason
+        bigint hidden_by
+        datetime hidden_at
+        datetime edited_at
+    }
+    sentiment_results {
+        bigint id PK
+        bigint comment_id FK
+        varchar label
+        decimal score
+        decimal confidence
+        boolean is_risk_comment
+        varchar suggested_action
+        decimal weight
+        json matched_positive_terms
+        json matched_negative_terms
+        boolean negation_applied
+        varchar analyzer_version
+        int processing_ms
+        varchar error_message
+        int retry_count
+        boolean is_latest
+        datetime analyzed_at
+    }
+    recommendation_logs {
+        bigint id PK
+        bigint user_id FK
+        varchar session_id
+        bigint listing_id FK
+        varchar source
+        varchar batch_id
+        decimal score
+        int rank_position
+        decimal area_score
+        decimal price_score
+        decimal category_score
+        decimal amenity_score
+        decimal trust_score_norm
+        decimal freshness_score
+        decimal promoted_boost
+        boolean is_cold_start
+        json context
+        datetime clicked_at
+    }
+```
+
+#### 2.6.2. Dự đoán giá
+
+```mermaid
+erDiagram
+    listings ||--o{ prediction_histories : "listing_id: 1 listing co 0..n lan du doan gia"
+    users ||--o{ prediction_histories : "1 user/landlord yeu cau 0..n lan du doan"
+    categories ||--o{ prediction_histories : "1 category duoc dung trong 0..n prediction"
+    wards ||--o{ prediction_histories : "1 ward duoc dung trong 0..n prediction"
+    prediction_histories ||--o{ listings : "price_prediction_id: prediction duoc listing ap dung de danh dau gia"
+
+    users {
+        bigint id PK
+        varchar full_name
+        varchar email UK
+        varchar phone UK
+        varchar password_hash
+        varchar avatar_url
+        varchar gender
+        varchar status
+        bigint role_id FK
+        datetime email_verified_at
+        datetime phone_verified_at
+        datetime last_login_at
+        int failed_login_count
+        datetime locked_until
+        varchar lock_reason
+        bigint locked_by
+        datetime locked_at
+        datetime comment_restricted_until
+        datetime contact_restricted_until
+    }
+    categories {
+        bigint id PK
+        varchar code UK
+        varchar name
+        varchar slug UK
+        varchar description
+        varchar icon
+        json required_fields
+        json optional_fields
+        int display_order
+        boolean is_active
+        int listing_count
+    }
+    provinces {
+        bigint id PK
+        varchar code UK
+        varchar name
+        varchar short_name
+        varchar type
+        varchar slug UK
+        varchar search_name
+        decimal latitude
+        decimal longitude
+        int display_order
+        boolean is_active
+        int listing_count
+    }
+    districts {
+        bigint id PK
+        bigint province_id FK
+        varchar code UK
+        varchar name
+        varchar type
+        varchar slug UK
+        varchar search_name
+        decimal latitude
+        decimal longitude
+        int display_order
+        boolean is_active
+        int listing_count
+    }
+    wards {
+        bigint id PK
+        bigint district_id FK
+        varchar code UK
+        varchar name
+        varchar type
+        varchar slug UK
+        varchar search_name
+        decimal latitude
+        decimal longitude
+        boolean is_active
+        int listing_count
+    }
+    listings {
+        bigint id PK
+        bigint owner_id FK
+        bigint category_id FK
+        varchar title
+        varchar slug UK
+        text description
+        decimal price
+        decimal area
+        decimal deposit_amount
+        decimal electricity_price
+        decimal water_price
+        bigint ward_id FK
+        varchar address_detail
+        decimal latitude
+        decimal longitude
+        int room_count
+        int toilet_count
+        varchar toilet_type
+        int max_occupants
+        int current_occupants
+        varchar gender_requirement
+        boolean pet_allowed
+        boolean parking_available
+        varchar curfew_type
+        varchar furniture_status
+        date available_from
+        varchar status
+        varchar reject_reason
+        varchar lock_reason
+        varchar lock_severity
+        datetime auto_hidden_at
+        varchar auto_hide_reason
+        decimal trust_score
+        decimal average_rating
+        int review_count
+        int view_count
+        int favorite_count
+        int contact_count
+        int comment_count
+        int negative_comment_count
+        int positive_comment_count
+        int need_review_count
+        datetime last_need_review_at
+        bigint price_prediction_id FK
+        boolean price_deviation_flag
+        boolean is_promoted
+        datetime promoted_until
+        int promotion_priority
+        datetime published_at
+        datetime expired_at
+        datetime expiry_reminder_sent_at
+        int renew_count
+        int floor_count
+    }
+    prediction_histories {
+        bigint id PK
+        bigint listing_id FK
+        bigint user_id FK
+        bigint category_id FK
+        bigint ward_id FK
+        decimal area
+        int room_count
+        int toilet_count
+        varchar furniture_status
+        json amenity_ids
+        decimal suggested_price
+        decimal price_low
+        decimal price_median
+        decimal price_high
+        decimal price_per_sqm
+        int sample_size
+        varchar scope_used
+        varchar confidence
+        decimal dispersion_ratio
+        json adjustment_detail
+        varchar explanation
+        decimal input_price
+        decimal deviation_ratio
+        boolean is_flagged
+        boolean is_applied
+        varchar estimator_version
+    }
+```
+
+#### 2.6.3. Chatbot
+
+```mermaid
+erDiagram
+    users ||--o{ chatbot_conversations : "1 user co 0..n chatbot conversation; user_id co the null"
+    chatbot_conversations ||--o{ chatbot_messages : "1 chatbot conversation co 0..n chatbot message"
+
+    users {
+        bigint id PK
+        varchar full_name
+        varchar email UK
+        varchar phone UK
+        varchar password_hash
+        varchar avatar_url
+        varchar gender
+        varchar status
+        bigint role_id FK
+        datetime email_verified_at
+        datetime phone_verified_at
+        datetime last_login_at
+        int failed_login_count
+        datetime locked_until
+        varchar lock_reason
+        bigint locked_by
+        datetime locked_at
+        datetime comment_restricted_until
+        datetime contact_restricted_until
+    }
+    chatbot_conversations {
+        bigint id PK
+        bigint user_id FK
+        varchar session_id UK
+        varchar status
+        varchar last_intent
+        json collected_filters
+        int clarify_turn_count
+        int message_count
+        datetime started_at
+        datetime last_message_at
+        datetime ended_at
+    }
+    chatbot_messages {
+        bigint id PK
+        bigint conversation_id FK
+        varchar sender
+        varchar content
+        varchar intent
+        decimal intent_confidence
+        json extracted_slots
+        json result_listing_ids
+        int result_count
+        boolean is_fallback
+        int response_ms
+    }
+```
+
+#### 2.6.4. Notification, audit và cấu hình
+
+```mermaid
+erDiagram
+    users ||--o{ notifications : "1 user nhan 0..n notification"
+    users ||--o{ notification_preferences : "1 user co 0..n notification preference theo type"
+    users ||--o{ audit_logs : "actor_id: 1 user tao 0..n audit log; actor_id co the null voi SYSTEM"
+
+    users {
+        bigint id PK
+        varchar full_name
+        varchar email UK
+        varchar phone UK
+        varchar password_hash
+        varchar avatar_url
+        varchar gender
+        varchar status
+        bigint role_id FK
+        datetime email_verified_at
+        datetime phone_verified_at
+        datetime last_login_at
+        int failed_login_count
+        datetime locked_until
+        varchar lock_reason
+        bigint locked_by
+        datetime locked_at
+        datetime comment_restricted_until
+        datetime contact_restricted_until
     }
     notifications {
         bigint id PK
         bigint user_id FK
         varchar type
         varchar channel
+        varchar title
+        varchar content
+        varchar link
+        varchar ref_type
+        bigint ref_id
+        boolean is_read
+        datetime read_at
+        datetime email_sent_at
+        varchar email_error
     }
     notification_preferences {
         bigint id PK
@@ -1052,55 +1764,121 @@ erDiagram
         boolean in_app
         boolean email
     }
-    sentiment_results {
-        bigint id PK
-        bigint comment_id FK
-        varchar label
-        decimal score
-        boolean is_latest
-    }
-    recommendation_logs {
-        bigint id PK
-        bigint user_id FK
-        bigint listing_id FK
-        varchar source
-    }
-    prediction_histories {
-        bigint id PK
-        bigint listing_id FK
-        bigint user_id FK
-        decimal suggested_price
-        varchar confidence
-    }
-    chatbot_conversations {
-        bigint id PK
-        bigint user_id FK
-        char session_id
-    }
-    chatbot_messages {
-        bigint id PK
-        bigint conversation_id FK
-        varchar sender
-        varchar intent
-    }
     audit_logs {
         bigint id PK
         bigint actor_id FK
+        varchar actor_email
         varchar action
-        text target_type
+        varchar target_type
+        bigint target_id
+        varchar target_label
+        json old_value
+        json new_value
+        varchar reason
+        varchar ip_address
+        varchar user_agent
+        varchar request_id
     }
     system_configs {
         bigint id PK
         varchar config_key UK
         text config_value
+        text default_value
+        varchar value_type
+        varchar group_name
+        varchar label
+        varchar description
+        decimal min_value
+        decimal max_value
+        boolean is_editable
+        int display_order
     }
     ai_configs {
         bigint id PK
         varchar module
         varchar config_key
+        json config_value
+        varchar value_schema
+        varchar description
+        boolean is_enabled
         int version
     }
 ```
+
+> `system_configs` và `ai_configs` là các bảng cấu hình độc lập. Hai bảng này không có FK nghiệp vụ.
+
+### 2.7. (g) Chỉ mục mô tả quan hệ
+
+| # | Quan hệ ERD | Ý nghĩa |
+|---|---|---|
+| 1 | `roles ||--o{ users` | 1 role co 0..n user; moi user co dung 1 role |
+| 2 | `users ||--o| user_profiles` | 1 user co 0..1 profile ca nhan |
+| 3 | `users ||--o| landlord_profiles` | 1 user co 0..1 landlord profile |
+| 4 | `users ||--o{ verifications` | 1 user co 0..n phien xac thuc |
+| 5 | `users ||--o{ refresh_tokens` | 1 user co 0..n refresh token |
+| 6 | `refresh_tokens ||--o{ refresh_tokens` | 1 token cha co 0..n token con khi rotate |
+| 7 | `users ||--o{ password_reset_tokens` | 1 user co 0..n token dat lai mat khau |
+| 8 | `users ||--o{ follows` | follower_id: 1 user co the theo doi 0..n landlord |
+| 9 | `users ||--o{ follows` | landlord_id: 1 landlord co the co 0..n follower |
+| 10 | `provinces ||--|{ districts` | 1 province co 1..n district |
+| 11 | `districts ||--|{ wards` | 1 district co 1..n ward |
+| 12 | `users ||--o{ listings` | owner_id: 1 user/landlord co the co 0..n listing |
+| 13 | `categories ||--o{ listings` | 1 category co 0..n listing; moi listing thuoc 1 category |
+| 14 | `provinces ||--o{ listings` | 1 province co 0..n listing |
+| 15 | `districts ||--o{ listings` | 1 district co 0..n listing |
+| 16 | `wards ||--o{ listings` | 1 ward co 0..n listing |
+| 17 | `prediction_histories ||--o{ listings` | price_prediction_id: 1 prediction co the duoc gan cho 0..n listing |
+| 18 | `listings ||--o{ listing_images` | 1 listing co 0..n image; moi image thuoc 1 listing |
+| 19 | `listings ||--o{ listing_amenities` | 1 listing co 0..n amenity link |
+| 20 | `amenities ||--o{ listing_amenities` | 1 amenity xuat hien trong 0..n listing |
+| 21 | `users ||--o{ favorites` | 1 user co 0..n favorite |
+| 22 | `listings ||--o{ favorites` | 1 listing duoc 0..n user luu |
+| 23 | `users ||--o{ view_histories` | 1 user co 0..n view; user_id co the null voi khach an danh |
+| 24 | `listings ||--o{ view_histories` | 1 listing co 0..n view history |
+| 25 | `users ||--o{ search_histories` | 1 user co 0..n search; user_id co the null |
+| 26 | `users ||--o{ contact_logs` | user_id: 1 tenant co 0..n contact log |
+| 28 | `listings ||--o{ contact_logs` | 1 listing co 0..n contact log |
+| 29 | `listings ||--o{ conversations` | 1 listing co 0..n conversation |
+| 30 | `users ||--o{ conversations` | tenant_id: 1 user co 0..n conversation dang tenant |
+| 32 | `conversations ||--o{ messages` | 1 conversation co 0..n message |
+| 33 | `users ||--o{ messages` | sender_id: 1 user gui 0..n message |
+| 34 | `listings ||--o{ comments` | 1 listing co 0..n comment |
+| 35 | `users ||--o{ comments` | 1 user co the viet 0..n comment |
+| 36 | `comments ||--o{ comments` | 1 comment cha co 0..n reply |
+| 37 | `listings ||--o{ reviews` | 1 listing co 0..n review |
+| 38 | `users ||--o{ reviews` | user_id: 1 tenant co the viet 0..n review |
+| 40 | `users ||--o{ reports` | reporter_id: 1 user tao 0..n report |
+| 41 | `users ||--o{ reports` | resolved_by: 1 moderator xu ly 0..n report; co the null |
+| 42 | `listings ||--o{ reports` | 1 listing co 0..n report; listing_id co the null |
+| 43 | `reports ||--o{ moderation_actions` | 1 report co 0..n moderation action |
+| 44 | `users ||--o{ moderation_actions` | moderator_id: 1 moderator thuc hien 0..n action |
+| 45 | `listings ||--o{ moderation_actions` | 1 listing co 0..n moderation action |
+| 46 | `users ||--o{ violation_warnings` | user_id: 1 user nhan 0..n warning |
+| 47 | `users ||--o{ violation_warnings` | issued_by: 1 moderator/gui he thong tao 0..n warning; co the null |
+| 48 | `listings ||--o{ violation_warnings` | 1 listing sinh 0..n warning; listing_id co the null |
+| 49 | `reports ||--o{ violation_warnings` | 1 report sinh 0..n warning; report_id co the null |
+| 50 | `moderation_actions ||--o{ violation_warnings` | 1 action co the sinh 0..n warning |
+| 51 | `users ||--o{ payments` | 1 user co 0..n payment |
+| 52 | `listings ||--o{ payments` | 1 listing co 0..n payment; listing_id co the null |
+| 53 | `promotion_packages ||--o{ payments` | 1 package co 0..n payment |
+| 54 | `coupons ||--o{ payments` | 1 coupon duoc dung trong 0..n payment |
+| 55 | `payments ||--o| promotion_subscriptions` | 1 payment thanh cong sinh 0..1 subscription |
+| 56 | `listings ||--o{ promotion_subscriptions` | 1 listing co 0..n promotion subscription |
+| 57 | `promotion_packages ||--o{ promotion_subscriptions` | 1 package co 0..n subscription |
+| 58 | `users ||--o{ promotion_subscriptions` | 1 user/landlord co 0..n subscription |
+| 59 | `comments ||--o{ sentiment_results` | 1 comment co 0..n phien ban phan tich sentiment |
+| 60 | `users ||--o{ recommendation_logs` | 1 user co 0..n recommendation log; user_id co the null |
+| 61 | `listings ||--o{ recommendation_logs` | 1 listing xuat hien trong 0..n recommendation log |
+| 62 | `listings ||--o{ prediction_histories` | listing_id: 1 listing co 0..n lan du doan gia |
+| 63 | `users ||--o{ prediction_histories` | 1 user/landlord yeu cau 0..n lan du doan |
+| 64 | `categories ||--o{ prediction_histories` | 1 category duoc dung trong 0..n prediction |
+| 67 | `wards ||--o{ prediction_histories` | 1 ward duoc dung trong 0..n prediction |
+| 68 | `prediction_histories ||--o{ listings` | price_prediction_id: prediction duoc listing ap dung de danh dau gia |
+| 69 | `users ||--o{ chatbot_conversations` | 1 user co 0..n chatbot conversation; user_id co the null |
+| 70 | `chatbot_conversations ||--o{ chatbot_messages` | 1 chatbot conversation co 0..n chatbot message |
+| 71 | `users ||--o{ notifications` | 1 user nhan 0..n notification |
+| 72 | `users ||--o{ notification_preferences` | 1 user co 0..n notification preference theo type |
+| 73 | `users ||--o{ audit_logs` | actor_id: 1 user tao 0..n audit log; actor_id co the null voi SYSTEM |
 
 ### 2.8. (h) Ý nghĩa từng bảng (tóm tắt nhanh)
 
@@ -1108,7 +1886,7 @@ erDiagram
 |---|---|
 | `roles` | Định nghĩa 4 vai trò hệ thống và metadata role. |
 | `users` | Tài khoản đăng nhập, trạng thái tài khoản, và thông tin bảo mật. |
-| `user_profiles` | Hồ sơ mở rộng cho người dùng: nghề nghiệp, ngày sinh, khu vực. |
+| `user_profiles` | Hồ sơ mở rộng cho người dùng: nghề nghiệp, ngày sinh, địa chỉ chi tiết dạng text và tùy chọn ở ghép. |
 | `landlord_profiles` | Hồ sơ đặc thù chủ trọ: điểm uy tín, trạng thái xác thực. |
 | `verifications` | Lưu mã/phiên xác thực email, điện thoại theo user và loại kiểm tra. |
 | `refresh_tokens` | Quản lý chuỗi refresh token cho đăng nhập dài hạn. |
@@ -1122,7 +1900,6 @@ erDiagram
 | `listings` | Tin đăng phòng trọ, tình trạng, địa chỉ và giá thuê. |
 | `listing_images` | Hình ảnh của từng tin đăng. |
 | `listing_amenities` | Bảng nối nhiều-nhiều giữa tin đăng và tiện ích. |
-| `listing_edit_histories` | Lịch sử chỉnh sửa quan trọng của tin đăng. |
 | `favorites` | Danh sách tin mà người dùng đã lưu. |
 | `view_histories` | Nhật ký lượt xem tin để tính lượt xem và chống đếm trùng. |
 | `search_histories` | Lịch sử tìm kiếm của user. |
@@ -1152,7 +1929,7 @@ erDiagram
 
 ---
 
-## 3. Đặc tả chi tiết từng bảng (43 bảng)
+## 3. Đặc tả chi tiết từng bảng (42 bảng hiện hành)
 
 > **Quy ước đọc bảng đặc tả:** cột `Khóa` dùng `PK` (primary key), `FK` (foreign key),
 > `UK` (thành phần của unique key), `IDX` (thành phần của index thường).
@@ -1324,8 +2101,6 @@ Phân quyền hiện hành dựa trực tiếp vào `users.role_id`:
 | `date_of_birth` | `DATE` | Y | `NULL` | | Ngày sinh | `[§2.2]` USER-02 |
 | `bio` | `VARCHAR(500)` | Y | `NULL` | | Giới thiệu ngắn | `[§2.2]` |
 | `occupation` | `VARCHAR(100)` | Y | `NULL` | | Nghề nghiệp — dữ liệu tham khảo cho tin ở ghép | `[§0.3]` |
-| `province_id` | `BIGINT UNSIGNED` | Y | `NULL` | FK | Tỉnh đang sống → **cold start** gợi ý theo khu vực | `[§9.2]` *"Gợi ý theo vị trí nếu người dùng chọn tỉnh/quận"* |
-| `district_id` | `BIGINT UNSIGNED` | Y | `NULL` | FK | Quận đang sống | `[§9.2]` |
 | `address_detail` | `VARCHAR(255)` | Y | `NULL` | | Địa chỉ liên hệ | `[§2.2]` USER-03 |
 | `preferred_gender_requirement` | `VARCHAR(15)` | Y | `NULL` | | `GenderRequirement` mong muốn khi tìm ở ghép | `[§9.2]` *"Giới tính nếu là ở ghép"* |
 | `created_at` … `deleted_at` | | | | | | canonical 6.1 |
@@ -1337,8 +2112,6 @@ Phân quyền hiện hành dựa trực tiếp vào `users.role_id`:
 | Tên | Cột → đích | ON DELETE | ON UPDATE | Lý do |
 |---|---|---|---|---|
 | `fk_user_profiles_users` | `user_id → users(id)` | `CASCADE` | `RESTRICT` | Hồ sơ là **thành phần sở hữu** (composition) của user, không tồn tại độc lập. |
-| `fk_user_profiles_provinces` | `province_id → provinces(id)` | `SET NULL` | `RESTRICT` | Tỉnh là dữ liệu tham chiếu tùy chọn; nếu Admin gộp/xóa đơn vị hành chính `[§10.5]` thì hồ sơ **vẫn phải sống**, chỉ mất thông tin phụ → `SET NULL` (cột nullable). |
-| `fk_user_profiles_districts` | `district_id → districts(id)` | `SET NULL` | `RESTRICT` | Như trên. |
 
 **Check** `ck_user_profiles_gender_req CHECK (preferred_gender_requirement IS NULL OR preferred_gender_requirement IN ('MALE_ONLY','FEMALE_ONLY','ANY'))`.
 
@@ -1569,7 +2342,7 @@ danh sách follower để bắn `FOLLOWED_LANDLORD_NEW_LISTING` (canonical 5, `[
 | `optional_fields` | `JSON` | N | `'[]'` | | Trường được phép nhập (ngoài bộ chung); field không thuộc `required ∪ optional ∪ base` bị bỏ qua | `[§10.5]` |
 | `display_order` | `INT` | N | `0` | IDX | Thứ tự hiển thị | `[§10.5]` |
 | `is_active` | `BOOLEAN` | N | `TRUE` | IDX | *"Thêm/sửa/**ẩn** loại tin"* | `[§10.5]` |
-| `listing_count` | `INT UNSIGNED` | N | `0` | | Denormalize — *"Top danh mục phổ biến"* trên dashboard; cập nhật bởi `TrustScoreRecalcJob` | `[§10.1]` |
+| `listing_count` | `INT UNSIGNED` | N | `0` | | Denormalize — *"Top danh mục phổ biến"* trên trang chủ/dashboard; backfill bởi V17 và cập nhật tức thời khi listing đổi trạng thái public/category | `[§10.1]` |
 | `created_at` / `updated_at` | `DATETIME(6)` | N | | | Bảng tra cứu — không có cột audit khác | canonical 6.1 |
 
 **Index** `idx_categories_is_active_display_order (is_active, display_order)` — render menu/bộ lọc
@@ -1638,7 +2411,7 @@ làm được qua UI; phần "thêm" cần migration vì code phải có nhánh 
 
 | Tên | Cột → đích | ON DELETE | ON UPDATE | Lý do |
 |---|---|---|---|---|
-| `fk_districts_provinces` | `province_id → provinces(id)` | `RESTRICT` | `RESTRICT` | **Không** cho xóa tỉnh còn quận: sẽ làm mồ côi hàng nghìn `wards` và làm hỏng `listings.province_id`. Muốn ngừng dùng thì `is_active = FALSE`. `CASCADE` ở đây là thảm họa dữ liệu (một câu `DELETE` sai xóa cả cây hành chính). |
+| `fk_districts_provinces` | `province_id → provinces(id)` | `RESTRICT` | `RESTRICT` | **Không** cho xóa tỉnh còn quận: sẽ làm mồ côi hàng nghìn `wards`, kéo theo sai khu vực của `listings.ward_id`. Muốn ngừng dùng thì `is_active = FALSE`. `CASCADE` ở đây là thảm họa dữ liệu (một câu `DELETE` sai xóa cả cây hành chính). |
 
 **Check** `ck_districts_type CHECK (type IN ('QUAN','HUYEN','THI_XA','THANH_PHO_THUOC_TINH'))`.
 
@@ -1702,7 +2475,7 @@ CONSTRAINT ck_amenities_price_impact CHECK (price_impact_ratio BETWEEN -1 AND 1)
 #### 3.17. `listings` — **bảng lõi của hệ thống**
 
 Khớp **chính xác** danh sách thuộc tính `[§6.3] Listing` (Id, OwnerId, CategoryId, Title,
-Description, Price, Area, DepositAmount, ProvinceId, DistrictId, WardId, AddressDetail,
+Description, Price, Area, DepositAmount, WardId, AddressDetail,
 Latitude, Longitude, RoomCount, ToiletCount, MaxOccupants, CurrentOccupants, GenderRequirement,
 PetAllowed, ParkingAvailable, CurfewType, FurnitureStatus, Status, TrustScore, AverageRating,
 ViewCount, FavoriteCount, ContactCount, PublishedAt, ExpiredAt, CreatedAt, UpdatedAt) và bổ sung
@@ -1721,9 +2494,7 @@ các cột bắt buộc để thỏa `[§3.3][§3.7][§5.8][§9.1][§9.4][§10.4
 | `deposit_amount` | `DECIMAL(15,2)` | Y | `NULL` | | Tiền cọc | `[§3.3]` `DepositAmount` |
 | `electricity_price` | `DECIMAL(15,2)` | Y | `NULL` | | Giá điện (đ/kWh) | `[§3.3]` `ElectricityPrice` |
 | `water_price` | `DECIMAL(15,2)` | Y | `NULL` | | Giá nước (đ/m³ hoặc đ/người) | `[§3.3]` `WaterPrice` |
-| `province_id` | `BIGINT UNSIGNED` | N | — | FK, IDX | | `[§3.3][§6.2]` |
-| `district_id` | `BIGINT UNSIGNED` | N | — | FK, IDX | | `[§3.3][§6.2]` |
-| `ward_id` | `BIGINT UNSIGNED` | N | — | FK, IDX | Bắt buộc — bước 1 dự đoán giá lấy comparable **cùng ward** | `[§9.4]` (canonical 10.4) |
+| `ward_id` | `BIGINT UNSIGNED` | N | — | FK, IDX | Khu vực của tin. Province/district suy ra qua `wards.district_id → districts.province_id`; không lưu lặp FK bắc cầu. Bắt buộc — bước 1 dự đoán giá lấy comparable **cùng ward** | `[§9.4]` (canonical 10.4) |
 | `address_detail` | `VARCHAR(255)` | N | — | | Số nhà, tên đường | `[§3.3]` `AddressDetail` |
 | `latitude` | `DECIMAL(10,7)` | Y | `NULL` | IDX | | `[§3.3]` *"Latitude/Longitude nếu có bản đồ"* |
 | `longitude` | `DECIMAL(10,7)` | Y | `NULL` | IDX | | `[§3.3]` |
@@ -1789,7 +2560,7 @@ các cột bắt buộc để thỏa `[§3.3][§3.7][§5.8][§9.1][§9.4][§10.4
 
 | Tên | Cột | Lý do |
 |---|---|---|
-| `idx_listings_search` | `(status, province_id, district_id, category_id, price, area)` | Index **chủ lực** của tìm kiếm `[§3.7]` — §5.2 |
+| `idx_listings_search` | `(status, ward_id, category_id, price, area)` | Index **chủ lực** khi truy vấn đã có ward; province/district lọc qua `wards/districts` từ `ward_id` `[§3.7]` — §5.2 |
 | `idx_listings_promoted_sort` | `(status, is_promoted, promotion_priority, published_at)` | Xen tin được đẩy lên đầu `[§2.9][§3.7]` |
 | `idx_listings_status_published_at` | `(status, published_at)` | Sắp xếp "mới nhất" `[§2.4]` SRCH-08 |
 | `idx_listings_status_price` | `(status, price)` | Sắp xếp theo giá `[§2.4]` SRCH-08 |
@@ -1818,9 +2589,7 @@ các cột bắt buộc để thỏa `[§3.3][§3.7][§5.8][§9.1][§9.4][§10.4
 |---|---|---|---|---|
 | `fk_listings_users` | `owner_id → users(id)` | `RESTRICT` | `RESTRICT` | `[§10.2]`: *"Không xóa cứng user có giao dịch, **tin đăng** hoặc report"* — DB phải **từ chối** thao tác này, không được im lặng xóa theo (`CASCADE`) cũng không được để tin mồ côi (`SET NULL`, mà cột `NOT NULL`). |
 | `fk_listings_categories` | `category_id → categories(id)` | `RESTRICT` | `RESTRICT` | Danh mục có tin thì chỉ được **ẩn** (`is_active=FALSE`), không xóa `[§10.5]`. |
-| `fk_listings_provinces` | `province_id → provinces(id)` | `RESTRICT` | `RESTRICT` | Cột `NOT NULL` → không `SET NULL` được; và mất khu vực = tin không tìm thấy `[§3.7]`. |
-| `fk_listings_districts` | `district_id → districts(id)` | `RESTRICT` | `RESTRICT` | Như trên. |
-| `fk_listings_wards` | `ward_id → wards(id)` | `RESTRICT` | `RESTRICT` | Như trên. |
+| `fk_listings_wards` | `ward_id → wards(id)` | `RESTRICT` | `RESTRICT` | Tin luôn có ward; province/district suy ra qua chuỗi `ward → district → province`, không lặp FK bắc cầu. |
 | `fk_listings_prediction_histories` | `price_prediction_id → prediction_histories(id)` | `SET NULL` | `RESTRICT` | Tham chiếu **tùy chọn**. Khi dọn `prediction_histories` cũ (§10), tin **phải sống tiếp** — mất giá tham khảo là chấp nhận được vì `[§9.4]` nói *"Giá AI chỉ là tham khảo"*. Cột nullable nên `SET NULL` hợp lệ. |
 
 > `fk_listings_prediction_histories` tạo **vòng FK** với `fk_prediction_histories_listings`
@@ -1932,8 +2701,7 @@ trùng một tiện ích.
 > Cập nhật tiện ích của tin (LIST-12) dùng chiến lược **xóa cứng + chèn lại** trong một
 > transaction (`DELETE FROM listing_amenities WHERE listing_id = ?` rồi `INSERT`). Đây là
 > **ngoại lệ có chủ ý** của luật soft-delete §1.5: bảng nối thuần túy, không mang thông tin
-> nghiệp vụ độc lập, không bị report/thanh toán tham chiếu; lịch sử thay đổi tiện ích đã được
-> ghi ở `listing_edit_histories` `[§3.4]`. Nếu xóa mềm ở đây, `uk_listing_amenities_listing_amenity`
+> nghiệp vụ độc lập, không bị report/thanh toán tham chiếu. Nếu xóa mềm ở đây, `uk_listing_amenities_listing_amenity`
 > sẽ chặn việc gắn lại tiện ích đã bỏ (giống bẫy ở `follows` §3.11) — chi phí phức tạp không đổi
 > lấy giá trị nào.
 
@@ -1943,45 +2711,6 @@ trùng một tiện ích.
 |---|---|---|---|---|
 | `fk_listing_amenities_listings` | `listing_id → listings(id)` | `CASCADE` | `RESTRICT` | Bảng nối sở hữu bởi tin. |
 | `fk_listing_amenities_amenities` | `amenity_id → amenities(id)` | `RESTRICT` | `RESTRICT` | **Không** cho xóa tiện ích đang được tin dùng — sẽ làm tin mất thuộc tính đã kiểm duyệt và làm sai kết quả lọc `[§3.7]`. `[§10.5]` chỉ yêu cầu *"ẩn"* (`is_active=FALSE`). |
-
-#### 3.20. `listing_edit_histories`
-
-Bắt buộc theo canonical mục 6 (`[§3.4]` *"Mọi thay đổi quan trọng cần lưu lịch sử chỉnh sửa"*,
-`[§10.4]` *"Xem lịch sử chỉnh sửa"*).
-
-| Cột | Kiểu | Null | Mặc định | Khóa | Mô tả nghiệp vụ | Căn cứ |
-|---|---|---|---|---|---|---|
-| `id` | `BIGINT UNSIGNED` | N | `AUTO_INCREMENT` | PK | | |
-| `listing_id` | `BIGINT UNSIGNED` | N | — | FK, IDX | | `[§3.4]` |
-| `editor_id` | `BIGINT UNSIGNED` | Y | `NULL` | FK, IDX | Chủ trọ hoặc Admin. `NULL` = SYSTEM (job đổi trạng thái) | `[§3.4]` *"Admin sửa trực tiếp nội dung vi phạm nhẹ"* |
-| `field_name` | `VARCHAR(50)` | N | — | IDX | Tên field camelCase: `title`, `price`, `description`, `addressDetail`, `primaryImage`, `amenities`, `status` | `[§3.4]` |
-| `old_value` | `TEXT` | Y | `NULL` | | Giá trị cũ (chuỗi hóa) | `[§10.4]` |
-| `new_value` | `TEXT` | Y | `NULL` | | Giá trị mới | `[§10.4]` |
-| `is_sensitive_change` | `BOOLEAN` | N | `FALSE` | IDX | *"Thay đổi tiêu đề, mô tả, giá, địa chỉ hoặc ảnh chính cần kiểm duyệt lại"* → kích `RESUBMIT_AFTER_EDIT` | `[§3.4]` + canonical 5.1 |
-| `status_before` | `VARCHAR(20)` | Y | `NULL` | | Trạng thái trước khi sửa | `[§3.4]` |
-| `status_after` | `VARCHAR(20)` | Y | `NULL` | | Trạng thái sau (có thể `PENDING`) | `[§3.4]` bước 5 |
-| `edit_batch_id` | `CHAR(36)` | N | — | IDX | Gom nhiều dòng field của **cùng một lần bấm Lưu** thành một mục lịch sử trên UI | `[§10.4]` |
-| `created_at` | `DATETIME(6)` | N | `CURRENT_TIMESTAMP(6)` | IDX | | |
-
-**Index** `idx_listing_edit_histories_listing_id_created_at (listing_id, created_at)` — màn hình
-*"Xem lịch sử chỉnh sửa"* `[§10.4]` sắp theo thời gian giảm dần;
-`idx_listing_edit_histories_batch (edit_batch_id)`; `idx_listing_edit_histories_editor_id (editor_id)`
-(FK + *"Xem lịch sử hoạt động"* `[§10.2]`).
-**Unique** không có.
-**Foreign key**
-
-| Tên | Cột → đích | ON DELETE | ON UPDATE | Lý do |
-|---|---|---|---|---|
-| `fk_listing_edit_histories_listings` | `listing_id → listings(id)` | `CASCADE` | `RESTRICT` | Lịch sử sửa gắn với tin; khi purge tin thì đi cùng. |
-| `fk_listing_edit_histories_users` | `editor_id → users(id)` | `SET NULL` | `RESTRICT` | Cột **nullable** đã mang nghĩa "SYSTEM". Nếu user bị xóa vật lý (chỉ xảy ra với tài khoản test), lịch sử **phải sống tiếp** vì nó là dữ liệu kiểm duyệt `[§10.4]` — `CASCADE` sẽ **xóa bằng chứng**. |
-
-**Check** `ck_listing_edit_histories_changed CHECK (old_value IS NOT NULL OR new_value IS NOT NULL)`
-— không ghi dòng lịch sử rỗng.
-
-> Bảng này **append-only** nên chỉ có `created_at`, không có `updated_at`/`deleted_at` (§1.8).
-> Nó là bằng chứng kiểm duyệt: sửa hoặc xóa lịch sử sửa là vô nghĩa.
-
----
 
 ### Nhóm interaction — 8 bảng
 
@@ -2093,7 +2822,6 @@ danh mục `[§3.7]` luồng phụ.
 | `id` | `BIGINT UNSIGNED` | N | `AUTO_INCREMENT` | PK | | |
 | `listing_id` | `BIGINT UNSIGNED` | N | — | FK, IDX | | `[§6.2]` |
 | `user_id` | `BIGINT UNSIGNED` | N | — | FK, IDX | Người thuê liên hệ. **NOT NULL** vì `[§3.10]` *"Khách chưa đăng nhập được yêu cầu đăng nhập trước khi xem số đầy đủ"* | `[§3.10]` |
-| `owner_id` | `BIGINT UNSIGNED` | N | — | FK, IDX | Chủ trọ (denormalize từ `listings.owner_id`) — cho phép `/api/landlord/contacts` truy vấn **không cần join** `listings` | `[§2.6]` CONT-04 |
 | `contact_type` | `VARCHAR(15)` | N | — | IDX | `ContactType`: `VIEW_PHONE` / `FORM` / `CHAT` | `[§3.10]` *"hình thức liên hệ"* |
 | `message` | `VARCHAR(1000)` | Y | `NULL` | | Nội dung form; `NULL` với `VIEW_PHONE` | `[§3.10]` *"nội dung nếu gửi form"* |
 | `contact_name` | `VARCHAR(100)` | Y | `NULL` | | Tên người liên hệ khai trong form (có thể khác tên tài khoản) | `[§3.10]` |
@@ -2107,7 +2835,6 @@ danh mục `[§3.7]` luồng phụ.
 
 | Tên | Cột | Lý do |
 |---|---|---|
-| `idx_contact_logs_owner_id_created_at` | `(owner_id, created_at)` | `/api/landlord/contacts` — *"Chủ trọ có thể xem danh sách người đã liên hệ tin của mình"* `[§3.10]` |
 | `idx_contact_logs_listing_id_created_at` | `(listing_id, created_at)` | Thống kê tin LIST-10 `[§7.3]` |
 | `idx_contact_logs_dedup` | `(listing_id, user_id, created_at)` | Khử trùng lặp `contact.dedup_minutes` `[§3.10]`; đồng thời phục vụ điều kiện đánh giá `review.require_contact` `[§3.12]` |
 | `idx_contact_logs_user_id_created_at` | `(user_id, created_at)` | Hồ sơ nhu cầu w=5 (canonical 10.2) |
@@ -2119,11 +2846,9 @@ danh mục `[§3.7]` luồng phụ.
 |---|---|---|---|---|
 | `fk_contact_logs_listings` | `listing_id → listings(id)` | `CASCADE` | `RESTRICT` | Sở hữu bởi tin. |
 | `fk_contact_logs_users` | `user_id → users(id)` | `RESTRICT` | `RESTRICT` | **RESTRICT, không CASCADE** — khác `view_histories`. `contact_logs` là **bằng chứng nghiệp vụ**: nó là điều kiện cho phép đánh giá (`review.require_contact = true` `[§3.12]`) và là dữ liệu chủ trọ đang dùng để liên lạc `[§2.6]` CONT-04. Xóa nó theo user sẽ **vô hiệu hóa review đã tồn tại**. `[§10.2]` cũng cấm xóa cứng user có dữ liệu nghiệp vụ. |
-| `fk_contact_logs_users_owner` | `owner_id → users(id)` | `RESTRICT` | `RESTRICT` | Như trên (tên FK có hậu tố cột theo §1.3). |
 
-**Check** `ck_contact_logs_type CHECK (contact_type IN ('VIEW_PHONE','FORM','CHAT'))`;
-`ck_contact_logs_not_self CHECK (user_id <> owner_id)` — chủ trọ không tự liên hệ tin của mình
-để bơm `contact_count`.
+**Check** `ck_contact_logs_type CHECK (contact_type IN ('VIEW_PHONE','FORM','CHAT'))`.
+Quy tắc chủ trọ không tự liên hệ tin của mình được ép ở service bằng `listing.owner_id`.
 
 **[BỔ SUNG NGOÀI CANONICAL]** — enum `ContactType : VIEW_PHONE, FORM, CHAT`
 (canonical mục 5 không có; bắt buộc vì `[§3.10]` có *"Dữ liệu vào: ListingId, **hình thức liên hệ**"*
@@ -2132,16 +2857,15 @@ và luồng phân biệt "bấm xem số điện thoại" với "gửi tin nhắ
 #### 3.25. `conversations`
 
 `[§6.1] Conversation`; `[§2.6]` CONT-03. `[§13.2]`: *"Chỉ cần nhắn tin cơ bản, không cần realtime
-phức tạp"* → mô hình 1 hội thoại = (tin, người thuê, chủ trọ).
+phức tạp"* → mô hình 1 hội thoại = (tin, người thuê); chủ trọ suy ra từ `listings.owner_id`.
 
 | Cột | Kiểu | Null | Mặc định | Khóa | Mô tả nghiệp vụ | Căn cứ |
 |---|---|---|---|---|---|---|
 | `id` | `BIGINT UNSIGNED` | N | `AUTO_INCREMENT` | PK | | |
 | `listing_id` | `BIGINT UNSIGNED` | N | — | FK, UK | Hội thoại luôn **gắn với một tin** — chủ trọ cần biết đang nói về phòng nào | `[§2.6]` CONT-03 |
 | `tenant_id` | `BIGINT UNSIGNED` | N | — | FK, UK, IDX | | `[§2.6]` |
-| `landlord_id` | `BIGINT UNSIGNED` | N | — | FK, UK, IDX | Denormalize từ `listings.owner_id` | `[§2.6]` |
 | `status` | `VARCHAR(10)` | N | `'ACTIVE'` | IDX | `ConversationStatus`: `ACTIVE` / `ARCHIVED` / `BLOCKED` | `[§3.10]` *"Người dùng bị report spam có thể bị hạn chế liên hệ"* |
-| `first_response_at` | `DATETIME(6)` | Y | `NULL` | IDX | Mốc **tin nhắn đầu tiên của chủ trọ** trong hội thoại. Ghi **đúng một lần** (khi `sender_id = landlord_id` và cột còn `NULL`), sau đó bất biến. `NULL` = chủ trọ **chưa từng** phản hồi. Đây là nguồn sự thật của *"Chủ trọ phản hồi người thuê nhanh và đầy đủ"* | `[§5.7]` — §9.8 |
+| `first_response_at` | `DATETIME(6)` | Y | `NULL` | IDX | Mốc **tin nhắn đầu tiên của chủ trọ** trong hội thoại. Ghi **đúng một lần** khi `sender_id = listings.owner_id` của `listing_id` và cột còn `NULL`, sau đó bất biến. `NULL` = chủ trọ **chưa từng** phản hồi. Đây là nguồn sự thật của *"Chủ trọ phản hồi người thuê nhanh và đầy đủ"* | `[§5.7]` — §9.8 |
 | `last_message_at` | `DATETIME(6)` | Y | `NULL` | IDX | Denormalize — sắp danh sách hội thoại **không cần** join `messages` | `[§2.6]` |
 | `last_message_preview` | `VARCHAR(200)` | Y | `NULL` | | Trích 200 ký tự đầu tin nhắn cuối | `[§2.6]` |
 | `tenant_unread_count` | `INT UNSIGNED` | N | `0` | | Badge chưa đọc phía người thuê | `[§11.12]` |
@@ -2149,28 +2873,23 @@ phức tạp"* → mô hình 1 hội thoại = (tin, người thuê, chủ trọ
 | `message_count` | `INT UNSIGNED` | N | `0` | | | |
 | `created_at` … `deleted_at` | | | | | | canonical 6.1 |
 
-**Index** `idx_conversations_tenant_id_last_message_at (tenant_id, last_message_at)` và
-`idx_conversations_landlord_id_last_message_at (landlord_id, last_message_at)` — hai màn hình
-`/tai-khoan/tin-nhan` và `/quan-ly/tin-nhan` (canonical 12) đều sắp theo tin nhắn mới nhất;
-`idx_conversations_listing_id (listing_id)` — FK + xem hội thoại của một tin;
-`idx_conversations_landlord_id_created_at (landlord_id, created_at, first_response_at)` — tính
-tỷ lệ phản hồi của chủ trọ trong cửa sổ N ngày `[§5.7]` (§9.8): `landlord_id` equality →
-`created_at` range → `first_response_at` đọc **trong index**, không chạm bảng.
-**Unique** `uk_conversations_listing_tenant_landlord (listing_id, tenant_id, landlord_id)` —
-không tạo 2 hội thoại trùng cho cùng bộ ba (bấm "Chat" nhiều lần phải mở lại hội thoại cũ).
+**Index** `idx_conversations_tenant_id_last_message_at (tenant_id, last_message_at)` phục vụ
+`/tai-khoan/tin-nhan`; `idx_conversations_listing_id_last_message_at (listing_id, last_message_at)`
+phục vụ màn hình chủ trọ sau khi join `listings.owner_id`; `idx_conversations_listing_id (listing_id)`
+phục vụ FK + xem hội thoại của một tin.
+**Unique** `uk_conversations_listing_tenant (listing_id, tenant_id)` —
+không tạo 2 hội thoại trùng cho cùng tin và người thuê (bấm "Chat" nhiều lần phải mở lại hội thoại cũ).
 **Foreign key**
 
 | Tên | Cột → đích | ON DELETE | ON UPDATE | Lý do |
 |---|---|---|---|---|
 | `fk_conversations_listings` | `listing_id → listings(id)` | `CASCADE` | `RESTRICT` | Hội thoại vô nghĩa nếu tin bị purge. |
 | `fk_conversations_users_tenant` | `tenant_id → users(id)` | `RESTRICT` | `RESTRICT` | Hội thoại là nội dung có thể bị report `[§2.8]` RPT-03 → bằng chứng, không xóa theo user. |
-| `fk_conversations_users_landlord` | `landlord_id → users(id)` | `RESTRICT` | `RESTRICT` | Như trên. |
 
 **Check**
 
 ```sql
 CONSTRAINT ck_conversations_status CHECK (status IN ('ACTIVE','ARCHIVED','BLOCKED')),
-CONSTRAINT ck_conversations_not_self CHECK (tenant_id <> landlord_id),
 CONSTRAINT ck_conversations_unread CHECK (tenant_unread_count >= 0 AND landlord_unread_count >= 0),
 CONSTRAINT ck_conversations_first_response CHECK (first_response_at IS NULL
                                                   OR first_response_at >= created_at)
@@ -2188,7 +2907,7 @@ WHERE id = :conversationId
   AND first_response_at IS NULL;      -- ghi đúng một lần, idempotent, không cần SELECT trước
 ```
 
-Chạy trong `MessageServiceImpl.send()` **chỉ khi** `sender_id = conversation.landlord_id`, ngay
+Chạy trong `MessageServiceImpl.send()` **chỉ khi** `sender_id = listings.owner_id` của hội thoại, ngay
 cạnh lệnh cập nhật `last_message_at`/`message_count` (§1.2 tầng 1 — UPDATE nguyên tử, không
 `SELECT` rồi `SET`). Mệnh đề `AND first_response_at IS NULL` làm câu lệnh **idempotent**: mọi tin
 nhắn thứ 2 trở đi của chủ trọ update 0 dòng.
@@ -2196,7 +2915,7 @@ nhắn thứ 2 trở đi của chủ trọ update 0 dòng.
 > **Vì sao là cột trên `conversations` chứ không `MIN(messages.created_at)` khi cần?**
 > `[§5.7]` dùng dữ liệu này để tính điểm uy tín cho **mọi** chủ trọ mỗi đêm
 > (`TrustScoreRecalcJob`). Suy ra từ `messages` cần một subquery `MIN(created_at) ... WHERE
-> sender_id = landlord_id GROUP BY conversation_id` trên bảng **lớn nhất** của nhóm interaction,
+> sender là chủ trọ GROUP BY conversation_id` trên bảng **lớn nhất** của nhóm interaction,
 > cho **toàn bộ** hội thoại — chính xác kiểu truy vấn mà §1.2 tồn tại để tránh. Cột này còn mang
 > nghĩa nghiệp vụ riêng (mốc bất biến) mà `MIN()` không diễn đạt được: xóa mềm tin nhắn đầu tiên
 > (`messages.deleted_at`, thu hồi tin nhắn) **không** được xóa sự kiện "đã từng phản hồi".
@@ -2207,7 +2926,7 @@ nhắn thứ 2 trở đi của chủ trọ update 0 dòng.
 |---|---|---|---|---|---|---|
 | `id` | `BIGINT UNSIGNED` | N | `AUTO_INCREMENT` | PK | | |
 | `conversation_id` | `BIGINT UNSIGNED` | N | — | FK, IDX | | `[§6.2]` *"Một cuộc trò chuyện có nhiều tin nhắn"* |
-| `sender_id` | `BIGINT UNSIGNED` | N | — | FK, IDX | Phải là `tenant_id` hoặc `landlord_id` của hội thoại (ép ở service, §4.3) | `[§2.6]` |
+| `sender_id` | `BIGINT UNSIGNED` | N | — | FK, IDX | Phải là `tenant_id` hoặc `listings.owner_id` của hội thoại (ép ở service, §4.3) | `[§2.6]` |
 | `content` | `VARCHAR(2000)` | N | — | | Nội dung; đã sanitize | `[§11.1]` |
 | `is_read` | `BOOLEAN` | N | `FALSE` | IDX | | `[§11.12]` |
 | `read_at` | `DATETIME(6)` | Y | `NULL` | | | |
@@ -2302,7 +3021,6 @@ CONSTRAINT ck_comments_not_self_parent CHECK (parent_id IS NULL OR parent_id <> 
 | `id` | `BIGINT UNSIGNED` | N | `AUTO_INCREMENT` | PK | | |
 | `listing_id` | `BIGINT UNSIGNED` | N | — | FK, UK, IDX | | `[§6.2]` *"Một tin có nhiều đánh giá"* |
 | `user_id` | `BIGINT UNSIGNED` | N | — | FK, UK | Người đánh giá | `[§3.12]` |
-| `landlord_id` | `BIGINT UNSIGNED` | N | — | FK, IDX | Denormalize từ `listings.owner_id` — *"Đánh giá tin/**chủ trọ**"*; tính `landlord_profiles.average_rating` không cần join | `[§2.7]` REV-01, `[§8.6]` |
 | `rating` | `TINYINT UNSIGNED` | N | — | IDX | 1–5 sao | `[§3.12]` *"Rating từ 1 đến 5"* |
 | `content` | `VARCHAR(1000)` | Y | `NULL` | | *"Nội dung đánh giá có thể bắt buộc nếu rating <= 2"* → ép bằng CHECK | `[§3.12]` |
 | `status` | `VARCHAR(10)` | N | `'VISIBLE'` | IDX | `ReviewStatus` | canonical 5 |
@@ -2318,7 +3036,6 @@ CONSTRAINT ck_comments_not_self_parent CHECK (parent_id IS NULL OR parent_id <> 
 | Tên | Cột | Lý do |
 |---|---|---|
 | `idx_reviews_listing_id_status_created_at` | `(listing_id, status, created_at)` | `GET /api/listings/{id}/reviews` |
-| `idx_reviews_landlord_id_status` | `(landlord_id, status)` | Tính `landlord_profiles.average_rating` `[§8.6]`; hồ sơ chủ trọ công khai `[§2.2]` USER-04 |
 | `idx_reviews_rating_status` | `(rating, status)` | `[§10.9]` lọc đánh giá thấp; theo dõi *"Đánh giá quá tiêu cực… được AI và Admin theo dõi"* `[§3.12]` |
 | `idx_reviews_user_id` | `(user_id)` | `/tai-khoan/danh-gia-cua-toi` (canonical 12) + FK |
 
@@ -2332,7 +3049,6 @@ người dùng tự xóa để viết lại.
 |---|---|---|---|---|
 | `fk_reviews_listings` | `listing_id → listings(id)` | `CASCADE` | `RESTRICT` | Sở hữu bởi tin. |
 | `fk_reviews_users` | `user_id → users(id)` | `RESTRICT` | `RESTRICT` | Đánh giá là nội dung công khai + đầu vào điểm uy tín `[§5.8]`; `[§10.9]` *"Không sửa nội dung đánh giá của người dùng. Chỉ ẩn hoặc khôi phục"* ⇒ càng không được xóa theo. |
-| `fk_reviews_users_landlord` | `landlord_id → users(id)` | `RESTRICT` | `RESTRICT` | Như trên. |
 
 **Check**
 
@@ -3001,7 +3717,7 @@ sentiment"*).
 | Tên | Cột | Lý do |
 |---|---|---|
 | `idx_sentiment_results_comment_id_created_at` | `(comment_id, created_at)` | Xem lịch sử phân tích của một bình luận `[§10.10]` |
-| `idx_sentiment_results_listing_id_label` | `(listing_id, label, is_latest)` | **Tính tỷ lệ tiêu cực của tin** `[§9.1]` (ngưỡng 40%/50%) |
+| `idx_sentiment_results_comment_id_created_at` | `(comment_id, created_at)` | Lịch sử phân tích theo bình luận; tỷ lệ tiêu cực của tin join qua `comments.listing_id` |
 | `idx_sentiment_results_suggested_action` | `(suggested_action, is_latest)` | Hàng đợi *"Xem danh sách tin bị AI cảnh báo"* `[§7.4][§10.10]` |
 | `idx_sentiment_results_analyzer_version` | `(analyzer_version, created_at)` | So sánh chất lượng giữa các phiên bản `[§10.10]` |
 | `idx_sentiment_results_label_confidence` | `(label, confidence)` | Lọc kết quả confidence thấp để review thủ công `[§9.1]` |
@@ -3087,7 +3803,7 @@ lại quá nhiều một tin"* `[§9.2]` (kiểm tra tin đã gợi ý gần đ�
 | `listing_id` | `BIGINT UNSIGNED` | Y | `NULL` | FK, IDX | **Nullable**: dự đoán chạy khi chủ trọ đang nhập form, **trước khi** tin tồn tại | `[§9.4]` bước 1–3, `[§8.1]` |
 | `user_id` | `BIGINT UNSIGNED` | N | — | FK, IDX | Chủ trọ yêu cầu | `[§3.16]` |
 | `category_id` | `BIGINT UNSIGNED` | N | — | FK | Input *"Loại nhà"* | `[§9.4]` |
-| `province_id` / `district_id` / `ward_id` | `BIGINT UNSIGNED` | N | — | FK, IDX | Input *"Khu vực"* | `[§9.4]` |
+| `ward_id` | `BIGINT UNSIGNED` | N | — | FK, IDX | Input *"Khu vực"*; province/district suy ra qua `ward_id`, không lưu lặp FK bắc cầu | `[§9.4]` |
 | `area` | `DECIMAL(8,2)` | N | — | | Input *"Diện tích"* | `[§9.4]` |
 | `room_count` / `toilet_count` | `TINYINT UNSIGNED` | Y | `NULL` | | Input *"Số phòng, Số toilet"* | `[§9.4]` |
 | `furniture_status` | `VARCHAR(10)` | Y | `NULL` | | Input *"Nội thất"* | `[§9.4]` |
@@ -3112,6 +3828,7 @@ lại quá nhiều một tin"* `[§9.2]` (kiểm tra tin đã gợi ý gần đ�
 
 **Index** `idx_prediction_histories_listing_id_created_at (listing_id, created_at)` — *"Xem lịch sử
 dự đoán giá"* `[§10.10]`; `idx_prediction_histories_user_id_created_at (user_id, created_at)`;
+`idx_prediction_histories_ward_id (ward_id)` phục vụ đối soát input khu vực;
 `idx_prediction_histories_is_flagged (is_flagged, created_at)` — *"Admin có thể dùng danh sách tin
 lệch giá lớn để kiểm duyệt"* `[§9.4]`;
 `idx_prediction_histories_confidence (confidence)`.
@@ -3123,9 +3840,7 @@ lệch giá lớn để kiểm duyệt"* `[§9.4]`;
 | `fk_prediction_histories_listings` | `listing_id → listings(id)` | `SET NULL` | `RESTRICT` | Cột đã nullable (dự đoán có trước tin). Lịch sử dự đoán phải sống để *"phục vụ báo cáo và đánh giá chất lượng AI"* `[§9.4]` kể cả khi tin bị purge. |
 | `fk_prediction_histories_users` | `user_id → users(id)` | `RESTRICT` | `RESTRICT` | `[§10.2]`. |
 | `fk_prediction_histories_categories` | `category_id → categories(id)` | `RESTRICT` | `RESTRICT` | `[§10.5]`. |
-| `fk_prediction_histories_provinces` | `province_id → provinces(id)` | `RESTRICT` | `RESTRICT` | §3.14. |
-| `fk_prediction_histories_districts` | `district_id → districts(id)` | `RESTRICT` | `RESTRICT` | §3.14. |
-| `fk_prediction_histories_wards` | `ward_id → wards(id)` | `RESTRICT` | `RESTRICT` | §3.14. |
+| `fk_prediction_histories_wards` | `ward_id → wards(id)` | `RESTRICT` | `RESTRICT` | Province/district suy ra qua `ward -> district -> province`, không lặp FK bắc cầu. |
 
 **Check**
 
@@ -3335,45 +4050,36 @@ Bắt buộc theo canonical mục 6 (nhóm admin có `ai_configs`); `[§2.11]` A
 
 ---
 
-### 3.47. Bảng tổng kiểm — 45/45
+### 3.47. Bảng tổng kiểm - 42 bảng hiện hành
 
 | # | Bảng | Nhóm | # | Bảng | Nhóm |
 |---|---|---|---|---|---|
-| 1 | `users` | auth/user | 24 | `contact_logs` | interaction |
-| 2 | `roles` | auth/user | 25 | `conversations` | interaction |
-| 3 | *(`user_roles` — đã bỏ ở v3)* | — | 26 | `messages` | interaction |
-| 4 | `user_profiles` | auth/user | 25 | `comments` | interaction |
-| 5 | `landlord_profiles` | auth/user | 26 | `reviews` | interaction |
-| 6 | `user_profiles` | auth/user | 29 | `reports` | moderation |
-| 7 | `landlord_profiles` | auth/user | 30 | `moderation_actions` | moderation |
-| 8 | `verifications` | auth/user | 31 | `violation_warnings` | moderation |
-| 9 | `refresh_tokens` | auth/user | 32 | `banned_keywords` | moderation |
-| 10 | `password_reset_tokens` | auth/user | 33 | `promotion_packages` | payment |
-| 11 | `follows` | auth/user | 34 | `coupons` | payment |
-| 12 | `categories` | catalog | 35 | `payments` | payment |
-| 13 | `provinces` | catalog | 36 | `promotion_subscriptions` | payment |
-| 15 | `V15__drop_permission_tables.sql` | Drop `role_permissions` và `permissions`; chuyển schema sang role-only | ✔ Bắt buộc sau V14 |
-| 14 | `districts` | catalog | 37 | `notifications` | notification |
-| 15 | `wards` | catalog | 38 | `notification_preferences` | notification |
-| 16 | `amenities` | catalog | 39 | `sentiment_results` | ai |
-| 17 | `listings` | listing | 40 | `recommendation_logs` | ai |
-| 18 | `listing_images` | listing | 41 | `prediction_histories` | ai |
-| 19 | `listing_amenities` | listing | 42 | `chatbot_conversations` | ai |
-| 20 | `listing_edit_histories` | listing | 43 | `chatbot_messages` | ai |
-| 21 | `favorites` | interaction | 44 | `audit_logs` | admin |
-| 22 | `view_histories` | interaction | 45 | `system_configs` | admin |
-| 23 | `search_histories` | interaction | 46 | `ai_configs` | admin |
+| 1 | `roles` | auth/user | 22 | `messages` | interaction |
+| 2 | `users` | auth/user | 23 | `comments` | interaction |
+| 3 | `user_profiles` | auth/user | 24 | `reviews` | interaction |
+| 4 | `landlord_profiles` | auth/user | 25 | `reports` | moderation |
+| 5 | `verifications` | auth/user | 26 | `moderation_actions` | moderation |
+| 6 | `refresh_tokens` | auth/user | 27 | `violation_warnings` | moderation |
+| 7 | `password_reset_tokens` | auth/user | 28 | `banned_keywords` | moderation |
+| 8 | `follows` | auth/user | 29 | `promotion_packages` | payment |
+| 9 | `categories` | catalog | 30 | `coupons` | payment |
+| 10 | `provinces` | catalog | 31 | `payments` | payment |
+| 11 | `districts` | catalog | 32 | `promotion_subscriptions` | payment |
+| 12 | `wards` | catalog | 33 | `notifications` | notification |
+| 13 | `amenities` | catalog | 34 | `notification_preferences` | notification |
+| 14 | `listings` | listing | 35 | `sentiment_results` | ai |
+| 15 | `listing_images` | listing | 36 | `recommendation_logs` | ai |
+| 16 | `listing_amenities` | listing | 37 | `prediction_histories` | ai |
+| 17 | `favorites` | interaction | 38 | `chatbot_conversations` | ai |
+| 18 | `view_histories` | interaction | 39 | `chatbot_messages` | ai |
+| 19 | `search_histories` | interaction | 40 | `audit_logs` | admin |
+| 20 | `contact_logs` | interaction | 41 | `system_configs` | admin |
+| 21 | `conversations` | interaction | 42 | `ai_configs` | admin |
 
-Khớp canonical mục 6 ở **mọi nhóm**: auth/user 11, catalog 5, listing 4, interaction 8,
-moderation 4, payment 4, ai 5, admin 3 — **giữ nguyên 100%**.
-Khác **duy nhất một** điểm: nhóm `notification` là **2** bảng thay vì 1
-(`notifications` + `notification_preferences`) ⇒ tổng 46, **trừ `user_roles` đã bỏ ở v3 ⇒ 45**.
+Schema hiện hành có 42 bảng. Các bảng lịch sử đã bị loại khỏi schema cuối cùng: `user_roles` (V13), `permissions` và `role_permissions` (V15), `listing_edit_histories` (đã bỏ theo thiết kế hiện tại).
 
-`notification_preferences` là bảng **[BỔ SUNG NGOÀI CANONICAL]** duy nhất của tài liệu này. Căn cứ
-bắt buộc: `[§11.12]` *"Có thể tắt một số loại thông báo không quan trọng"* — canonical mục 6 không
-liệt kê bảng nào lưu được lựa chọn này, và `follows.notify_new_listing` chỉ phủ 1/16
-`NotificationType` (§3.38). `03_THIET_KE_API.md` mục 4.10.6–4.10.7 đã đặc tả đầy đủ hai endpoint
-đọc/ghi cài đặt này ⇒ thiếu bảng thì đặc tả API không hiện thực được. Xem §3.38 và phụ lục A.6.
+Tổng theo nhóm hiện hành: auth/user 8, catalog 5, listing 3, interaction 8, moderation 4, payment 4, notification 2, ai 5, admin 3.
+`notification_preferences` vẫn là bảng bổ sung ngoài canonical để lưu cấu hình tắt/bật thông báo theo từng user.
 
 ---
 
@@ -3470,7 +4176,7 @@ rồi `INSERT` dòng mới với `is_latest = TRUE`.
 | `uk_listings_slug` | `listings` | `(slug)` | URL xác định | `[§11.8]` |
 | `uk_listing_amenities_listing_amenity` | `listing_amenities` | `(listing_id, amenity_id)` | Không gắn trùng tiện ích | `[§6.2]` |
 | `uk_favorites_user_listing` | `favorites` | `(user_id, listing_id)` | *"Một người dùng chỉ lưu một tin một lần"* | `[§3.9]` |
-| `uk_conversations_listing_tenant_landlord` | `conversations` | `(listing_id, tenant_id, landlord_id)` | Không tạo hội thoại trùng | `[§2.6]` |
+| `uk_conversations_listing_tenant` | `conversations` | `(listing_id, tenant_id)` | Không tạo hội thoại trùng cho cùng tin và người thuê | `[§2.6]` |
 | `uk_reviews_user_listing` | `reviews` | `(user_id, listing_id)` | *"Một người dùng chỉ đánh giá một tin một lần"* | `[§3.12]` |
 | `uk_reports_reporter_dedup` | `reports` | `(reporter_id, dedup_key)` | Không báo cáo trùng đối tượng + lý do trong một chu kỳ | `[§3.13]` |
 | `uk_banned_keywords_normalized_keyword` | `banned_keywords` | `(normalized_keyword)` | | `[§11.10]` |
@@ -3541,8 +4247,6 @@ hằng số canonical mục 5. Đã ghi tại từng bảng ở §3. Đây là t
 | `ck_coupons_window` / `ck_promotion_subscriptions_window` | `end_at > start_at` | `[§3.14][§10.6]` |
 | `ck_listings_counters_non_negative` | mọi counter `>= 0` | §1.2 tầng 3 |
 | `ck_follows_not_self` | `follower_id <> landlord_id` | logic |
-| `ck_conversations_not_self` | `tenant_id <> landlord_id` | logic |
-| `ck_contact_logs_not_self` | `user_id <> owner_id` | `[§3.10]` (chống bơm `contact_count`) |
 | `ck_comments_not_self_parent` | `parent_id <> id` | logic |
 
 ### 4.4. Ràng buộc PHẢI làm ở tầng application — vì DB không biểu diễn được
@@ -3569,7 +4273,7 @@ hằng số canonical mục 5. Đã ghi tại từng bảng ở §3. Đây là t
 | 14 | **`messages.sender_id` phải là `tenant_id` hoặc `landlord_id`** của hội thoại | CHECK không truy vấn bảng khác | `MessageServiceImpl.send()` — 403 `FORBIDDEN` nếu sai | `[§2.6]` |
 | 15 | **`reports.target_id` phải trỏ tới đối tượng có thật** (đa hình) | SQL không có FK đa hình (§3.29) | `ReportServiceImpl.create()` nạp đối tượng qua service tương ứng → 404 `<X>_NOT_FOUND` | `[§3.13]` |
 | 16 | **`coupons.per_user_limit`** | Cross-table (`payments`) | `PaymentServiceImpl` + `SELECT ... FOR UPDATE` trên dòng coupon | `[§10.6]` |
-| 17 | **Sửa nhạy cảm → `PENDING`** (tiêu đề/mô tả/giá/địa chỉ/ảnh chính) | Cần so sánh giá trị cũ vs mới | `ListingServiceImpl.update()` tính `is_sensitive_change`, ghi `listing_edit_histories`, gọi `RESUBMIT_AFTER_EDIT` | `[§3.4]` |
+| 17 | **Sửa nhạy cảm → `PENDING`** (tiêu đề/mô tả/giá/địa chỉ/ảnh chính) | Cần so sánh giá trị cũ vs mới | `ListingServiceImpl.update()` so sánh field cũ/mới rồi gọi `RESUBMIT_AFTER_EDIT`; không lưu bảng lịch sử riêng | `[§3.4]` |
 | 18 | **`listing.renew.free_per_month` = 2** | Cross-row + cửa sổ tháng + config | `ListingServiceImpl.renew()` dùng `landlord_profiles.free_renew_used_this_month` | `[§3.5]` |
 | 19 | **Chủ trọ không được xóa bình luận của người thuê** | Là quy tắc quyền, không phải toàn vẹn dữ liệu | `@PreAuthorize` + kiểm tra `comment.userId == currentUserId` trong `CommentServiceImpl.delete()` | `[§3.11]` |
 | 20 | **`required_fields` theo danh mục** | JSON động — CHECK không đọc được bảng `categories` | `ListingRequestValidator` đọc `categories.required_fields` | `[§10.5]` |
@@ -3589,7 +4293,7 @@ hằng số canonical mục 5. Đã ghi tại từng bảng ở §3. Đây là t
    tường minh để tên index theo quy ước canonical mục 2 và để kiểm soát được cột đi kèm.
 2. **Thứ tự cột trong index tổ hợp: equality → sort → range.** Đây là luật quan trọng nhất, xem §5.2.
 3. **Không tạo index đơn cột cho cột đã là tiền tố trái của một index tổ hợp** — thừa, tốn ghi.
-   Ví dụ có `idx_listings_search (status, province_id, …)` thì **không** tạo `idx_listings_status`.
+   Ví dụ có `idx_listings_search (status, ward_id, …)` thì **không** tạo `idx_listings_status`.
 4. **Cột chọn lọc kém (`BOOLEAN`, enum 2–4 giá trị) không bao giờ đứng một mình** — chỉ tham gia
    index tổ hợp hoặc bị bỏ (để MySQL lọc sau khi đọc dòng).
 5. Mỗi index trong tài liệu này đều gắn với **một truy vấn có thật** trong §9 hoặc trong danh sách
@@ -3602,14 +4306,21 @@ hằng số canonical mục 5. Đã ghi tại từng bảng ở §3. Đây là t
 ```sql
 WHERE l.deleted_at IS NULL
   AND l.status IN ('ACTIVE','NEED_REVIEW')   -- publicStatuses() [canonical 5.2]
-  AND l.province_id = ?                      -- SRCH-02
-  AND l.district_id = ?                      -- SRCH-02
+  AND l.ward_id = ?                          -- SRCH-02, nếu lọc đến ward
+  AND EXISTS (                               -- SRCH-02, nếu lọc province/district
+      SELECT 1
+      FROM wards w
+      JOIN districts d ON d.id = w.district_id
+      WHERE w.id = l.ward_id
+        AND d.province_id = ?
+        AND d.id = ?
+  )
   AND l.category_id = ?                      -- SRCH-05
   AND l.price BETWEEN ? AND ?                -- SRCH-03
   AND l.area  BETWEEN ? AND ?                -- SRCH-04
 ```
 
-#### 5.2.2. Vì sao thứ tự đề xuất `(status, province_id, district_id, price, area, category_id)` KHÔNG tối ưu
+#### 5.2.2. Vì sao thứ tự đề xuất `(status, ward_id, price, area, category_id)` KHÔNG tối ưu
 
 MySQL dùng index B-tree theo **leftmost prefix**: nó chỉ đi sâu vào cột thứ `k+1` **nếu** cột thứ
 `k` được ràng buộc bằng **equality** (`=` hoặc `IN`). **Ngay khi gặp một điều kiện range**
@@ -3621,13 +4332,12 @@ MySQL dùng index B-tree theo **leftmost prefix**: nó chỉ đi sâu vào cột
 | Vị trí | Cột | Loại điều kiện | Có thu hẹp seek? |
 |---|---|---|---|
 | 1 | `status` | `IN (...)` = equality set | ✔ |
-| 2 | `province_id` | `=` | ✔ |
-| 3 | `district_id` | `=` | ✔ |
+| 2 | `ward_id` | `=` | ✔ |
+| 3 | `category_id` | `=` | ✔ |
 | 4 | `price` | `BETWEEN` — **RANGE** | ✔ (cột range **cuối cùng** được seek) |
 | 5 | `area` | `BETWEEN` | ✘ — chỉ lọc bằng ICP |
-| 6 | `category_id` | `=` | ✘ — **equality bị chôn sau range, mất tác dụng seek** |
 
-Vấn đề: `category_id` là **equality** nhưng bị đặt sau `price` (range) ⇒ MySQL **không** dùng
+Vấn đề: nếu `category_id` bị đặt sau `price` (range) ⇒ MySQL **không** dùng
 được nó để nhảy. Với một quận có 20.000 tin, lọc `price` còn 4.000 entry, thì cả 4.000 entry
 đó phải đọc và lọc `category_id` từng cái — trong khi nếu `category_id` đứng trước `price`,
 MySQL nhảy thẳng tới đúng nhánh danh mục và chỉ đọc ~600 entry.
@@ -3639,17 +4349,13 @@ MySQL nhảy thẳng tới đúng nhánh danh mục và chỉ đọc ~600 entry.
 | Cột | Số giá trị phân biệt | Chọn lọc (ước lượng) | Ghi chú |
 |---|---|---|---|
 | `status` | 10 | ~0.75 (kém) | Nhưng ~75% tin là `ACTIVE`/`NEED_REVIEW` ⇒ **không** lọc được nhiều |
-| `province_id` | 63 | ~0.30 | Phân bố **rất lệch**: TP.HCM + Hà Nội chiếm ~60% tin |
-| `district_id` | ~700 | ~0.02 | **Chọn lọc mạnh nhất** trong nhóm equality |
+| `ward_id` | ~10.500 | ~0.003 | Chọn lọc mạnh nhất khi user chọn đến phường/xã; province/district suy ra qua `wards/districts` |
 | `category_id` | 7 | ~0.35 | `BOARDING_HOUSE` chiếm phần lớn |
 | `price` | liên tục | ~0.20 | Range |
 | `area` | liên tục | ~0.30 | Range |
 
-Nếu chỉ nhìn selectivity thuần thì `district_id` nên đứng đầu. **Nhưng không được** — vì:
+Nếu chỉ nhìn selectivity thuần thì `ward_id` rất hấp dẫn, nhưng nó chỉ dùng trực tiếp khi truy vấn có `wardId`. Với province/district, code dùng `EXISTS` qua `wards/districts` để tránh lưu lặp FK ở `listings`.
 
-- `district_id` là **tùy chọn** trong bộ lọc `[§3.7]`. Rất nhiều truy vấn chỉ chọn tỉnh
-  ("Tìm phòng ở TP.HCM") mà **không** chọn quận. Nếu `district_id` đứng đầu, những truy vấn đó
-  **không dùng được index** (vỡ leftmost prefix).
 - `status` **luôn** có mặt trong **100%** truy vấn công khai (canonical 5.2 bắt buộc). Cột có
   mặt trong mọi truy vấn **phải** đứng đầu, kể cả khi selectivity kém — nếu không, index vô dụng
   với chính truy vấn nóng nhất.
@@ -3657,9 +4363,8 @@ Nếu chỉ nhìn selectivity thuần thì `district_id` nên đứng đầu. **
 **Thứ tự phải theo "tần suất xuất hiện trong WHERE" trước, "selectivity" sau** — vì leftmost
 prefix là ràng buộc cứng, còn selectivity chỉ ảnh hưởng chi phí.
 
-Thứ tự xuất hiện (bộ lọc `[§3.7]` từ hay dùng đến ít dùng):
-`status` (100%) → `province_id` (~95%) → `district_id` (~60%) → `category_id` (~45%) →
-`price` (~40%) → `area` (~20%).
+Thứ tự chốt cho index trên bảng `listings`:
+`status` (100%) → `ward_id` khi có filter cấp ward → `category_id` → `price` → `area`.
 
 May mắn là thứ tự này **cũng** thỏa luật equality-trước-range.
 
@@ -3667,32 +4372,30 @@ May mắn là thứ tự này **cũng** thỏa luật equality-trước-range.
 
 ```sql
 CREATE INDEX idx_listings_search
-    ON listings (status, province_id, district_id, category_id, price, area);
+    ON listings (status, ward_id, category_id, price, area);
 ```
 
 | Vị trí | Cột | Vai trò | Giải thích |
 |---|---|---|---|
 | 1 | `status` | equality set | Có mặt 100% truy vấn (canonical 5.2). `IN ('ACTIVE','NEED_REVIEW')` được MySQL xử lý như **2 range equality độc lập** → vẫn seek được các cột sau cho **từng** giá trị. Đây là lý do `IN` khác `BETWEEN`. |
-| 2 | `province_id` | equality | ~95% truy vấn có. Selectivity trung bình nhưng bắt buộc phải sớm để không vỡ prefix. |
-| 3 | `district_id` | equality | Chọn lọc mạnh nhất (~0.02). Truy vấn chỉ có tỉnh vẫn dùng được prefix `(status, province_id)`. |
-| 4 | `category_id` | equality | **Equality cuối cùng** — phải đứng trước mọi range. |
-| 5 | `price` | **range** | Cột range **đầu tiên và duy nhất được seek**. Đặt `price` chứ không phải `area` vì `price` xuất hiện gấp đôi (~40% vs ~20%) và chọn lọc hơn. |
-| 6 | `area` | ICP filter | Sau `price` (range) nên **không seek được**, nhưng vẫn để trong index: MySQL đẩy điều kiện `area BETWEEN ?` xuống tầng storage (**Index Condition Pushdown**) và loại entry **trước khi** phải đọc dòng ở clustered index. Tiết kiệm phần lớn random I/O. |
+| 2 | `ward_id` | equality | Chỉ có FK trực tiếp cấp ward trên `listings`; province/district lọc qua `wards/districts`. |
+| 3 | `category_id` | equality | **Equality cuối cùng** — phải đứng trước mọi range. |
+| 4 | `price` | **range** | Cột range **đầu tiên và duy nhất được seek**. Đặt `price` chứ không phải `area` vì `price` xuất hiện thường hơn và chọn lọc hơn. |
+| 5 | `area` | ICP filter | Sau `price` (range) nên **không seek được**, nhưng vẫn để trong index để MySQL lọc bằng Index Condition Pushdown. |
 
 **Các prefix hữu ích được phục vụ miễn phí bởi cùng index này:**
 
 | Truy vấn | Prefix dùng được |
 |---|---|
-| Chỉ chọn tỉnh | `(status, province_id)` |
-| Tỉnh + quận | `(status, province_id, district_id)` |
-| Tỉnh + quận + loại tin | `(status, province_id, district_id, category_id)` |
-| Tỉnh + quận + loại + giá | toàn bộ 5 cột đầu |
+| Chọn đến ward | `(status, ward_id)` |
+| Ward + loại tin | `(status, ward_id, category_id)` |
+| Ward + loại + giá | toàn bộ 4 cột đầu |
 
 **Điều index này KHÔNG phục vụ (và cách xử lý):**
 
 | Trường hợp | Xử lý |
 |---|---|
-| Lọc **chỉ** theo loại tin, không chọn khu vực | Vỡ prefix ở `province_id`. Chấp nhận: `[§3.7]` mô tả khu vực là tiêu chí đầu tiên của người thuê; UI (canonical 12 `/tim-kiem`) **luôn** có tỉnh mặc định (từ `user_profiles.province_id` hoặc TP.HCM). Nếu vẫn xảy ra → `idx_listings_category_id` gánh. |
+| Lọc **chỉ** theo loại tin, không chọn khu vực | Vỡ prefix ở `ward_id`. Nếu xảy ra → `idx_listings_category_id` gánh. |
 | Lọc theo tiện ích (SRCH-06) | Không nằm trong `listings`. Xử lý bằng `EXISTS` trên `listing_amenities` với `idx_listing_amenities_amenity_id` — xem §9.1. |
 | Lọc `pet_allowed`/`parking_available`/`curfew_type`/`furniture_status`/`toilet_type`/`max_occupants`/`gender_requirement` | **Cố ý không** đưa vào `idx_listings_search`. Lý do: chúng là boolean/enum ít giá trị (selectivity 0.3–0.7), đứng sau range nên vô dụng cho seek; thêm 7 cột vào index làm index phình ~3× (chậm ghi, tốn buffer pool) mà không giảm số dòng đọc đáng kể. Chốt: để MySQL lọc sau khi đọc dòng — sau 4 cột equality đầu, tập kết quả đã đủ nhỏ (~vài trăm dòng) nên chi phí không đáng kể. |
 | `deleted_at IS NULL` | Không đưa vào index: mọi trạng thái public (`ACTIVE`/`NEED_REVIEW`) **luôn** có `deleted_at IS NULL` (state machine set `DELETED` + `deleted_at` cùng lúc, §1.5) ⇒ điều kiện này gần như không loại thêm dòng nào sau khi đã lọc `status`. Vẫn giữ trong `WHERE` vì đó là hợp đồng đọc (§1.5). |
@@ -3855,7 +4558,7 @@ ngram trên `TEXT` là thao tác **nặng** (đọc + tokenize toàn bộ `descr
 | `idx_wards_district_id_is_active` | `wards` | `(district_id, is_active)` | BTREE | Dropdown cấp 3 | `[§10.5]` |
 | `idx_wards_search_name` | `wards` | `(search_name)` | BTREE | Chatbot | `[§9.3]` |
 | `idx_amenities_group_display_order` | `amenities` | `(group_code, is_active, display_order)` | BTREE | Render bộ lọc theo nhóm | `[§3.7][§10.5]` |
-| **`idx_listings_search`** | `listings` | `(status, province_id, district_id, category_id, price, area)` | BTREE | **Tìm kiếm chính** | `[§3.7][§11.3]` — §5.2 |
+| **`idx_listings_search`** | `listings` | `(status, ward_id, category_id, price, area)` | BTREE | **Tìm kiếm chính khi lọc ward** | `[§3.7][§11.3]` — §5.2 |
 | `idx_listings_promoted_sort` | `listings` | `(status, is_promoted, promotion_priority, published_at)` | BTREE | Trang chủ + xen tin đẩy | `[§2.9]` — §5.4 |
 | `idx_listings_status_published_at` | `listings` | `(status, published_at)` | BTREE | Sắp "mới nhất" | SRCH-08 |
 | `idx_listings_status_price` | `listings` | `(status, price)` | BTREE | Sắp theo giá | SRCH-08 |
@@ -3874,9 +4577,6 @@ ngram trên `TEXT` là thao tác **nặng** (đọc + tokenize toàn bộ `descr
 | `idx_listing_images_listing_id_display_order` | `listing_images` | `(listing_id, display_order)` | BTREE | Gallery đúng thứ tự | `[§7.3]` |
 | `idx_listing_images_listing_id_is_primary` | `listing_images` | `(listing_id, is_primary)` | BTREE | Ảnh đại diện cho card | `[§11.9]` |
 | `idx_listing_amenities_amenity_id` | `listing_amenities` | `(amenity_id)` | BTREE | Lọc theo tiện ích | SRCH-06 |
-| `idx_listing_edit_histories_listing_id_created_at` | `listing_edit_histories` | `(listing_id, created_at)` | BTREE | Xem lịch sử sửa | `[§10.4]` |
-| `idx_listing_edit_histories_batch` | `listing_edit_histories` | `(edit_batch_id)` | BTREE | Gom lần sửa | `[§10.4]` |
-| `idx_listing_edit_histories_editor_id` | `listing_edit_histories` | `(editor_id)` | BTREE | FK + lịch sử hoạt động | `[§10.2]` |
 | `idx_favorites_user_id_created_at` | `favorites` | `(user_id, created_at)` | BTREE | Tin đã lưu | FAV-03 |
 | `idx_favorites_listing_id` | `favorites` | `(listing_id)` | BTREE | FK + đối soát counter | §1.2 |
 | `idx_view_histories_user_id_viewed_at` | `view_histories` | `(user_id, viewed_at)` | BTREE | Lịch sử xem + hồ sơ nhu cầu | HIST-02, `[§9.2]` |
@@ -3886,14 +4586,12 @@ ngram trên `TEXT` là thao tác **nặng** (đọc + tokenize toàn bộ `descr
 | `idx_search_histories_user_id_created_at` | `search_histories` | `(user_id, created_at)` | BTREE | Hồ sơ nhu cầu w=2 | `[§9.2]` |
 | `idx_search_histories_keyword` | `search_histories` | `(keyword)` | BTREE | Từ khóa phổ biến | ADM-13 |
 | `idx_search_histories_result_count` | `search_histories` | `(result_count)` | BTREE | Truy vấn 0 kết quả | `[§3.7]` |
-| `idx_contact_logs_owner_id_created_at` | `contact_logs` | `(owner_id, created_at)` | BTREE | Chủ trọ xem người liên hệ | CONT-04 |
 | `idx_contact_logs_listing_id_created_at` | `contact_logs` | `(listing_id, created_at)` | BTREE | Thống kê tin | LIST-10 |
 | `idx_contact_logs_dedup` | `contact_logs` | `(listing_id, user_id, created_at)` | BTREE | Khử trùng lặp + điều kiện đánh giá | `[§3.10][§3.12]` |
 | `idx_contact_logs_user_id_created_at` | `contact_logs` | `(user_id, created_at)` | BTREE | Hồ sơ nhu cầu w=5 | `[§9.2]` |
 | `idx_conversations_tenant_id_last_message_at` | `conversations` | `(tenant_id, last_message_at)` | BTREE | Danh sách hội thoại (thuê) | CONT-03 |
-| `idx_conversations_landlord_id_last_message_at` | `conversations` | `(landlord_id, last_message_at)` | BTREE | Danh sách hội thoại (chủ) | CONT-03 |
 | `idx_conversations_listing_id` | `conversations` | `(listing_id)` | BTREE | FK | |
-| `idx_conversations_landlord_id_created_at` | `conversations` | `(landlord_id, created_at, first_response_at)` | BTREE | **Tỷ lệ phản hồi chủ trọ trong cửa sổ N ngày** — equality→range, `first_response_at` nằm trong index ⇒ `Using index` cho cả `COUNT` lẫn `AVG` | `[§5.7]` — §9.8 |
+| `idx_conversations_listing_id_last_message_at` | `conversations` | `(listing_id, last_message_at)` | BTREE | Danh sách hội thoại phía chủ trọ sau khi join `listings.owner_id` | CONT-03 |
 | `idx_messages_conversation_id_created_at` | `messages` | `(conversation_id, created_at)` | BTREE | Nạp tin nhắn | CONT-03 |
 | `idx_messages_sender_id` | `messages` | `(sender_id)` | BTREE | FK + rate limit | canonical 8 |
 | `idx_comments_listing_id_status_created_at` | `comments` | `(listing_id, status, created_at)` | BTREE | Danh sách bình luận | `[§3.11]` |
@@ -3903,7 +4601,6 @@ ngram trên `TEXT` là thao tác **nặng** (đọc + tokenize toàn bộ `descr
 | `idx_comments_listing_id_sentiment` | `comments` | `(listing_id, sentiment_label, is_spam)` | BTREE | Tỷ lệ tiêu cực của tin | `[§9.1]` |
 | `idx_comments_is_risk_comment` | `comments` | `(is_risk_comment, status)` | BTREE | Hàng đợi cảnh báo AI | `[§7.4]` |
 | `idx_reviews_listing_id_status_created_at` | `reviews` | `(listing_id, status, created_at)` | BTREE | Danh sách đánh giá | REV-01 |
-| `idx_reviews_landlord_id_status` | `reviews` | `(landlord_id, status)` | BTREE | Rating chủ trọ | `[§8.6]` |
 | `idx_reviews_rating_status` | `reviews` | `(rating, status)` | BTREE | Lọc đánh giá thấp | `[§10.9]` |
 | `idx_reviews_user_id` | `reviews` | `(user_id)` | BTREE | Đánh giá của tôi + FK | canonical 12 |
 | `idx_reports_status_severity_created_at` | `reports` | `(status, severity, created_at)` | BTREE | Hàng đợi báo cáo | `[§10.8]` |
@@ -3944,7 +4641,6 @@ ngram trên `TEXT` là thao tác **nặng** (đọc + tokenize toàn bộ `descr
 | `idx_notifications_created_at` | `notifications` | `(created_at)` | BTREE | Job dọn dẹp | §10.2 |
 | `idx_notification_preferences_user_id` | `notification_preferences` | `(user_id)` | BTREE | FK + nạp cài đặt thông báo của một user (`GET /api/notifications/preferences`) | `[§11.12]` — §3.38 |
 | `idx_sentiment_results_comment_id_created_at` | `sentiment_results` | `(comment_id, created_at)` | BTREE | Lịch sử phân tích | `[§10.10]` |
-| `idx_sentiment_results_listing_id_label` | `sentiment_results` | `(listing_id, label, is_latest)` | BTREE | **Tỷ lệ tiêu cực của tin** | `[§9.1]` |
 | `idx_sentiment_results_suggested_action` | `sentiment_results` | `(suggested_action, is_latest)` | BTREE | Hàng đợi cảnh báo AI | `[§10.10]` |
 | `idx_sentiment_results_analyzer_version` | `sentiment_results` | `(analyzer_version, created_at)` | BTREE | So sánh phiên bản | `[§10.10]` |
 | `idx_sentiment_results_label_confidence` | `sentiment_results` | `(label, confidence)` | BTREE | Lọc confidence thấp | `[§9.1]` |
@@ -3955,6 +4651,7 @@ ngram trên `TEXT` là thao tác **nặng** (đọc + tokenize toàn bộ `descr
 | `idx_recommendation_logs_clicked_at` | `recommendation_logs` | `(clicked_at)` | BTREE | CTR | `[§9.2]` |
 | `idx_prediction_histories_listing_id_created_at` | `prediction_histories` | `(listing_id, created_at)` | BTREE | Lịch sử dự đoán | `[§10.10]` |
 | `idx_prediction_histories_user_id_created_at` | `prediction_histories` | `(user_id, created_at)` | BTREE | FK | |
+| `idx_prediction_histories_ward_id` | `prediction_histories` | `(ward_id)` | BTREE | FK + đối soát input khu vực | `[§9.4]` |
 | `idx_prediction_histories_is_flagged` | `prediction_histories` | `(is_flagged, created_at)` | BTREE | Tin lệch giá | `[§9.4]` |
 | `idx_prediction_histories_confidence` | `prediction_histories` | `(confidence)` | BTREE | Chất lượng AI | `[§10.10]` |
 | `idx_chatbot_conversations_user_id_started_at` | `chatbot_conversations` | `(user_id, started_at)` | BTREE | FK | |
@@ -4150,7 +4847,7 @@ stateDiagram-v2
 | `LOCK` | `status='LOCKED'`, `lock_reason`, `lock_severity` (cả hai bắt buộc) | `moderation_actions(LOCK)`, `audit_logs(LISTING_LOCK)`, `notifications(LISTING_LOCKED)`, `violation_warnings`, `landlord_profiles.locked_listing_count += 1` | `[§10.4][§5.4][§11.4]` |
 | `UNLOCK` | `status='HIDDEN'`, `lock_reason=NULL`, `lock_severity=NULL` | `moderation_actions(UNLOCK)`, `audit_logs(LISTING_UNLOCK)` | canonical 5.1, `[§10.4]` |
 | `RENEW` | `status='ACTIVE'`, `expired_at=now()+listing.display_days`, `renew_count += 1`, `expiry_reminder_sent_at=NULL` | `landlord_profiles.free_renew_used_this_month += 1` (nếu gia hạn miễn phí) | `[§3.5][§5.2]` |
-| `RESUBMIT_AFTER_EDIT` | `status='PENDING'` | `listing_edit_histories` (nhiều dòng, cùng `edit_batch_id`), `audit_logs(LISTING_EDIT)` | `[§3.4][§11.4]` |
+| `RESUBMIT_AFTER_EDIT` | `status='PENDING'` | Không ghi bảng lịch sử riêng; response trả `moderationImpact` cho lần sửa hiện tại | `[§3.4]` |
 | `SOFT_DELETE` | `status='DELETED'`, `deleted_at=now()` | — (dữ liệu liên quan **giữ nguyên**) | `[§3.6]` |
 | `CLOSE` | `status='CLOSED'` | — (dùng thống kê tỷ lệ thành công) | `[§3.6]` |
 
@@ -4260,13 +4957,21 @@ spring:
 | 1 | `V1__baseline_schema.sql` | **Toàn bộ 46 bảng** (45 canonical + `notification_preferences`, §3.38): `CREATE TABLE` theo đúng thứ tự phụ thuộc FK, mọi index (trừ FULLTEXT), mọi unique, mọi CHECK, mọi cột sinh. Kết thúc bằng khối `ALTER TABLE` thêm 2 FK vòng (`fk_listings_prediction_histories`). Chỉ DDL, **không** DML. | ✔ **Bắt buộc** |
 | 2 | `V2__seed_roles_permissions.sql` | Migration lịch sử seed role và dữ liệu permission cũ | ✔ Giữ nguyên để không phá checksum; schema cuối cùng được V15 dọn permission |
 | 3 | `V3__seed_catalog_categories_amenities.sql` | 7 category `[§0.3]` + `required_fields` theo loại `[§10.5]` + toàn bộ amenity theo 4 nhóm `[§10.5]` | ✔ **Bắt buộc** — không có category thì `LIST-01` không tạo được tin (`category_id NOT NULL`) |
-| 4 | `V4__seed_administrative_units.sql` | 63 tỉnh + ~700 quận/huyện + ~10.500 phường/xã (dữ liệu GSO) | ✔ **Bắt buộc** — `province_id`/`district_id`/`ward_id` đều `NOT NULL` trong `listings` |
+| 4 | `V4__seed_administrative_units.sql` | 63 tỉnh + ~700 quận/huyện + ~10.500 phường/xã (dữ liệu GSO) | ✔ **Bắt buộc** — `ward_id` là `NOT NULL` trong `listings`; province/district suy ra qua ward |
 | 5 | `V5__seed_system_configs.sql` | **Toàn bộ 105 config key** = 85 key của canonical mục 9 (100%) + 16 key bổ sung (§8.6: 10 rate limit, 5 tỷ lệ phản hồi `[§5.7]`, 1 tự động ẩn theo sentiment `[§5.3]`) | ✔ **Bắt buộc** — `SystemConfigService.getInt("listing.display_days")` thiếu key → ném exception → không duyệt được tin nào |
 | 6 | `V6__seed_banned_keywords.sql` | Bộ từ khóa cấm khởi tạo `[§11.10]` | ✘ Không bắt buộc — bảng rỗng thì validator `@NoBannedKeyword` chỉ đơn giản không chặn gì. Nhưng seed để hệ thống có tác dụng ngay |
 | 7 | `V7__seed_promotion_packages.sql` | 4 gói đẩy tin `[§10.6]` | ✘ Không bắt buộc cho luồng lõi — nhưng `PAY-01` trả danh sách rỗng nếu thiếu |
 | 8 | `V8__seed_sentiment_lexicon.sql` | Từ điển cảm xúc tiếng Việt + bảng hệ số hedonic + từ khóa intent chatbot → ghi vào `ai_configs` | ✔ **Bắt buộc** — `ai.sentiment.enabled=true` (canonical 9) mà từ điển rỗng thì mọi bình luận ra `NEUTRAL` score 0 ⇒ AI-01 **không hoạt động**, vi phạm canonical 13.1 (*"không code rỗng"*) |
 | 9 | `V9__seed_admin_account.sql` | Tài khoản Admin đầu tiên + `ROLE_ADMIN` | ✔ **Bắt buộc** — không có Admin thì không ai duyệt được tin (`LIST-05`), hệ thống bế tắc |
 | 10 | `V10__fulltext_index.sql` | `CREATE FULLTEXT INDEX ... WITH PARSER ngram` | ✔ **Bắt buộc** — `MATCH ... AGAINST` **ném lỗi SQL** nếu không có fulltext index; SRCH-01 sẽ 500 |
+| 11 | `V11__extend_audit_and_notification_enums.sql` | Mở rộng enum audit/notification theo schema hiện hành | ✔ Bắt buộc sau V10 |
+| 12 | `V12__extend_audit_content_moderation.sql` | Mở rộng audit cho luồng kiểm duyệt nội dung | ✔ Bắt buộc sau V11 |
+| 13 | `V13__single_role_per_user.sql` | Chuyển sang role-only: mỗi user có đúng một `role_id`, bỏ bảng nối `user_roles` | ✔ Bắt buộc sau V12 |
+| 14 | `V14__drop_per_user_capability_configs.sql` | Dọn các cấu hình quyền theo user không còn dùng | ✔ Bắt buộc sau V13 |
+| 15 | `V15__drop_permission_tables.sql` | Drop `role_permissions` và `permissions`; schema cuối cùng không còn permission table | ✔ Bắt buộc sau V14 |
+| 16 | `V16__drop_user_profile_area_columns.sql` | Drop FK/index/cột `province_id`, `district_id` khỏi `user_profiles`; DB mới từ V1 đã không tạo hai cột này, migration no-op an toàn | ✔ Bắt buộc sau V15 |
+| 17 | `V17__backfill_category_listing_counts.sql` | Tính lại `categories.listing_count` từ các listing public hiện có để "Danh mục phổ biến" không lệch dữ liệu | ✔ Bắt buộc sau V16 |
+| 18 | `V18__backfill_landlord_listing_stats.sql` | Tính lại `landlord_profiles.total_listings` và `total_active_listings` từ listing hiện có để hồ sơ chủ trọ hiển thị đúng số tin | ✔ Bắt buộc sau V17 |
 
 **Tóm tắt "dữ liệu seed nào bắt buộc để hệ thống chạy được ngay sau `docker compose up --build`"**
 (canonical mục 13.5): **V1, V2, V3, V4, V5, V8, V9, V10 là bắt buộc**; V6 và V7 là seed nghiệp vụ
@@ -4279,14 +4984,13 @@ nên có nhưng hệ thống vẫn khởi động và phục vụ được luồ
 ```
 1. roles, users, provinces, categories, amenities,
    promotion_packages, coupons, banned_keywords, system_configs, ai_configs
-2. districts (→provinces), user_profiles,
-   landlord_profiles, verifications, refresh_tokens, password_reset_tokens, follows
-3. wards (→districts)
-4. prediction_histories (→users, categories, provinces, districts, wards)
+2. user_profiles, landlord_profiles, verifications, refresh_tokens, password_reset_tokens, follows
+3. districts (→provinces), wards (→districts)
+4. prediction_histories (→users, categories, wards)
    -- CHƯA có FK tới listings (thêm sau)
 5. listings (→users, categories, provinces, districts, wards)
    -- CHƯA có fk_listings_prediction_histories
-6. listing_images, listing_amenities, listing_edit_histories, favorites,
+6. listing_images, listing_amenities, favorites,
    view_histories, search_histories, contact_logs, conversations, comments,
    reviews, reports, payments, notifications, notification_preferences (→users),
    audit_logs, chatbot_conversations
@@ -4698,19 +5402,21 @@ nêu tên bảng); bắt buộc vì `[§2.9]` PROMO-02 *"Gắn nhãn tin nổi b
 
 ```sql
 SELECT l.id, l.slug, l.title, l.price, l.area, l.address_detail,
-       l.province_id, l.district_id, l.ward_id, l.category_id,
+       d.province_id, w.district_id, l.ward_id, l.category_id,
        l.trust_score, l.average_rating, l.review_count, l.view_count,
        l.is_promoted, l.promotion_priority, l.published_at,
        img.url AS primary_image_url
 FROM listings l
+JOIN wards w ON w.id = l.ward_id
+JOIN districts d ON d.id = w.district_id
 LEFT JOIN listing_images img
        ON img.listing_id = l.id
       AND img.is_primary = TRUE
       AND img.deleted_at IS NULL
 WHERE l.deleted_at IS NULL
   AND l.status IN (:publicStatuses)                                    -- canonical 5.2 - KHÔNG hardcode 'ACTIVE'
-  AND (:provinceId  IS NULL OR l.province_id = :provinceId)            -- SRCH-02
-  AND (:districtId  IS NULL OR l.district_id = :districtId)            -- SRCH-02
+  AND (:provinceId  IS NULL OR d.province_id = :provinceId)            -- SRCH-02
+  AND (:districtId  IS NULL OR w.district_id = :districtId)            -- SRCH-02
   AND (:wardId      IS NULL OR l.ward_id     = :wardId)                -- SRCH-02
   AND (:categoryId  IS NULL OR l.category_id = :categoryId)            -- SRCH-05
   AND (:priceFrom   IS NULL OR l.price >= :priceFrom)                  -- SRCH-03
@@ -4743,7 +5449,8 @@ LIMIT :size OFFSET :offset;            -- [§11.3] "Phân trang danh sách tin"
 
 | Tình huống | Index MySQL chọn | Ghi chú |
 |---|---|---|
-| Có `provinceId` (~95% truy vấn), không keyword | **`idx_listings_search`** | Seek qua `(status, province_id[, district_id][, category_id][, price])`; `area` lọc bằng ICP. Phần `ORDER BY` → filesort trên tập đã thu hẹp (đánh đổi §5.3) |
+| Có `wardId`, không keyword | **`idx_listings_search`** | Seek qua `(status, ward_id[, category_id][, price])`; `area` lọc bằng ICP. Phần `ORDER BY` → filesort trên tập đã thu hẹp (đánh đổi §5.3) |
+| Có `provinceId`/`districtId`, không `wardId` | Join `wards/districts` + index theo FK | Khu vực cấp cha lấy qua `l.ward_id -> wards -> districts`; không lưu lặp `province_id/district_id` trong `listings` |
 | Không filter nào (trang chủ) | **`idx_listings_promoted_sort`** | 3 cột `ORDER BY` nằm đúng thứ tự sau `status` ⇒ **không filesort**, dừng sau `size` dòng |
 | Có keyword | **`ft_listings_title_description`** | Fulltext không kết hợp được với BTREE (§5.5); các filter còn lại lọc trên dòng |
 | Join ảnh đại diện | **`idx_listing_images_listing_id_is_primary`** | Ref lookup 1 dòng/tin |
@@ -4914,14 +5621,15 @@ LEFT JOIN (
     GROUP BY vw.user_id
 ) w ON w.user_id = lp.user_id
 LEFT JOIN (
-    SELECT r.landlord_id, AVG(r.rating) AS avg_rating, COUNT(*) AS rv_cnt
+    SELECT l.owner_id, AVG(r.rating) AS avg_rating, COUNT(*) AS rv_cnt
     FROM reviews r
+    JOIN listings l ON l.id = r.listing_id
     WHERE r.deleted_at IS NULL AND r.status = 'VISIBLE'
-    GROUP BY r.landlord_id
-) rv ON rv.landlord_id = lp.user_id
+    GROUP BY l.owner_id
+) rv ON rv.owner_id = lp.user_id
 LEFT JOIN (
     -- §9.8 — tỷ lệ phản hồi trong cửa sổ trượt; "đã phản hồi" = có first_response_at TRONG SLA
-    SELECT c.landlord_id,
+    SELECT l.owner_id,
            COUNT(*) AS conv_cnt,
            SUM(CASE WHEN c.first_response_at IS NOT NULL
                      AND c.first_response_at <= c.created_at + INTERVAL :slaHours HOUR
@@ -4930,10 +5638,11 @@ LEFT JOIN (
                     THEN TIMESTAMPDIFF(MINUTE, c.created_at, c.first_response_at) END)
                AS avg_response_minutes
     FROM conversations c
+    JOIN listings l ON l.id = c.listing_id
     WHERE c.deleted_at IS NULL
       AND c.created_at >= :now - INTERVAL :responseWindowDays DAY
-    GROUP BY c.landlord_id
-) rs ON rs.landlord_id = lp.user_id
+    GROUP BY l.owner_id
+) rs ON rs.owner_id = lp.user_id
 SET lp.total_listings        = COALESCE(ls.total_listings, 0),
     lp.total_active_listings = COALESCE(ls.active_listings, 0),
     lp.locked_listing_count  = COALESCE(ls.locked_listings, 0),
@@ -4967,8 +5676,8 @@ WHERE lp.deleted_at IS NULL;
 
 Index dùng: `idx_listings_owner_id_status (owner_id, status)`,
 `idx_violation_warnings_user_id_created_at (user_id, ...)` (prefix `user_id`),
-`idx_reviews_landlord_id_status (landlord_id, status)`,
-`idx_conversations_landlord_id_created_at (landlord_id, created_at, first_response_at)` (§9.8).
+`idx_reviews_listing_id_status_created_at (listing_id, status, ...)` khi join từ `reviews` sang `listings`,
+`idx_conversations_listing_id_last_message_at (listing_id, last_message_at)` khi join từ `conversations` sang `listings` (§9.8).
 
 **[BỔ SUNG NGOÀI CANONICAL]** — số hạng `ResponseTerm` và 5 config key
 `trust.weight.landlord_response_rate`, `trust.response_rate.window_days`,
@@ -4999,9 +5708,10 @@ WHERE l.deleted_at IS NULL
   AND l.price > 0;
 ```
 
-**Bước 1b — nếu `COUNT < ai.price.min_samples` (8), nới lên `DISTRICT`:** thay
-`l.ward_id = :wardId` bằng `l.district_id = :districtId`.
-**Bước 1c — vẫn thiếu, nới lên `PROVINCE`:** `l.province_id = :provinceId`.
+**Bước 1b — nếu `COUNT < ai.price.min_samples` (8), nới lên `DISTRICT`:** join `wards w ON w.id = l.ward_id`
+và lọc `w.district_id = :districtId`.
+**Bước 1c — vẫn thiếu, nới lên `PROVINCE`:** join thêm `districts d ON d.id = w.district_id`
+và lọc `d.province_id = :provinceId`.
 **Bước 2 — vẫn thiếu ⇒ `confidence = 'INSUFFICIENT_DATA'`, `suggested_price = NULL`,
 KHÔNG dự đoán** (canonical 10.4 bước 2; ép ở DB bởi `ck_prediction_histories_insufficient`, §3.41).
 
@@ -5010,8 +5720,8 @@ KHÔNG dự đoán** (canonical 10.4 bước 2; ép ở DB bởi `ck_prediction_
 | Cấp | Index | Cách dùng |
 |---|---|---|
 | `WARD` | **`idx_listings_ward_category_area (ward_id, category_id, area, status)`** | `ward_id` equality → `category_id` equality → `area` **range** (cột range cuối được seek) → `status` lọc bằng ICP. Đây là lý do index này tồn tại và tại sao thứ tự cột đúng luật §5.2 |
-| `DISTRICT` | `idx_listings_search (status, province_id, district_id, category_id, price, area)` | Prefix `(status, province_id, district_id, category_id)` — cần truyền cả `province_id` (luôn có sẵn từ form). `area` lọc ICP |
-| `PROVINCE` | `idx_listings_search` | Prefix `(status, province_id, category_id)`… — `district_id` bị bỏ ⇒ **vỡ prefix ở vị trí 3**. MySQL vẫn dùng được `(status, province_id)` rồi lọc phần còn lại. Chấp nhận: cấp `PROVINCE` là đường cùng, tần suất thấp |
+| `DISTRICT` | Join `wards` qua `l.ward_id` | Lọc `w.district_id = :districtId`; không lưu `district_id` lặp trong `listings` |
+| `PROVINCE` | Join `wards` + `districts` qua `l.ward_id` | Lọc `d.province_id = :provinceId`; không lưu `province_id` lặp trong `listings` |
 
 **Bước 3–5 (median, percentile, IQR) — tính ở tầng Java, không ở SQL.** Lý do: MySQL 8.4 **không có**
 `PERCENTILE_CONT`/`MEDIAN`; mô phỏng bằng window function (`NTILE`/`ROW_NUMBER`) làm câu SQL phức tạp,
@@ -5324,16 +6034,16 @@ SELECT COUNT(*)                                                       AS conv_cn
                 THEN TIMESTAMPDIFF(MINUTE, c.created_at, c.first_response_at) END)
                                                                       AS avg_response_minutes
 FROM conversations c
-WHERE c.landlord_id = :landlordId
+JOIN listings l ON l.id = c.listing_id
+WHERE l.owner_id = :landlordId
   AND c.deleted_at IS NULL
   AND c.created_at >= :now - INTERVAL :windowDays DAY;
 ```
 
-**Index được dùng:** **`idx_conversations_landlord_id_created_at (landlord_id, created_at,
-first_response_at)`** — `landlord_id` equality → `created_at` range (đúng luật ADR-04: equality
-trước range) → `first_response_at` được đọc **trong index** ⇒ `Using index`, không chạm bảng dù
-`COUNT`, `SUM` và `AVG` đều cần nó. `deleted_at` lọc trên dòng — chấp nhận được vì số hội thoại của
-một chủ trọ trong 30 ngày là hàng chục, không phải hàng nghìn.
+**Index được dùng:** `idx_listings_owner_id_status (owner_id, status)` để lấy tin của chủ trọ,
+sau đó `idx_conversations_listing_id_last_message_at (listing_id, last_message_at)`/`idx_conversations_listing_id`
+để đọc hội thoại theo `listing_id`. `first_response_at` được đọc từ dòng `conversations`; số hội thoại
+của một chủ trọ trong cửa sổ 30 ngày thường nhỏ nên chi phí join chấp nhận được và tránh lặp FK bắc cầu.
 
 **Ai ghi, ghi khi nào:** `TrustScoreRecalcJob` (02:00 hằng ngày, canonical mục 11 — *"tính lại điểm
 uy tín tin + chủ trọ `[§5.7]`"*) chạy **bản hàng loạt** của truy vấn này (câu `UPDATE landlord_profiles`
@@ -5402,7 +6112,7 @@ HIST-02, 1 cho thống kê LIST-10.
 | Loại dữ liệu | Chính sách | Căn cứ |
 |---|---|---|
 | **Dữ liệu nghiệp vụ** (`listings`, `users`, `payments`, `reports`, `comments`, `reviews`, `contact_logs`, `violation_warnings`, `moderation_actions`, `promotion_subscriptions`) | **KHÔNG BAO GIỜ xóa.** Chỉ xóa mềm | `[§11.5]` *"Không xóa cứng dữ liệu nghiệp vụ quan trọng"*, `[§3.6]`, `[§10.2]` |
-| **Audit** (`audit_logs`, `listing_edit_histories`) | Giữ **tối thiểu 24 tháng**, sau đó lưu trữ ra file lạnh | `[§11.4]` |
+| **Audit** (`audit_logs`) | Giữ **tối thiểu 24 tháng**, sau đó lưu trữ ra file lạnh | `[§11.4]` |
 | **Log hành vi / AI** (`view_histories`, `search_histories`, `recommendation_logs`, `chatbot_messages`, `chatbot_conversations`) | **Được dọn theo tuổi** | Không thuộc *"dữ liệu nghiệp vụ quan trọng"* `[§11.5]`; giữ lại vô hạn còn là **rủi ro riêng tư** `[§11.1]` |
 | **Dữ liệu phái sinh** (`notifications`) | Được dọn theo tuổi | Sự kiện gốc đã ở `audit_logs`/`payments`/`moderation_actions` |
 | **Token kỹ thuật** (`refresh_tokens`, `password_reset_tokens`, `verifications`) | Xóa vật lý khi hết hạn | Đã có `TokenCleanupJob` (canonical mục 11) |
@@ -5419,7 +6129,6 @@ HIST-02, 1 cho thống kê LIST-10.
 | `sentiment_results` | **Vô hạn** với `is_latest = TRUE`; **12 tháng** với phiên bản cũ | Xóa phiên bản cũ | Bản hiện hành là đầu vào điểm uy tín `[§5.8]`, không được xóa. Phiên bản cũ chỉ để so sánh chất lượng AI `[§10.10]` |
 | `prediction_histories` | **Vô hạn** nếu `listing_id IS NOT NULL`; **12 tháng** nếu `listing_id IS NULL` | Xóa bản mồ côi | `[§9.4]` *"Kết quả dự đoán cần lưu để phục vụ báo cáo"* — nhưng bản dự đoán từ form bỏ dở (không thành tin) hết giá trị sau 1 năm |
 | `audit_logs` | **24 tháng** trong DB | Xuất ra file `.csv.gz` rồi xóa khỏi DB | `[§11.4]` + `[§11.5]` — audit không mất, chỉ chuyển sang lưu trữ lạnh |
-| `listing_edit_histories` | Theo vòng đời tin | Xóa cùng tin khi purge (`CASCADE`) | `[§10.4]` |
 | Tin `status='DELETED'` | **12 tháng** | Purge vật lý **chỉ khi** không có `payments`/`reports` tham chiếu | `[§3.6]` *"Không xóa cứng tin nếu có thanh toán, báo cáo hoặc bình luận liên quan"* — FK `RESTRICT` (§3.35) sẽ **chặn** nếu vi phạm |
 
 **Job dọn dẹp** — **[BỔ SUNG NGOÀI CANONICAL]**: `DataRetentionJob`, chạy **03:30 hằng ngày**
@@ -5490,7 +6199,7 @@ LIMIT 100;
 ```
 
 Khi dòng `listings` bị xóa, các bảng con `CASCADE` (§3.18–3.22) tự dọn: `listing_images`,
-`listing_amenities`, `listing_edit_histories`, `favorites`, `view_histories`, `contact_logs`?
+`listing_amenities`, `favorites`, `view_histories`, `contact_logs`?
 — **không**, `contact_logs` là `RESTRICT` (§3.24) nên nó cũng chặn purge. Đây là **đúng**:
 `contact_logs` là bằng chứng cho `review.require_contact` `[§3.12]`.
 
@@ -5538,7 +6247,7 @@ môi trường chạy — một lần chạy nhầm file dump lên prod sẽ **x
 | **ADR-01** | **Soft delete bằng `deleted_at` viết tường minh trong repository, KHÔNG dùng `@Where`/`@SQLRestriction`** | `[§3.6]` vừa yêu cầu xóa mềm, vừa yêu cầu *"Admin **vẫn xem được** tin đã xóa mềm"* | `@Where(clause="deleted_at IS NULL")` trên entity; xóa cứng | `@Where` lọc **vĩnh viễn, không tắt được**, làm module Admin không thể liệt kê tin `DELETED` bằng JPA và làm audit log không join được tên đối tượng đã xóa. Điều kiện tường minh cho ta **hai** method `findAliveById`/`findAnyById` — biểu diễn đúng hai ngữ cảnh nghiệp vụ | Lập trình viên **có thể quên** `deleted_at IS NULL`. Bù bằng: cấm dùng `findById` kế thừa trong service (ArchUnit), `ListingSpecifications.alive()` bắt buộc, code review | `[§3.6][§10.2][§11.5]`, canonical 6.1 |
 | **ADR-02** | **Unique có điều kiện bằng cột sinh trả `NULL` (`email_uk`, `phone_uk`, `latest_uk`)** | MySQL 8.4 **không có** partial/filtered unique index. Cần `UNIQUE(email) WHERE deleted_at IS NULL` | (a) chỉ ép ở application — **race condition**; (b) `UNIQUE(email, deleted_at)` — **vô tác dụng** vì `NULL != NULL`; (c) cột `deleted_flag BIGINT` set = `id` khi xóa — trùng lặp nguồn sự thật với `deleted_at` | Unique index InnoDB **cho phép nhiều `NULL`**. Cột sinh `IF(deleted_at IS NULL, LOWER(email), NULL) STORED` biến ràng buộc có điều kiện thành ràng buộc DB thật, **tự động**, không race. Tài khoản `LOCKED` **giữ** email (không cho né lệnh khóa bằng cách đăng ký lại) | Thêm 3 cột kỹ thuật; không map vào entity (Hibernate `validate` không quan tâm cột thừa) | `[§3.1][§6.2]` — §4.1 |
 | **ADR-03** | **Enum lưu `VARCHAR` + `CHECK (col IN (...))`, KHÔNG dùng `ENUM` của MySQL, KHÔNG dùng `ORDINAL`** | Cần chống giá trị rác ở DB mà không mất tính linh hoạt | MySQL `ENUM`; `@Enumerated(ORDINAL)` | ORDINAL **vỡ im lặng** khi chèn hằng số vào giữa (canonical mục 5 đã chốt). MySQL `ENUM` buộc `ALTER TABLE` khi thêm giá trị, nhân đôi nguồn sự thật với enum Java, và làm `ddl-auto=validate` **fail**. `CHECK` cho đúng lợi ích của `ENUM` (chặn rác, tự tài liệu hóa) mà sửa chỉ là DDL nhẹ | Thêm giá trị enum cần một migration `ALTER ... DROP CHECK` + `ADD CHECK`. **Cố ý** — thêm trạng thái là quyết định kiến trúc, phải thấy được | canonical mục 5 — §1.7 |
-| **ADR-04** | **Thứ tự `idx_listings_search` là `(status, province_id, district_id, category_id, price, area)`** — khác thứ tự gợi ý ban đầu | Cần một index phục vụ truy vấn nóng nhất `[§3.7]` | `(status, province_id, district_id, price, area, category_id)` | MySQL **dừng seek** tại cột range đầu tiên. Trong thứ tự cũ, `category_id` (equality) bị chôn **sau** `price` (range) ⇒ mất tác dụng seek. Luật: **mọi equality trước mọi range**. Thứ tự cột theo **tần suất xuất hiện trong `WHERE`** trước, selectivity sau — vì leftmost prefix là ràng buộc cứng còn selectivity chỉ là chi phí | `district_id` chọn lọc nhất nhưng không đứng đầu được (nó là filter **tùy chọn**; đứng đầu sẽ làm truy vấn "chỉ chọn tỉnh" mất index). 7 cột lọc boolean/enum cố ý **không** vào index | `[§3.7][§11.3]` — §5.2 |
+| **ADR-04** | **Thứ tự `idx_listings_search` là `(status, ward_id, category_id, price, area)`** | Cần một index phục vụ truy vấn nóng nhất khi filter tới ward `[§3.7]` | `(status, ward_id, price, area, category_id)` | MySQL **dừng seek** tại cột range đầu tiên. `category_id` là equality nên phải đứng trước `price`; province/district được lọc qua `wards/districts` từ `ward_id`, không lưu FK bắc cầu trên `listings`. | Bộ lọc chỉ tỉnh/quận phải join thêm bảng location; đổi lại schema không lặp dữ liệu khu vực. 7 cột lọc boolean/enum cố ý **không** vào index | `[§3.7][§11.3]` — §5.2 |
 | **ADR-05** | **FULLTEXT với `WITH PARSER ngram`, `ngram_token_size=2`, truy vấn `BOOLEAN MODE`** | Tìm từ khóa tiếng Việt `[§3.7]` SRCH-01 | `LIKE '%...%'` (full scan); parser mặc định (mất âm tiết ≤2 ký tự do `innodb_ft_min_token_size=3` ⇒ **"ở ghép"**, **"Gò Vấp"** hỏng); `NATURAL LANGUAGE MODE` | ngram index mọi cặp ký tự ⇒ không mất âm tiết ngắn, khớp được từ ghép. `BOOLEAN MODE` **bắt buộc** vì `NATURAL LANGUAGE MODE` có **ngưỡng 50%**: từ `"phòng"`, `"trọ"` xuất hiện ở ~100% tin sẽ bị **loại hoàn toàn** — lỗi chí mạng với chính website phòng trọ | Index lớn hơn ~2–3×; có false positive; không tìm được từ 1 ký tự. Bắt buộc escape ký tự boolean ở tầng ứng dụng (cũng là `[§3.7]` *"không cho phép ký tự nguy hiểm"*) | `[§3.7][§11.6]` — §5.5 |
 | **ADR-06** | **`reports.target_id` / `moderation_actions.target_id` / `notifications.ref_id` là tham chiếu ĐA HÌNH, không có FK** | Một report trỏ tới `LISTING`/`COMMENT`/`USER`/`REVIEW` `[§2.8]` | (a) 4 cột nullable + 4 FK + CHECK "đúng 1 non-null"; (b) 4 bảng report riêng | SQL **không có** FK đa hình. (a) sinh 4 index rời rạc và mọi truy vấn gom nhóm phải `COALESCE`; (b) nhân 4 màn hình Admin, trái `[§10.8]` *"Gom nhóm report theo tin **hoặc** user"* (yêu cầu **một** hàng đợi) | Mất toàn vẹn tham chiếu ở DB cho `target_id`. Bù: `ReportServiceImpl.create()` **bắt buộc** nạp đối tượng đích qua service tương ứng → 404 nếu không có (§4.4 mục 15) + integration test | `[§2.8][§10.8]` — §3.29 |
 | **ADR-07** | **"Report hợp lệ" trong ngưỡng tự động ẩn = `status <> 'REJECTED'`, KHÔNG phải `is_valid = TRUE`** | `[§5.3]` nói *"số report **hợp lệ** vượt ngưỡng"* nhưng **không định nghĩa** "hợp lệ" | `is_valid = TRUE` (đã được Moderator xác nhận đúng) | Nếu đòi `is_valid = TRUE` thì phải có Moderator xử lý **trước** — mà lúc đó Moderator đã tự quyết định, ngưỡng tự động trở nên vô nghĩa. `[§4.4]` mô tả rõ trình tự: báo cáo → **hệ thống** chuyển `NeedReview` → **rồi** Moderator xem. Tự động **trước**, người **sau** | Report ác ý có thể đẩy tin sạch vào `NEED_REVIEW`. Rủi ro thấp: cần **5 tài khoản khác nhau** trong 24h `[§5.3]`, và `NEED_REVIEW` **vẫn hiển thị** theo mặc định (`listing.need_review.publicly_visible=true`), đúng `[§3.13]` *"Report không tự động khóa tin ngay"* | `[§5.3][§4.4][§3.13]` — §9.4 |
@@ -5667,11 +6376,8 @@ ADR-17
 |---|---|---|---|
 | `notification_preferences` | notification | `[§11.12]` *"Có thể tắt một số loại thông báo không quan trọng"*. Canonical mục 6 chốt nhóm `notification` chỉ có `notifications` — **không** bảng nào lưu được lựa chọn bật/tắt **theo loại** của người dùng. `follows.notify_new_listing` chỉ phủ **1/16** `NotificationType` và là công tắc theo **từng chủ trọ được theo dõi** `[§2.5]`, không thay thế được. `03_THIET_KE_API.md` mục 4.10.6–4.10.7 đã đặc tả đầy đủ `GET`/`PUT /api/notifications/preferences` ⇒ không có bảng thì đặc tả API **không hiện thực được**, vi phạm canonical 13.2 (*"mọi business rule trong tài liệu có chỗ thực thi tương ứng"*) | §3.38 |
 
-**Hệ quả:** tổng số bảng **45 → 46**. Mọi nhóm khác của canonical mục 6 giữ nguyên 100%; chỉ nhóm
-`notification` từ 1 lên 2 bảng. Đã cập nhật đồng bộ ở: phạm vi (đầu tài liệu), mục lục, tiêu đề §3,
-tiêu đề nhóm notification, bảng tổng kiểm §3.47, V1 §7.2 và thứ tự tạo bảng §7.3, script kiểm chứng
-khôi phục §10.4. Đây là mục **duy nhất** trong tài liệu này đề nghị canonical mục 6 được cập nhật
-(45 → 46) ở bước review đối chiếu.
+**Hệ quả hiện hành:** `notification_preferences` vẫn là bảng bổ sung ngoài canonical, nhưng tổng schema hiện tại là **42 bảng** sau khi đã loại `user_roles`, `permissions`, `role_permissions` và `listing_edit_histories`.
+Các mục liên quan đã được đồng bộ trong ERD và bảng tổng kiểm 3.47; khi review canonical, cần đối chiếu theo danh sách 42 bảng hiện hành.
 
 ---
 

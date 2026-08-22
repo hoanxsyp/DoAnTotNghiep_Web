@@ -10,8 +10,6 @@ import com.webtro.modules.catalog.entity.Province;
 import com.webtro.modules.catalog.entity.Ward;
 import com.webtro.modules.catalog.repository.AmenityRepository;
 import com.webtro.modules.catalog.repository.CategoryRepository;
-import com.webtro.modules.catalog.repository.DistrictRepository;
-import com.webtro.modules.catalog.repository.ProvinceRepository;
 import com.webtro.modules.catalog.repository.WardRepository;
 import com.webtro.modules.listing.entity.Listing;
 import com.webtro.modules.listing.entity.ListingImage;
@@ -54,8 +52,6 @@ import java.util.Optional;
 public class ListingMapper {
 
     private final CategoryRepository categoryRepository;
-    private final ProvinceRepository provinceRepository;
-    private final DistrictRepository districtRepository;
     private final WardRepository wardRepository;
     private final AmenityRepository amenityRepository;
     private final ListingImageRepository listingImageRepository;
@@ -119,9 +115,7 @@ public class ListingMapper {
      */
     public ListingDetailResponse toDetail(Listing l, boolean viewerAuthenticated, boolean privileged) {
         Category category = categoryRepository.findById(l.getCategoryId()).orElse(null);
-        Province province = provinceRepository.findById(l.getProvinceId()).orElse(null);
-        District district = districtRepository.findById(l.getDistrictId()).orElse(null);
-        Ward ward = wardRepository.findById(l.getWardId()).orElse(null);
+        LocationParts location = locationOf(l.getWardId());
 
         boolean revealSensitive = viewerAuthenticated || privileged;
         int trust = toInt(l.getTrustScore());
@@ -140,14 +134,14 @@ public class ListingMapper {
                 .waterPrice(l.getWaterPrice())
                 .area(l.getArea())
                 .pricePerSquareMeter(pricePerSqm(l.getPrice(), l.getArea()))
-                .provinceId(l.getProvinceId())
-                .provinceName(province == null ? null : province.getName())
-                .districtId(l.getDistrictId())
-                .districtName(district == null ? null : district.getName())
+                .provinceId(location.province() == null ? null : location.province().getId())
+                .provinceName(location.province() == null ? null : location.province().getName())
+                .districtId(location.district() == null ? null : location.district().getId())
+                .districtName(location.district() == null ? null : location.district().getName())
                 .wardId(l.getWardId())
-                .wardName(ward == null ? null : ward.getName())
+                .wardName(location.ward() == null ? null : location.ward().getName())
                 .addressDetail(l.getAddressDetail())
-                .fullAddress(fullAddress(l, province, district, ward))
+                .fullAddress(fullAddress(l, location.province(), location.district(), location.ward()))
                 .latitude(revealSensitive ? l.getLatitude() : null)
                 .longitude(revealSensitive ? l.getLongitude() : null)
                 .roomCount(l.getRoomCount())
@@ -287,13 +281,21 @@ public class ListingMapper {
     }
 
     private String shortAddress(Listing l) {
-        Province province = provinceRepository.findById(l.getProvinceId()).orElse(null);
-        District district = districtRepository.findById(l.getDistrictId()).orElse(null);
-        Ward ward = wardRepository.findById(l.getWardId()).orElse(null);
+        LocationParts location = locationOf(l.getWardId());
         return joinNonBlank(", ",
-                ward == null ? null : ward.getName(),
-                district == null ? null : district.getName(),
-                province == null ? null : province.getName());
+                location.ward() == null ? null : location.ward().getName(),
+                location.district() == null ? null : location.district().getName(),
+                location.province() == null ? null : location.province().getName());
+    }
+
+    private LocationParts locationOf(Long wardId) {
+        Ward ward = wardId == null ? null : wardRepository.findById(wardId).orElse(null);
+        District district = ward == null ? null : ward.getDistrict();
+        Province province = district == null ? null : district.getProvince();
+        return new LocationParts(province, district, ward);
+    }
+
+    private record LocationParts(Province province, District district, Ward ward) {
     }
 
     private String fullAddress(Listing l, Province province, District district, Ward ward) {

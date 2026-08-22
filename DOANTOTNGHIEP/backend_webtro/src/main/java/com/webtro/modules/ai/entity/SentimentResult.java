@@ -32,8 +32,8 @@ import java.time.Instant;
  * {@link com.webtro.common.AuditableEntity}/{@link com.webtro.common.BaseEntity} (kế thừa sẽ ánh xạ
  * cột không tồn tại và fail {@code ddl-auto=validate}); {@code id}/{@code created_at} khai tại chỗ.
  *
- * <p>{@code commentId}, {@code listingId} trỏ sang module khác (chéo module) nên giữ {@code Long},
- * không map quan hệ (canonical luật 8).
+ * <p>{@code commentId} trỏ sang module khác (chéo module) nên giữ {@code Long}, không map quan hệ
+ * (canonical luật 8). Listing suy ra qua comment.
  *
  * <p>Cột sinh {@code latest_uk} (STORED, = {@code IF(is_latest, comment_id, NULL)}) do DB tự sinh
  * để ép "đúng một" phiên bản hiện hành/bình luận — <b>không map</b> ở entity.
@@ -43,7 +43,6 @@ import java.time.Instant;
         name = "sentiment_results",
         indexes = {
                 @Index(name = "idx_sentiment_results_comment_id_created_at", columnList = "comment_id, created_at"),
-                @Index(name = "idx_sentiment_results_listing_id_label", columnList = "listing_id, label, is_latest"),
                 @Index(name = "idx_sentiment_results_suggested_action", columnList = "suggested_action, is_latest"),
                 @Index(name = "idx_sentiment_results_analyzer_version", columnList = "analyzer_version, created_at"),
                 @Index(name = "idx_sentiment_results_label_confidence", columnList = "label, confidence")
@@ -65,8 +64,6 @@ public class SentimentResult {
     private Long commentId;
 
     /** Tin đăng chứa bình luận (denormalize để tính tỷ lệ tiêu cực; FK listings.id — chéo module). */
-    @Column(name = "listing_id")
-    private Long listingId;
 
     /** Nhãn cảm xúc. */
     @Enumerated(EnumType.STRING)

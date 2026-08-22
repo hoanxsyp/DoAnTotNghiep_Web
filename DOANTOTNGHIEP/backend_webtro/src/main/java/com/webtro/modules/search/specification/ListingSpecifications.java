@@ -8,6 +8,7 @@ import com.webtro.common.enums.ListingStatus;
 import com.webtro.common.enums.ToiletType;
 import com.webtro.modules.catalog.entity.Amenity;
 import com.webtro.modules.catalog.entity.Category;
+import com.webtro.modules.catalog.entity.Ward;
 import com.webtro.modules.listing.entity.Listing;
 import com.webtro.modules.listing.entity.ListingAmenity;
 import jakarta.persistence.criteria.Expression;
@@ -83,12 +84,14 @@ public final class ListingSpecifications {
 
     public static Specification<Listing> provinceId(Long provinceId) {
         return provinceId == null ? null
-                : (root, query, cb) -> cb.equal(root.get("provinceId"), provinceId);
+                : (root, query, cb) -> cb.exists(wardLocationSubquery(root, query, cb,
+                "district.province.id", provinceId));
     }
 
     public static Specification<Listing> districtId(Long districtId) {
         return districtId == null ? null
-                : (root, query, cb) -> cb.equal(root.get("districtId"), districtId);
+                : (root, query, cb) -> cb.exists(wardLocationSubquery(root, query, cb,
+                "district.id", districtId));
     }
 
     public static Specification<Listing> wardId(Long wardId) {
@@ -353,5 +356,24 @@ public final class ListingSpecifications {
         // Chốt hạ bằng id để thứ tự ổn định giữa các trang.
         orders.add(cb.desc(root.get("id")));
         return orders;
+    }
+
+    private static Subquery<Long> wardLocationSubquery(
+            Root<Listing> root,
+            jakarta.persistence.criteria.CriteriaQuery<?> query,
+            jakarta.persistence.criteria.CriteriaBuilder cb,
+            String path,
+            Long expectedId) {
+        Subquery<Long> sub = query.subquery(Long.class);
+        Root<Ward> ward = sub.from(Ward.class);
+        sub.select(ward.get("id"));
+        jakarta.persistence.criteria.Path<?> current = ward;
+        for (String part : path.split("\\.")) {
+            current = current.get(part);
+        }
+        sub.where(
+                cb.equal(ward.get("id"), root.get("wardId")),
+                cb.equal(current, expectedId));
+        return sub;
     }
 }

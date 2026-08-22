@@ -13,7 +13,7 @@
 -- NOTE on creation order (see final report): tables are created in the order requested.
 -- Four foreign keys are FORWARD references under that order and are added via ALTER TABLE
 -- at the END of this file (same technique doc 02 mandates for the listings<->prediction cycle):
---   fk_user_profiles_provinces, fk_user_profiles_districts, fk_payments_coupons,
+--   fk_payments_coupons,
 --   fk_listings_prediction_histories.
 -- No FULLTEXT indexes in V1 (deferred to a later migration per task rule 6).
 -- No seed data in V1 (seed lives in V2+).
@@ -144,8 +144,6 @@ CREATE TABLE user_profiles (
   date_of_birth                DATE            NULL,
   bio                          VARCHAR(500)    NULL,
   occupation                   VARCHAR(100)    NULL,
-  province_id                  BIGINT UNSIGNED NULL,
-  district_id                  BIGINT UNSIGNED NULL,
   address_detail               VARCHAR(255)    NULL,
   preferred_gender_requirement VARCHAR(15)     NULL,
   created_at                   DATETIME(6)     NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
@@ -155,8 +153,6 @@ CREATE TABLE user_profiles (
   deleted_at                   DATETIME(6)     NULL,
   PRIMARY KEY (id),
   UNIQUE KEY uk_user_profiles_user_id (user_id),
-  KEY idx_user_profiles_province_id (province_id),
-  KEY idx_user_profiles_district_id (district_id),
   CONSTRAINT fk_user_profiles_users FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE ON UPDATE RESTRICT,
   CONSTRAINT ck_user_profiles_gender_req CHECK (preferred_gender_requirement IS NULL
       OR preferred_gender_requirement IN ('MALE_ONLY','FEMALE_ONLY','ANY'))
@@ -449,8 +445,6 @@ CREATE TABLE listings (
   deposit_amount         DECIMAL(15,2)    NULL,
   electricity_price      DECIMAL(15,2)    NULL,
   water_price            DECIMAL(15,2)    NULL,
-  province_id            BIGINT UNSIGNED  NOT NULL,
-  district_id            BIGINT UNSIGNED  NOT NULL,
   ward_id                BIGINT UNSIGNED  NOT NULL,
   address_detail         VARCHAR(255)     NOT NULL,
   latitude               DECIMAL(10,7)    NULL,
@@ -500,7 +494,7 @@ CREATE TABLE listings (
   deleted_at             DATETIME(6)      NULL,
   PRIMARY KEY (id),
   UNIQUE KEY uk_listings_slug (slug),
-  KEY idx_listings_search (status, province_id, district_id, category_id, price, area),
+  KEY idx_listings_search (status, ward_id, category_id, price, area),
   KEY idx_listings_promoted_sort (status, is_promoted, promotion_priority, published_at),
   KEY idx_listings_status_published_at (status, published_at),
   KEY idx_listings_status_price (status, price),
@@ -517,8 +511,6 @@ CREATE TABLE listings (
   KEY idx_listings_price_prediction_id (price_prediction_id),
   CONSTRAINT fk_listings_users      FOREIGN KEY (owner_id)    REFERENCES users (id)      ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT fk_listings_categories FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE RESTRICT ON UPDATE RESTRICT,
-  CONSTRAINT fk_listings_provinces  FOREIGN KEY (province_id) REFERENCES provinces (id)  ON DELETE RESTRICT ON UPDATE RESTRICT,
-  CONSTRAINT fk_listings_districts  FOREIGN KEY (district_id) REFERENCES districts (id)  ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT fk_listings_wards      FOREIGN KEY (ward_id)     REFERENCES wards (id)       ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT ck_listings_status CHECK (status IN
       ('DRAFT','PENDING','ACTIVE','REJECTED','HIDDEN','EXPIRED','CLOSED','LOCKED','NEED_REVIEW','DELETED')),
@@ -681,7 +673,6 @@ CREATE TABLE contact_logs (
   id               BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   listing_id       BIGINT UNSIGNED NOT NULL,
   user_id          BIGINT UNSIGNED NOT NULL,
-  owner_id         BIGINT UNSIGNED NOT NULL,
   contact_type     VARCHAR(15)     NOT NULL,
   message          VARCHAR(1000)   NULL,
   contact_name     VARCHAR(100)    NULL,
@@ -695,15 +686,12 @@ CREATE TABLE contact_logs (
   updated_by       BIGINT UNSIGNED NULL,
   deleted_at       DATETIME(6)     NULL,
   PRIMARY KEY (id),
-  KEY idx_contact_logs_owner_id_created_at (owner_id, created_at),
   KEY idx_contact_logs_listing_id_created_at (listing_id, created_at),
   KEY idx_contact_logs_dedup (listing_id, user_id, created_at),
   KEY idx_contact_logs_user_id_created_at (user_id, created_at),
   CONSTRAINT fk_contact_logs_listings    FOREIGN KEY (listing_id) REFERENCES listings (id) ON DELETE CASCADE  ON UPDATE RESTRICT,
   CONSTRAINT fk_contact_logs_users       FOREIGN KEY (user_id)    REFERENCES users (id)    ON DELETE RESTRICT ON UPDATE RESTRICT,
-  CONSTRAINT fk_contact_logs_users_owner FOREIGN KEY (owner_id)   REFERENCES users (id)    ON DELETE RESTRICT ON UPDATE RESTRICT,
-  CONSTRAINT ck_contact_logs_type     CHECK (contact_type IN ('VIEW_PHONE','FORM','CHAT')),
-  CONSTRAINT ck_contact_logs_not_self CHECK (user_id <> owner_id)
+  CONSTRAINT ck_contact_logs_type     CHECK (contact_type IN ('VIEW_PHONE','FORM','CHAT'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 25. conversations -------------------------------------------------------------------
@@ -711,7 +699,6 @@ CREATE TABLE conversations (
   id                    BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   listing_id            BIGINT UNSIGNED NOT NULL,
   tenant_id             BIGINT UNSIGNED NOT NULL,
-  landlord_id           BIGINT UNSIGNED NOT NULL,
   status                VARCHAR(10)     NOT NULL DEFAULT 'ACTIVE',
   first_response_at     DATETIME(6)     NULL,
   last_message_at       DATETIME(6)     NULL,
@@ -725,16 +712,13 @@ CREATE TABLE conversations (
   updated_by            BIGINT UNSIGNED NULL,
   deleted_at            DATETIME(6)     NULL,
   PRIMARY KEY (id),
-  UNIQUE KEY uk_conversations_listing_tenant_landlord (listing_id, tenant_id, landlord_id),
+  UNIQUE KEY uk_conversations_listing_tenant (listing_id, tenant_id),
   KEY idx_conversations_tenant_id_last_message_at (tenant_id, last_message_at),
-  KEY idx_conversations_landlord_id_last_message_at (landlord_id, last_message_at),
   KEY idx_conversations_listing_id (listing_id),
-  KEY idx_conversations_landlord_id_created_at (landlord_id, created_at, first_response_at),
+  KEY idx_conversations_listing_id_last_message_at (listing_id, last_message_at),
   CONSTRAINT fk_conversations_listings        FOREIGN KEY (listing_id)  REFERENCES listings (id) ON DELETE CASCADE  ON UPDATE RESTRICT,
   CONSTRAINT fk_conversations_users_tenant    FOREIGN KEY (tenant_id)   REFERENCES users (id)    ON DELETE RESTRICT ON UPDATE RESTRICT,
-  CONSTRAINT fk_conversations_users_landlord  FOREIGN KEY (landlord_id) REFERENCES users (id)    ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT ck_conversations_status    CHECK (status IN ('ACTIVE','ARCHIVED','BLOCKED')),
-  CONSTRAINT ck_conversations_not_self  CHECK (tenant_id <> landlord_id),
   CONSTRAINT ck_conversations_unread    CHECK (tenant_unread_count >= 0 AND landlord_unread_count >= 0),
   CONSTRAINT ck_conversations_first_response CHECK (first_response_at IS NULL OR first_response_at >= created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -813,7 +797,6 @@ CREATE TABLE reviews (
   id                  BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT,
   listing_id          BIGINT UNSIGNED  NOT NULL,
   user_id             BIGINT UNSIGNED  NOT NULL,
-  landlord_id         BIGINT UNSIGNED  NOT NULL,
   rating              INT UNSIGNED NOT NULL,
   content             VARCHAR(1000)    NULL,
   status              VARCHAR(10)      NOT NULL DEFAULT 'VISIBLE',
@@ -830,12 +813,10 @@ CREATE TABLE reviews (
   PRIMARY KEY (id),
   UNIQUE KEY uk_reviews_user_listing (user_id, listing_id),
   KEY idx_reviews_listing_id_status_created_at (listing_id, status, created_at),
-  KEY idx_reviews_landlord_id_status (landlord_id, status),
   KEY idx_reviews_rating_status (rating, status),
   KEY idx_reviews_user_id (user_id),
   CONSTRAINT fk_reviews_listings       FOREIGN KEY (listing_id)  REFERENCES listings (id) ON DELETE CASCADE  ON UPDATE RESTRICT,
   CONSTRAINT fk_reviews_users          FOREIGN KEY (user_id)     REFERENCES users (id)    ON DELETE RESTRICT ON UPDATE RESTRICT,
-  CONSTRAINT fk_reviews_users_landlord FOREIGN KEY (landlord_id) REFERENCES users (id)    ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT ck_reviews_status CHECK (status IN ('VISIBLE','HIDDEN','DELETED')),
   CONSTRAINT ck_reviews_rating CHECK (rating BETWEEN 1 AND 5),
   CONSTRAINT ck_reviews_content_required CHECK (rating > 2 OR (content IS NOT NULL AND CHAR_LENGTH(content) >= 3)),
@@ -1206,7 +1187,6 @@ CREATE TABLE notification_preferences (
 CREATE TABLE sentiment_results (
   id                     BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   comment_id             BIGINT UNSIGNED NOT NULL,
-  listing_id             BIGINT UNSIGNED NULL,
   label                  VARCHAR(20)     NOT NULL,
   score                  DECIMAL(4,3)    NULL,
   confidence             DECIMAL(4,3)    NULL,
@@ -1227,7 +1207,6 @@ CREATE TABLE sentiment_results (
   PRIMARY KEY (id),
   UNIQUE KEY uk_sentiment_results_latest (latest_uk),
   KEY idx_sentiment_results_comment_id_created_at (comment_id, created_at),
-  KEY idx_sentiment_results_listing_id_label (listing_id, label, is_latest),
   KEY idx_sentiment_results_suggested_action (suggested_action, is_latest),
   KEY idx_sentiment_results_analyzer_version (analyzer_version, created_at),
   KEY idx_sentiment_results_label_confidence (label, confidence),
@@ -1283,8 +1262,6 @@ CREATE TABLE prediction_histories (
   listing_id        BIGINT UNSIGNED  NULL,
   user_id           BIGINT UNSIGNED  NOT NULL,
   category_id       BIGINT UNSIGNED  NOT NULL,
-  province_id       BIGINT UNSIGNED  NOT NULL,
-  district_id       BIGINT UNSIGNED  NOT NULL,
   ward_id           BIGINT UNSIGNED  NOT NULL,
   area              DECIMAL(8,2)     NOT NULL,
   room_count        INT UNSIGNED NULL,
@@ -1314,15 +1291,11 @@ CREATE TABLE prediction_histories (
   KEY idx_prediction_histories_is_flagged (is_flagged, created_at),
   KEY idx_prediction_histories_confidence (confidence),
   KEY idx_prediction_histories_category_id (category_id),
-  KEY idx_prediction_histories_province_id (province_id),
-  KEY idx_prediction_histories_district_id (district_id),
   KEY idx_prediction_histories_ward_id (ward_id),
   KEY idx_prediction_histories_sample_size (sample_size),
   CONSTRAINT fk_prediction_histories_listings  FOREIGN KEY (listing_id)  REFERENCES listings (id)   ON DELETE SET NULL ON UPDATE RESTRICT,
   CONSTRAINT fk_prediction_histories_users      FOREIGN KEY (user_id)     REFERENCES users (id)      ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT fk_prediction_histories_categories FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE RESTRICT ON UPDATE RESTRICT,
-  CONSTRAINT fk_prediction_histories_provinces  FOREIGN KEY (province_id) REFERENCES provinces (id)  ON DELETE RESTRICT ON UPDATE RESTRICT,
-  CONSTRAINT fk_prediction_histories_districts  FOREIGN KEY (district_id) REFERENCES districts (id)  ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT fk_prediction_histories_wards      FOREIGN KEY (ward_id)     REFERENCES wards (id)      ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT ck_prediction_histories_confidence CHECK (confidence IN
       ('HIGH','MEDIUM','LOW','INSUFFICIENT_DATA')),
@@ -1473,11 +1446,6 @@ CREATE TABLE ai_configs (
 -- =====================================================================================
 -- Deferred foreign keys (forward / circular references) — added after all tables exist
 -- =====================================================================================
-
--- user_profiles -> provinces/districts (catalog tables created after user_profiles)
-ALTER TABLE user_profiles
-  ADD CONSTRAINT fk_user_profiles_provinces FOREIGN KEY (province_id) REFERENCES provinces (id) ON DELETE SET NULL ON UPDATE RESTRICT,
-  ADD CONSTRAINT fk_user_profiles_districts FOREIGN KEY (district_id) REFERENCES districts (id) ON DELETE SET NULL ON UPDATE RESTRICT;
 
 -- payments -> coupons
 ALTER TABLE payments

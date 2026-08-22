@@ -82,12 +82,8 @@ public class Listing extends AuditableEntity {
     // ----- Địa chỉ -----
 
     /** Tỉnh/thành (provinces.id). */
-    @Column(name = "province_id", nullable = false)
-    private Long provinceId;
 
     /** Quận/huyện (districts.id). */
-    @Column(name = "district_id", nullable = false)
-    private Long districtId;
 
     /** Phường/xã (wards.id). */
     @Column(name = "ward_id", nullable = false)

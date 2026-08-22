@@ -29,6 +29,8 @@ import com.webtro.modules.admin.service.SystemConfigService;
 import com.webtro.modules.admin.specification.AdminListingSpecifications;
 import com.webtro.modules.listing.entity.Listing;
 import com.webtro.modules.listing.repository.ListingRepository;
+import com.webtro.modules.listing.service.ListingCategoryCountPublisher;
+import com.webtro.modules.listing.service.ListingOwnerStatsPublisher;
 import com.webtro.modules.listing.statemachine.ListingEvent;
 import com.webtro.modules.listing.statemachine.ListingStateMachine;
 import com.webtro.modules.moderation.entity.ModerationAction;
@@ -69,6 +71,8 @@ public class AdminListingServiceImpl implements AdminListingService {
     private final NotificationService notificationService;
     private final AdminListingMapper adminListingMapper;
     private final ApplicationEventPublisher eventPublisher;
+    private final ListingCategoryCountPublisher categoryCountPublisher;
+    private final ListingOwnerStatsPublisher ownerStatsPublisher;
 
     /**
      * Tự tham chiếu qua proxy để mỗi phần tử trong thao tác hàng loạt chạy trong một giao dịch
@@ -132,6 +136,8 @@ public class AdminListingServiceImpl implements AdminListingService {
             throw new ConflictException(ErrorCode.LISTING_ALREADY_APPROVED);
         }
         ListingStatus previous = listing.getStatus();
+        ListingCategoryCountPublisher.Snapshot categoryCountBefore = categoryCountPublisher.snapshot(listing);
+        ListingOwnerStatsPublisher.Snapshot ownerStatsBefore = ownerStatsPublisher.snapshot(listing);
         ListingStatus newStatus = listingStateMachine.transition(previous, ListingEvent.APPROVE);
 
         int displayDays = request.getDisplayDays() != null
@@ -144,6 +150,8 @@ public class AdminListingServiceImpl implements AdminListingService {
         listing.setExpiredAt(now.plus(Duration.ofDays(displayDays)));
         listing.setRejectReason(null);
         listingRepository.save(listing);
+        categoryCountPublisher.publishIfChanged(categoryCountBefore, listing);
+        ownerStatsPublisher.publishIfChanged(ownerStatsBefore, listing);
 
         Long modId = recordModeration(listing, actorId, ModerationActionType.APPROVE, null,
                 sanitize(request.getNote(), "Duyệt tin"), previous, newStatus);
@@ -204,6 +212,8 @@ public class AdminListingServiceImpl implements AdminListingService {
         }
         Listing listing = getAnyListing(id);
         ListingStatus previous = listing.getStatus();
+        ListingCategoryCountPublisher.Snapshot categoryCountBefore = categoryCountPublisher.snapshot(listing);
+        ListingOwnerStatsPublisher.Snapshot ownerStatsBefore = ownerStatsPublisher.snapshot(listing);
         ListingStatus newStatus = listingStateMachine.transition(previous, ListingEvent.LOCK);
 
         String reason = HtmlSanitizer.stripAllHtml(request.getReason());
@@ -212,6 +222,8 @@ public class AdminListingServiceImpl implements AdminListingService {
         listing.setLockReason(reason);
         listing.setLockSeverity(severity);
         listingRepository.save(listing);
+        categoryCountPublisher.publishIfChanged(categoryCountBefore, listing);
+        ownerStatsPublisher.publishIfChanged(ownerStatsBefore, listing);
 
         Long modId = recordModeration(listing, actorId, ModerationActionType.LOCK,
                 ModerationResult.SEVERE_LOCK, reason, previous, newStatus);
@@ -294,6 +306,8 @@ public class AdminListingServiceImpl implements AdminListingService {
     public AdminListingActionResponse unhide(Long id, String reason, Long actorId) {
         Listing listing = getAnyListing(id);
         ListingStatus previous = listing.getStatus();
+        ListingCategoryCountPublisher.Snapshot categoryCountBefore = categoryCountPublisher.snapshot(listing);
+        ListingOwnerStatsPublisher.Snapshot ownerStatsBefore = ownerStatsPublisher.snapshot(listing);
         // HIDDEN → ACTIVE qua máy trạng thái (ném LISTING_INVALID_TRANSITION nếu không ở HIDDEN).
         ListingStatus newStatus = listingStateMachine.transition(previous, ListingEvent.UNHIDE_BY_MODERATOR);
 
@@ -303,6 +317,8 @@ public class AdminListingServiceImpl implements AdminListingService {
         listing.setAutoHiddenAt(null);
         listing.setAutoHideReason(null);
         listingRepository.save(listing);
+        categoryCountPublisher.publishIfChanged(categoryCountBefore, listing);
+        ownerStatsPublisher.publishIfChanged(ownerStatsBefore, listing);
 
         Long modId = recordModeration(listing, actorId, ModerationActionType.UNHIDE, null,
                 cleaned, previous, newStatus);

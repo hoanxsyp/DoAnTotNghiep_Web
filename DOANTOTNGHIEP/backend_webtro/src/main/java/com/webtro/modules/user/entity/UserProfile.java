@@ -7,7 +7,6 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
-import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
@@ -25,18 +24,11 @@ import java.time.LocalDate;
  * bảng {@code user_profiles} (mục 6 của V1 baseline).
  *
  * <p>{@code user_id} cùng module + UNIQUE → map {@code @OneToOne(LAZY)}.
- * {@code province_id}/{@code district_id} trỏ sang module {@code catalog} nên chỉ giữ
- * {@link Long} (canonical luật 8). FK tới provinces/districts được thêm bằng ALTER TABLE ở cuối
- * V1 (forward reference) nên không khai báo {@code foreignKey} phía entity.
  */
 @Entity
 @Table(
         name = "user_profiles",
-        uniqueConstraints = @UniqueConstraint(name = "uk_user_profiles_user_id", columnNames = "user_id"),
-        indexes = {
-                @Index(name = "idx_user_profiles_province_id", columnList = "province_id"),
-                @Index(name = "idx_user_profiles_district_id", columnList = "district_id")
-        }
+        uniqueConstraints = @UniqueConstraint(name = "uk_user_profiles_user_id", columnNames = "user_id")
 )
 @Getter
 @Setter
@@ -61,14 +53,6 @@ public class UserProfile extends AuditableEntity {
     /** Nghề nghiệp. */
     @Column(name = "occupation", length = 100)
     private String occupation;
-
-    /** Tỉnh/thành thường trú (provinces.id, chéo module → giữ Long). */
-    @Column(name = "province_id")
-    private Long provinceId;
-
-    /** Quận/huyện thường trú (districts.id, chéo module → giữ Long). */
-    @Column(name = "district_id")
-    private Long districtId;
 
     /** Địa chỉ chi tiết. */
     @Column(name = "address_detail", length = 255)

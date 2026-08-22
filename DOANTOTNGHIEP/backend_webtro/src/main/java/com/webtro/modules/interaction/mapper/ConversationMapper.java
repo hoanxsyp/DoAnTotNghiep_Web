@@ -15,9 +15,9 @@ import org.springframework.stereotype.Component;
 @Component
 public class ConversationMapper {
 
-    public ConversationResponse toResponse(Conversation c, Long currentUserId,
+    public ConversationResponse toResponse(Conversation c, Long currentUserId, Long landlordId,
                                            ListingBrief listing, UserBrief partner) {
-        boolean iAmLandlord = c.getLandlordId().equals(currentUserId);
+        boolean iAmLandlord = landlordId != null && landlordId.equals(currentUserId);
         int unread = iAmLandlord ? c.getLandlordUnreadCount() : c.getTenantUnreadCount();
 
         ConversationResponse.PartnerResponse partnerDto = partner == null ? null

@@ -7,6 +7,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -29,10 +31,28 @@ public interface SentimentResultRepository
     List<SentimentResult> findByCommentIdOrderByCreatedAtDesc(Long commentId);
 
     /** Đếm bình luận hiện hành theo nhãn của một tin (tính tỷ lệ tiêu cực, ngưỡng 40%/50%). */
-    long countByListingIdAndLabelAndIsLatestTrue(Long listingId, SentimentLabel label);
+    @Query("""
+            SELECT COUNT(sr)
+            FROM SentimentResult sr, Comment c
+            WHERE c.id = sr.commentId
+              AND c.listingId = :listingId
+              AND c.deletedAt IS NULL
+              AND sr.label = :label
+              AND sr.isLatest = true
+            """)
+    long countByListingIdAndLabelAndIsLatestTrue(@Param("listingId") Long listingId,
+                                                 @Param("label") SentimentLabel label);
 
     /** Đếm toàn bộ bình luận hiện hành của một tin. */
-    long countByListingIdAndIsLatestTrue(Long listingId);
+    @Query("""
+            SELECT COUNT(sr)
+            FROM SentimentResult sr, Comment c
+            WHERE c.id = sr.commentId
+              AND c.listingId = :listingId
+              AND c.deletedAt IS NULL
+              AND sr.isLatest = true
+            """)
+    long countByListingIdAndIsLatestTrue(@Param("listingId") Long listingId);
 
     /** Hàng đợi tin bị AI đề xuất xử lý (WATCH/NEED_REVIEW), chỉ bản hiện hành. */
     Page<SentimentResult> findBySuggestedActionAndIsLatestTrue(SentimentAction suggestedAction, Pageable pageable);

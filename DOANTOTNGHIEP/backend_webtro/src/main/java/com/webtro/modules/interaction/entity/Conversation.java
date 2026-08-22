@@ -21,7 +21,7 @@ import java.time.Instant;
 /**
  * Hội thoại chat giữa người thuê và chủ trọ về một tin — bảng {@code conversations}.
  *
- * <p>Duy nhất theo bộ ba ({@code listingId}, {@code tenantId}, {@code landlordId}). Lưu các bộ đếm
+ * <p>Duy nhất theo cặp ({@code listingId}, {@code tenantId}); landlord suy ra từ owner của listing. Lưu các bộ đếm
  * chưa đọc và mốc phản hồi đầu tiên phục vụ tính tỷ lệ phản hồi chủ trọ {@code [§5.7]}.
  * FK chéo module giữ dạng {@code Long}.
  */
@@ -29,13 +29,12 @@ import java.time.Instant;
 @Table(
         name = "conversations",
         uniqueConstraints = @UniqueConstraint(
-                name = "uk_conversations_listing_tenant_landlord",
-                columnNames = {"listing_id", "tenant_id", "landlord_id"}),
+                name = "uk_conversations_listing_tenant",
+                columnNames = {"listing_id", "tenant_id"}),
         indexes = {
                 @Index(name = "idx_conversations_tenant_id_last_message_at", columnList = "tenant_id, last_message_at"),
-                @Index(name = "idx_conversations_landlord_id_last_message_at", columnList = "landlord_id, last_message_at"),
                 @Index(name = "idx_conversations_listing_id", columnList = "listing_id"),
-                @Index(name = "idx_conversations_landlord_id_created_at", columnList = "landlord_id, created_at, first_response_at")
+                @Index(name = "idx_conversations_listing_id_last_message_at", columnList = "listing_id, last_message_at")
         })
 @Getter
 @Setter
@@ -53,8 +52,6 @@ public class Conversation extends AuditableEntity {
     private Long tenantId;
 
     /** Chủ trọ (FK users.id — chéo module, giữ Long). */
-    @Column(name = "landlord_id", nullable = false)
-    private Long landlordId;
 
     @Enumerated(EnumType.STRING)
     @Builder.Default

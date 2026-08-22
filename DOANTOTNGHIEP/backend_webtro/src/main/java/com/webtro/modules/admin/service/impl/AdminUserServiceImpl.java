@@ -33,6 +33,8 @@ import com.webtro.modules.admin.specification.AdminLandlordSpecifications;
 import com.webtro.modules.admin.specification.AdminUserSpecifications;
 import com.webtro.modules.listing.entity.Listing;
 import com.webtro.modules.listing.repository.ListingRepository;
+import com.webtro.modules.listing.service.ListingCategoryCountPublisher;
+import com.webtro.modules.listing.service.ListingOwnerStatsPublisher;
 import com.webtro.modules.listing.service.TrustScoreService;
 import com.webtro.modules.listing.statemachine.ListingEvent;
 import com.webtro.modules.listing.statemachine.ListingStateMachine;
@@ -103,6 +105,8 @@ public class AdminUserServiceImpl implements AdminUserService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final ListingRepository listingRepository;
     private final ListingStateMachine listingStateMachine;
+    private final ListingCategoryCountPublisher categoryCountPublisher;
+    private final ListingOwnerStatsPublisher ownerStatsPublisher;
     private final TrustScoreService trustScoreService;
     private final AdminUserMapper adminUserMapper;
     private final AuditLogService auditLogService;
@@ -726,10 +730,14 @@ public class AdminUserServiceImpl implements AdminUserService {
     private int lockOwnerListings(Long ownerId, String reason) {
         int count = 0;
         for (Listing l : listingRepository.findAll(ownerStatusSpec(ownerId, LOCKABLE))) {
+            ListingCategoryCountPublisher.Snapshot categoryCountBefore = categoryCountPublisher.snapshot(l);
+            ListingOwnerStatsPublisher.Snapshot ownerStatsBefore = ownerStatsPublisher.snapshot(l);
             ListingStatus newStatus = listingStateMachine.transition(l.getStatus(), ListingEvent.LOCK);
             l.setStatus(newStatus);
             l.setLockReason(reason);
             listingRepository.save(l);
+            categoryCountPublisher.publishIfChanged(categoryCountBefore, l);
+            ownerStatsPublisher.publishIfChanged(ownerStatsBefore, l);
             count++;
         }
         return count;

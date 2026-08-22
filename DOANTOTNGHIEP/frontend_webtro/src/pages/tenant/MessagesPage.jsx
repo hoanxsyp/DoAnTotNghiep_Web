@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useSelector } from 'react-redux';
 import {
   Box, Card, Stack, List, ListItemButton, ListItemAvatar, ListItemText, Avatar, Badge,
   Typography, Divider, TextField, IconButton, Tooltip, useMediaQuery,
@@ -14,11 +15,14 @@ import LoadingSkeleton from '@/components/common/LoadingSkeleton';
 import EmptyState from '@/components/common/EmptyState';
 import notify from '@/utils/toast';
 import { fromNow, formatDateTime } from '@/utils/format';
+import { selectCurrentUser } from '@/redux/authSlice';
+import { subscribeToConversationMessages } from '@/services/chatSocketService';
 
 const MessagesPage = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [searchParams, setSearchParams] = useSearchParams();
+  const currentUser = useSelector(selectCurrentUser);
 
   const [conversations, setConversations] = useState([]);
   const [loadingList, setLoadingList] = useState(true);
@@ -28,6 +32,33 @@ const MessagesPage = () => {
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const endRef = useRef(null);
+
+  const upsertMessage = useCallback((incoming) => {
+    if (!incoming?.id) return;
+    const normalized = {
+      ...incoming,
+      sentByMe: String(incoming.senderId) === String(currentUser?.id),
+    };
+    setMessages((prev) => {
+      const exists = prev.some((m) => String(m.id) === String(normalized.id));
+      const next = exists
+        ? prev.map((m) => (String(m.id) === String(normalized.id) ? { ...m, ...normalized } : m))
+        : [...prev, normalized];
+      return next.sort((a, b) => new Date(a.sentAt || 0) - new Date(b.sentAt || 0));
+    });
+    setConversations((prev) => prev.map((c) => (
+      c.id === normalized.conversationId ? {
+        ...c,
+        unreadCount: normalized.sentByMe || c.id === activeId ? 0 : c.unreadCount,
+        lastMessage: {
+          content: normalized.content,
+          sentByMe: normalized.sentByMe,
+          sentAt: normalized.sentAt,
+        },
+        lastMessageAt: normalized.sentAt,
+      } : c
+    )));
+  }, [activeId, currentUser?.id]);
 
   const loadConversations = useCallback(async () => {
     setLoadingList(true);
@@ -82,6 +113,25 @@ const MessagesPage = () => {
     // eslint-disable-next-line
   }, [activeId]);
 
+  useEffect(() => {
+    if (!activeId || !currentUser?.id) return undefined;
+    return subscribeToConversationMessages({
+      conversationId: activeId,
+      currentUserId: currentUser.id,
+      onMessage: (message) => {
+        upsertMessage(message);
+        if (!message.sentByMe) {
+          contactApi.markRead(activeId).then(() => {
+            setConversations((prev) => prev.map((c) => (
+              c.id === activeId ? { ...c, unreadCount: 0 } : c
+            )));
+          }).catch(() => {});
+        }
+      },
+      onError: () => {},
+    });
+  }, [activeId, currentUser?.id, upsertMessage]);
+
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
   const handleSend = async () => {
@@ -90,7 +140,7 @@ const MessagesPage = () => {
     setSending(true);
     try {
       const msg = await contactApi.sendMessage(activeId, { content });
-      setMessages((prev) => [...prev, msg]);
+      upsertMessage(msg);
       setInput('');
       setConversations((prev) => prev.map((c) => (
         c.id === activeId ? { ...c, lastMessage: { content, sentByMe: true, sentAt: msg?.sentAt }, lastMessageAt: msg?.sentAt } : c

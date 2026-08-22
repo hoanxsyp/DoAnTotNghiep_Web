@@ -5,6 +5,8 @@ import com.webtro.common.enums.NotificationType;
 import com.webtro.config.properties.AppProperties;
 import com.webtro.modules.listing.entity.Listing;
 import com.webtro.modules.listing.repository.ListingRepository;
+import com.webtro.modules.listing.service.ListingCategoryCountPublisher;
+import com.webtro.modules.listing.service.ListingOwnerStatsPublisher;
 import com.webtro.modules.listing.statemachine.ListingEvent;
 import com.webtro.modules.listing.statemachine.ListingStateMachine;
 import com.webtro.modules.notification.service.NotificationService;
@@ -41,17 +43,23 @@ public class ListingExpiryJob {
 
     private final ListingRepository listingRepository;
     private final ListingStateMachine stateMachine;
+    private final ListingCategoryCountPublisher categoryCountPublisher;
+    private final ListingOwnerStatsPublisher ownerStatsPublisher;
     private final NotificationService notificationService;
     private final AppProperties appProperties;
     private final TransactionTemplate txTemplate;
 
     public ListingExpiryJob(ListingRepository listingRepository,
                             ListingStateMachine stateMachine,
+                            ListingCategoryCountPublisher categoryCountPublisher,
+                            ListingOwnerStatsPublisher ownerStatsPublisher,
                             NotificationService notificationService,
                             AppProperties appProperties,
                             PlatformTransactionManager txManager) {
         this.listingRepository = listingRepository;
         this.stateMachine = stateMachine;
+        this.categoryCountPublisher = categoryCountPublisher;
+        this.ownerStatsPublisher = ownerStatsPublisher;
         this.notificationService = notificationService;
         this.appProperties = appProperties;
         this.txTemplate = new TransactionTemplate(txManager);
@@ -104,9 +112,13 @@ public class ListingExpiryJob {
         if (listing.getExpiredAt() == null || !listing.getExpiredAt().isBefore(now)) {
             return false; // đã được gia hạn trong lúc chờ
         }
+        ListingCategoryCountPublisher.Snapshot categoryCountBefore = categoryCountPublisher.snapshot(listing);
+        ListingOwnerStatsPublisher.Snapshot ownerStatsBefore = ownerStatsPublisher.snapshot(listing);
         ListingStatus target = stateMachine.transition(listing.getStatus(), ListingEvent.EXPIRE);
         listing.setStatus(target);
         listingRepository.save(listing);
+        categoryCountPublisher.publishIfChanged(categoryCountBefore, listing);
+        ownerStatsPublisher.publishIfChanged(ownerStatsBefore, listing);
         return true;
     }
 

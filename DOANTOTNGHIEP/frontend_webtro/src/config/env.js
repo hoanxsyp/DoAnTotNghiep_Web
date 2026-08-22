@@ -7,6 +7,7 @@
  */
 export const env = {
   apiBaseUrl: import.meta.env.VITE_API_BASE_URL || '/api',
+  wsBaseUrl: import.meta.env.VITE_WS_BASE_URL || '',
   appName: import.meta.env.VITE_APP_NAME || 'Webtro',
   isDev: import.meta.env.DEV,
   isProd: import.meta.env.PROD,

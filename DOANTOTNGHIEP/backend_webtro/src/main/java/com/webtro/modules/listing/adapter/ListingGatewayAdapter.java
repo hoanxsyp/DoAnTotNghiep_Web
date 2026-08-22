@@ -5,8 +5,6 @@ import com.webtro.exception.ResourceNotFoundException;
 import com.webtro.modules.catalog.entity.District;
 import com.webtro.modules.catalog.entity.Province;
 import com.webtro.modules.catalog.entity.Ward;
-import com.webtro.modules.catalog.repository.DistrictRepository;
-import com.webtro.modules.catalog.repository.ProvinceRepository;
 import com.webtro.modules.catalog.repository.WardRepository;
 import com.webtro.modules.interaction.spi.ListingGateway;
 import com.webtro.modules.listing.entity.Listing;
@@ -41,8 +39,6 @@ public class ListingGatewayAdapter implements ListingGateway {
 
     private final ListingRepository listingRepository;
     private final ListingImageRepository imageRepository;
-    private final ProvinceRepository provinceRepository;
-    private final DistrictRepository districtRepository;
     private final WardRepository wardRepository;
     private final ListingVisibilityService visibilityService;
     private final ListingService listingService;
@@ -154,10 +150,21 @@ public class ListingGatewayAdapter implements ListingGateway {
     }
 
     private String shortAddress(Listing l) {
-        String ward = wardRepository.findById(l.getWardId()).map(Ward::getName).orElse(null);
-        String district = districtRepository.findById(l.getDistrictId()).map(District::getName).orElse(null);
-        String province = provinceRepository.findById(l.getProvinceId()).map(Province::getName).orElse(null);
-        return joinNonBlank(ward, district, province);
+        LocationParts location = locationOf(l.getWardId());
+        return joinNonBlank(
+                location.ward() == null ? null : location.ward().getName(),
+                location.district() == null ? null : location.district().getName(),
+                location.province() == null ? null : location.province().getName());
+    }
+
+    private LocationParts locationOf(Long wardId) {
+        Ward ward = wardId == null ? null : wardRepository.findById(wardId).orElse(null);
+        District district = ward == null ? null : ward.getDistrict();
+        Province province = district == null ? null : district.getProvince();
+        return new LocationParts(province, district, ward);
+    }
+
+    private record LocationParts(Province province, District district, Ward ward) {
     }
 
     private static String joinNonBlank(String... parts) {

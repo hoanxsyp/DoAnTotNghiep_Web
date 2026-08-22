@@ -45,4 +45,7 @@ public interface ConversationService {
      */
     ConversationCreatedResponse startChatFromContact(Long listingId, Long tenantId, Long landlordId,
                                                      String initialMessage);
+
+    /** Kiem tra user co thuoc hoi thoai hay khong; nem loi neu khong co quyen. */
+    void assertConversationMember(Long conversationId, Long userId);
 }

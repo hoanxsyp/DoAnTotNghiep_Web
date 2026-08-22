@@ -27,6 +27,7 @@ import com.webtro.modules.interaction.service.ConversationService;
 import com.webtro.modules.interaction.spi.BannedKeywordGateway;
 import com.webtro.modules.interaction.spi.ListingGateway;
 import com.webtro.modules.interaction.spi.UserGateway;
+import com.webtro.modules.interaction.websocket.ChatRealtimePublisher;
 import com.webtro.security.RateLimitService;
 import com.webtro.util.HtmlSanitizer;
 import lombok.RequiredArgsConstructor;
@@ -38,6 +39,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -45,6 +48,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Hiện thực nghiệp vụ hội thoại/tin nhắn (CONT-03) — canonical 4.6.4–4.6.9, {@code [§3.10]}.
@@ -72,6 +76,7 @@ public class ConversationServiceImpl implements ConversationService {
     private final UserGateway userGateway;
     private final BannedKeywordGateway bannedKeywordGateway;
     private final ConversationMapper conversationMapper;
+    private final ChatRealtimePublisher chatRealtimePublisher;
     private final RateLimitService rateLimitService;
     private final SystemConfigService systemConfig;
     private final ApplicationEventPublisher eventPublisher;
@@ -114,13 +119,16 @@ public class ConversationServiceImpl implements ConversationService {
         List<Long> listingIds = content.stream().map(Conversation::getListingId).distinct().toList();
         Map<Long, ListingGateway.ListingBrief> listings = listingGateway.getBriefs(listingIds);
         List<Long> partnerIds = content.stream()
-                .map(c -> c.getTenantId().equals(userId) ? c.getLandlordId() : c.getTenantId())
+                .map(c -> c.getTenantId().equals(userId) ? landlordIdOf(c, listings.get(c.getListingId())) : c.getTenantId())
+                .filter(Objects::nonNull)
                 .distinct().toList();
         Map<Long, UserGateway.UserBrief> partners = userGateway.getBriefs(partnerIds);
 
         List<ConversationResponse> items = content.stream().map(c -> {
-            Long partnerId = c.getTenantId().equals(userId) ? c.getLandlordId() : c.getTenantId();
-            return conversationMapper.toResponse(c, userId, listings.get(c.getListingId()), partners.get(partnerId));
+            ListingGateway.ListingBrief listing = listings.get(c.getListingId());
+            Long landlordId = landlordIdOf(c, listing);
+            Long partnerId = c.getTenantId().equals(userId) ? landlordId : c.getTenantId();
+            return conversationMapper.toResponse(c, userId, landlordId, listing, partners.get(partnerId));
         }).toList();
 
         Page<ConversationResponse> asPage = new PageImpl<>(items, pageable, total);
@@ -195,9 +203,10 @@ public class ConversationServiceImpl implements ConversationService {
     public ConversationResponse getConversation(Long conversationId, Long userId) {
         Conversation c = requireMember(conversationId, userId);
         ListingGateway.ListingBrief listing = listingGateway.findBrief(c.getListingId()).orElse(null);
-        Long partnerId = c.getTenantId().equals(userId) ? c.getLandlordId() : c.getTenantId();
-        UserGateway.UserBrief partner = userGateway.findBrief(partnerId).orElse(null);
-        return conversationMapper.toResponse(c, userId, listing, partner);
+        Long landlordId = landlordIdOf(c, listing);
+        Long partnerId = c.getTenantId().equals(userId) ? landlordId : c.getTenantId();
+        UserGateway.UserBrief partner = partnerId == null ? null : userGateway.findBrief(partnerId).orElse(null);
+        return conversationMapper.toResponse(c, userId, landlordId, listing, partner);
     }
 
     @Override
@@ -269,6 +278,12 @@ public class ConversationServiceImpl implements ConversationService {
         return asTenant + asLandlord;
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public void assertConversationMember(Long conversationId, Long userId) {
+        requireMember(conversationId, userId);
+    }
+
     // ------------------------------------------------------------------
 
     private record Persisted(Conversation conversation, Message message, boolean alreadyExisted) {
@@ -277,14 +292,13 @@ public class ConversationServiceImpl implements ConversationService {
     /** Tạo hoặc lấy lại hội thoại theo bộ ba rồi gắn một tin nhắn. */
     private Persisted persistConversationMessage(Long listingId, Long tenantId, Long landlordId, String message) {
         Conversation conversation = conversationRepository
-                .findByListingIdAndTenantIdAndLandlordIdAndDeletedAtIsNull(listingId, tenantId, landlordId)
+                .findByListingIdAndTenantIdAndDeletedAtIsNull(listingId, tenantId)
                 .orElse(null);
         boolean alreadyExisted = conversation != null;
         if (conversation == null) {
             conversation = conversationRepository.save(Conversation.builder()
                     .listingId(listingId)
                     .tenantId(tenantId)
-                    .landlordId(landlordId)
                     .build());
         }
         Message msg = appendMessage(conversation, tenantId, message);
@@ -304,17 +318,36 @@ public class ConversationServiceImpl implements ConversationService {
         c.setLastMessageAt(now);
         c.setLastMessagePreview(content.length() > PREVIEW_MAX ? content.substring(0, PREVIEW_MAX) : content);
         c.setMessageCount(c.getMessageCount() + 1);
+        Long landlordId = landlordIdOf(c);
         if (c.getTenantId().equals(senderId)) {
             c.setLandlordUnreadCount(c.getLandlordUnreadCount() + 1);
-        } else {
+        } else if (landlordId != null && landlordId.equals(senderId)) {
             c.setTenantUnreadCount(c.getTenantUnreadCount() + 1);
             // Chủ trọ phản hồi lần đầu → ghi mốc SLA (idempotent) — [§5.7].
             if (c.getFirstResponseAt() == null) {
                 c.setFirstResponseAt(now);
             }
+        } else {
+            throw new ForbiddenException(ErrorCode.CONVERSATION_FORBIDDEN);
         }
         conversationRepository.save(c);
+        UserGateway.UserBrief sender = userGateway.findBrief(senderId).orElse(null);
+        MessageResponse realtimeMessage = conversationMapper.toMessageResponse(message, senderId, sender);
+        publishAfterCommit(c.getId(), realtimeMessage);
         return message;
+    }
+
+    private void publishAfterCommit(Long conversationId, MessageResponse message) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            chatRealtimePublisher.publishMessage(conversationId, message);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                chatRealtimePublisher.publishMessage(conversationId, message);
+            }
+        });
     }
 
     /** Ghi ContactLog CHAT (dedup theo contact.dedup_minutes) + báo chủ trọ khi được tính. */
@@ -326,7 +359,6 @@ public class ConversationServiceImpl implements ConversationService {
         contactLogRepository.save(ContactLog.builder()
                 .listingId(listing.id())
                 .userId(tenantId)
-                .ownerId(listing.ownerId())
                 .contactType(ContactType.CHAT)
                 .isCounted(counted)
                 .isReadByOwner(false)
@@ -350,7 +382,8 @@ public class ConversationServiceImpl implements ConversationService {
         Conversation c = conversationRepository.findById(conversationId)
                 .filter(cv -> cv.getDeletedAt() == null)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.CONVERSATION_NOT_FOUND));
-        if (!c.getTenantId().equals(userId) && !c.getLandlordId().equals(userId)) {
+        Long landlordId = landlordIdOf(c);
+        if (!c.getTenantId().equals(userId) && (landlordId == null || !landlordId.equals(userId))) {
             throw new ForbiddenException(ErrorCode.CONVERSATION_FORBIDDEN);
         }
         return c;
@@ -365,5 +398,18 @@ public class ConversationServiceImpl implements ConversationService {
                 .filter(c -> listingId == null || listingId.equals(c.getListingId()))
                 .filter(c -> !unreadOnly || unreadCountFor(c, userId) > 0)
                 .toList();
+    }
+
+    private Long landlordIdOf(Conversation c) {
+        return listingGateway.findBrief(c.getListingId())
+                .map(ListingGateway.ListingBrief::ownerId)
+                .orElse(null);
+    }
+
+    private Long landlordIdOf(Conversation c, ListingGateway.ListingBrief listing) {
+        if (listing != null) {
+            return listing.ownerId();
+        }
+        return landlordIdOf(c);
     }
 }

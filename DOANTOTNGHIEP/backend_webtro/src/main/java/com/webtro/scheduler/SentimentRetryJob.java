@@ -58,7 +58,7 @@ public class SentimentRetryJob {
         for (SentimentResult sr : pending) {
             Long commentId = sr.getCommentId();
             try {
-                sentimentService.processCommentSentiment(commentId, sr.getListingId());
+                sentimentService.processCommentSentiment(commentId, null);
                 processed++;
             } catch (RuntimeException e) {
                 errors++;

@@ -21,10 +21,33 @@ public interface ContactLogRepository extends JpaRepository<ContactLog, Long> {
     boolean existsByListingIdAndUserIdAndCreatedAtAfterAndDeletedAtIsNull(Long listingId, Long userId, Instant since);
 
     /** Danh sách liên hệ mà một chủ tin nhận được (phân trang). */
-    Page<ContactLog> findByOwnerIdAndDeletedAtIsNull(Long ownerId, Pageable pageable);
+    @Query(value = """
+            SELECT c
+            FROM ContactLog c, Listing l
+            WHERE l.id = c.listingId
+              AND l.ownerId = :ownerId
+              AND c.deletedAt IS NULL
+            ORDER BY c.createdAt DESC
+            """,
+            countQuery = """
+            SELECT COUNT(c)
+            FROM ContactLog c, Listing l
+            WHERE l.id = c.listingId
+              AND l.ownerId = :ownerId
+              AND c.deletedAt IS NULL
+            """)
+    Page<ContactLog> findByOwnerIdAndDeletedAtIsNull(@Param("ownerId") Long ownerId, Pageable pageable);
 
     /** Đếm liên hệ chủ tin chưa đọc. */
-    long countByOwnerIdAndIsReadByOwnerFalseAndDeletedAtIsNull(Long ownerId);
+    @Query("""
+            SELECT COUNT(c)
+            FROM ContactLog c, Listing l
+            WHERE l.id = c.listingId
+              AND l.ownerId = :ownerId
+              AND c.isReadByOwner = false
+              AND c.deletedAt IS NULL
+            """)
+    long countByOwnerIdAndIsReadByOwnerFalseAndDeletedAtIsNull(@Param("ownerId") Long ownerId);
 
     /** Liên hệ mới nhất của một người kể từ {@code since} (giới hạn qua {@code Pageable}) — tín hiệu hành vi w=5. */
     List<ContactLog> findByUserIdAndCreatedAtAfterAndDeletedAtIsNullOrderByCreatedAtDesc(
@@ -34,14 +57,25 @@ public interface ContactLogRepository extends JpaRepository<ContactLog, Long> {
     boolean existsByUserIdAndDeletedAtIsNull(Long userId);
 
     /** Count counted contacts for owner's listings in [from, to). */
+    @Query("""
+            SELECT COUNT(c)
+            FROM ContactLog c, Listing l
+            WHERE l.id = c.listingId
+              AND l.ownerId = :ownerId
+              AND c.isCounted = true
+              AND c.createdAt >= :from
+              AND c.createdAt < :to
+              AND c.deletedAt IS NULL
+            """)
     long countByOwnerIdAndIsCountedTrueAndCreatedAtGreaterThanEqualAndCreatedAtLessThanAndDeletedAtIsNull(
-            Long ownerId, Instant from, Instant to);
+            @Param("ownerId") Long ownerId, @Param("from") Instant from, @Param("to") Instant to);
 
     /** Daily counted contacts for owner's listings in [from, to). */
     @Query(value = """
             SELECT DATE(c.created_at) AS day, COUNT(*) AS total
             FROM contact_logs c
-            WHERE c.owner_id = :ownerId
+            JOIN listings l ON l.id = c.listing_id
+            WHERE l.owner_id = :ownerId
               AND c.deleted_at IS NULL
               AND c.is_counted = true
               AND c.created_at >= :from

@@ -79,7 +79,7 @@ public class ContactServiceImpl implements ContactService {
         boolean counted = logContact(listing, userId, ContactType.VIEW_PHONE, null, null, null).counted();
 
         Long conversationId = conversationRepository
-                .findByListingIdAndTenantIdAndLandlordIdAndDeletedAtIsNull(listingId, userId, listing.ownerId())
+                .findByListingIdAndTenantIdAndDeletedAtIsNull(listingId, userId)
                 .map(Conversation::getId)
                 .orElse(null);
 
@@ -177,8 +177,7 @@ public class ContactServiceImpl implements ContactService {
                 PageResponse.from(page, log -> {
                     ListingGateway.ListingBrief lb = listings.get(log.getListingId());
                     Long convId = conversationRepository
-                            .findByListingIdAndTenantIdAndLandlordIdAndDeletedAtIsNull(
-                                    log.getListingId(), log.getUserId(), ownerId)
+                            .findByListingIdAndTenantIdAndDeletedAtIsNull(log.getListingId(), log.getUserId())
                             .map(Conversation::getId).orElse(null);
                     return contactMapper.toLandlordContact(log,
                             lb == null ? null : lb.title(), convId, tenants.get(log.getUserId()));
@@ -238,7 +237,6 @@ public class ContactServiceImpl implements ContactService {
         ContactLog log = ContactLog.builder()
                 .listingId(listing.id())
                 .userId(userId)
-                .ownerId(listing.ownerId())
                 .contactType(type)
                 .message(message)
                 .contactPhone(callbackPhone)

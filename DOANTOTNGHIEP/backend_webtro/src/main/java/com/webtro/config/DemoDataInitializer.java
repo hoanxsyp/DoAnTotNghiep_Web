@@ -287,14 +287,11 @@ public class DemoDataInitializer implements ApplicationRunner {
             User u = createUser("tenant" + (i + 1), tenantNames[i],
                     String.format("090400%04d", i + 1),
                     (i % 2 == 0) ? Gender.FEMALE : Gender.MALE, passwordHash, now, tenantRole);
-            LocationRef loc = locations.get(i % locations.size());
             UserProfile profile = UserProfile.builder()
                     .user(u)
                     .dateOfBirth(LocalDate.of(1995 + (i % 8), 1 + (i % 12), 1 + (i % 27)))
                     .bio(bios[i])
                     .occupation(occupations[i])
-                    .provinceId(loc.provinceId())
-                    .districtId(loc.districtId())
                     .addressDetail("Ngõ " + (5 + i) + " đường Trần Phú")
                     .preferredGenderRequirement((i % 3 == 0) ? GenderRequirement.ANY
                             : (i % 3 == 1 ? GenderRequirement.MALE_ONLY : GenderRequirement.FEMALE_ONLY))
@@ -377,8 +374,6 @@ public class DemoDataInitializer implements ApplicationRunner {
                     .depositAmount(price)
                     .electricityPrice(new BigDecimal("3500"))
                     .waterPrice(new BigDecimal("100000"))
-                    .provinceId(loc.provinceId())
-                    .districtId(loc.districtId())
                     .wardId(loc.wardId())
                     .addressDetail("Số " + (12 + i) + ", ngõ " + (3 + i % 20) + " đường Nguyễn Văn Cừ, " + loc.label())
                     .roomCount(1)
@@ -464,8 +459,6 @@ public class DemoDataInitializer implements ApplicationRunner {
                         .depositAmount(price)
                         .electricityPrice(new BigDecimal("3500"))
                         .waterPrice(new BigDecimal("100000"))
-                        .provinceId(loc.provinceId())
-                        .districtId(loc.districtId())
                         .wardId(loc.wardId())
                         .addressDetail("Số " + (2 + c) + ", ngõ " + (10 + c % 30) + " " + district)
                         .roomCount(1)
@@ -648,7 +641,6 @@ public class DemoDataInitializer implements ApplicationRunner {
             reviewRepository.save(Review.builder()
                     .listingId(listing.getId())
                     .userId(tenant.getId())
-                    .landlordId(listing.getOwnerId())
                     .rating(rating)
                     .content(content)
                     .status(ReviewStatus.VISIBLE)
@@ -713,6 +705,8 @@ public class DemoDataInitializer implements ApplicationRunner {
         // ============================ 7. THANH TOÁN + ĐẨY TIN (~5) ============================
         int paymentCreated = createPaymentsAndPromotions(landlords, listings, now);
 
+        updateCategoryListingCounts(listings);
+
         // ============================ TỔNG KẾT ============================
         log.info("Gieo dữ liệu mẫu HOÀN TẤT: {} người dùng (1 moderator + {} chủ trọ + {} người thuê), "
                         + "{} tin đăng, {} lưu tin, {} lượt xem, {} bình luận, {} đánh giá, {} theo dõi, "
@@ -745,6 +739,21 @@ public class DemoDataInitializer implements ApplicationRunner {
     private Role requireRole(String code) {
         return roleRepository.findByCodeAndDeletedAtIsNull(code)
                 .orElseThrow(() -> new IllegalStateException("Chưa seed vai trò " + code + " (kiểm tra V2 migration)"));
+    }
+
+    private void updateCategoryListingCounts(List<Listing> listings) {
+        Map<Long, Integer> counts = new HashMap<>();
+        for (Listing listing : listings) {
+            if (listing.getDeletedAt() == null
+                    && (listing.getStatus() == ListingStatus.ACTIVE
+                    || listing.getStatus() == ListingStatus.NEED_REVIEW)) {
+                counts.merge(listing.getCategoryId(), 1, Integer::sum);
+            }
+        }
+        for (Category category : categoryRepository.findAll()) {
+            category.setListingCount(counts.getOrDefault(category.getId(), 0));
+            categoryRepository.save(category);
+        }
     }
 
     private void updateLandlordAggregates(List<User> landlords, List<Listing> listings,

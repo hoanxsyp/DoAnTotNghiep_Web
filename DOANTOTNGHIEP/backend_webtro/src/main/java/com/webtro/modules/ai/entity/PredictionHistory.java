@@ -32,8 +32,8 @@ import java.time.Instant;
  * <b>không kế thừa</b> base class; khai {@code id}/{@code created_at} tại chỗ.
  *
  * <p>{@code listingId} (nullable — dự đoán có thể có trước khi tạo tin), {@code userId},
- * {@code categoryId}, {@code provinceId}, {@code districtId}, {@code wardId} đều trỏ sang module
- * khác nên giữ {@code Long}, không map quan hệ (canonical luật 8).
+ * {@code categoryId}, {@code wardId} đều trỏ sang module khác nên giữ {@code Long}, không map quan hệ
+ * (canonical luật 8). Province/district suy ra qua {@code wardId}.
  *
  * <p>Tồn tại vòng FK {@code listings.price_prediction_id -> prediction_histories.id} và
  * {@code prediction_histories.listing_id -> listings.id}; cả hai nullable, giải quyết ở tầng DB.
@@ -47,8 +47,6 @@ import java.time.Instant;
                 @Index(name = "idx_prediction_histories_is_flagged", columnList = "is_flagged, created_at"),
                 @Index(name = "idx_prediction_histories_confidence", columnList = "confidence"),
                 @Index(name = "idx_prediction_histories_category_id", columnList = "category_id"),
-                @Index(name = "idx_prediction_histories_province_id", columnList = "province_id"),
-                @Index(name = "idx_prediction_histories_district_id", columnList = "district_id"),
                 @Index(name = "idx_prediction_histories_ward_id", columnList = "ward_id"),
                 @Index(name = "idx_prediction_histories_sample_size", columnList = "sample_size")
         })
@@ -75,14 +73,6 @@ public class PredictionHistory {
     /** Loại hình tin (FK categories.id — chéo module, giữ Long). */
     @Column(name = "category_id", nullable = false)
     private Long categoryId;
-
-    /** Tỉnh/thành (FK provinces.id — chéo module, giữ Long). */
-    @Column(name = "province_id", nullable = false)
-    private Long provinceId;
-
-    /** Quận/huyện (FK districts.id — chéo module, giữ Long). */
-    @Column(name = "district_id", nullable = false)
-    private Long districtId;
 
     /** Phường/xã (FK wards.id — chéo module, giữ Long). */
     @Column(name = "ward_id", nullable = false)

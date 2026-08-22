@@ -39,8 +39,6 @@ public class PriceMapper {
                 .listingId(listingId)
                 .userId(userId)
                 .categoryId(input.categoryId())
-                .provinceId(input.provinceId())
-                .districtId(input.districtId())
                 .wardId(input.wardId())
                 .area(input.area())
                 .roomCount(input.roomCount())

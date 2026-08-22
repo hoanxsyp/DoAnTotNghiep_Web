@@ -1,8 +1,11 @@
 package com.webtro.modules.admin.specification;
 
 import com.webtro.common.enums.ListingStatus;
+import com.webtro.modules.catalog.entity.Ward;
 import com.webtro.modules.listing.entity.Listing;
 import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.time.Instant;
@@ -42,10 +45,10 @@ public final class AdminListingSpecifications {
                 ps.add(cb.equal(root.get("categoryId"), categoryId));
             }
             if (provinceId != null) {
-                ps.add(cb.equal(root.get("provinceId"), provinceId));
+                ps.add(cb.exists(wardLocationSubquery(root, query, cb, "district.province.id", provinceId)));
             }
             if (districtId != null) {
-                ps.add(cb.equal(root.get("districtId"), districtId));
+                ps.add(cb.exists(wardLocationSubquery(root, query, cb, "district.id", districtId)));
             }
             if (wardId != null) {
                 ps.add(cb.equal(root.get("wardId"), wardId));
@@ -61,5 +64,24 @@ public final class AdminListingSpecifications {
             }
             return cb.and(ps.toArray(new Predicate[0]));
         };
+    }
+
+    private static Subquery<Long> wardLocationSubquery(
+            Root<Listing> root,
+            jakarta.persistence.criteria.CriteriaQuery<?> query,
+            jakarta.persistence.criteria.CriteriaBuilder cb,
+            String path,
+            Long expectedId) {
+        Subquery<Long> sub = query.subquery(Long.class);
+        Root<Ward> ward = sub.from(Ward.class);
+        sub.select(ward.get("id"));
+        jakarta.persistence.criteria.Path<?> current = ward;
+        for (String part : path.split("\\.")) {
+            current = current.get(part);
+        }
+        sub.where(
+                cb.equal(ward.get("id"), root.get("wardId")),
+                cb.equal(current, expectedId));
+        return sub;
     }
 }

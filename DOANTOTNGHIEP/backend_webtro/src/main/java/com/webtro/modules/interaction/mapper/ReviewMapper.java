@@ -48,11 +48,11 @@ public class ReviewMapper {
      *
      * @param author tác giả đã nạp qua gateway (có thể null nếu tài khoản đã bị xóa)
      */
-    public AdminReviewResponse toAdminResponse(Review r, AuthorResponse author) {
+    public AdminReviewResponse toAdminResponse(Review r, AuthorResponse author, Long landlordId) {
         return AdminReviewResponse.builder()
                 .id(r.getId())
                 .listingId(r.getListingId())
-                .landlordId(r.getLandlordId())
+                .landlordId(landlordId)
                 .rating(r.getRating())
                 .content(r.getContent())
                 .status(r.getStatus() == null ? null : r.getStatus().name())

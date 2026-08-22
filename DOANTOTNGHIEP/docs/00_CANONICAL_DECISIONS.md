@@ -366,7 +366,6 @@ Lý do từng cái (ngắn gọn):
 **Enum bổ sung (v2.1)** — phát sinh khi đặc tả `02`/`03`, giá trị chi tiết ở `02`:
 
 ```java
-ListingEditAction      : CREATE, UPDATE_MINOR, UPDATE_SENSITIVE, STATUS_CHANGE   [§3.4]  (listing_edit_histories)
 CloseReason            : RENTED_OUT, NO_LONGER_AVAILABLE, OTHER                  [§3.6]  (listings.close_reason)
 RejectReasonCode       : MISSING_INFO, WRONG_PRICE, FAKE_IMAGE, BANNED_CONTENT,
                          WRONG_AREA, DUPLICATE, OTHER                            [§3.3]  (listings.reject_reason_code)
@@ -455,14 +454,16 @@ khóa tin ngay" `[§3.13]`).
 | `RefreshToken` | đề bài yêu cầu refresh token |
 | `PasswordResetToken` | `[§2.1]` AUTH-04 |
 | `Follow` | `[§2.5]` FOLLOW-01/02 (`[§6.1]` thiếu) |
-| `ListingEditHistory` | `[§3.4]` *"lưu lịch sử chỉnh sửa"*, `[§10.4]` *"Xem lịch sử chỉnh sửa"* |
 | `BannedKeyword` | `[§3.3]`, `[§5.3]`, `[§11.10]` *"Chặn từ khóa cấm"* |
 | `ViolationWarning` | `[§5.4]` *"3 lần cảnh báo trong 30 ngày"* — phải đếm được |
 | `Coupon` | `[§10.6]` *"Cấu hình khuyến mãi nếu cần"*, `[§2.9]` PROMO |
 | `NotificationPreference` | `[§11.12]` *"Có thể tắt một số loại thông báo không quan trọng"* — không có bảng này thì câu đó không có chỗ thực thi (**thêm ở v2**) |
 
 > **v3:** bỏ bảng nối `user_roles` (migration V13) vì mỗi người dùng chỉ còn một vai trò, lưu ở
-> cột `users.role_id`. Tổng số bảng: **46 → 45**.
+> cột `users.role_id`.
+>
+> **v4:** bỏ bảng lịch sử chỉnh sửa tin vì code hiện chỉ ghi mà không có API/UI đọc ra; logic duyệt lại
+> khi sửa field nhạy cảm vẫn nằm trong `ListingServiceImpl.update()`.
 
 Danh sách đầy đủ theo module:
 
@@ -472,7 +473,7 @@ Danh sách đầy đủ theo module:
 
 **catalog (5)** — `categories`, `provinces`, `districts`, `wards`, `amenities`
 
-**listing (4)** — `listings`, `listing_images`, `listing_amenities`, `listing_edit_histories`
+**listing (3)** — `listings`, `listing_images`, `listing_amenities`
 
 **interaction (8)** — `favorites`, `view_histories`, `search_histories`, `contact_logs`,
 `conversations`, `messages`, `comments`, `reviews`

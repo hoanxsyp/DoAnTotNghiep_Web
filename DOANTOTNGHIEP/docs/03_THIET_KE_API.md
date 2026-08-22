@@ -2736,8 +2736,6 @@ mục phổ biến `[§9.2]`. Chi tiết thuật toán ở mục 7.2.
     trong `moderation.threshold.warning_window_days` (30) → `403 LISTING_POSTING_SUSPENDED`.
 11. `slug` sinh bởi `SlugUtil.toSlug(title)`; trùng → thêm hậu tố `-2`, `-3`…
 12. `expiredAt = null` khi `DRAFT`; chỉ set khi `APPROVE` (mục 4.14) `[§5.2]`.
-13. Ghi `listing_edit_histories` bản ghi đầu tiên (`action = CREATE`) `[§3.4]` *"lưu lịch sử chỉnh sửa"*.
-
 ---
 
 #### 4.4.8. `PUT /api/listings/{id}` — Sửa tin đăng
@@ -2775,7 +2773,6 @@ nhưng bỏ `submitImmediately`, thêm:
       "sensitiveFieldsChanged": ["title", "price"],
       "reason": "Thay đổi tiêu đề, mô tả, giá, địa chỉ hoặc ảnh chính cần kiểm duyệt lại"
     },
-    "editHistoryId": 908,
     "updatedAt": "2026-07-17T10:00:00Z"
   },
   "timestamp": "2026-07-17T10:00:00Z"
@@ -2809,9 +2806,7 @@ nhưng bỏ `submitImmediately`, thêm:
 3. **Chỉ áp dụng khi tin đang `ACTIVE`.** Tin `DRAFT`/`REJECTED`/`PENDING` sửa xong **giữ nguyên**
    trạng thái cũ (`RESUBMIT_AFTER_EDIT` chỉ có `from = ACTIVE` — canonical §5.1).
    Tin `HIDDEN`/`EXPIRED`/`CLOSED` sửa xong giữ nguyên trạng thái.
-4. **Ghi lịch sử chỉnh sửa** `[§3.4]` *"Mọi thay đổi quan trọng cần lưu lịch sử chỉnh sửa"*,
-   `[§10.4]` *"Xem lịch sử chỉnh sửa"*: mỗi lần PUT ghi một `listing_edit_histories` chứa diff
-   JSON `{field: {old, new}}`, `editor_id`, `edit_note`, `caused_reapproval`.
+4. **Không lưu bảng lịch sử chỉnh sửa riêng**: response chỉ trả `moderationImpact` của lần sửa hiện tại.
 5. **Audit** `[§3.4]` Luồng phụ *"Chủ trọ thay ảnh hoặc giá, hệ thống ghi audit"*: khi Admin sửa
    (`LISTING_UPDATE_ANY`) → ghi thêm `audit_logs` với `AuditAction = LISTING_EDIT` (canonical §5).
 6. Toàn bộ validation của mục 4.4.7 áp dụng lại, kể cả `@NoBannedKeyword` và dự đoán giá lại nếu
@@ -3085,7 +3080,7 @@ dùng để thống kê tỷ lệ thành công `[§3.6]` *"Tin Closed có thể 
    - Tin `ACTIVE` (gia hạn sớm) → `expired_at = expired_at_cũ + listing.display_days` (**cộng dồn**,
      không mất thời gian còn lại).
 5. **Hạn mức miễn phí** `[§3.5]` *"Có thể giới hạn số lần gia hạn miễn phí trong tháng"*:
-   đếm `listing_edit_histories` / bảng đếm renew trong **tháng dương lịch hiện tại** theo `owner_id`;
+   đếm bằng `landlord_profiles.free_renew_used_this_month` trong **tháng dương lịch hiện tại** theo `owner_id`;
    `>= listing.renew.free_per_month` (2 — canonical §9) và **không** truyền `packageId` →
    trả `paymentRequired = true` (**200**, không phải lỗi) để FE dẫn sang thanh toán.
    Nếu FE cố ép gia hạn miễn phí khi đã hết lượt (gọi lại không `packageId`) → vẫn trả
@@ -3217,7 +3212,7 @@ dùng để thống kê tỷ lệ thành công `[§3.6]` *"Tin Closed có thể 
 
 **Quy tắc:** đổi ảnh chính trên tin `ACTIVE` → `RESUBMIT_AFTER_EDIT` (`ACTIVE → PENDING`)
 `[§3.4]` *"ảnh chính cần kiểm duyệt lại"*, canonical §5.1. Tin `DRAFT`/`PENDING`/`REJECTED` giữ
-nguyên trạng thái. Ghi `listing_edit_histories`.
+nguyên trạng thái. Không ghi bảng lịch sử riêng.
 
 ---
 
@@ -3464,75 +3459,6 @@ cảnh báo sớm `[§1.2]` *"Nhận cảnh báo khi tin có nhiều bình luậ
 FE **chỉ render** theo mảng này, không tự suy luận, tránh lệch state machine. `expiringSoon = true`
 khi `daysRemaining <= max(listing.expiry.reminder_days)` (3) `[§5.2]`. Tin `DELETED` chỉ hiện khi
 truyền `status=DELETED` tường minh.
-
----
-
-#### 4.4.22. `GET /api/listings/{id}/edit-histories` — Lịch sử chỉnh sửa tin
-
-| Mục | Nội dung |
-|---|---|
-| Mã chức năng | `[§3.4]` *"Mọi thay đổi quan trọng cần lưu lịch sử chỉnh sửa"*; `[§10.4]` *"Xem lịch sử chỉnh sửa"* — **[BỔ SUNG NGOÀI `[§12.3]`]** |
-| Quyền | `LISTING_UPDATE_OWN` + **OWNER**, hoặc `LISTING_VIEW_ANY` (Moderator/Admin) |
-
-**Query params:** `page` (0), `size` (20, max 100), `sort` (`createdAt,desc` — chỉ `createdAt`).
-
-**Response 200**
-
-```json
-{
-  "success": true,
-  "message": "Lấy lịch sử chỉnh sửa thành công",
-  "data": {
-    "items": [
-      {
-        "id": 908,
-        "listingId": 1024,
-        "action": "UPDATE",
-        "editorId": 42,
-        "editorName": "Nguyễn Văn An",
-        "editorRole": "ROLE_LANDLORD",
-        "causedReapproval": true,
-        "previousStatus": "ACTIVE",
-        "newStatus": "PENDING",
-        "editNote": "Giảm giá do đã có người hỏi nhiều",
-        "changes": [
-          { "field": "price", "fieldLabel": "Giá thuê", "oldValue": "3500000.00", "newValue": "3300000.00", "sensitive": true },
-          { "field": "title", "fieldLabel": "Tiêu đề",
-            "oldValue": "Phòng trọ mới xây, có gác lửng, Q. Bình Thạnh",
-            "newValue": "Phòng trọ mới xây, có gác lửng, giá tốt — Q. Bình Thạnh", "sensitive": true }
-        ],
-        "createdAt": "2026-07-12T03:05:00Z"
-      },
-      {
-        "id": 812,
-        "listingId": 1024,
-        "action": "CREATE",
-        "editorId": 42,
-        "editorName": "Nguyễn Văn An",
-        "editorRole": "ROLE_LANDLORD",
-        "causedReapproval": false,
-        "previousStatus": null,
-        "newStatus": "DRAFT",
-        "editNote": null,
-        "changes": [],
-        "createdAt": "2026-07-09T14:20:00Z"
-      }
-    ],
-    "page": 0, "size": 20, "totalElements": 2, "totalPages": 1, "first": true, "last": true
-  },
-  "timestamp": "2026-07-17T10:00:00Z"
-}
-```
-
-**Mã lỗi:** `UNAUTHORIZED`, `LISTING_NOT_FOUND`, `LISTING_FORBIDDEN`, `INVALID_SORT_FIELD`.
-
-**Quy tắc:** `action` ∈ {`CREATE`, `UPDATE`, `IMAGE_CHANGE`, `AMENITY_CHANGE`, `ADMIN_EDIT`}.
-Chủ trọ **không** thấy `editorName` khi `editorRole = ROLE_ADMIN` (hiển thị `"Quản trị viên"`)
-`[§11.1]` *"Không lộ thông tin nhạy cảm"*.
-
-> **[BỔ SUNG NGOÀI CANONICAL]** enum `ListingEditAction : CREATE, UPDATE, IMAGE_CHANGE,
-> AMENITY_CHANGE, ADMIN_EDIT` — bắt buộc bởi entity `ListingEditHistory` (canonical §6) mà
-> canonical §5 chưa liệt kê enum tương ứng.
 
 ---
 
@@ -6575,7 +6501,6 @@ thường"* `[§9.4]`. `waitingHours` = số giờ tin đã chờ duyệt.
       "availableActions": ["APPROVE", "REJECT", "HIDE", "LOCK", "WARN", "REQUEST_EDIT",
                            "CLEAR_NEED_REVIEW", "DISMISS"]
     },
-    "editHistoryCount": 3,
     "recentComments": [
       { "id": 4501, "content": "Đến xem thì không có phòng này, chủ đòi cọc trước mới cho xem. Cẩn thận!",
         "sentimentLabel": "NEGATIVE", "sentimentScore": -0.82, "status": "VISIBLE",
@@ -8434,7 +8359,7 @@ phải sửa từng phần tử.
 2. **Không bắt buộc gửi đủ mọi phần tử** — chỉ gửi những cái đổi chỗ. Nhưng `displayOrder` gửi lên
    **không được trùng** với nhau; nếu trùng với phần tử **không** gửi lên, phần tử gửi lên **thắng**
    và phần tử cũ bị đẩy xuống (`MAX+1`) — hành vi này ghi vào audit.
-3. Sắp xếp **không** ảnh hưởng tin đăng, **không** ghi `listing_edit_histories` — đây là thay đổi
+3. Sắp xếp **không** ảnh hưởng tin đăng — đây là thay đổi
    trình bày, không phải nội dung.
 4. Invalidate cache `[§11.11]`; ghi **một** `audit_logs` cho cả lô `[§11.4]` (khác bulk — đây là một
    thao tác logic duy nhất).
@@ -9920,7 +9845,6 @@ Kế thừa **toàn bộ** field của `ListingSummaryResponse`, cộng thêm:
 | `createdAt` / `updatedAt` | Instant | luôn | |
 | **`moderation`** | object | **chỉ `LISTING_VIEW_ANY`** | Khối kiểm duyệt (mục 4.14.2) |
 | **`recentComments`** | object[] | **chỉ `LISTING_VIEW_ANY`** | `[§8.7]` |
-| **`editHistoryCount`** | int | **chỉ OWNER hoặc `LISTING_VIEW_ANY`** | `[§3.4]` |
 | **`moderationImpact`** | object | **chỉ** trong response của `PUT /api/listings/{id}` | mục 4.4.8 |
 | **`pricePrediction`** | object | **chỉ** trong response của `POST /api/listings` | `[§3.3]` bước 8 |
 
@@ -10039,7 +9963,6 @@ public class PageResponse<T> {
 | `/api/admin/system-configs` | ✘ | ✘ | ✘ | **✘ 403** | ✔ | **`[§1.2]`** |
 | `/api/admin/ai/config` | ✘ | ✘ | ✘ | **✘ 403** | ✔ | **`[§1.2]`** |
 | `/api/admin/audit-logs` | ✘ | ✘ | ✘ | **✘ 403** | ✔ | canonical §4.2 |
-| `listing.editHistory.editorName` (khi Admin sửa) | ✘ | ✘ | `"Quản trị viên"` | ✔ | ✔ | `[§11.1]` |
 
 **Hiện thực `MaskUtil` (canonical §8):**
 
@@ -11354,7 +11277,7 @@ sequenceDiagram
         else Hợp lệ
             LS->>SM: SAVE_DRAFT: (none) -> DRAFT
             SM->>DB: INSERT listings (status=DRAFT, expired_at=NULL)
-            LS->>DB: INSERT listing_amenities, listing_edit_histories (CREATE) [§3.4]
+            LS->>DB: INSERT listing_amenities
 
             LS->>SM: SUBMIT: DRAFT -> PENDING
             alt imageCount < listing.image.min (1)
@@ -12147,7 +12070,7 @@ frontend_webtro/src/
 │   ├── authApi.js              # → mục 4.1  — /api/auth/**
 │   ├── userApi.js              # → mục 4.2  — /api/users/**  (gồm follow, landlord-profile)
 │   ├── catalogApi.js           # → mục 4.3  — /api/categories, /provinces, /districts, /amenities
-│   ├── listingApi.js           # → mục 4.4  — /api/listings/** (CRUD, state, ảnh, stats, edit-history)
+│   ├── listingApi.js           # → mục 4.4  — /api/listings/** (CRUD, state, ảnh, stats)
 │   ├── searchApi.js            # → mục 4.4.1–4.4.3 — /api/listings (search), /api/search/**
 │   ├── favoriteApi.js          # → mục 4.5.1–4.5.3 — /api/favorites/**
 │   ├── historyApi.js           # → mục 4.5.4–4.5.8 — /api/history/views, /api/search/histories
@@ -12585,7 +12508,6 @@ canonical §5.
 | # | Enum | Giá trị | Bắt buộc vì | Dùng ở mục |
 |---|---|---|---|---|
 | 1 | `AmenityGroup` | `NOI_THAT`, `AN_NINH`, `SINH_HOAT`, `GIAO_THONG` | **`[§10.5]`** *"Nhóm tiện ích: nội thất, an ninh, sinh hoạt, giao thông"* — entity `Amenity` (canonical §6) cần cột `group` | 4.3.5, 4.17.12 |
-| 2 | `ListingEditAction` | `CREATE`, `UPDATE`, `IMAGE_CHANGE`, `AMENITY_CHANGE`, `ADMIN_EDIT` | Entity `ListingEditHistory` (canonical §6) cần phân loại thao tác — `[§3.4]`, `[§10.4]` | 4.4.22 |
 | 3 | `BannedKeywordSeverity` | `SEVERE`, `MILD` | Entity `BannedKeyword` (canonical §6); giải mâu thuẫn `[§3.3]` (chặn) vs `[§3.11]` (chuyển Pending) — xem **ADR-15** | 4.20.4, 4.7.2 |
 | 4 | `BannedKeywordScope` | `LISTING_TITLE`, `LISTING_DESCRIPTION`, `LISTING_ADDRESS`, `COMMENT`, `REVIEW`, `MESSAGE`, `PROFILE` | Cùng từ cấm áp dụng khác nhau ở từng nơi — `[§11.10]` | 4.20.4 |
 | 5 | `CouponDiscountType` | `FIXED_AMOUNT`, `PERCENTAGE` | Entity `Coupon` (canonical §6) — `[§10.6]` *"Cấu hình khuyến mãi nếu cần"* | 4.9.9, 4.18.9 |

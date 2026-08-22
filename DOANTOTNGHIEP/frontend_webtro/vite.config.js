@@ -30,6 +30,12 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: false,
         },
+        '/ws': {
+          target: devApiTarget,
+          changeOrigin: true,
+          secure: false,
+          ws: true,
+        },
         '/v3/api-docs': { target: devApiTarget, changeOrigin: true },
         '/swagger-ui': { target: devApiTarget, changeOrigin: true },
       },
