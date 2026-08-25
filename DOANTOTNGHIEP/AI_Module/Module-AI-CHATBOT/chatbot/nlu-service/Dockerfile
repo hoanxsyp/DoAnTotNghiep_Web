@@ -16,13 +16,11 @@ WORKDIR /app/nlu-service
 COPY nlu-service/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Chỉ cần jar + wordsegmenter; các thư mục models/* rỗng còn lại do
-# py_vncorenlp yêu cầu tồn tại (xem vncorenlp_util._download_wseg_only).
+# Chỉ cần helper; VnCoreNLP jar + wordsegmenter được vncorenlp_util tải khi
+# service khởi động nếu artifact chưa có trong image/local checkout.
 COPY ml/vncorenlp_util.py /app/ml/vncorenlp_util.py
-COPY ml/vncorenlp/VnCoreNLP-1.2.jar /app/ml/vncorenlp/VnCoreNLP-1.2.jar
-COPY ml/vncorenlp/models/wordsegmenter /app/ml/vncorenlp/models/wordsegmenter
 RUN mkdir -p /app/ml/vncorenlp/models/dep /app/ml/vncorenlp/models/ner \
-             /app/ml/vncorenlp/models/postagger
+             /app/ml/vncorenlp/models/postagger /app/ml/vncorenlp/models/wordsegmenter
 
 COPY nlu-service/app.py .
 

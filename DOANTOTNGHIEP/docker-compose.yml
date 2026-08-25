@@ -1,7 +1,7 @@
 # =====================================================================
 #  Website quang cao va tim kiem phong tro - toan bo he thong
 # ---------------------------------------------------------------------
-#  Chay:      docker compose up --build
+#  Chay:      docker compose up -d --build
 #  Dung:      docker compose down
 #  Xoa sach:  docker compose down -v      (xoa ca du lieu MySQL/Redis/anh)
 #
@@ -173,6 +173,175 @@ services:
     networks:
       - webtro-net
 
+  # --------------------------- AI: Sentiment -------------------------
+  sentiment-api:
+    build:
+      context: ./AI_Module/AI_SentimentAnalysis
+      dockerfile: Dockerfile
+    container_name: webtro-ai-sentiment-api
+    restart: unless-stopped
+    environment:
+      PYTHONUNBUFFERED: "1"
+      TF_CPP_MIN_LOG_LEVEL: "2"
+      TZ: UTC
+    ports:
+      - "${SENTIMENT_API_EXPOSED_PORT:-5000}:5000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+    networks:
+      - webtro-net
+
+  # ------------------------- AI: Recommendation ----------------------
+  recommendation-api:
+    build:
+      context: ./AI_Module/AI_Recommendation
+      dockerfile: Dockerfile
+    image: ai-room-recommendation:local
+    container_name: webtro-ai-recommendation-api
+    init: true
+    restart: unless-stopped
+    ports:
+      - "${RECOMMENDATION_API_EXPOSED_PORT:-8001}:8000"
+    environment:
+      TZ: UTC
+    networks:
+      - webtro-net
+
+  # ------------------------- AI: Rental Price ------------------------
+  rental-api:
+    build:
+      context: ./AI_Module/AI_Rental_Price_Predictor/ai_rental
+      dockerfile: Dockerfile
+    image: rental-api:latest
+    container_name: webtro-ai-rental-api
+    restart: unless-stopped
+    environment:
+      PYTHONUNBUFFERED: "1"
+      TF_CPP_MIN_LOG_LEVEL: "2"
+      TZ: UTC
+    ports:
+      - "${RENTAL_API_EXPOSED_PORT:-8002}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    networks:
+      - webtro-net
+
+  # -------------------------- AI: Demo Portal ------------------------
+  ai-portal:
+    build:
+      context: ./AI_Module/AI_Rental_Price_Predictor/ui
+      dockerfile: Dockerfile
+    image: rental-ui:latest
+    container_name: webtro-ai-portal
+    restart: unless-stopped
+    depends_on:
+      sentiment-api:
+        condition: service_healthy
+      rental-api:
+        condition: service_healthy
+    environment:
+      PYTHONUNBUFFERED: "1"
+      RENTAL_API_URL: http://rental-api:8000
+      SENTIMENT_API_URL: http://sentiment-api:5000
+      TZ: UTC
+    ports:
+      - "${AI_PORTAL_EXPOSED_PORT:-8501}:8501"
+    networks:
+      - webtro-net
+
+  # --------------------------- AI: Chatbot DB ------------------------
+  chatbot-mysql:
+    image: mysql:8.0
+    container_name: webtro-chatbot-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${CHATBOT_DB_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${CHATBOT_DB_NAME:-roomfinder}
+      TZ: UTC
+    volumes:
+      - chatbot_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    networks:
+      - webtro-net
+
+  # ------------------------- AI: Chatbot Redis -----------------------
+  chatbot-redis:
+    image: redis:7-alpine
+    container_name: webtro-chatbot-redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - webtro-net
+
+  # -------------------------- AI: Chatbot NLU ------------------------
+  chatbot-nlu:
+    build:
+      context: ./AI_Module/Module-AI-CHATBOT/chatbot
+      dockerfile: nlu-service/Dockerfile
+    container_name: webtro-chatbot-nlu
+    restart: unless-stopped
+    volumes:
+      - ./AI_Module/Module-AI-CHATBOT/chatbot/ml/out-intent:/app/ml/out-intent:ro
+      - ./AI_Module/Module-AI-CHATBOT/chatbot/ml/out-ner:/app/ml/out-ner:ro
+    ports:
+      - "${CHATBOT_NLU_EXPOSED_PORT:-8003}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    networks:
+      - webtro-net
+
+  # --------------------------- AI: Chatbot API -----------------------
+  chatbot-api:
+    build:
+      context: ./AI_Module/Module-AI-CHATBOT/chatbot
+      dockerfile: Dockerfile
+    container_name: webtro-chatbot-api
+    restart: unless-stopped
+    depends_on:
+      chatbot-mysql:
+        condition: service_healthy
+      chatbot-redis:
+        condition: service_healthy
+    environment:
+      DB_HOST: chatbot-mysql
+      DB_PORT: 3306
+      DB_NAME: ${CHATBOT_DB_NAME:-roomfinder}
+      DB_USER: ${CHATBOT_DB_USER:-root}
+      DB_PASSWORD: ${CHATBOT_DB_PASSWORD:-root}
+      REDIS_HOST: chatbot-redis
+      REDIS_PORT: 6379
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      NLU_ENABLED: ${CHATBOT_NLU_ENABLED:-true}
+      NLU_URL: http://chatbot-nlu:8000
+      GEOCODING_ENABLED: ${CHATBOT_GEOCODING_ENABLED:-true}
+      TZ: UTC
+    ports:
+      - "${CHATBOT_API_EXPOSED_PORT:-8081}:8080"
+    networks:
+      - webtro-net
+
   # ------------------------------ Frontend ----------------------------
   frontend:
     build:
@@ -205,4 +374,6 @@ volumes:
   redis_data:
     driver: local
   webtro_storage:
+    driver: local
+  chatbot_mysql_data:
     driver: local

@@ -33,7 +33,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import torch
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 ROOT = Path(__file__).parent
@@ -61,13 +61,18 @@ async def lifespan(app: FastAPI):
         AutoTokenizer,
     )
 
-    torch.set_num_threads(max(1, (os.cpu_count() or 4) // 2))
-    _M["segmenter"] = get_segmenter(ML_DIR / "vncorenlp")
-    _M["intent_tok"] = AutoTokenizer.from_pretrained(INTENT_DIR)
-    _M["intent_model"] = AutoModelForSequenceClassification.from_pretrained(INTENT_DIR).eval()
-    _M["ner_tok"] = AutoTokenizer.from_pretrained(NER_DIR)
-    _M["ner_model"] = AutoModelForTokenClassification.from_pretrained(NER_DIR).eval()
-    _M["embed_model"] = SentenceTransformer(EMBED_MODEL)
+    try:
+        torch.set_num_threads(max(1, (os.cpu_count() or 4) // 2))
+        _M["segmenter"] = get_segmenter(ML_DIR / "vncorenlp")
+        _M["intent_tok"] = AutoTokenizer.from_pretrained(INTENT_DIR)
+        _M["intent_model"] = AutoModelForSequenceClassification.from_pretrained(INTENT_DIR).eval()
+        _M["ner_tok"] = AutoTokenizer.from_pretrained(NER_DIR)
+        _M["ner_model"] = AutoModelForTokenClassification.from_pretrained(NER_DIR).eval()
+        _M["embed_model"] = SentenceTransformer(EMBED_MODEL)
+        _M["ready"] = True
+    except Exception as exc:
+        _M["ready"] = False
+        _M["startup_error"] = str(exc)
     yield
     _M.clear()
 
@@ -103,25 +108,41 @@ class EmbedResponse(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "intent_model": INTENT_DIR, "ner_model": NER_DIR, "embed_model": EMBED_MODEL}
+    return {
+        "status": "ok" if _M.get("ready") else "degraded",
+        "intent_model": INTENT_DIR,
+        "ner_model": NER_DIR,
+        "embed_model": EMBED_MODEL,
+        "startup_error": _M.get("startup_error"),
+    }
 
 
 @app.post("/embed", response_model=EmbedResponse)
 def embed(req: EmbedRequest) -> EmbedResponse:
     """Embedding cho semantic rerank (GĐ3, SPEC §12.1). Dùng cho cả mô tả phòng
     (tính 1 lần, cache ở backend) lẫn câu hỏi người dùng (tính mỗi lượt cần rerank)."""
+    ensure_ready()
     vec = _M["embed_model"].encode(req.text.strip() or " ", normalize_embeddings=True)
     return EmbedResponse(vector=vec.tolist())
 
 
 @app.post("/nlu", response_model=NluResponse)
 def nlu(req: NluRequest) -> NluResponse:
+    ensure_ready()
     text = req.text.strip()
     if not text:
         return NluResponse(intent="out_of_scope", confidence=1.0, entities=[])
     intent, confidence = classify_intent(text)
     entities = extract_entities(text)
     return NluResponse(intent=intent, confidence=confidence, entities=entities)
+
+
+def ensure_ready():
+    if not _M.get("ready"):
+        raise HTTPException(status_code=503, detail={
+            "message": "NLU models are not ready",
+            "startup_error": _M.get("startup_error"),
+        })
 
 
 def classify_intent(text: str) -> tuple[str, float]:
