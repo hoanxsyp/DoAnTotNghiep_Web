@@ -35,12 +35,12 @@ services:
       # Cấp GEMINI_API_KEY từ shell: `export GEMINI_API_KEY=...` trước khi up.
       # Nếu để trống, NLU/NLG tự fallback rule-based/template (vẫn chạy được).
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      # NLU PhoBERT (GĐ2, bước 2.4). nlu chết → app tự fallback LLM, nên
+      # NLU ViSoBERT (GĐ2, bước 2.4). nlu chết → app tự fallback LLM, nên
       # KHÔNG depends_on nlu — app không đợi/không sập theo nlu.
       NLU_URL: http://nlu:8000
     ports: ["8081:8080"]
 
-  # NLU PhoBERT (GĐ2, SPEC §11 bước 2.3). Model KHÔNG bake vào image —
+  # NLU ViSoBERT (GĐ2, SPEC §11 bước 2.3). Model KHÔNG bake vào image —
   # mount từ ml/out-* (phải train xong trước: xem ml/README.md).
   # Spring chưa gọi service này (bước 2.4); app vẫn chạy được khi nlu tắt.
   nlu:

@@ -2,7 +2,7 @@
 
 > Tài liệu tổng hợp: dự án đã làm đến giai đoạn nào, mỗi giai đoạn còn thiếu gì.
 > Đối chiếu với `SPEC_Module_Chatbot_AI_Tim_Phong_Tro.md` (bản chuẩn hóa v2.0).
-> Cập nhật: 2026-08-01.
+> Cập nhật: 2026-09-29 (đổi tầng NLU sang ViSoBERT — xem mục 2).
 
 ---
 
@@ -11,7 +11,7 @@
 | Giai đoạn | Phạm vi | Trạng thái | Ghi chú |
 |---|---|---|---|
 | **GĐ1 — MVP** | NLU(LLM)→Normalizer→Context→Retrieval→NLG+Guardrail, multi-turn, geo | ✅ **Xong** | Chạy e2e, đủ 8 intent, đủ demo §15 |
-| **GĐ2 — PhoBERT + Fast-path** | Train intent/NER, FastAPI service, nối Spring, fast-path, so sánh 3 phương án NLU | ✅ **Xong** | Intent train lại trên **143 câu thật**: acc GOLD **0.893** (sát DoD-1). NER vẫn trên proxy (0.728) — data2 không có nhãn NER |
+| **GĐ2 — NLU ViSoBERT + Fast-path** | Train intent/NER, FastAPI service, nối Spring, fast-path, so sánh các phương án NLU | 🟠 **Code xong, chưa train** | Toàn bộ pipeline + service + eval harness đã sẵn sàng, nhưng `ml/out-*` còn trống nên **chưa có số liệu model nào** |
 | **GĐ3 — Semantic + Recommendation** | Semantic rerank (embedding), Content-Based+KNN recommend | ✅ **Xong** | Không dùng Elasticsearch (có chủ đích, catalog ~60 phòng) |
 | **Phụ — Geocoding fallback** | POI miss → Nominatim → cache | ✅ **Xong** | Tầng 2 hybrid geo |
 
@@ -51,35 +51,43 @@
 
 ---
 
-## 2. GĐ2 — Fine-tune PhoBERT & Fast-path (SPEC §11)
+## 2. GĐ2 — Fine-tune ViSoBERT & Fast-path (SPEC §11)
+
+> ⚠️ **Chưa train model.** Code, service và eval harness đã xong nhưng
+> `ml/out-intent` / `ml/out-ner` còn trống, nên mọi ô số liệu trong mục này là
+> "chưa đo". Xem `ml/README.md` để biết cách train và điền.
 
 ### Đã làm ✅
 
 | Hạng mục | Vị trí | SPEC |
 |---|---|---|
 | Sinh dataset synthetic (2500 intent, 2075 NER) | `ml/data/generate_dataset.py` | §13.2 |
-| Train intent classifier (PhoBERT-base-v2, 8 nhãn) | `ml/train_intent.py` → `ml/out-intent/` | §11 bước 2.1 |
+| Train intent classifier (ViSoBERT, 8 nhãn) | `ml/train_intent.py` → `ml/out-intent/` | §11 bước 2.1 |
 | Train NER (token classification, BIO) | `ml/train_ner.py` → `ml/out-ner/` | §11 bước 2.2 |
-| Word-segment VnCoreNLP trước khi tokenize | `ml/vncorenlp_util.py` | §11 lưu ý |
+| Encode văn bản thô + gán BIO theo `offset_mapping` (trần Span-F1 = 1.0000) | `ml/nlu_encoding.py` | §11 lưu ý |
 | Bọc FastAPI service `/nlu` + `/embed` + `/health` | `nlu-service/app.py` | §11 bước 2.3 |
-| Nối Spring qua `PhoBertNluServiceImpl` (@Primary, timeout 300ms, fallback LLM→rule) | `service/PhoBertNluServiceImpl` | §11 bước 2.4 |
+| Nối Spring qua `LocalNluServiceImpl` (@Primary, timeout 300ms, fallback LLM→rule) | `service/LocalNluServiceImpl` | §11 bước 2.4 |
 | Fast-path bật + ghi `path` vào `chat_log` | `ChatOrchestrator` | §6.3 |
 | **So sánh 3 phương án NLU (A/B/C)** | `ml/eval_nlu_compare.py`, `ml/eval-results/REPORT.md` | §14.4 |
 
-### Kết quả đo được (cập nhật 2026-08-01 — đã có data thật cho intent)
+### Kết quả đo được — CHƯA CÓ
 
-**Intent — train lại trên 143 câu THẬT (data.md 56 + data2.md 87), eval chính = GOLD 28 câu thật held-out:**
+Model chưa được train nên chưa có ô nào điền được. Dataset đã sẵn sàng: intent
+train trên 2615 câu (2500 synthetic + **143 câu THẬT** từ data.md 56 + data2.md 87),
+eval chính = GOLD 28 câu thật held-out.
 
-| Model | Metric | Giá trị | Ngưỡng DoD | Đạt? |
-|---|---|---|---|---|
-| Intent | **Accuracy (GOLD thật)** | **0.893** (25/28) | DoD-1 ≥ 0.90 | ⚠️ sát ngưỡng |
-| Intent | Macro-F1 (GOLD thật) | 0.735* | — | — |
-| Intent | Accuracy (PROXY tay viết) | 0.894 | — | — |
-| NER | Entity-F1 (seqeval, bộ PROXY) | 0.728 | DoD-2 ≥ 0.85 | ❌ |
+| Model | Metric | Giá trị | Ngưỡng DoD |
+|---|---|---|---|
+| Intent | Accuracy (GOLD thật, 28 câu) | *chưa đo* | DoD-1 ≥ 0.90 |
+| Intent | Macro-F1 (GOLD thật) | *chưa đo* | — |
+| Intent | Accuracy (PROXY tay viết, 142 câu) | *chưa đo* | — |
+| NER | Span-F1 strict (bộ PROXY, 87 câu) | *chưa đo* | DoD-2 ≥ 0.85 |
 
-*Macro-F1 GOLD thấp là **do cách tính, không phải model kém**: GOLD chỉ có 6/8 intent (thiếu hẳn `calculate_cost` và `policy_inquiry`, 0 mẫu test), macro-F1 chia trung bình trên đủ 8 nhãn nên bị 2 nhãn không có mẫu kéo xuống. Con số có nghĩa là **accuracy 0.893**.
-
-> So với lần train cũ (chỉ eval trên proxy): accuracy **0.873 → 0.893** nhờ bổ sung `data2.md` (87 câu hội thoại thật cho `room_detail`/`book_appointment`/`refine_search`/`compare_rooms`). NER **chưa** train lại vì data2 không có nhãn NER (là câu hội thoại, không phải bài đăng tìm phòng).
+Lưu ý khi điền: **Macro-F1 trên GOLD sẽ thấp giả tạo** vì GOLD chỉ có 6/8 intent
+(thiếu hẳn `calculate_cost` và `policy_inquiry`, 0 mẫu test), macro-F1 chia trung
+bình trên đủ 8 nhãn nên bị 2 nhãn không có mẫu kéo xuống — **accuracy là số dẫn**.
+NER cũng chưa có bộ test THẬT (data2 là câu hội thoại, không sinh nhãn NER), nên
+số NER đo được sẽ vẫn là trên proxy.
 
 **So sánh 3 phương án (§14.4) — cập nhật 2026-08-01, `ml/eval-results/REPORT.md`:**
 
@@ -88,18 +96,18 @@ Intent đo trên **GOLD thật** (28 câu held-out); Slot-F1/Latency/Chi phí v�
 | Phương án | Intent Acc (GOLD) | Slot-F1 (proxy) | Latency TB | Chi phí/1000 msg |
 |---|---|---|---|---|
 | A. LLM prompt JSON | 0.893 | 0.921 | 850ms | ~2.342đ |
-| B. PhoBERT fine-tuned | **0.893** | 0.872 | **86ms** | **≈0đ** |
+| B. ViSoBERT fine-tuned | *chưa đo* | *chưa đo* | *chưa đo* | **≈0đ** |
 | C. LLM Function Calling | 0.821 | 0.950 | 669ms | ~1.163đ |
 
-Kết luận khoa học (mạnh hơn trên data thật): **trên GOLD, PhoBERT (B) HÒA phương án LLM prompt (A) ở 0.893 và vượt Function Calling (C, 0.821)** — tức mô hình self-host miễn phí ngang LLM về intent trên dữ liệu thật. B vẫn thua ~5đ Slot-F1 (đo trên proxy) nhưng **thắng ~8–10× latency và chi phí ≈0**.
+Số của A và C đã đo thật trên GOLD/PROXY. **Dòng B chưa có số** — cần train 2 model ViSoBERT rồi chạy `eval_nlu_compare.py --side visobert`. Lưu ý khi kết luận: GOLD chỉ 28 câu nên 1 câu = 3,6 điểm accuracy; lợi thế chắc chắn của B là **latency và chi phí ≈0**, còn hơn/kém về accuracy thì phải đo mới biết.
 
 ### Còn thiếu ❌ (quan trọng cho bảo vệ)
 
 1. **DỮ LIỆU THẬT (§13.3)** — đã cải thiện một phần cho intent, NER còn nguyên:
-   - **Intent: đã có 143 câu thật** (data.md 56 + data2.md 87 câu hội thoại) → tách GOLD 28 câu thật held-out làm bộ đánh giá chính. Accuracy GOLD = **0.893**. Đây là số hợp lệ hơn để trình (eval trên data thật, không phải proxy), tuy GOLD còn nhỏ (28 câu) và thiếu 2 intent (`calculate_cost`, `policy_inquiry`).
-   - **NER: vẫn chỉ có bộ PROXY** (`ner_test_real.jsonl`, 87 câu tay viết) — data2 là câu hội thoại nên không sinh nhãn NER. Cần thu thập + gán nhãn NER thật rồi đo lại (0.728 vẫn là số trên proxy).
+   - **Intent: đã có 143 câu thật** (data.md 56 + data2.md 87 câu hội thoại) → tách GOLD 28 câu thật held-out làm bộ đánh giá chính. Bộ này hợp lệ để trình (eval trên data thật, không phải proxy) nhưng còn nhỏ (28 câu → 1 câu = 3,6 điểm acc) và thiếu 2 intent (`calculate_cost`, `policy_inquiry`).
+   - **NER: vẫn chỉ có bộ PROXY** (`ner_test_real.jsonl`, 87 câu tay viết) — data2 là câu hội thoại nên không sinh nhãn NER. Cần thu thập + gán nhãn NER thật; `ner_data_md_labeled.jsonl` (56 câu thật, 209 entity) đã có nhãn nhưng hiện chưa được `train_ner.py` dùng.
    - Nên tiếp tục thu thập thêm câu thật (đặc biệt `calculate_cost`, `policy_inquiry`) để GOLD đủ phủ 8 intent và đủ lớn.
-2. **Intent sát DoD-1** (0.893 vs ≥0.90) trên GOLD 28 câu; **NER chưa đạt DoD-2** (0.728, còn trên proxy).
+2. **Chưa có số cho DoD-1 và DoD-2** vì model chưa train — đây là việc chặn đầu tiên.
 3. **Chưa đo tỉ lệ fast-path trên log thật** — SPEC §11 bước 2.4 muốn chạy thật ≥1 tuần rồi `SELECT path, COUNT(*), AVG(latency_ms) FROM chat_log GROUP BY path`. Query đã sẵn (README §7), chỉ thiếu **dữ liệu chạy thật đủ lâu**.
 
 ---
@@ -139,8 +147,8 @@ Kết luận khoa học (mạnh hơn trên data thật): **trên GOLD, PhoBERT (
 
 | DoD | Tiêu chí | Ngưỡng | Trạng thái | Việc còn thiếu |
 |---|---|---|---|---|
-| DoD-1 | Intent Accuracy (test thật) | ≥0.90 | ⚠️ **0.893 trên GOLD thật** (28 câu) | Sát ngưỡng; thu thập thêm câu thật (nhất là `calculate_cost`/`policy_inquiry`) rồi đo lại |
-| DoD-2 | Entity F1 macro (test thật) | ≥0.85 | ⚠️ 0.728 trên **proxy** | NER chưa có data thật (data2 không có nhãn NER); cần gán nhãn NER thật rồi đo lại |
+| DoD-1 | Intent Accuracy (test thật) | ≥0.90 | ❌ **chưa đo** — model chưa train | Train `train_intent.py`, đo trên GOLD 28 câu thật; thu thập thêm câu thật (nhất là `calculate_cost`/`policy_inquiry`) |
+| DoD-2 | Entity F1 macro (test thật) | ≥0.85 | ❌ **chưa đo** — model chưa train | Train `train_ner.py`; và NER vẫn chưa có bộ test THẬT (data2 không có nhãn NER) nên số đầu tiên sẽ là trên proxy |
 | DoD-3 | **Recall@5 của retrieval** | ≥0.80 | ✅ **ĐẠT — Recall@5 = 1.000** (30 câu) | Harness JUnit `RetrievalRecallEvalTest` + bộ vàng `retrieval_eval.jsonl`; báo cáo `ml/eval-results/retrieval_recall.md`. (Mở rộng lên ~50 câu + thêm data thật nếu muốn) |
 | DoD-4 | Hallucination rate | =0 sau guardrail | ✅ Validator đã cài + có `hallucination_flag` | Chỉ cần chạy query báo cáo trên log thật |
 | DoD-5 | Latency p95 | ≤2.5s LLM / ≤400ms fast | ⚠️ Đo được từ `chat_log`, chưa tổng hợp trên log thật đủ lớn | Chạy thật rồi query p50/p95 |
@@ -176,11 +184,12 @@ Kết luận khoa học (mạnh hơn trên data thật): **trên GOLD, PhoBERT (
 
 Xếp theo mức độ ảnh hưởng tới điểm số:
 
-1. 🔴 **Thu thập + gán nhãn data thật (§13.3)** → train lại PhoBERT → đo lại DoD-1/DoD-2. *(Ảnh hưởng lớn nhất — hiện mọi số model đều trên proxy.)*
-2. 🔴 **Xây harness Recall@5/MRR (§14.3)** cho DoD-3 — hiện đang trống hoàn toàn.
-3. 🟠 **Chạy hệ thống thật đủ lâu** (bạn bè gõ thử) để có log → tính fast-path %, latency p50/p95, hallucination rate. Đây cũng là nguồn câu thật cho mục 1.
-4. 🟠 **Bộ 100 cặp Normalizer** cho §14.1 (ngưỡng ≥0.95).
-5. 🟢 (Tùy chọn) Geo Tầng 3, metric NDCG cho semantic rerank.
+1. 🔴 **Thu thập + gán nhãn data thật (§13.3)** → train lại → đo lại DoD-1/DoD-2. *(Ảnh hưởng lớn nhất — hiện mọi số model đều trên proxy. Đổi encoder KHÔNG giải quyết việc này: GOLD chỉ 28 câu, 1 câu = 3,6 điểm acc.)*
+2. 🔴 **Train intent + NER (ViSoBERT)** rồi chạy `eval_nlu_compare.py --side visobert` để điền dòng B.
+3. 🔴 **Xây harness Recall@5/MRR (§14.3)** cho DoD-3 — hiện đang trống hoàn toàn.
+4. 🟠 **Chạy hệ thống thật đủ lâu** (bạn bè gõ thử) để có log → tính fast-path %, latency p50/p95, hallucination rate. Đây cũng là nguồn câu thật cho mục 1.
+5. 🟠 **Bộ 100 cặp Normalizer** cho §14.1 (ngưỡng ≥0.95).
+6. 🟢 (Tùy chọn) Geo Tầng 3, metric NDCG cho semantic rerank.
 
 ---
 
@@ -191,8 +200,8 @@ Xếp theo mức độ ảnh hưởng tới điểm số:
 | `SPEC_Module_Chatbot_AI_Tim_Phong_Tro.md` | Đặc tả chuẩn + hướng dẫn 3 giai đoạn (nguồn chân lý) |
 | `README.md` | Kiến trúc backend, ánh xạ SPEC, cách chạy, khác biệt có chủ đích |
 | `TODO.md` | Việc để sau (geo tầng 3, data thật) + nhật ký "đã xong" |
-| `ml/README.md` | Dataset + train PhoBERT + cảnh báo bộ proxy |
+| `ml/README.md` | Dataset + train ViSoBERT + cảnh báo bộ proxy |
 | `ml/eval-results/REPORT.md` | Bảng so sánh 3 phương án NLU (§14.4) |
-| `nlu-service/README.md` | FastAPI PhoBERT service |
+| `nlu-service/README.md` | FastAPI NLU service (ViSoBERT) |
 | `de_cuong_do_an.md` | Đề cương gốc (toàn hệ thống, không chỉ chatbot) |
 | **`TRANG_THAI_DU_AN.md`** | **← File này: tổng hợp trạng thái theo giai đoạn** |

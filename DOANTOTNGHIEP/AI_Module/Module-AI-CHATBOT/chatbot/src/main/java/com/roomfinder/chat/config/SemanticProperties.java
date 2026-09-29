@@ -4,7 +4,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
  * Cấu hình semantic rerank (GĐ3, SPEC §12.1) — khối `roomfinder.semantic`.
- * Dùng chung base URL với NLU PhoBERT (`roomfinder.nlu.url`) vì endpoint
+ * Dùng chung base URL với NLU self-host (`roomfinder.nlu.url`) vì endpoint
  * {@code /embed} nằm trên cùng nlu-service (FastAPI) — không lặp lại cấu hình URL.
  */
 @ConfigurationProperties(prefix = "roomfinder.semantic")

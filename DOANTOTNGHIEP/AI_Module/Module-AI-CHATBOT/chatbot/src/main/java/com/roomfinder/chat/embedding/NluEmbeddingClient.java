@@ -13,7 +13,7 @@ import java.util.Map;
 
 /**
  * Gọi endpoint {@code POST /embed} trên nlu-service (cùng service với NLU
- * PhoBERT — xem {@code nlu-service/app.py}) để lấy vector embedding tiếng Việt.
+ * NLU — xem {@code nlu-service/app.py}) để lấy vector embedding tiếng Việt.
  */
 @Component
 public class NluEmbeddingClient implements EmbeddingClient {

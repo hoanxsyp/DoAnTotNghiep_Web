@@ -7,7 +7,7 @@ import java.util.Arrays;
 
 /**
  * Tập intent đóng (8 nhãn) — §3.1 của SPEC.
- * Mã JSON (snake_case) là hợp đồng với LLM/PhoBERT.
+ * Mã JSON (snake_case) là hợp đồng với LLM/nlu-service.
  */
 public enum Intent {
     SEARCH_ROOM("search_room"),

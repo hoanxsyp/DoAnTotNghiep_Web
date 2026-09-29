@@ -1,28 +1,17 @@
-# NLU service (SPEC §11 bước 2.3).
+# NLU service (SPEC §11 bước 2.3) — model ViSoBERT.
 # Build context là BACKEND ROOT (không phải nlu-service/) vì cần COPY
-# ml/vncorenlp_util.py + VnCoreNLP jar/model — xem docker-compose.yml:
+# ml/nlu_encoding.py — xem docker-compose.yml:
 #   build: { context: ., dockerfile: nlu-service/Dockerfile }
-# Model PhoBERT (~515MB/cái) KHÔNG bake vào image — mount volume ./ml/out-*.
+# Model đã fine-tune (~390MB/cái) KHÔNG bake vào image — mount volume ./ml/out-*.
 FROM python:3.12-slim
-
-# VnCoreNLP chạy trên JVM (py_vncorenlp/pyjnius)
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends default-jre-headless \
-    && rm -rf /var/lib/apt/lists/*
-ENV JAVA_HOME=/usr/lib/jvm/default-java
 
 WORKDIR /app/nlu-service
 
 COPY nlu-service/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Chỉ cần jar + wordsegmenter; các thư mục models/* rỗng còn lại do
-# py_vncorenlp yêu cầu tồn tại (xem vncorenlp_util._download_wseg_only).
-COPY ml/vncorenlp_util.py /app/ml/vncorenlp_util.py
-COPY ml/vncorenlp/VnCoreNLP-1.2.jar /app/ml/vncorenlp/VnCoreNLP-1.2.jar
-COPY ml/vncorenlp/models/wordsegmenter /app/ml/vncorenlp/models/wordsegmenter
-RUN mkdir -p /app/ml/vncorenlp/models/dep /app/ml/vncorenlp/models/ner \
-             /app/ml/vncorenlp/models/postagger
+# app.py import nlu_encoding từ $NLU_ML_DIR (mặc định /app/ml).
+COPY ml/nlu_encoding.py /app/ml/nlu_encoding.py
 
 COPY nlu-service/app.py .
 

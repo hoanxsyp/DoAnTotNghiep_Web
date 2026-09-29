@@ -1,4 +1,7 @@
-"""Huấn luyện PhoBERT intent classifier — SPEC §11 bước 2.1.
+"""Huấn luyện ViSoBERT intent classifier — SPEC §11 bước 2.1.
+
+Base model `uitnlp/visobert` — pretrain trên văn bản mạng xã hội nên chịu được
+teencode/mất dấu trong câu chat, và nhận văn bản THÔ (không word-segment).
 
 Dữ liệu train = synthetic (`data/intent_train.jsonl`) + DỮ LIỆU THẬT đã đánh nhãn
 (`data/intent_train_real.jsonl`, sinh bởi `data/split_real_data.py`).
@@ -10,11 +13,13 @@ Dữ liệu train = synthetic (`data/intent_train.jsonl`) + DỮ LIỆU THẬT �
 Model dùng GOLD để chọn best checkpoint (metric_for_best_model=f1).
 
 Lưu ý độ phủ tập GOLD: không có calculate_cost (0 câu thật) và rất ít
-policy_inquiry/out_of_scope -> các lớp này vẫn chủ yếu dựa vào PROXY.
+policy_inquiry/out_of_scope -> các lớp này vẫn chủ yếu dựa vào PROXY. GOLD chỉ
+28 câu nên 1 câu = 3,6 điểm accuracy — chênh lệch 1-2 câu giữa 2 lần train là
+NHIỄU, không phải cải thiện.
 
 Chạy:
     python data/split_real_data.py                # (chạy trước) tách train/test thật
-    python train_intent.py                        # full training
+    python train_intent.py
     python train_intent.py --max-train 100 --epochs 1 --output-dir out-intent-smoke
 """
 
@@ -33,12 +38,10 @@ from transformers import (
     TrainingArguments,
 )
 
-from vncorenlp_util import get_segmenter, segment_plain
+from nlu_encoding import CONFIG_MAX_LEN, DEFAULT_BASE_MODEL, MAX_LENGTH
 
 ROOT = Path(__file__).parent
 DATA_DIR = ROOT / "data"
-VNCORENLP_DIR = ROOT / "vncorenlp"
-MODEL_NAME = "vinai/phobert-base-v2"
 
 LABELS = [
     "search_room", "refine_search", "room_detail", "compare_rooms",
@@ -62,8 +65,9 @@ def load_jsonl_optional(path: Path, what: str):
     return load_jsonl(path)
 
 
-def to_dataset(segmenter, rows):
-    texts = [segment_plain(segmenter, r["text"]) for r in rows]
+def to_dataset(rows):
+    """Văn bản THÔ — ViSoBERT tự tách subword, không tiền xử lý gì thêm."""
+    texts = [r["text"] for r in rows]
     labels = [LABEL2ID[r["intent"]] for r in rows]
     return Dataset.from_dict({"text": texts, "label": labels})
 
@@ -87,8 +91,8 @@ def make_training_args(output_dir, num_epochs, batch_size):
         return TrainingArguments(evaluation_strategy="epoch", **common)
 
 
-def main(max_train, num_epochs, output_dir, batch_size):
-    segmenter = get_segmenter(VNCORENLP_DIR)
+def main(max_train, num_epochs, output_dir, batch_size, base_model, max_length):
+    print(f"Base model: {base_model} | max_length: {max_length}")
 
     # Train = synthetic + data thật (nếu có). Data thật để ở file riêng nên
     # generate_dataset.py chạy lại KHONG ghi de len no.
@@ -105,17 +109,19 @@ def main(max_train, num_epochs, output_dir, batch_size):
     print(f"Train: {len(train_rows)} cau (synthetic {len(synth_rows)} + that {len(real_train_rows)}) "
           f"| eval chinh: {'GOLD' if gold_rows else 'PROXY'} {len(eval_rows)} cau")
 
-    train_ds = to_dataset(segmenter, train_rows)
-    test_ds = to_dataset(segmenter, eval_rows)
-    proxy_ds = to_dataset(segmenter, proxy_rows)
+    train_ds = to_dataset(train_rows)
+    test_ds = to_dataset(eval_rows)
+    proxy_ds = to_dataset(proxy_rows)
 
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    tokenizer = AutoTokenizer.from_pretrained(base_model)
     model = AutoModelForSequenceClassification.from_pretrained(
-        MODEL_NAME, num_labels=len(LABELS), id2label=ID2LABEL, label2id=LABEL2ID
+        base_model, num_labels=len(LABELS), id2label=ID2LABEL, label2id=LABEL2ID
     )
+    # nlu-service đọc khoá này từ config.json để encode y hệt lúc train.
+    setattr(model.config, CONFIG_MAX_LEN, max_length)
 
     def prep(batch):
-        return tokenizer(batch["text"], truncation=True, max_length=64)
+        return tokenizer(batch["text"], truncation=True, max_length=max_length)
 
     train_ds = train_ds.map(prep, batched=True)
     test_ds = test_ds.map(prep, batched=True)
@@ -167,5 +173,10 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--output-dir", default=str(ROOT / "out-intent"))
+    parser.add_argument("--base-model", default=DEFAULT_BASE_MODEL,
+                        help=f"mac dinh {DEFAULT_BASE_MODEL}")
+    parser.add_argument("--max-length", type=int, default=MAX_LENGTH,
+                        help=f"mac dinh {MAX_LENGTH}; nang len 128/256 khi train tren data that dai")
     args = parser.parse_args()
-    main(args.max_train, args.epochs, args.output_dir, args.batch_size)
+    main(args.max_train, args.epochs, args.output_dir, args.batch_size, args.base_model,
+         args.max_length)

@@ -9,7 +9,7 @@ hoặc bảo vệ đồ án.
 > `ChatOrchestrator.handle()`. Kiến trúc theo §2.1 của SPEC. Bản dễ hiểu (ví von +
 > ví dụ hội thoại): `FLOW_DE_HIEU.md`.
 >
-> **Phạm vi:** đã gộp cả xử lý GĐ1 (MVP) lẫn phần mở rộng GĐ2 (NLU PhoBERT qua
+> **Phạm vi:** đã gộp cả xử lý GĐ1 (MVP) lẫn phần mở rộng GĐ2 (NLU ViSoBERT qua
 > `nlu-service`) và GĐ3 (geocoding fallback, recommendation cá nhân hóa, semantic
 > rerank). Các phần GĐ2/GĐ3 đều **bật/tắt được** và có fallback về hành vi GĐ1.
 
@@ -26,7 +26,7 @@ POST /api/v1/chat  { session_id, user_id, message }
 │                                                                        │
 │  0. Sinh sessionId nếu thiếu · load ChatContext từ Redis · gán userId  │
 │  1. NLU:  message → NluResult { intent, confidence, entities(Filters) } │
-│        PhoBERT (nlu-service) → LLM → rule-based  (fallback 3 tầng)      │
+│        ViSoBERT (nlu-service) → LLM → rule-based (fallback 3 tầng)      │
 │  2. Normalizer:  chuẩn hóa entities (giá/tiện ích/khu vực/thời gian)    │
 │  3. Context:  MERGE / OVERRIDE / RESET → activeFilters                  │
 │  4. Định tuyến theo intent (switch)                                     │
@@ -69,8 +69,8 @@ giờ sập vì NLU**):
 
 | Ưu tiên | Cài đặt | Khi nào dùng | Ghi chú |
 |---|---|---|---|
-| 1 (`@Primary`) | `PhoBertNluServiceImpl` | GĐ2 bật (`NLU_ENABLED=true`) | Gọi `nlu-service` (FastAPI, 2 model PhoBERT) qua RestClient, timeout 300ms |
-| 2 | `LlmNluServiceImpl` | PhoBERT tắt/chết, có `GEMINI_API_KEY` | Gọi **Gemini**, ép trả **JSON thuần** theo schema cố định |
+| 1 (`@Primary`) | `LocalNluServiceImpl` | GĐ2 bật (`NLU_ENABLED=true`) | Gọi `nlu-service` (FastAPI, 2 model ViSoBERT) qua RestClient, timeout 300ms |
+| 2 | `LlmNluServiceImpl` | nlu-service tắt/chết, có `GEMINI_API_KEY` | Gọi **Gemini**, ép trả **JSON thuần** theo schema cố định |
 | 3 | `RuleBasedNluService` | LLM lỗi / không key / parse JSON hỏng | Regex + từ khóa — luôn trả về được |
 
 - `nlu-service` chỉ trả **span thô** (offset ký tự); việc quy span → giá trị máy đọc
@@ -90,7 +90,7 @@ giờ sập vì NLU**):
 - **POI** → chỉ trim (việc khớp alias/geocode để ở `RetrievalService`).
 - **DateTime** → chuẩn ISO nếu đang là span tiếng Việt ("chiều mai 3h").
 
-Đây là **mạng an toàn** cho output của cả LLM lẫn PhoBERT (cả hai chỉ nhả span/chuỗi).
+Đây là **mạng an toàn** cho output của cả LLM lẫn ViSoBERT (cả hai chỉ nhả span/chuỗi).
 
 ### Bước 3 — Context: MERGE / OVERRIDE / RESET
 `ContextService.apply(ctx, nlu, message)` hợp nhất entity lượt này vào `activeFilters`:
@@ -300,7 +300,7 @@ Endpoint phụ:
 
 | Lớp | Khi lỗi/thiếu | Hành vi thay thế |
 |---|---|---|
-| NLU PhoBERT (`nlu-service`) | service chết / timeout 300ms / `NLU_ENABLED=false` | fallback `LlmNluServiceImpl` |
+| NLU self-host (`nlu-service`) | service chết / timeout 300ms / `NLU_ENABLED=false` | fallback `LlmNluServiceImpl` |
 | NLU LLM | lỗi / không key / JSON hỏng | fallback `RuleBasedNluService` |
 | Intent lạ | nhãn không thuộc 8 nhãn | map về `OUT_OF_SCOPE` |
 | Thiếu slot | không có giá & khu vực | hỏi lại (CLARIFY), không gọi LLM |

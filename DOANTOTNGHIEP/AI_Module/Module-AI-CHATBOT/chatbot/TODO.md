@@ -5,7 +5,7 @@
 Đọc lại toàn bộ cấu trúc dự án, hợp nhất/dọn tài liệu cho khớp code hiện tại:
 
 - **Gộp xử lý mới (GĐ2/GĐ3) vào 2 file FLOW** — trước đó chỉ mô tả GĐ1:
-  - `FLOW_XU_LY.md` (kỹ thuật): NLU fallback 3 tầng (PhoBERT `nlu-service` → LLM →
+  - `FLOW_XU_LY.md` (kỹ thuật): NLU fallback 3 tầng (ViSoBERT `nlu-service` → LLM →
     rule), geocoding fallback (§3.6), tầng rerank GĐ3 semantic/personalization + logic
     pool & `ranked_by` (§3.7), ghi `room_view`, thêm `ranked_by` vào response JSON.
   - `FLOW_DE_HIEU.md` (dễ hiểu): thêm mục "Những nâng cấp so với bản đầu (GĐ2 & GĐ3)".
@@ -100,17 +100,23 @@ mô đồ án (>10.000 phòng) thì chuyển sang Elasticsearch `dense_vector` n
    + gán nhãn tay (Doccano/Label Studio) — SPEC §13.3; đánh giá lại DoD.
    → **ĐANG LÀM** (bắt đầu 2026-07-30) — xem mục
    "## ML — dữ liệu thật + đo lại DoD" ở cuối file để biết chi tiết & việc còn lại.
-2. ~~So sánh PhoBERT với baseline LLM (SPEC §14.4)~~ — **XONG 2026-07-18**, đo
-   đủ cả 3 phương án (A prompt-JSON, B PhoBERT, C function-calling), bảng ở
-   `ml/eval-results/REPORT.md`, harness `ml/eval_nlu_compare.py`. Kết luận:
-   B hòa A về intent (acc 0.923), thua ~5đ Slot-F1, thắng ~8–10× latency và
-   chi phí ≈0đ. Số liệu trên bộ PROXY — có data thật (mục 1) thì chạy lại
-   (xóa `ml/eval-results/*.jsonl` rồi chạy 3 side + `--report`).
-3. ~~Bọc FastAPI (`nlu-service/`) + `PhoBertNluServiceImpl` nối vào Spring~~ —
+2. **So sánh 3 phương án NLU (SPEC §14.4)** — harness `ml/eval_nlu_compare.py`
+   đã xong, đã đo A (prompt-JSON) và C (function-calling); bảng ở
+   `ml/eval-results/REPORT.md`. **Còn thiếu dòng B (ViSoBERT)**: phải train 2 model
+   rồi chạy `--side visobert` + `eval_local_intent_gold.py` + `--report`.
+3. ~~Bọc FastAPI (`nlu-service/`) + `LocalNluServiceImpl` nối vào Spring~~ —
    **XONG 2026-07-18** (SPEC §11 bước 2.3 + 2.4, xem `nlu-service/README.md`).
-   PhoBERT là NLU @Primary, timeout 300ms, fallback LLM → rule-based; fast-path
+   `nlu-service` là NLU @Primary, timeout 300ms, fallback LLM → rule-based; fast-path
    §6.3 + ghi `path` vào `chat_log` vốn đã có sẵn trong `ChatOrchestrator` từ GĐ1.
    Đã test e2e 6 lượt hội thoại + test fallback khi tắt nlu-service.
+4. 🔴 **Train 2 model ViSoBERT** — `ml/out-intent` và `ml/out-ner` còn trống nên
+   `nlu-service` chưa khởi động được và mọi bảng số liệu NLU còn "chưa đo":
+   - `python train_intent.py --epochs 5 --output-dir out-intent`
+   - `python train_ner.py --epochs 8 --output-dir out-ner`
+   - dựng `nlu-service`, kiểm `GET /health`
+   - `python eval_nlu_compare.py --side visobert` + `python eval_local_intent_gold.py`
+     + `python eval_nlu_compare.py --report` → điền dòng B vào `eval-results/REPORT.md`
+   - chạy smoke test 10 câu của `nlu-service/README.md`
 
 ## ML — dữ liệu thật + đo lại DoD (bắt đầu 2026-07-30)
 
@@ -178,7 +184,7 @@ Bổ sung dữ liệu THẬT (thu thập từ post/chat, khác synthetic) vào p
   không", "còn ko em ở luôn" (data2.md dòng 21, 41, 46) — hiện tạm gán `room_detail`.
   Nếu xuất hiện nhiều, cân nhắc thêm intent mới (phải sửa `LABELS` ở cả
   `train_intent.py`, backend, và sinh data cho lớp này).
-- **`JAVA_HOME` chưa set cố định**: `train_intent.py`/`train_ner.py` cần JVM cho
-  VnCoreNLP. Máy dev hiện mượn JBR của IntelliJ
-  (`C:\Program Files\JetBrains\IntelliJ IDEA 2025.2.5\jbr`). Nên `setx JAVA_HOME`
-  một lần cho ổn định.
+- **`JAVA_HOME` chưa set cố định**: pipeline ML không cần JVM (thuần Python), nhưng
+  backend Spring Boot thì cần. Máy dev hiện mượn JBR của IntelliJ
+  (`C:\Program Files\JetBrains\IntelliJ IDEA 2025.2.5\jbr`, Java 21) trong khi
+  `pom.xml` target Java 22 — nên `setx JAVA_HOME` tới một JDK 22 cho ổn định.
