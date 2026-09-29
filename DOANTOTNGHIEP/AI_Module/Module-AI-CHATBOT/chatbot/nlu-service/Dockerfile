@@ -1,7 +1,8 @@
 # NLU service (SPEC §11 bước 2.3) — model ViSoBERT.
-# Build context là BACKEND ROOT (không phải nlu-service/) vì cần COPY
-# ml/nlu_encoding.py — xem docker-compose.yml:
-#   build: { context: ., dockerfile: nlu-service/Dockerfile }
+# Build context là CHATBOT ROOT (không phải nlu-service/) vì cần COPY
+# ml/nlu_encoding.py — xem service `chatbot-nlu` trong DOANTOTNGHIEP/docker-compose.yml:
+#   build: { context: ./AI_Module/Module-AI-CHATBOT/chatbot,
+#            dockerfile: nlu-service/Dockerfile }
 # Model đã fine-tune (~390MB/cái) KHÔNG bake vào image — mount volume ./ml/out-*.
 FROM python:3.12-slim
 

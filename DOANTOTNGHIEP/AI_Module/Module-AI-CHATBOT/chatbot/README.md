@@ -92,14 +92,16 @@ Luồng theo §2.1: `NLU → Normalizer → Context (Redis) → Slot Checker →
 ## 3. Chạy nhanh bằng Docker (khuyến nghị)
 
 ```bash
-# chạy ở thư mục gốc repo (nơi có pom.xml, docker-compose.yml)
+# Compose đã gom về DOANTOTNGHIEP/docker-compose.yml (không còn compose riêng ở
+# thư mục chatbot). Chạy từ DOANTOTNGHIEP/:
 export GEMINI_API_KEY=your_key   # bỏ qua nếu chưa có (Windows PowerShell: $env:GEMINI_API_KEY="...")
-docker compose up --build
+docker compose up --build chatbot-api chatbot-nlu mysql redis
 ```
 
-Compose dựng `mysql`, `redis`, `app` (build bằng Maven trong container) và `nlu`
-(ViSoBERT — chỉ chạy nếu đã train model vào `ml/out-*`, xem `nlu-service/README.md`).
-App map ra http://localhost:8081 (cổng trong container là 8080).
+Compose root dựng `mysql`, `redis`, `chatbot-api` (build bằng Maven trong container)
+và `chatbot-nlu` (ViSoBERT — chỉ phục vụ được nếu đã train model vào `ml/out-*`;
+chưa train thì `/health` trả `degraded` và request trả 503, xem `nlu-service/README.md`).
+`chatbot-api` map ra http://localhost:8081, `chatbot-nlu` ra http://localhost:8003.
 
 ## 4. Chạy cục bộ (không Docker)
 
@@ -199,7 +201,7 @@ Repo phẳng: backend Spring Boot nằm ngay ở **thư mục gốc** (không c�
 
 ```
 Module-AI/                        (thư mục gốc = backend Spring Boot)
-├── pom.xml, Dockerfile, docker-compose.yml
+├── pom.xml, Dockerfile            (compose dùng chung ở DOANTOTNGHIEP/)
 ├── README.md, FLOW_*.md, SPEC_*.md, de_cuong_do_an.md, TODO.md
 ├── frontend/     React + Vite chat widget  (xem frontend/README.md)
 ├── ml/           dataset + train ViSoBERT  (xem ml/README.md)

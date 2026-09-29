@@ -61,7 +61,9 @@ NLU_INTENT_MODEL=../ml/out-intent-smoke NLU_NER_MODEL=../ml/out-ner-smoke uvicor
 ## Chạy bằng Docker
 
 ```bash
-docker compose up nlu    # build context là backend root, xem docker-compose.yml
+# Compose đã gom về root repo; service tên `chatbot-nlu` (cổng ngoài 8003 → 8000)
+cd ../../../..            # tới DOANTOTNGHIEP/ (nơi có docker-compose.yml)
+docker compose up chatbot-nlu
 ```
 
 Model mount qua volume `./ml/out-*` (không bake vào image — ~390MB/model). Image

@@ -18,6 +18,10 @@ văn bản THÔ → fast tokenizer với `offset_mapping` → nhãn NER nằm tr
 subword → gộp BIO thành span. `max_length` đọc từ `config.json` của model
 (khoá `nlu_max_length`, do `train_*.py` ghi) nên không cần cấu hình tay.
 
+Nếu nạp model lỗi (vd. `ml/out-*` còn trống vì chưa train), service vẫn LÊN nhưng
+`GET /health` trả `status: "degraded"` kèm `startup_error`, và `/nlu` + `/embed` trả
+**503**. Spring bắt lỗi này như mọi lỗi khác → fallback LLM → rule-based.
+
 Chạy:
     uvicorn app:app --host 0.0.0.0 --port 8000
 Biến môi trường (mặc định chạy được ngay từ repo):
@@ -33,7 +37,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import torch
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 ROOT = Path(__file__).parent
@@ -63,23 +67,30 @@ async def lifespan(app: FastAPI):
         AutoTokenizer,
     )
 
-    torch.set_num_threads(max(1, (os.cpu_count() or 4) // 2))
-    _M["intent_tok"] = AutoTokenizer.from_pretrained(INTENT_DIR)
-    _M["intent_model"] = AutoModelForSequenceClassification.from_pretrained(INTENT_DIR).eval()
-    _M["ner_tok"] = AutoTokenizer.from_pretrained(NER_DIR)
-    _M["ner_model"] = AutoModelForTokenClassification.from_pretrained(NER_DIR).eval()
-    # max_length phải khớp lúc train, nếu không sẽ cắt câu mà không báo lỗi.
-    _M["intent_len"] = resolve_max_length(_M["intent_model"].config)
-    _M["ner_len"] = resolve_max_length(_M["ner_model"].config)
-    print(f"[NLU] max_length: intent={_M['intent_len']} ner={_M['ner_len']}")
-
-    if not _M["ner_tok"].is_fast:
-        raise RuntimeError(
-            f"{NER_DIR}: can fast tokenizer de lay offset_mapping. Thu muc model "
-            "phai co tokenizer.json (tokenizer.save_pretrained() luc train ghi ra)."
-        )
-
-    _M["embed_model"] = SentenceTransformer(EMBED_MODEL)
+    # Nạp trong try/except: thiếu/hỏng model thì service vẫn LÊN nhưng ở trạng
+    # thái "degraded" (mọi request trả 503 kèm lý do) thay vì chết lúc startup.
+    # Quan trọng vì `ml/out-*` có thể còn trống khi chưa train.
+    try:
+        torch.set_num_threads(max(1, (os.cpu_count() or 4) // 2))
+        _M["intent_tok"] = AutoTokenizer.from_pretrained(INTENT_DIR)
+        _M["intent_model"] = AutoModelForSequenceClassification.from_pretrained(INTENT_DIR).eval()
+        _M["ner_tok"] = AutoTokenizer.from_pretrained(NER_DIR)
+        _M["ner_model"] = AutoModelForTokenClassification.from_pretrained(NER_DIR).eval()
+        # max_length phải khớp lúc train, nếu không sẽ cắt câu mà không báo lỗi.
+        _M["intent_len"] = resolve_max_length(_M["intent_model"].config)
+        _M["ner_len"] = resolve_max_length(_M["ner_model"].config)
+        if not _M["ner_tok"].is_fast:
+            raise RuntimeError(
+                f"{NER_DIR}: can fast tokenizer de lay offset_mapping. Thu muc model "
+                "phai co tokenizer.json (tokenizer.save_pretrained() luc train ghi ra)."
+            )
+        _M["embed_model"] = SentenceTransformer(EMBED_MODEL)
+        _M["ready"] = True
+        print(f"[NLU] san sang | max_length: intent={_M['intent_len']} ner={_M['ner_len']}")
+    except Exception as exc:
+        _M["ready"] = False
+        _M["startup_error"] = str(exc)
+        print(f"[NLU] KHOI DONG LOI -> /health = 'degraded', moi request tra 503: {exc}")
     yield
     _M.clear()
 
@@ -116,10 +127,11 @@ class EmbedResponse(BaseModel):
 @app.get("/health")
 def health():
     return {
-        "status": "ok",
+        "status": "ok" if _M.get("ready") else "degraded",
         "intent_model": INTENT_DIR,
         "ner_model": NER_DIR,
         "embed_model": EMBED_MODEL,
+        "startup_error": _M.get("startup_error"),
         # Lộ ra để debug: sai max_length là cắt câu mà không báo lỗi.
         "max_length": {"intent": _M.get("intent_len"), "ner": _M.get("ner_len")},
     }
@@ -129,18 +141,28 @@ def health():
 def embed(req: EmbedRequest) -> EmbedResponse:
     """Embedding cho semantic rerank (GĐ3, SPEC §12.1). Dùng cho cả mô tả phòng
     (tính 1 lần, cache ở backend) lẫn câu hỏi người dùng (tính mỗi lượt cần rerank)."""
+    ensure_ready()
     vec = _M["embed_model"].encode(req.text.strip() or " ", normalize_embeddings=True)
     return EmbedResponse(vector=vec.tolist())
 
 
 @app.post("/nlu", response_model=NluResponse)
 def nlu(req: NluRequest) -> NluResponse:
+    ensure_ready()
     text = req.text.strip()
     if not text:
         return NluResponse(intent="out_of_scope", confidence=1.0, entities=[])
     intent, confidence = classify_intent(text)
     entities = extract_entities(text)
     return NluResponse(intent=intent, confidence=confidence, entities=entities)
+
+
+def ensure_ready():
+    if not _M.get("ready"):
+        raise HTTPException(status_code=503, detail={
+            "message": "NLU models are not ready",
+            "startup_error": _M.get("startup_error"),
+        })
 
 
 def classify_intent(text: str) -> tuple[str, float]:

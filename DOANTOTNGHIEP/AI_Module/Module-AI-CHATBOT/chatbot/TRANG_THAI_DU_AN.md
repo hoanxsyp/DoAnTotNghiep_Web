@@ -163,7 +163,7 @@ Số của A và C đã đo thật trên GOLD/PROXY. **Dòng B chưa có số** 
    cáo `ml/eval-results/retrieval_recall.md`, assert ≥0.80. **Kết quả: Recall@5 =
    1.000, MRR = 1.000** → DoD-3 đạt. Cổng bằng biến môi trường `RETRIEVAL_EVAL=true`
    (cần MySQL vì query dùng `ST_Distance_Sphere`), nên `mvn test` thường vẫn bỏ qua.
-   Chạy: `docker compose up -d mysql` rồi `RETRIEVAL_EVAL=true mvn test -Dtest=RetrievalRecallEvalTest`
+   Chạy: `docker compose up -d mysql` (từ `DOANTOTNGHIEP/` — compose đã gom về root) rồi `RETRIEVAL_EVAL=true mvn test -Dtest=RetrievalRecallEvalTest`
    (đặt `DB_PORT=3307` nếu dùng MySQL Docker của repo).
    *Còn có thể mở rộng*: nâng lên ~50 câu (SPEC §14.3) và bổ sung câu từ log thật.
 2. **Normalizer exact-match accuracy (§14.1, ngưỡng ≥0.95) — chưa có bộ 100 cặp.** Hiện có unit test (`PriceNormalizerTest`, `UtilityNormalizerTest`) nhưng chưa phải bộ 100 cặp span→value để báo cáo con số accuracy.
