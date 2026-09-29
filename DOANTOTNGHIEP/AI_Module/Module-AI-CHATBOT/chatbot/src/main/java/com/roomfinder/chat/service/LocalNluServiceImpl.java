@@ -20,9 +20,11 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * NLU bằng PhoBERT qua nlu-service (FastAPI) — GĐ2, §11 bước 2.4.
+ * NLU bằng ViSoBERT qua nlu-service (FastAPI) — GĐ2, §11 bước 2.4.
+ * Class này KHÔNG phụ thuộc base model: hợp đồng JSON của nlu-service là span thô
+ * + intent, nên thay model bên Python không phải sửa gì ở tầng Java.
  * @Primary thay cho LlmNluServiceImpl; chuỗi fallback 2 tầng:
- * PhoBERT chết/timeout(300ms) → LLM → rule-based. Hệ thống không bao giờ
+ * nlu-service chết/timeout(300ms) → LLM → rule-based. Hệ thống không bao giờ
  * sập vì NLU. Tắt bằng roomfinder.nlu.enabled=false (NLU_ENABLED).
  *
  * nlu-service trả entity là SPAN THÔ ({label,text,start,end,score}) — class này
@@ -33,15 +35,15 @@ import java.util.regex.Pattern;
  */
 @Service
 @Primary
-public class PhoBertNluServiceImpl implements NluService {
+public class LocalNluServiceImpl implements NluService {
 
-    private static final Logger log = LoggerFactory.getLogger(PhoBertNluServiceImpl.class);
+    private static final Logger log = LoggerFactory.getLogger(LocalNluServiceImpl.class);
 
     private final RestClient http;
     private final NluService fallback;
     private final NluProperties props;
 
-    public PhoBertNluServiceImpl(NluProperties props,
+    public LocalNluServiceImpl(NluProperties props,
                                  @Qualifier("llmNluServiceImpl") NluService fallback) {
         this.props = props;
         this.fallback = fallback;
@@ -55,31 +57,31 @@ public class PhoBertNluServiceImpl implements NluService {
     public NluResult parse(String message) {
         if (!props.isEnabled()) return fallback.parse(message);
         try {
-            PhoBertResponse r = http.post()
+            NluServiceResponse r = http.post()
                     .uri("/nlu")
                     .header("Content-Type", "application/json")
                     .body(Map.of("text", message == null ? "" : message))
                     .retrieve()
-                    .body(PhoBertResponse.class);
+                    .body(NluServiceResponse.class);
             if (r == null || r.intent() == null) {
                 throw new IllegalStateException("nlu-service trả response rỗng");
             }
             return toNluResult(r);
         } catch (Exception e) {
-            log.warn("NLU PhoBERT lỗi ({}), fallback LLM", e.getMessage());
+            log.warn("NLU self-host lỗi ({}), fallback LLM", e.getMessage());
             return fallback.parse(message);
         }
     }
 
     // --- Hợp đồng JSON với nlu-service (xem nlu-service/README.md) --------
 
-    record PhoBertResponse(String intent, double confidence, List<Span> entities) {}
+    record NluServiceResponse(String intent, double confidence, List<Span> entities) {}
 
     record Span(String label, String text, int start, int end, double score) {}
 
     // --- Span → Filters ---------------------------------------------------
 
-    private NluResult toNluResult(PhoBertResponse r) {
+    private NluResult toNluResult(NluServiceResponse r) {
         NluResult out = new NluResult();
         out.setIntent(Intent.fromCode(r.intent()));
         out.setConfidence(r.confidence());

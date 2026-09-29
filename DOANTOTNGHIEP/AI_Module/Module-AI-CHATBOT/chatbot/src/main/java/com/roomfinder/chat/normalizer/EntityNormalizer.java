@@ -5,7 +5,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * Tầng Normalizer (§3.3) — BẮT BUỘC. Chuyển entity "thô" từ NLU thành
- * giá trị máy đọc được trước khi vào Retrieval. Ở GĐ2 (PhoBERT NER trả span)
+ * giá trị máy đọc được trước khi vào Retrieval. Ở GĐ2 (NER trả span thô)
  * tầng này gánh phần lớn công việc; ở GĐ1 nó là mạng an toàn cho LLM.
  */
 @Component

@@ -20,7 +20,7 @@ Hình dung bạn nhắn tin cho một nhân viên môi giới. Bạn ấy làm 6
 
 | Bước | Nhân viên môi giới làm gì | Trong code là ai |
 |---|---|---|
-| 1. **Nghe hiểu** | Đọc tin nhắn, hiểu bạn muốn gì (tìm phòng? hỏi giá? so sánh?) | `NluService` (PhoBERT → Gemini → rule) |
+| 1. **Nghe hiểu** | Đọc tin nhắn, hiểu bạn muốn gì (tìm phòng? hỏi giá? so sánh?) | `NluService` (ViSoBERT → Gemini → rule) |
 | 2. **Ghi ra giấy cho gọn** | "à, tối đa 3 triệu, quận Thanh Xuân, cần điều hòa" | `EntityNormalizer` |
 | 3. **Nhớ câu chuyện từ đầu** | Nhớ lượt trước bạn đã nói gì để cộng dồn yêu cầu | `ContextService` (Redis) |
 | 4. **Mở sổ tra phòng** | Lật danh sách phòng thật, lọc theo yêu cầu | `RetrievalService` (MySQL) |
@@ -195,14 +195,14 @@ Mình tìm được 2 phòng phù hợp với yêu cầu của bạn (...). Bạ
 Bản GĐ1 ở trên đã chạy được đầu-cuối. Sau đó bot được lắp thêm 4 mảng, **tất cả đều
 bật/tắt được** — tắt hết đi thì bot vẫn y như GĐ1, không hỏng gì.
 
-### 5.1. Bot tự học "nghe hiểu" thay vì luôn nhờ AI ngoài (PhoBERT — GĐ2)
+### 5.1. Bot tự học "nghe hiểu" thay vì luôn nhờ AI ngoài (ViSoBERT — GĐ2)
 
 Ở bước 1 ("Nghe hiểu"), thay vì lúc nào cũng gửi câu của bạn ra Gemini, bot có một
-**bộ não hiểu ý tự huấn luyện chạy ngay tại chỗ** (2 model PhoBERT trong `nlu-service`).
+**bộ não hiểu ý tự huấn luyện chạy ngay tại chỗ** (2 model ViSoBERT trong `nlu-service`).
 
 Ví von: như bạn nhân viên môi giới **tự học nghe hiểu tiếng địa phương** thay vì mỗi câu
 lại gọi điện hỏi tổng đài. Lợi ích: nhanh hơn, không tốn tiền gọi API, và tin nhắn của
-bạn **không phải rời khỏi hệ thống**. Có 3 lớp dự phòng: PhoBERT → Gemini → bộ từ khóa —
+bạn **không phải rời khỏi hệ thống**. Có 3 lớp dự phòng: ViSoBERT → Gemini → bộ từ khóa —
 lớp trên trục trặc thì tự rơi xuống lớp dưới, **không bao giờ đứng hình**.
 
 ### 5.2. Địa danh lạ? Bot tự tra bản đồ (Geocoding — GĐ3)
@@ -238,7 +238,7 @@ vẻ yên tĩnh" mà lòi ra phòng vượt ngân sách.
 
 | Tình huống | Bot xử lý |
 |---|---|
-| Bộ hiểu PhoBERT tắt / chậm quá | Tự chuyển sang **Gemini**; Gemini cũng lỗi/không key → **bộ từ khóa** → vẫn tìm phòng được |
+| Bộ hiểu ViSoBERT tắt / chậm quá | Tự chuyển sang **Gemini**; Gemini cũng lỗi/không key → **bộ từ khóa** → vẫn tìm phòng được |
 | Tìm mãi không ra phòng nào | **Nới lỏng dần**: tăng giá 15% → nới bán kính → bỏ tiện ích → gợi ý vài phòng gần nhất |
 | Địa danh chưa có trong sổ | **Tra bản đồ** rồi ghi nhớ; nếu bản đồ cũng không có thì bỏ lọc theo khoảng cách, vẫn trả phòng theo tiêu chí còn lại |
 | Người dùng nói thiếu thông tin ("tìm phòng cho tôi") | **Hỏi lại**: "Bạn muốn tìm ở khu vực nào? Giá tối đa bao nhiêu?" — không đoán bừa |

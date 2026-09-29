@@ -1,4 +1,4 @@
-# GĐ2 — huấn luyện PhoBERT intent + NER (SPEC §11).
+# GĐ2 — huấn luyện ViSoBERT intent + NER (SPEC §11).
 # torch bản CPU (không có GPU xác nhận trong môi trường phát triển hiện tại).
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch
@@ -7,5 +7,11 @@ transformers>=4.40
 datasets>=2.19
 evaluate>=0.4
 seqeval>=1.2
-py_vncorenlp>=0.1.4
 scikit-learn>=1.4
+# ViSoBERT chỉ ship sentencepiece.bpe.model (KHÔNG có tokenizer.json), nên
+# transformers phải convert slow -> fast lúc tải lần đầu; bước convert cần CẢ
+# sentencepiece LẪN protobuf, thiếu 1 trong 2 là AutoTokenizer.from_pretrained
+# raise ngay. Sau khi train, tokenizer.save_pretrained() ghi ra tokenizer.json
+# nên nlu-service nạp lại KHÔNG cần 2 gói này.
+sentencepiece
+protobuf

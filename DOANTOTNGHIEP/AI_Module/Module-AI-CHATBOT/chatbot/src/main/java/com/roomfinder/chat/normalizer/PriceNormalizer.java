@@ -8,7 +8,7 @@ import java.util.regex.Pattern;
  * "3tr5" → 3500000 | "3 củ" → 3000000 | "500k" → 500000 | "3000000" → 3000000
  *
  * Ở GĐ1 LLM thường đã trả số; normalizer này là mạng an toàn và là bước
- * BẮT BUỘC khi chuyển sang PhoBERT NER (GĐ2) vốn chỉ trả span văn bản.
+ * BẮT BUỘC khi chuyển sang NER self-host (GĐ2) vốn chỉ trả span văn bản.
  */
 public final class PriceNormalizer {
 

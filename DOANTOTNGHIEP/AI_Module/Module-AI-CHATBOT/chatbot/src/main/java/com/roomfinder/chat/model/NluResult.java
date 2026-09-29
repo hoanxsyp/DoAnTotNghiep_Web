@@ -8,7 +8,7 @@ import lombok.Setter;
 
 /**
  * Kết quả tầng NLU — hợp đồng JSON giữa NLU và Retrieval (§3.4).
- * Cùng schema dù cài đặt bằng LLM (GĐ1) hay PhoBERT (GĐ2).
+ * Cùng schema dù cài đặt bằng LLM (GĐ1) hay model self-host ViSoBERT (GĐ2).
  */
 @Getter
 @Setter

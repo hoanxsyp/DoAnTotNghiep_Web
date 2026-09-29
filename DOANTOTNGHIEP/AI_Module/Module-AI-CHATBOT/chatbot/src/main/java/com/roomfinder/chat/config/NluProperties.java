@@ -3,7 +3,8 @@ package com.roomfinder.chat.config;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * Cấu hình NLU service PhoBERT (GĐ2, §11 bước 2.4) — khối `roomfinder.nlu`.
+ * Cấu hình NLU service self-host (GĐ2, §11 bước 2.4) — khối `roomfinder.nlu`.
+ * Base model hiện tại: ViSoBERT (xem ml/README.md); cấu hình không phụ thuộc model.
  * Timeout mặc định 300ms theo SPEC: NLU cục bộ phải nhanh, chậm hơn thì
  * fallback LLM còn rẻ hơn là bắt người dùng đợi.
  */

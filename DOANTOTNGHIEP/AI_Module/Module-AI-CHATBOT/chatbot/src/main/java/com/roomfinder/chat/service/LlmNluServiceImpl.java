@@ -11,7 +11,7 @@ import org.springframework.stereotype.Service;
 
 /**
  * Cài đặt NLU bằng LLM trả JSON — GĐ1 (§10 bước 1.1).
- * Từ GĐ2, bean NLU mặc định là PhoBertNluServiceImpl (@Primary); class này
+ * Từ GĐ2, bean NLU mặc định là LocalNluServiceImpl (@Primary); class này
  * thành tầng fallback thứ nhất khi nlu-service chết/timeout.
  *
  * An toàn: nếu LLM lỗi/không có key → fallback sang NLU rule-based để

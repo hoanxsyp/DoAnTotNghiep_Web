@@ -1,24 +1,24 @@
 """Thí nghiệm so sánh NLU — SPEC §14.4 (checkpoint GĐ2).
 
 Chạy CÙNG MỘT test set qua 3 cài đặt NluService rồi in bảng so sánh:
-    A. llm     — Gemini prompt-JSON (GĐ1, prompt copy nguyên văn LlmNluServiceImpl)
-    B. phobert — nlu-service FastAPI (GĐ2, cần service chạy ở --phobert-url)
-    C. fc      — Gemini function-calling (đường cơ sở "thời tiền-LLM", SPEC §14.4C)
+    A. llm      — Gemini prompt-JSON (GĐ1, prompt copy nguyên văn LlmNluServiceImpl)
+    B. visobert — nlu-service FastAPI (GĐ2, cần service chạy ở --visobert-url)
+    C. fc       — Gemini function-calling (đường cơ sở "thời tiền-LLM", SPEC §14.4C)
 
 ⚠️ Test set hiện là bộ PROXY tay viết (xem cảnh báo trong build_proxy_testset.py)
 — số liệu dùng để so sánh TƯƠNG ĐỐI giữa các phương án, chưa phải minh chứng
 tuyệt đối khi bảo vệ (cần thay bằng dữ liệu thật §13.3).
 
-Cách so NER công bằng: LLM trả slot đã chuẩn hóa, PhoBERT trả span thô — không
-so trực tiếp được. Script quy TẤT CẢ (gold span, PhoBERT span, LLM filters) về
+Cách so NER công bằng: LLM trả slot đã chuẩn hóa, ViSoBERT trả span thô — không
+so trực tiếp được. Script quy TẤT CẢ (gold span, ViSoBERT span, LLM filters) về
 cùng dạng SLOT chuẩn hóa bằng cùng một bộ normalizer Python (mirror các
-normalizer Java) rồi tính micro P/R/F1 trên từng (slot, giá_trị). Riêng PhoBERT
+normalizer Java) rồi tính micro P/R/F1 trên từng (slot, giá_trị). Riêng ViSoBERT
 tính thêm Span-F1 (khớp đúng label+start+end) — metric "NER thuần" không có
 bên LLM. DATETIME/RADIUS chỉ chấm CÓ/KHÔNG (không so giá trị — chuẩn hóa
 datetime 2 bên khác nhau, so giá trị sẽ phạt oan).
 
 Chạy:
-    python eval_nlu_compare.py --side phobert
+    python eval_nlu_compare.py --side visobert
     GEMINI_API_KEY=... python eval_nlu_compare.py --side llm
     GEMINI_API_KEY=... python eval_nlu_compare.py --side fc
     python eval_nlu_compare.py --report        # in + ghi bảng từ kết quả đã lưu
@@ -206,7 +206,7 @@ def norm_area(span) -> float | None:
 
 
 def spans_to_slots(entities, sentence: str = "") -> set:
-    """[{label,text?,start,end}] (gold hoặc PhoBERT) → {(slot, value)} chuẩn hóa.
+    """[{label,text?,start,end}] (gold hoặc ViSoBERT) → {(slot, value)} chuẩn hóa.
     Gold không có "text" (chỉ offset) → cắt từ câu gốc."""
     slots = set()
     for e in entities:
@@ -298,13 +298,18 @@ def http_json(url, body, headers=None, timeout=60):
         return json.load(r)
 
 
-def predict_phobert(text, args):
+def predict_visobert(text, args):
+    """Gọi nlu-service (POST /nlu) — model self-host, trả span thô + chi phí ~0."""
     t0 = time.perf_counter()
-    r = http_json(f"{args.phobert_url}/nlu", {"text": text})
+    r = http_json(f"{args.visobert_url}/nlu", {"text": text})
     ms = (time.perf_counter() - t0) * 1000
     return {"intent": r["intent"], "spans": r["entities"],
             "slots": sorted(spans_to_slots(r["entities"])), "latency_ms": ms,
             "tokens_in": 0, "tokens_out": 0}
+
+
+# Phương án self-host (span thô + chi phí ~0) — phân biệt với nhánh LLM.
+LOCAL_SIDES = ("visobert",)
 
 
 def gemini_call(args, body):
@@ -374,7 +379,7 @@ def predict_fc(text, args):
             "tokens_in": ti, "tokens_out": to}
 
 
-PREDICTORS = {"phobert": predict_phobert, "llm": predict_llm, "fc": predict_fc}
+PREDICTORS = {"visobert": predict_visobert, "llm": predict_llm, "fc": predict_fc}
 
 
 # --- Chạy & cache -------------------------------------------------------------
@@ -463,7 +468,7 @@ def slot_metrics(recs):
 
 
 def span_metrics(recs):
-    """Span-F1 strict (label,start,end) — chỉ có nghĩa với side phobert."""
+    """Span-F1 strict (label,start,end) — chỉ có nghĩa với side visobert."""
     tp = fp = fn = 0
     for r in recs:
         if "spans" not in r:
@@ -488,7 +493,7 @@ def p95(xs):
 
 
 SIDES = [("llm", "A. LLM prompt JSON (GĐ1)"),
-         ("phobert", "B. PhoBERT fine-tuned (GĐ2)"),
+         ("visobert", "B. ViSoBERT fine-tuned (GĐ2)"),
          ("fc", "C. LLM Function Calling")]
 
 
@@ -538,7 +543,7 @@ def proxy_section():
         _, _, sf1 = slot_metrics(rn)
         spf1 = span_metrics(rn)
         lat = [r["latency_ms"] for r in ri + rn]
-        if side == "phobert":
+        if side in LOCAL_SIDES:
             cost = "≈0đ (self-host CPU)"
         else:
             n = len(ri) + len(rn)
@@ -553,8 +558,10 @@ def proxy_section():
         "",
         "- Test set: `intent_test_real.jsonl` (142 câu) + `ner_test_real.jsonl` (87 câu) — bộ PROXY tay viết.",
         "- Slot-F1: mọi phương án quy về cùng dạng (slot, giá_trị) chuẩn hóa; DATETIME/RADIUS chấm có/không.",
-        "- Span-F1 strict (label+start+end) chỉ đo được với PhoBERT (LLM không trả span).",
-        "- Latency LLM phụ thuộc mạng + tier; PhoBERT đo trên CPU local, không GPU.",
+        "- Span-F1 strict (label+start+end) chỉ đo được với ViSoBERT (LLM không trả "
+        "span). Metric này tính trên offset ký tự nên độc lập với cách tokenize, "
+        "khác với F1 seqeval mà train_ner.py in ra (tính theo đơn vị subword).",
+        "- Latency LLM phụ thuộc mạng + tier; ViSoBERT đo trên CPU local, không GPU.",
         f"- Chi phí LLM tính theo giá flash-lite ${PRICE_IN_PER_M}/1M in, ${PRICE_OUT_PER_M}/1M out"
         f" (KIỂM TRA lại bảng giá trước khi trích dẫn); free tier = 0đ trong quota.",
     ]
@@ -584,7 +591,8 @@ if __name__ == "__main__":
     ap.add_argument("--dataset", choices=list(DATASETS), default="proxy",
                     help="proxy = bo tay viet (intent+ner); gold = data that held-out (chi intent)")
     ap.add_argument("--report", action="store_true", help="in bang tong hop")
-    ap.add_argument("--phobert-url", default="http://127.0.0.1:8000")
+    ap.add_argument("--visobert-url", default="http://127.0.0.1:8000",
+                    help="dia chi nlu-service (FastAPI)")
     ap.add_argument("--model", default="gemini-3.1-flash-lite")
     ap.add_argument("--rpm", type=int, default=14, help="gioi han request/phut cho Gemini")
     a = ap.parse_args()

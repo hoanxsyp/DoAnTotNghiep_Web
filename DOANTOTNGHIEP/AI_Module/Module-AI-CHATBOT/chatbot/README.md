@@ -4,11 +4,11 @@ Cài đặt theo `SPEC_Module_Chatbot_AI_Tim_Phong_Tro.md`: chatbot tiếng Vi�
 tự nhiên → truy vấn có cấu trúc → tìm phòng **có thật trong CSDL** → sinh câu tư vấn dựa
 **hoàn toàn** trên dữ liệu truy xuất, có **guardrail chống bịa (hallucination)**.
 
-Đã triển khai đủ **GĐ1 (MVP)** + **GĐ2 (NLU PhoBERT)** + **GĐ3 (geocoding fallback,
+Đã triển khai đủ **GĐ1 (MVP)** + **GĐ2 (NLU ViSoBERT)** + **GĐ3 (geocoding fallback,
 recommendation cá nhân hóa, semantic rerank)** — tất cả phần mở rộng đều bật/tắt được
 và có fallback về hành vi GĐ1.
 
-> Phạm vi file này: backend Spring Boot GĐ1 (MVP) — GĐ2 (PhoBERT) và GĐ3
+> Phạm vi file này: backend Spring Boot GĐ1 (MVP) — GĐ2 (ViSoBERT) và GĐ3
 > (Recommendation + Semantic rerank) mô tả ở mục dưới, cùng nằm trong backend này.
 
 ## 0. Bản đồ tài liệu
@@ -23,23 +23,23 @@ và có fallback về hành vi GĐ1.
 | **`SPEC_Module_Chatbot_AI_Tim_Phong_Tro.md`** | **Đặc tả chuẩn (v2.0)** — nguồn chân lý, có hướng dẫn triển khai 3 giai đoạn + đánh giá | Tra cứu chi tiết, checklist bảo vệ |
 | **`de_cuong_do_an.md`** | Đề cương **cả hệ thống** (chatbot chỉ là 1 module) | Bối cảnh cấp trên |
 | **`TODO.md`** | Việc đã xong / còn lại, nhật ký quyết định | Theo dõi tiến độ |
-| `ml/README.md` | Dataset + huấn luyện PhoBERT (GĐ2) | Làm phần ML |
-| `nlu-service/README.md` | FastAPI bọc 2 model PhoBERT (`POST /nlu`, `/embed`) | Chạy tầng NLU/embedding |
+| `ml/README.md` | Dataset + huấn luyện ViSoBERT (GĐ2) | Làm phần ML |
+| `nlu-service/README.md` | FastAPI bọc 2 model ViSoBERT (`POST /nlu`, `/embed`) | Chạy tầng NLU/embedding |
 | `frontend/README.md` | Chat widget React + Vite | Làm phần UI |
 
-> Các mô tả xử lý mới (PhoBERT, geocoding, recommendation, semantic rerank) đã được
+> Các mô tả xử lý mới (ViSoBERT, geocoding, recommendation, semantic rerank) đã được
 > gộp vào 2 file FLOW ở trên. Memo lập kế hoạch cũ (`MEMO_...`) đã bỏ vì nội dung
 > bị SPEC v2.0 thay thế hoàn toàn (còn trong lịch sử git nếu cần).
 
-## Frontend, Giai đoạn 2 (PhoBERT) & Giai đoạn 3 (Recommendation + Semantic)
+## Frontend, Giai đoạn 2 (ViSoBERT) & Giai đoạn 3 (Recommendation + Semantic)
 
 - **`frontend/`** — chat widget React + Vite + TypeScript, gọi thẳng API dưới đây. Xem
   `frontend/README.md`.
-- **`ml/`** — dataset synthetic + script huấn luyện PhoBERT intent/NER (GĐ2, SPEC §11/§13).
+- **`ml/`** — dataset synthetic + script huấn luyện ViSoBERT intent/NER (GĐ2, SPEC §11/§13).
   Xem `ml/README.md` (đọc kỹ mục cảnh báo về bộ test "proxy" trước khi dùng số liệu để bảo vệ).
-- **`nlu-service/`** — FastAPI bọc 2 model PhoBERT đã train (GĐ2, SPEC §11 bước 2.3):
+- **`nlu-service/`** — FastAPI bọc 2 model ViSoBERT đã train (GĐ2, SPEC §11 bước 2.3):
   `POST /nlu` trả intent + entity span. Xem `nlu-service/README.md`. Spring gọi qua
-  `PhoBertNluServiceImpl` (@Primary, bước 2.4): timeout 300ms, chết → fallback
+  `LocalNluServiceImpl` (@Primary, bước 2.4): timeout 300ms, chết → fallback
   LLM → rule-based; tắt bằng `NLU_ENABLED=false` để về hẳn GĐ1.
 - **Geocoding fallback** (`geocoding/`, TODO.md) — khi bảng `poi` nội bộ miss (POI
   người dùng nhắc chưa có sẵn), tự động geocode qua OSM Nominatim, validate tọa
@@ -80,7 +80,7 @@ Luồng theo §2.1: `NLU → Normalizer → Context (Redis) → Slot Checker →
 | API `POST /api/v1/chat`, `/reset` | `controller/ChatController` | §7 |
 | Schema room+poi+chat_log, seed | `resources/schema.sql`, `data.sql` | §8 |
 
-**Interface `NluService`** là điểm cắm để GĐ2 thay PhoBERT mà không sửa tầng trên (§9.1, §14.4).
+**Interface `NluService`** là điểm cắm để GĐ2 thay model self-host mà không sửa tầng trên (§9.1, §14.4).
 
 ## 2. Yêu cầu
 
@@ -92,14 +92,16 @@ Luồng theo §2.1: `NLU → Normalizer → Context (Redis) → Slot Checker →
 ## 3. Chạy nhanh bằng Docker (khuyến nghị)
 
 ```bash
-# chạy ở thư mục gốc repo (nơi có pom.xml, docker-compose.yml)
+# Compose đã gom về DOANTOTNGHIEP/docker-compose.yml (không còn compose riêng ở
+# thư mục chatbot). Chạy từ DOANTOTNGHIEP/:
 export GEMINI_API_KEY=your_key   # bỏ qua nếu chưa có (Windows PowerShell: $env:GEMINI_API_KEY="...")
-docker compose up --build
+docker compose up --build chatbot-api chatbot-nlu mysql redis
 ```
 
-Compose dựng `mysql`, `redis`, `app` (build bằng Maven trong container) và `nlu`
-(PhoBERT — chỉ chạy nếu đã train model vào `ml/out-*`, xem `nlu-service/README.md`).
-App map ra http://localhost:8081 (cổng trong container là 8080).
+Compose root dựng `mysql`, `redis`, `chatbot-api` (build bằng Maven trong container)
+và `chatbot-nlu` (ViSoBERT — chỉ phục vụ được nếu đã train model vào `ml/out-*`;
+chưa train thì `/health` trả `degraded` và request trả 503, xem `nlu-service/README.md`).
+`chatbot-api` map ra http://localhost:8081, `chatbot-nlu` ra http://localhost:8003.
 
 ## 4. Chạy cục bộ (không Docker)
 
@@ -199,17 +201,17 @@ Repo phẳng: backend Spring Boot nằm ngay ở **thư mục gốc** (không c�
 
 ```
 Module-AI/                        (thư mục gốc = backend Spring Boot)
-├── pom.xml, Dockerfile, docker-compose.yml
+├── pom.xml, Dockerfile            (compose dùng chung ở DOANTOTNGHIEP/)
 ├── README.md, FLOW_*.md, SPEC_*.md, de_cuong_do_an.md, TODO.md
 ├── frontend/     React + Vite chat widget  (xem frontend/README.md)
-├── ml/           dataset + train PhoBERT   (xem ml/README.md)
-├── nlu-service/  FastAPI bọc PhoBERT       (xem nlu-service/README.md)
+├── ml/           dataset + train ViSoBERT  (xem ml/README.md)
+├── nlu-service/  FastAPI bọc ViSoBERT      (xem nlu-service/README.md)
 ├── scripts/      seed data, sinh phòng test
 ├── postman/      collection thử API
 ├── src/main/resources/  application.yml, schema.sql, data.sql
 └── src/main/java/com/roomfinder/chat/
     ├── controller/   ChatController, GlobalExceptionHandler
-    ├── service/      NluService(+Llm/RuleBased/PhoBert), ContextService, RetrievalService,
+    ├── service/      NluService(+Llm/RuleBased/Local), ContextService, RetrievalService,
     │                 NlgService, HallucinationValidator, ChatOrchestrator,
     │                 RecommendationService, SemanticRerankService (GĐ3)
     ├── normalizer/   Price/DateTime/Location/Utility + EntityNormalizer

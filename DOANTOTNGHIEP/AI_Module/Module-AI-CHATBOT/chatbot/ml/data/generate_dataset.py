@@ -9,8 +9,8 @@ của từng entity ngay khi sinh — không cần gán nhãn tay.
   ner_train.jsonl:    {"text": str, "entities": [{"start": int, "end": int, "label": str}]}
 
 `entities` dùng offset KÝ TỰ (giống Doccano/spaCy), không phải BIO theo token — việc
-word-segment (VnCoreNLP) + quy đổi sang BIO theo token được làm ở train_ner.py, vì
-ranh giới token phụ thuộc bộ segmenter, không nên cố định cứng lúc sinh dữ liệu.
+quy đổi sang BIO được làm ở train_ner.py, vì ranh giới token phụ thuộc tokenizer
+của model, không nên cố định cứng lúc sinh dữ liệu.
 
 Nhiễu (~15% mẫu, §13.2): bỏ dấu toàn câu (unicodedata NFD + lọc combining mark).
 Đây là phép biến đổi 1-đối-1 ký tự nên offset entity KHÔNG đổi — an toàn để áp dụng
