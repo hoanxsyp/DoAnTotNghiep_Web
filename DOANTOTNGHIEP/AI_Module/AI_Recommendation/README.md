@@ -77,9 +77,36 @@ Trong lần build đầu tiên, Docker sẽ cài dependencies, dựng FAISS inde
 
 Sau khi container khởi động:
 
+- Demo UI: <http://localhost:8000/demo/>
 - Swagger UI: <http://localhost:8000/docs>
 - Health check: <http://localhost:8000/api/v1/health>
 - Danh sách phòng: <http://localhost:8000/api/v1/rooms>
+
+## Demo giao diện độc lập
+
+Module có sẵn một giao diện tối giản tại <http://localhost:8000/demo/>. Giao diện
+được FastAPI phục vụ trực tiếp nên không cần cài Node.js và không gọi backend Java
+hoặc MySQL.
+
+Ba hồ sơ dựng sẵn minh họa ba trường hợp:
+
+- Người dùng mới: chưa có lịch sử, FAISS khởi tạo theo vị trí.
+- Người dùng ít lịch sử: 1-4 lượt xem, xếp hạng bằng FAISS.
+- Người dùng đủ lịch sử: từ 5 lượt xem, FAISS kết hợp LightGBM.
+
+Khi bấm **Ghi nhận lượt xem**, sự kiện chỉ được thêm vào bộ nhớ của tiến trình
+FastAPI. Nút **Đặt lại dữ liệu** khôi phục trạng thái ban đầu. Các file trong
+`data/` luôn được xem là dữ liệu nền chỉ đọc và không bị giao diện demo sửa đổi.
+
+Các API dành riêng cho giao diện:
+
+| Method | Endpoint | Chức năng |
+| --- | --- | --- |
+| `GET` | `/api/v1/demo/users` | Ba hồ sơ người dùng mẫu |
+| `GET` | `/api/v1/demo/users/{user_id}/history` | Lịch sử xem đã làm giàu thông tin phòng |
+| `GET` | `/api/v1/demo/recommendations/{user_id}` | Kết quả, điểm và lý do gợi ý |
+| `POST` | `/api/v1/demo/view-events` | Ghi lượt xem vào bộ nhớ |
+| `POST` | `/api/v1/demo/reset` | Đặt lại phiên demo |
 
 Dừng dịch vụ Compose:
 

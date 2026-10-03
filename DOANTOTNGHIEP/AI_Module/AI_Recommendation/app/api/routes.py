@@ -1,3 +1,4 @@
+import time
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -8,9 +9,51 @@ from app.models.room import Room, RoomRecommendation
 from app.models.user import User, ViewEvent
 from app.recommender.indexer import get_index, build_and_save, reload_index
 from app.reranker.ranker import rerank
+from app.reranker.features import compute_user_stats
 from app.reranker.trainer import load_model
 
 router = APIRouter()
+
+
+def _scenario(view_count: int) -> str:
+    if view_count == 0:
+        return "COLD_START"
+    if view_count < 5:
+        return "LIGHT"
+    return "HEAVY"
+
+
+def _method(view_count: int) -> str:
+    if view_count == 0:
+        return "FAISS_COLD_START"
+    if view_count < 5:
+        return "FAISS"
+    return "FAISS_LIGHTGBM"
+
+
+def _recommendation_reasons(user: dict, stats: dict, room: dict, is_cold: bool) -> list[str]:
+    reasons: list[str] = []
+    if room.get("city") == user.get("city"):
+        reasons.append("Cùng thành phố với hồ sơ người dùng")
+    if room.get("district") in {user.get("district"), stats.get("preferred_district")}:
+        reasons.append("Đúng khu vực thường quan tâm")
+
+    average_price = stats.get("avg_price", 0)
+    if average_price and abs(room.get("price", 0) - average_price) / average_price <= 0.2:
+        reasons.append("Giá gần mức thường xem")
+    if stats.get("preferred_type") and room.get("room_type") == stats["preferred_type"]:
+        reasons.append("Đúng loại phòng thường xem")
+
+    preferred_amenities = {
+        name for name, frequency in stats.get("amenity_freq", {}).items()
+        if frequency >= 0.5
+    }
+    overlap = preferred_amenities.intersection(room.get("amenities", []))
+    if overlap:
+        reasons.append(f"Khớp {len(overlap)} tiện ích quan tâm")
+    if is_cold and not reasons:
+        reasons.append("Gợi ý khởi tạo từ vị trí đăng ký")
+    return reasons[:3] or ["Phù hợp với hồ sơ nội dung tổng hợp"]
 
 
 # ─── Health ───────────────────────────────────────────────────────────────────
@@ -117,6 +160,97 @@ def get_recommendations(
         )
         for r in results
     ]
+
+
+# --- Standalone demo -------------------------------------------------------
+
+@router.get("/demo/users")
+def list_demo_users():
+    provider = get_provider()
+    result = []
+    for user in provider.get_all_users(demo_only=True):
+        view_count = len(provider.get_view_history(user["id"], limit=10_000))
+        result.append({
+            **user,
+            "view_count": view_count,
+            "scenario": _scenario(view_count),
+        })
+    return result
+
+
+@router.get("/demo/users/{user_id}/history")
+def get_demo_history(user_id: str, limit: int = Query(8, ge=1, le=50)):
+    provider = get_provider()
+    if not provider.get_user(user_id):
+        raise HTTPException(status_code=404, detail="User not found")
+
+    events = provider.get_view_history(user_id, limit=limit)
+    return [
+        {**event, "room": provider.get_room_by_id(event["room_id"])}
+        for event in events
+        if provider.get_room_by_id(event["room_id"])
+    ]
+
+
+@router.get("/demo/recommendations/{user_id}")
+def get_demo_recommendations(user_id: str, k: int = Query(8, ge=1, le=20)):
+    provider = get_provider()
+    user = provider.get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    history = provider.get_view_history(user_id, limit=50)
+    bundle = get_index()
+    started_at = time.perf_counter()
+    results = rerank(user, history, bundle, k=k)
+    elapsed_ms = round((time.perf_counter() - started_at) * 1000, 2)
+    stats = compute_user_stats(history, bundle.room_cache)
+
+    preferred_amenities = [
+        name for name, frequency in stats.get("amenity_freq", {}).items()
+        if frequency >= 0.5
+    ]
+    profile = {
+        "average_price": round(stats.get("avg_price", 0)),
+        "average_area": round(stats.get("avg_area", 0), 1),
+        "preferred_city": stats.get("preferred_city") or user.get("city"),
+        "preferred_district": stats.get("preferred_district") or user.get("district"),
+        "preferred_room_type": stats.get("preferred_type") or None,
+        "preferred_amenities": preferred_amenities,
+    }
+
+    return {
+        "user": user,
+        "view_count": len(history),
+        "scenario": _scenario(len(history)),
+        "ranking_method": _method(len(history)),
+        "processing_time_ms": elapsed_ms,
+        "profile": profile,
+        "items": [
+            {
+                "rank": index,
+                "room": result.room,
+                "final_score": result.lgbm_score,
+                "faiss_score": result.faiss_score,
+                "is_cold_start": result.is_cold_start,
+                "reasons": _recommendation_reasons(
+                    user, stats, result.room, result.is_cold_start
+                ),
+            }
+            for index, result in enumerate(results, start=1)
+        ],
+    }
+
+
+@router.post("/demo/view-events", status_code=201)
+def record_demo_view_event(event: ViewEvent):
+    return record_view_event(event)
+
+
+@router.post("/demo/reset")
+def reset_demo_data():
+    get_provider().reset_demo()
+    return {"message": "Demo data reset", "users": len(get_provider().get_all_users(demo_only=True))}
 
 
 # ─── Admin ────────────────────────────────────────────────────────────────────
