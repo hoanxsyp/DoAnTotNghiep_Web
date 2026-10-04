@@ -35,7 +35,11 @@ def print_comparison(user, h):
     print(f" City: {user.get('city')}  |  District: {user.get('district')}")
     print(f" Views: {len(h)}")
     if h:
-        recent = sorted(h, key=lambda e: e["viewed_at"], reverse=True)[:3]
+        recent = sorted(
+            h,
+            key=lambda e: e.get("occurred_at") or e.get("viewed_at", ""),
+            reverse=True,
+        )[:3]
         print(f" Gần nhất:")
         for e in recent:
             r = bundle.room_cache.get(e["room_id"], {})

@@ -100,13 +100,23 @@ class MockDataProvider(DataProvider):
     def get_user(self, user_id: str) -> dict | None:
         return self._users.get(user_id)
 
-    def get_view_history(self, user_id: str, limit: int = 50) -> list[dict]:
+    def get_view_history(self, user_id: str, limit: int = 250) -> list[dict]:
+        """Backward-compatible alias for callers that still request views."""
+        return self.get_interactions(user_id, limit)
+
+    def get_interactions(self, user_id: str, limit: int = 250) -> list[dict]:
         with self._lock:
             events = [dict(e) for e in self._history if e["user_id"] == user_id]
-        events.sort(key=lambda e: e["viewed_at"], reverse=True)
+        events.sort(
+            key=lambda e: e.get("occurred_at") or e.get("viewed_at", ""),
+            reverse=True,
+        )
         return events[:limit]
 
     def save_view_event(self, event: dict) -> None:
+        self.save_interaction(event)
+
+    def save_interaction(self, event: dict) -> None:
         with self._lock:
             self._history.append(dict(event))
 

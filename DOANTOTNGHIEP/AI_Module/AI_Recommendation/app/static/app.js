@@ -142,7 +142,8 @@ function createRoomCard(item) {
   scoreRow.className = 'score-row';
   const finalScore = document.createElement('span');
   finalScore.className = 'score';
-  finalScore.textContent = `Điểm cuối: ${(item.final_score * 100).toFixed(1)}%`;
+  // LGBMRanker returns an ordering score, not a probability.
+  finalScore.textContent = `Điểm xếp hạng: ${item.final_score.toFixed(3)}`;
   const faissScore = document.createElement('span');
   faissScore.className = 'score';
   faissScore.textContent = `FAISS: ${(item.faiss_score * 100).toFixed(1)}%`;

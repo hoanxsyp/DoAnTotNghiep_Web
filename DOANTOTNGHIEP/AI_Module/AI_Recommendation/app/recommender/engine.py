@@ -195,7 +195,11 @@ if __name__ == "__main__":
     results1 = recommend(heavy, h, bundle, k=10)
     print_results("CASE 1 — User có nhiều lịch sử xem", results1, heavy)
     print(f"\n Đã xem: {len(h)} phòng — hiển thị 5 phòng gần nhất")
-    for e in sorted(h, key=lambda x: x["viewed_at"], reverse=True)[:5]:
+    for e in sorted(
+        h,
+        key=lambda x: x.get("occurred_at") or x.get("viewed_at", ""),
+        reverse=True,
+    )[:5]:
         r = bundle.room_cache.get(e["room_id"], {})
         print(f"   · {r.get('title','?'):<40} {r.get('district','?')}")
 

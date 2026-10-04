@@ -1,9 +1,15 @@
 {
-  "cv_auc_mean": 0.7852,
-  "cv_auc_std": 0.0206,
-  "cv_ap_mean": 0.5885,
+  "model_type": "LGBMRanker",
+  "cv_ndcg_at_10_mean": 0.817,
+  "cv_ndcg_at_10_std": 0.0242,
   "n_samples": 4930,
   "n_features": 32,
-  "pos_rate": 0.2,
-  "train_time_sec": 1.7
+  "n_query_groups": 191,
+  "label_distribution": {
+    "0": 3944,
+    "1": 618,
+    "2": 241,
+    "3": 127
+  },
+  "train_time_sec": 6.18
 }

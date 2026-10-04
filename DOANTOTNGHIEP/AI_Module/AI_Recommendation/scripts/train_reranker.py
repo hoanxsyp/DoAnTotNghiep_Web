@@ -39,15 +39,16 @@ def main():
     print(" STEP 2 — Generate training data")
     print("=" * 60)
     t0 = time.perf_counter()
-    X, y = generate_training_data(users, history_by_user, bundle)
+    X, y, groups = generate_training_data(users, history_by_user, bundle)
     print(f"  Done in {time.perf_counter()-t0:.2f}s")
     print(f"  X shape: {X.shape}  |  y shape: {y.shape}")
+    print(f"  Query groups: {len(groups)}")
 
     print("\n" + "=" * 60)
     print(" STEP 3 — Train LightGBM")
     print("=" * 60)
     t0 = time.perf_counter()
-    model, meta = train_model(X, y)
+    model, meta = train_model(X, y, groups)
     meta["train_time_sec"] = round(time.perf_counter() - t0, 2)
     print(f"\n  Train time: {meta['train_time_sec']}s")
 

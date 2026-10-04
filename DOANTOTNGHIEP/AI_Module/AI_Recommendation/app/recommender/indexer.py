@@ -242,36 +242,43 @@ def tune_nprobe(bundle: IndexBundle, target_recall: float = 0.95) -> int:
     # IVFFlat khong co DirectMap nen dung room_cache de lay vector truc tiep
     from app.features.extractor import get_extractor
     extractor = get_extractor()
-    sample_ids = list(bundle.id_map[:min(200, len(bundle))])
-    sample_rooms = [bundle.room_cache[rid] for rid in sample_ids if rid in bundle.room_cache]
-    matrix = extractor.extract_batch(sample_rooms).astype(np.float32)
-    faiss.normalize_L2(matrix)
+    all_rooms = [bundle.room_cache[room_id] for room_id in bundle.id_map]
+    all_matrix = extractor.extract_batch(all_rooms).astype(np.float32)
+    faiss.normalize_L2(all_matrix)
+    queries = all_matrix[:min(200, len(all_matrix))]
 
-    # Tính ground truth bằng FlatIP
+    # Ground truth must use the same global position space as the IVF index.
     flat = faiss.IndexFlatIP(bundle.index.d)
-    flat.add(matrix)
-    _, gt = flat.search(matrix, 10)
+    flat.add(all_matrix)
+    _, gt = flat.search(queries, 10)
 
-    best_nprobe = DEFAULT_NPROBE
+    best_nprobe = 1
+    best_recall = 0.0
     for nprobe in [1, 2, 4, 8, 16, 32, 64]:
         if nprobe > bundle.index.nlist:
             break
         bundle.index.nprobe = nprobe
-        _, approx = bundle.index.search(matrix, 10)
+        _, approx = bundle.index.search(queries, 10)
 
         # Recall@10: tỉ lệ kết quả đúng
         hits = sum(
-            len(set(gt[i]) & set(approx[i])) for i in range(len(matrix))
+            len(set(gt[i]) & set(approx[i])) for i in range(len(queries))
         )
-        recall = hits / (len(matrix) * 10)
+        recall = hits / (len(queries) * 10)
         print(f"  nprobe={nprobe:3d}  recall@10={recall:.3f}")
+
+        if recall > best_recall:
+            best_nprobe = nprobe
+            best_recall = recall
 
         if recall >= target_recall:
             best_nprobe = nprobe
+            best_recall = recall
             break
 
     bundle.index.nprobe = best_nprobe
-    print(f"  → Best nprobe: {best_nprobe} (recall >= {target_recall})")
+    bundle.meta["nprobe"] = best_nprobe
+    print(f"  → Best nprobe: {best_nprobe} (recall@10={best_recall:.3f})")
     return best_nprobe
 
 

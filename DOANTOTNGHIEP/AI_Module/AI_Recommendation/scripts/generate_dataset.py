@@ -9,6 +9,8 @@ import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from generate_interactions import generate_interactions
+
 random.seed(42)
 
 # ─── Constants ────────────────────────────────────────────────────────────────
@@ -169,59 +171,10 @@ def gen_users(n: int) -> list[dict]:
 
 
 def gen_view_history(users: list[dict], rooms: list[dict], max_events: int = 3000) -> list[dict]:
-    """
-    Sinh lịch sử xem có tính thực tế:
-    - Mỗi user có "preference" ngầm (quận, loại phòng, mức giá)
-    - 70% sự kiện xem phù hợp preference → model học được pattern
-    - 30% random → tránh overfitting
-    """
-    now = datetime.now()
-    events = []
-
-    for user in users:
-        # Preference ngầm của user
-        pref_district = random.choice(DISTRICTS)
-        pref_type = random.choice(ROOM_TYPES)
-        pref_price_max = random.randint(2_000_000, 8_000_000)
-
-        # Số lần xem mỗi user: 5 ~ 40
-        n_views = random.randint(5, 40)
-
-        # Lọc phòng phù hợp preference
-        preferred = [
-            r for r in rooms
-            if r["district"] == pref_district
-            or r["room_type"] == pref_type
-            or r["price"] <= pref_price_max
-        ]
-        if not preferred:
-            preferred = rooms
-
-        viewed_ids = set()
-        for _ in range(n_views):
-            # 70% chọn phòng phù hợp preference
-            if random.random() < 0.7 and preferred:
-                room = random.choice(preferred)
-            else:
-                room = random.choice(rooms)
-
-            if room["id"] in viewed_ids:
-                continue
-            viewed_ids.add(room["id"])
-
-            # Thời gian xem: trong 30 ngày gần nhất, phân phối lệch về gần đây
-            days_ago = random.betavariate(1, 3) * 30   # beta: thiên về gần đây
-            viewed_at = now - timedelta(days=days_ago, seconds=random.randint(0, 86400))
-
-            events.append({
-                "user_id": user["id"],
-                "room_id": room["id"],
-                "viewed_at": viewed_at.isoformat(),
-            })
-
-    # Shuffle để không lộ pattern theo thứ tự
-    random.shuffle(events)
-    return events[:max_events]
+    # max_events is retained in the signature for backward compatibility.
+    # Do not truncate raw events because that could split a room interaction
+    # and remove its favorite or repeated-view evidence.
+    return generate_interactions(users, rooms, seed=42)
 
 
 # ─── Main ─────────────────────────────────────────────────────────────────────

@@ -6,7 +6,7 @@ Tính vector đại diện cho user dựa trên:
   - Địa chỉ đăng ký (cold start khi chưa có lịch sử)
   - Blend cả hai khi user mới bắt đầu xem (< MIN_VIEWS lượt)
 
-Output: vector float32 cùng chiều với room vector (49 dims),
+Output: vector float32 cùng chiều với room vector (dimension do config quyết định),
         đã được L2-normalize → có thể đưa thẳng vào FAISS.search().
 """
 
@@ -19,6 +19,11 @@ import faiss
 import numpy as np
 
 from app.features.extractor import get_extractor
+from app.recommender.interactions import (
+    aggregate_interactions,
+    interaction_count,
+    profile_weight,
+)
 
 # ─── Hyperparameters ──────────────────────────────────────────────────────────
 
@@ -96,53 +101,61 @@ def build_history_profile(
     room_cache: dict,
 ) -> tuple[np.ndarray | None, int]:
     """
-    Tính user profile từ lịch sử xem bằng weighted average + time decay.
+    Tính user profile từ interaction weight × time decay.
 
     Args:
-        view_history: list of {"room_id": str, "viewed_at": str/datetime}
-                      Không cần sắp xếp theo thời gian.
+        view_history: danh sách view/favorite/unfavorite events. Event legacy
+                      không có event_type được hiểu là view.
         room_cache:   dict room_id → room dict (từ IndexBundle)
 
     Returns:
-        (profile_vector, n_valid_views)
-        profile_vector là None nếu không có view nào hợp lệ.
+        (profile_vector, n_effective_signals)
+        profile_vector là None nếu không có interaction hợp lệ.
     """
     extractor = get_extractor()
 
-    # Sắp xếp mới → cũ, chỉ lấy MAX_HISTORY lượt gần nhất
-    sorted_history = sorted(
-        view_history,
-        key=lambda e: e.get("viewed_at", ""),
+    # Gộp các raw event thành một tín hiệu cho mỗi user-room. Event cũ không
+    # có event_type vẫn được hiểu là view.
+    interactions = aggregate_interactions(view_history)
+    sorted_interactions = sorted(
+        interactions.values(),
+        key=lambda item: item.get("last_interacted_at")
+        or datetime.min.replace(tzinfo=timezone.utc),
         reverse=True,
     )[:MAX_HISTORY]
 
     vectors = []
     weights = []
 
-    for event in sorted_history:
-        room_id = event.get("room_id")
+    valid_interactions = {}
+    for interaction in sorted_interactions:
+        room_id = interaction["room_id"]
         if room_id not in room_cache:
             continue  # phòng đã bị xóa khỏi index
 
         room = room_cache[room_id]
-        weight = _decay_weight(event.get("viewed_at", datetime.now(timezone.utc)))
+        occurred_at = interaction.get("last_interacted_at") or datetime.now(timezone.utc)
+        weight = profile_weight(interaction) * _decay_weight(occurred_at)
 
         vec = extractor.extract(room)
         vectors.append(vec)
         weights.append(weight)
+        valid_interactions[room_id] = interaction
 
     if not vectors:
         return None, 0
 
     # Weighted average
-    weights_arr = np.array(weights, dtype=np.float32)
+    # float64 avoids all weights collapsing to zero when interactions are old;
+    # the final profile is converted back to float32 for FAISS.
+    weights_arr = np.array(weights, dtype=np.float64)
     matrix = np.stack(vectors).astype(np.float32)
     profile = np.average(matrix, axis=0, weights=weights_arr).astype(np.float32)
 
     # Normalize
     profile = profile.reshape(1, -1)
     faiss.normalize_L2(profile)
-    return profile.reshape(-1), len(vectors)
+    return profile.reshape(-1), interaction_count(valid_interactions)
 
 
 # ─── Blend: kết hợp history + address ────────────────────────────────────────
@@ -195,7 +208,7 @@ def build_user_profile(
         room_cache:   IndexBundle.room_cache
 
     Returns:
-        profile vector (49 dims, L2-normalized) hoặc None nếu không có gì.
+        profile vector (cùng chiều room vector, L2-normalized) hoặc None.
 
     Flow:
         history_profile + address_profile → blend → final profile

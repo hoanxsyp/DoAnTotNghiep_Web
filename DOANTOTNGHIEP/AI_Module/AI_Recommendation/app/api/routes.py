@@ -6,8 +6,9 @@ from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
 
 from app.data.mock_provider import get_provider
 from app.models.room import Room, RoomRecommendation
-from app.models.user import User, ViewEvent
+from app.models.user import InteractionEvent, User, ViewEvent
 from app.recommender.indexer import get_index, build_and_save, reload_index
+from app.recommender.interactions import aggregate_interactions, interaction_count
 from app.reranker.ranker import rerank
 from app.reranker.features import compute_user_stats
 from app.reranker.trainer import load_model
@@ -15,23 +16,29 @@ from app.reranker.trainer import load_model
 router = APIRouter()
 
 
-def _scenario(view_count: int) -> str:
-    if view_count == 0:
+def _effective_signal_count(events: list[dict]) -> int:
+    return interaction_count(aggregate_interactions(events))
+
+
+def _scenario(signal_count: int) -> str:
+    if signal_count == 0:
         return "COLD_START"
-    if view_count < 5:
+    if signal_count < 5:
         return "LIGHT"
     return "HEAVY"
 
 
-def _method(view_count: int) -> str:
-    if view_count == 0:
+def _method(signal_count: int) -> str:
+    if signal_count == 0:
         return "FAISS_COLD_START"
-    if view_count < 5:
+    if signal_count < 5:
         return "FAISS"
     return "FAISS_LIGHTGBM"
 
 
-def _recommendation_reasons(user: dict, stats: dict, room: dict, is_cold: bool) -> list[str]:
+def _recommendation_reasons(
+    user: dict, stats: dict, room: dict, is_cold: bool
+) -> list[str]:
     reasons: list[str] = []
     if room.get("city") == user.get("city"):
         reasons.append("Cùng thành phố với hồ sơ người dùng")
@@ -130,10 +137,52 @@ def record_view_event(event: ViewEvent):
     record = {
         "user_id":   event.user_id,
         "room_id":   event.room_id,
-        "viewed_at": (event.viewed_at or datetime.now(timezone.utc)).isoformat(),
+        "event_type": "view",
+        "occurred_at": (event.viewed_at or datetime.now(timezone.utc)).isoformat(),
+        "session_id": event.session_id,
+        "duration_seconds": event.duration_seconds,
     }
-    provider.save_view_event(record)
+    provider.save_interaction(record)
     return {"message": "View event recorded"}
+
+
+@router.post("/interactions", status_code=201)
+def record_interaction(event: InteractionEvent):
+    provider = get_provider()
+    if not provider.get_user(event.user_id):
+        raise HTTPException(status_code=404, detail="User not found")
+    if not provider.get_room_by_id(event.room_id):
+        raise HTTPException(status_code=404, detail="Room not found")
+
+    record = {
+        "user_id": event.user_id,
+        "room_id": event.room_id,
+        "event_type": event.event_type,
+        "occurred_at": (event.occurred_at or datetime.now(timezone.utc)).isoformat(),
+        "session_id": event.session_id,
+    }
+    if event.event_type == "view":
+        record["duration_seconds"] = event.duration_seconds
+    provider.save_interaction(record)
+    return {"message": f"{event.event_type} interaction recorded"}
+
+
+@router.get("/users/{user_id}/favorites", response_model=list[Room])
+def get_user_favorites(user_id: str):
+    provider = get_provider()
+    if not provider.get_user(user_id):
+        raise HTTPException(status_code=404, detail="User not found")
+
+    interactions = aggregate_interactions(
+        provider.get_interactions(user_id, limit=10_000)
+    )
+    rooms = []
+    for room_id, interaction in interactions.items():
+        if interaction["is_favorite"]:
+            room = provider.get_room_by_id(room_id)
+            if room:
+                rooms.append(room)
+    return rooms
 
 
 # ─── Recommendations ──────────────────────────────────────────────────────────
@@ -148,7 +197,9 @@ def get_recommendations(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    history = provider.get_view_history(user_id, limit=50)
+    # Fetch raw events; profile.py will aggregate them and keep the latest
+    # MAX_HISTORY user-room interactions.
+    history = provider.get_interactions(user_id, limit=250)
     bundle  = get_index()
     results = rerank(user, history, bundle, k=k)
 
@@ -162,6 +213,8 @@ def get_recommendations(
     ]
 
 
+# ─── Admin ────────────────────────────────────────────────────────────────────
+
 # --- Standalone demo -------------------------------------------------------
 
 @router.get("/demo/users")
@@ -169,11 +222,12 @@ def list_demo_users():
     provider = get_provider()
     result = []
     for user in provider.get_all_users(demo_only=True):
-        view_count = len(provider.get_view_history(user["id"], limit=10_000))
+        events = provider.get_interactions(user["id"], limit=10_000)
+        signal_count = _effective_signal_count(events)
         result.append({
             **user,
-            "view_count": view_count,
-            "scenario": _scenario(view_count),
+            "view_count": signal_count,
+            "scenario": _scenario(signal_count),
         })
     return result
 
@@ -184,9 +238,14 @@ def get_demo_history(user_id: str, limit: int = Query(8, ge=1, le=50)):
     if not provider.get_user(user_id):
         raise HTTPException(status_code=404, detail="User not found")
 
-    events = provider.get_view_history(user_id, limit=limit)
+    events = provider.get_interactions(user_id, limit=limit)
     return [
-        {**event, "room": provider.get_room_by_id(event["room_id"])}
+        {
+            **event,
+            # Backward-compatible field for the existing demo UI.
+            "viewed_at": event.get("occurred_at") or event.get("viewed_at"),
+            "room": provider.get_room_by_id(event["room_id"]),
+        }
         for event in events
         if provider.get_room_by_id(event["room_id"])
     ]
@@ -199,7 +258,8 @@ def get_demo_recommendations(user_id: str, k: int = Query(8, ge=1, le=20)):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    history = provider.get_view_history(user_id, limit=50)
+    history = provider.get_interactions(user_id, limit=250)
+    signal_count = _effective_signal_count(history)
     bundle = get_index()
     started_at = time.perf_counter()
     results = rerank(user, history, bundle, k=k)
@@ -221,9 +281,9 @@ def get_demo_recommendations(user_id: str, k: int = Query(8, ge=1, le=20)):
 
     return {
         "user": user,
-        "view_count": len(history),
-        "scenario": _scenario(len(history)),
-        "ranking_method": _method(len(history)),
+        "view_count": signal_count,
+        "scenario": _scenario(signal_count),
+        "ranking_method": _method(signal_count),
         "processing_time_ms": elapsed_ms,
         "profile": profile,
         "items": [
@@ -249,11 +309,13 @@ def record_demo_view_event(event: ViewEvent):
 
 @router.post("/demo/reset")
 def reset_demo_data():
-    get_provider().reset_demo()
-    return {"message": "Demo data reset", "users": len(get_provider().get_all_users(demo_only=True))}
+    provider = get_provider()
+    provider.reset_demo()
+    return {
+        "message": "Demo data reset",
+        "users": len(provider.get_all_users(demo_only=True)),
+    }
 
-
-# ─── Admin ────────────────────────────────────────────────────────────────────
 
 def _rebuild_task():
     build_and_save()
@@ -270,7 +332,12 @@ def _retrain_task():
     from pathlib import Path
     ROOT = Path(__file__).parent.parent.parent
     sys.path.insert(0, str(ROOT))
-    from app.reranker.trainer import generate_training_data, train_model, save_model
+    from app.reranker.trainer import (
+        generate_training_data,
+        reload_model,
+        save_model,
+        train_model,
+    )
 
     provider = get_provider()
     users    = provider._users.values()
@@ -279,9 +346,10 @@ def _retrain_task():
         history_by_user.setdefault(e["user_id"], []).append(e)
 
     bundle = get_index()
-    X, y   = generate_training_data(list(users), history_by_user, bundle)
-    model, meta = train_model(X, y)
+    X, y, groups = generate_training_data(list(users), history_by_user, bundle)
+    model, meta = train_model(X, y, groups)
     save_model(model, meta)
+    reload_model()
 
 @router.post("/admin/retrain")
 def retrain_model(background_tasks: BackgroundTasks):
