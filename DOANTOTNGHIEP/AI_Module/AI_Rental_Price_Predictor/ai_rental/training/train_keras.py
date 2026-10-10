@@ -31,7 +31,7 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 
-from train_compare import NUM, CAT, BIN, TARGET   # dùng chung định nghĩa feature
+from train_compare import NUM, CAT, BIN, TARGET, ensure_derived_columns   # dùng chung định nghĩa feature
 
 sys.stdout.reconfigure(encoding="utf-8")
 keras.utils.set_random_seed(42)
@@ -67,6 +67,7 @@ def build_mlp(input_dim: int) -> keras.Model:
 def main():
     root = Path(__file__).resolve().parents[1]   # thư mục ai_rental (data/, models/ nằm ở đây)
     df = pd.read_csv(root / "data" / "processed" / "hanoi_all_clean.csv")
+    ensure_derived_columns(df)
     X, y = df[NUM + CAT + BIN], df[TARGET].values.reshape(-1, 1)
     print(f"Dataset: {len(df)} bản ghi | {df['district'].nunique()} quận")
 

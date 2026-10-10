@@ -64,7 +64,9 @@ def enrich_file(fp: str, workers: int):
 
     def work(rec):
         extra = fetch_detail(rec["source_url"])
-        rec.update(extra)
+        for key, value in extra.items():
+            if value not in (None, ""):
+                rec[key] = value
         with _lock:
             _done[0] += 1
             if _done[0] % 200 == 0:

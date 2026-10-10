@@ -17,6 +17,165 @@ import normalizers as N
 sys.stdout.reconfigure(encoding="utf-8")
 ROOT = Path(__file__).resolve().parents[1]   # thư mục ai_rental (data/ nằm ở đây)
 AMEN = list(N.AMENITY_PATTERNS)
+POPULATION_DENSITY_FILE = ROOT / "data" / "reference" / "hanoi_population_density_2024.csv"
+FRECENCY_HALF_LIFE_DAYS = 180.0
+MARKET_HALF_LIFE_DAYS = 90.0
+MARKET_FEATURES = [
+    "market_unit_price_million_m2",
+    "market_price_million",
+    "market_sample_count",
+    "market_frecency_score",
+    "market_freshness_days",
+    "market_scope_level",
+]
+POPULATION_FEATURES = ["population_density_km2"]
+
+
+def _weighted_mean(values, weights):
+    values = pd.to_numeric(values, errors="coerce")
+    weights = pd.to_numeric(weights, errors="coerce")
+    ok = values.notna() & weights.notna() & (weights > 0)
+    if not ok.any():
+        return np.nan
+    return float(np.average(values.loc[ok], weights=weights.loc[ok]))
+
+
+def _market_key(scope: str, district="", ward="", room_type="") -> str:
+    return "||".join([scope, str(district or ""), str(ward or ""), str(room_type or "")])
+
+
+def add_population_density(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    if not POPULATION_DENSITY_FILE.exists():
+        df["population_density_km2"] = np.nan
+        df["population_thousand"] = np.nan
+        df["district_area_km2"] = np.nan
+        return df
+
+    ref = pd.read_csv(POPULATION_DENSITY_FILE)
+    ref = ref.rename(columns={"area_km2": "district_area_km2"})
+    df = df.merge(
+        ref[["district", "district_area_km2", "population_thousand", "population_density_km2"]],
+        on="district",
+        how="left",
+    )
+    for col in ["district_area_km2", "population_thousand", "population_density_km2"]:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+        df[col] = df[col].fillna(df[col].median())
+    return df
+
+
+def _loo_market_scope(df: pd.DataFrame, keys: list[str], min_count: int, level: int) -> pd.DataFrame:
+    out = pd.DataFrame(index=df.index)
+    w = df["_market_weight"]
+    price_w = df["_market_price_w"]
+    unit_w = df["_market_unit_w"]
+
+    if keys:
+        grouped = df.groupby(keys, dropna=False)
+        count = grouped["_market_weight"].transform("count") - 1
+        w_sum = grouped["_market_weight"].transform("sum") - w
+        price_sum = grouped["_market_price_w"].transform("sum") - price_w
+        unit_sum = grouped["_market_unit_w"].transform("sum") - unit_w
+        freshness = grouped["listing_age_days"].transform("min")
+    else:
+        count = pd.Series(len(df) - 1, index=df.index)
+        w_sum = pd.Series(w.sum(), index=df.index) - w
+        price_sum = pd.Series(price_w.sum(), index=df.index) - price_w
+        unit_sum = pd.Series(unit_w.sum(), index=df.index) - unit_w
+        freshness = pd.Series(df["listing_age_days"].min(), index=df.index)
+
+    valid = (count >= min_count) & (w_sum > 0)
+    out["market_unit_price_million_m2"] = np.where(valid, unit_sum / w_sum, np.nan)
+    out["market_price_million"] = np.where(valid, price_sum / w_sum, np.nan)
+    out["market_sample_count"] = np.where(valid, count, np.nan)
+    out["market_frecency_score"] = np.where(valid, w_sum, np.nan)
+    out["market_freshness_days"] = np.where(valid, freshness, np.nan)
+    out["market_scope_level"] = np.where(valid, level, np.nan)
+    return out
+
+
+def _market_record(group: pd.DataFrame, scope: str, level: int) -> dict:
+    w = group["_market_weight"]
+    return {
+        "scope": scope,
+        "scope_level": level,
+        "district": "" if scope == "global" else str(group["district"].iloc[0]),
+        "ward": str(group["ward"].iloc[0]) if "ward" in group and "ward" in scope else "",
+        "room_type": str(group["room_type"].iloc[0]) if "room_type" in group and "room_type" in scope else "",
+        "market_unit_price_million_m2": round(_weighted_mean(group["unit_price"], w), 4),
+        "market_price_million": round(_weighted_mean(group["price_million"], w), 4),
+        "market_sample_count": int(len(group)),
+        "market_frecency_score": round(float(w.sum()), 4),
+        "market_freshness_days": int(group["listing_age_days"].min()),
+    }
+
+
+def _export_market_stats(df: pd.DataFrame, outdir: Path) -> None:
+    scopes = [
+        ("global", [], 0),
+        ("district", ["district"], 1),
+        ("district_room_type", ["district", "room_type"], 2),
+        ("district_ward", ["district", "ward"], 3),
+        ("district_ward_room_type", ["district", "ward", "room_type"], 4),
+    ]
+    stats = {}
+    for scope, keys, level in scopes:
+        if not keys:
+            rec = _market_record(df, scope, level)
+            stats[_market_key(scope)] = rec
+            continue
+        for _, group in df.groupby(keys, dropna=False):
+            rec = _market_record(group, scope, level)
+            stats[_market_key(scope, rec["district"], rec["ward"], rec["room_type"])] = rec
+
+    payload = {
+        "generated_at": pd.Timestamp.utcnow().isoformat(),
+        "market_half_life_days": MARKET_HALF_LIFE_DAYS,
+        "stats": stats,
+    }
+    json.dump(payload, (outdir / "market_stats.json").open("w", encoding="utf-8"),
+              ensure_ascii=False, indent=2)
+
+
+def add_market_features(df: pd.DataFrame, outdir: Path) -> pd.DataFrame:
+    df = df.copy()
+    confidence_weight = df["location_confidence"].map({"high": 1.0, "medium": 0.8, "low": 0.6}).fillna(0.6)
+    df["_market_weight"] = (
+        np.exp(-np.log(2) * df["listing_age_days"] / MARKET_HALF_LIFE_DAYS).clip(0.03, 1.0)
+        * confidence_weight
+    )
+    df["_market_price_w"] = df["price_million"] * df["_market_weight"]
+    df["_market_unit_w"] = df["unit_price"] * df["_market_weight"]
+
+    base = _loo_market_scope(df, [], min_count=1, level=0)
+    fallback = {
+        "market_unit_price_million_m2": float(df["unit_price"].median()),
+        "market_price_million": float(df["price_million"].median()),
+        "market_sample_count": int(len(df)),
+        "market_frecency_score": float(df["_market_weight"].sum()),
+        "market_freshness_days": int(df["listing_age_days"].min()),
+        "market_scope_level": 0,
+    }
+    for col, value in fallback.items():
+        base[col] = base[col].fillna(value)
+
+    scopes = [
+        (["district"], 5, 1),
+        (["district", "room_type"], 5, 2),
+        (["district", "ward"], 5, 3),
+        (["district", "ward", "room_type"], 3, 4),
+    ]
+    for keys, min_count, level in scopes:
+        candidate = _loo_market_scope(df, keys, min_count=min_count, level=level)
+        mask = candidate["market_unit_price_million_m2"].notna()
+        base.loc[mask, MARKET_FEATURES] = candidate.loc[mask, MARKET_FEATURES]
+
+    for col in MARKET_FEATURES:
+        df[col] = base[col].astype(float)
+
+    _export_market_stats(df, outdir)
+    return df.drop(columns=["_market_weight", "_market_price_w", "_market_unit_w"])
 
 
 def load_raw() -> pd.DataFrame:
@@ -83,7 +242,11 @@ def normalize(df: pd.DataFrame) -> pd.DataFrame:
     # Keep historical rows for coverage while making recent market prices dominant.
     df["recency_weight"] = np.exp(-np.log(2) * df["listing_age_days"] / 365.0).clip(0.05, 1.0)
     confidence_weight = df["location_confidence"].map({"high": 1.0, "medium": 0.8, "low": 0.6}).fillna(0.6)
-    df["sample_weight"] = (df["recency_weight"] * confidence_weight).round(4)
+    df["frecency_weight"] = (
+        np.exp(-np.log(2) * df["listing_age_days"] / FRECENCY_HALF_LIFE_DAYS).clip(0.03, 1.0)
+        * confidence_weight
+    ).round(4)
+    df["sample_weight"] = df["frecency_weight"]
     df["listing_group"] = [N.listing_group_key(a, lat, lon, phone, url)
                            for a, lat, lon, phone, url in zip(
                                df["address"], df["latitude"], df["longitude"],
@@ -132,10 +295,12 @@ def filter_outliers(df: pd.DataFrame) -> pd.DataFrame:
 def main():
     raw = load_raw()
     print(f"Đọc {len(raw)} tin thô từ {raw['source_name'].nunique()} nguồn")
+    outdir = ROOT / "data" / "processed"; outdir.mkdir(parents=True, exist_ok=True)
     df = filter_outliers(add_distance(normalize(raw)))
+    df = add_population_density(df)
+    df = add_market_features(df, outdir)
     print(f"Sau làm sạch: {len(df)} bản ghi hợp lệ")
 
-    outdir = ROOT / "data" / "processed"; outdir.mkdir(parents=True, exist_ok=True)
     df.to_csv(outdir / "hanoi_all_clean.csv", index=False, encoding="utf-8-sig")
 
     # lưu tâm phường (cho API tính distance nhất quán với lúc train)

@@ -29,7 +29,10 @@ warnings.filterwarnings("ignore")
 sys.stdout.reconfigure(encoding="utf-8")
 
 NUM = ["area_m2", "number_of_amenities", "distance_to_center_km", "floor",
-       "posted_month", "listing_age_days", "latitude", "longitude"]
+       "posted_month", "listing_age_days", "latitude", "longitude",
+       "population_density_km2", "market_unit_price_million_m2",
+       "market_price_million", "market_sample_count", "market_frecency_score",
+       "market_freshness_days", "market_scope_level"]
 CAT = ["district", "ward", "room_type"]
 BIN = ["has_dieu_hoa", "has_khep_kin", "has_ban_cong", "has_thang_may",
        "has_full_do", "has_gac", "has_may_giat", "has_nong_lanh",
@@ -93,6 +96,39 @@ def ensure_derived_columns(df):
         df["recency_weight"] = np.exp(-np.log(2) * df["listing_age_days"] / 365.0).clip(0.05, 1.0)
     if "sample_weight" not in df:
         df["sample_weight"] = df["recency_weight"]
+    if "frecency_weight" not in df:
+        df["frecency_weight"] = df["sample_weight"]
+    if "population_density_km2" not in df:
+        df["population_density_km2"] = np.nan
+    if "market_unit_price_million_m2" not in df:
+        df["market_unit_price_million_m2"] = df.get("unit_price", pd.Series(np.nan, index=df.index))
+    if "market_price_million" not in df:
+        df["market_price_million"] = df[TARGET].median() if TARGET in df else np.nan
+    if "market_sample_count" not in df:
+        df["market_sample_count"] = len(df)
+    if "market_frecency_score" not in df:
+        df["market_frecency_score"] = pd.to_numeric(df["sample_weight"], errors="coerce").fillna(1.0)
+    if "market_freshness_days" not in df:
+        df["market_freshness_days"] = pd.to_numeric(df["listing_age_days"], errors="coerce").fillna(365)
+    if "market_scope_level" not in df:
+        df["market_scope_level"] = 0
+    unit_series = pd.to_numeric(df["unit_price"], errors="coerce") if "unit_price" in df else pd.Series(np.nan, index=df.index)
+    target_series = pd.to_numeric(df[TARGET], errors="coerce") if TARGET in df else pd.Series(np.nan, index=df.index)
+    weight_series = pd.to_numeric(df["sample_weight"], errors="coerce")
+    age_series = pd.to_numeric(df["listing_age_days"], errors="coerce")
+    defaults = {
+        "population_density_km2": 12631.0,
+        "market_unit_price_million_m2": unit_series.median(),
+        "market_price_million": target_series.median(),
+        "market_sample_count": float(len(df)),
+        "market_frecency_score": weight_series.median(),
+        "market_freshness_days": age_series.median(),
+        "market_scope_level": 0.0,
+    }
+    for col, default in defaults.items():
+        if pd.isna(default):
+            default = 0.0
+        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(default)
     return listing_date
 
 
@@ -189,7 +225,18 @@ def main():
                "validation": {"strategy": "GroupKFold / GroupShuffleSplit by building group",
                               "n_groups": int(groups.nunique())},
                "recency": {"half_life_days": 365, "minimum_weight": 0.05,
+                           "frecency_half_life_days": 180,
+                           "sample_weight_column": "sample_weight",
                            "reference_date": str(listing_dates.max().date())},
+               "external_features": {
+                   "population_density": "data/reference/hanoi_population_density_2024.csv",
+                   "market_stats": "data/processed/market_stats.json",
+                   "market_features": [
+                       "market_unit_price_million_m2", "market_price_million",
+                       "market_sample_count", "market_frecency_score",
+                       "market_freshness_days", "market_scope_level"
+                   ],
+               },
                "cv_table": res.round(4).to_dict("records"),
                "n_samples": int(len(df)), "trained_at": str(date.today())},
               (out / "metadata.json").open("w", encoding="utf-8"), ensure_ascii=False, indent=2)

@@ -71,10 +71,12 @@ uvicorn serve_api:app --app-dir serving --host 0.0.0.0 --port 8000
 ## Feature của model
 | Nhóm | Feature |
 |---|---|
-| Số | `area_m2`, `number_of_amenities`, `distance_to_center_km`, `floor` |
+| Số | `area_m2`, `number_of_amenities`, `distance_to_center_km`, `floor`, `posted_month`, `listing_age_days`, `latitude`, `longitude`, `population_density_km2`, `market_unit_price_million_m2`, `market_price_million`, `market_sample_count`, `market_frecency_score`, `market_freshness_days`, `market_scope_level` |
 | Hạng mục | `district`, `ward`, `room_type` |
 | Nhị phân (10) | `has_dieu_hoa, has_khep_kin, has_ban_cong, has_thang_may, has_full_do, has_gac, has_may_giat, has_nong_lanh, has_wifi, has_de_xe` |
 | **Target** | `price_million` (triệu VND/tháng) |
+
+`market_*` được sinh ở bước preprocess từ các tin mới crawl theo `district/ward/room_type`, ưu tiên tin mới bằng half-life 90 ngày và lưu vào `data/processed/market_stats.json` để API dùng khi dự đoán. `population_density_km2` lấy từ `data/reference/hanoi_population_density_2024.csv`.
 
 ## Lưu ý hành vi model (vì sao dùng MONOTONIC)
 Trong dữ liệu tin đăng, vài tiện ích **tương quan ÂM** với giá: `khép kín` (−0.11), `wifi`,

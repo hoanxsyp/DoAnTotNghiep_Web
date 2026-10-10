@@ -20,8 +20,8 @@ COPY models/hanoi_all/monotonic_bundle.joblib   models/hanoi_all/monotonic_bundl
 COPY models/hanoi_all/monotonic_metadata.json   models/hanoi_all/monotonic_metadata.json
 COPY models/hanoi_all/model.joblib              models/hanoi_all/model.joblib
 COPY models/hanoi_all/metadata.json             models/hanoi_all/metadata.json
-COPY data/processed/hanoi_all_clean.csv         data/processed/hanoi_all_clean.csv
-COPY data/processed/ward_centroids.json         data/processed/ward_centroids.json
+COPY data/processed/                           data/processed/
+COPY data/reference/                           data/reference/
 
 EXPOSE 8000
 

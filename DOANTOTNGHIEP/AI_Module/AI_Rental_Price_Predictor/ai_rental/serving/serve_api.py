@@ -49,6 +49,13 @@ class PredictResponse(BaseModel):
     price_range: List[float]
     currency: str = "triệu VND/tháng"
     distance_to_center_km: float
+    population_density_km2: Optional[float] = None
+    market_unit_price_million_m2: Optional[float] = None
+    market_price_million: Optional[float] = None
+    market_sample_count: Optional[int] = None
+    market_frecency_score: Optional[float] = None
+    market_freshness_days: Optional[float] = None
+    market_scope_level: Optional[int] = None
     model_type: str
     mape_pct: Optional[float] = None
 
@@ -113,6 +120,13 @@ def predict(req: PredictRequest):
         predicted_price_million=r["predicted_price_million"],
         price_range=r["price_range"],
         distance_to_center_km=r["distance_to_center_km"],
+        population_density_km2=r["population_density_km2"],
+        market_unit_price_million_m2=r["market_unit_price_million_m2"],
+        market_price_million=r["market_price_million"],
+        market_sample_count=r["market_sample_count"],
+        market_frecency_score=r["market_frecency_score"],
+        market_freshness_days=r["market_freshness_days"],
+        market_scope_level=r["market_scope_level"],
         model_type=r["model_type"],
         mape_pct=r["mape_pct"],
     )

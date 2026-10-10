@@ -104,6 +104,56 @@ def crawl_district(district_slug: str, max_pages: int, delay=(1.0, 2.5)) -> list
     return rows
 
 
+def write_merged_jsonl(out: Path, rows: list[dict]) -> tuple[int, int, int]:
+    """Upsert by source_url so weekly crawls add data without losing enrich fields."""
+    existing: dict[str, dict] = {}
+    order: list[str] = []
+    if out.exists():
+        for line in io.open(out, encoding="utf-8"):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            url = rec.get("source_url")
+            if not url:
+                continue
+            if url not in existing:
+                order.append(url)
+            existing[url] = rec
+
+    before = len(existing)
+    added = 0
+    updated = 0
+    for rec in rows:
+        url = rec.get("source_url")
+        if not url:
+            continue
+        if url not in existing:
+            existing[url] = rec
+            order.append(url)
+            added += 1
+            continue
+
+        merged = existing[url].copy()
+        changed = False
+        for key, value in rec.items():
+            if value not in (None, "") and merged.get(key) != value:
+                merged[key] = value
+                changed = True
+        existing[url] = merged
+        if changed:
+            updated += 1
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with io.open(out, "w", encoding="utf-8") as f:
+        for url in order:
+            f.write(json.dumps(existing[url], ensure_ascii=False) + "\n")
+    return before, added, updated
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--district", default="quan-thanh-xuan")
@@ -114,11 +164,8 @@ def main():
     rows = crawl_district(args.district, args.max_pages)
 
     out = Path(__file__).resolve().parents[1] / "data" / "raw" / f"{args.district}.jsonl"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    with io.open(out, "w", encoding="utf-8") as f:
-        for r in rows:
-            f.write(json.dumps(r, ensure_ascii=False) + "\n")
-    print(f"\nĐÃ LƯU {len(rows)} tin -> {out}")
+    before, added, updated = write_merged_jsonl(out, rows)
+    print(f"\nĐÃ LƯU {before + added} tin -> {out} | +{added} mới | {updated} cập nhật")
 
 
 if __name__ == "__main__":
