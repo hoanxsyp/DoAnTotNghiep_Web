@@ -17,6 +17,7 @@ RUN pip install --upgrade pip \
 
 RUN useradd --create-home --uid 10001 appuser
 COPY --chown=appuser:appuser . .
+RUN mkdir -p /app/storage && chown appuser:appuser /app/storage
 
 USER appuser
 

@@ -17,6 +17,8 @@ random.seed(42)
 ROOT = Path(__file__).parent.parent
 DATA = ROOT / "data"
 
+from generate_interactions import generate_interactions, summarize_interactions
+
 # ─── Load rooms ───────────────────────────────────────────────────────────────
 
 rooms = json.loads((DATA / "rooms.json").read_text(encoding="utf-8"))
@@ -89,56 +91,7 @@ def gen_users(n: int) -> list[dict]:
 # ─── View history ─────────────────────────────────────────────────────────────
 
 def gen_view_history(users: list[dict]) -> list[dict]:
-    now = datetime.now()
-    events = []
-
-    for user in users:
-        city     = user.get("city")
-        district = user.get("district")
-
-        # Pool uu tien: same city; fallback tat ca
-        city_pool = rooms_by_city.get(city, rooms) if city else rooms
-        dist_pool = rooms_by_district.get(district, []) if district else []
-
-        # preference ngam: loai phong + muc gia
-        pref_type      = random.choice(["phong_tro", "nha_tro", "chung_cu_mini", "can_ho_dich_vu"])
-        pref_price_max = random.randint(2_000_000, 10_000_000)
-
-        # preferred = same district + same type + in budget
-        preferred = [
-            r for r in city_pool
-            if r["district"] == district
-            or r["room_type"] == pref_type
-            or r["price"] <= pref_price_max
-        ] or city_pool
-
-        n_views = random.randint(3, 45)
-        viewed_ids: set[str] = set()
-
-        for _ in range(n_views):
-            roll = random.random()
-            if roll < 0.45 and dist_pool:
-                room = random.choice(dist_pool)
-            elif roll < 0.80:
-                room = random.choice(preferred)
-            else:
-                room = random.choice(rooms)
-
-            if room["id"] in viewed_ids:
-                continue
-            viewed_ids.add(room["id"])
-
-            days_ago   = random.betavariate(1, 3) * 60
-            viewed_at  = now - timedelta(days=days_ago, seconds=random.randint(0, 86400))
-
-            events.append({
-                "user_id":  user["id"],
-                "room_id":  room["id"],
-                "viewed_at": viewed_at.isoformat(),
-            })
-
-    random.shuffle(events)
-    return events
+    return generate_interactions(users, rooms, seed=42)
 
 
 # ─── Main ────────────────────────────────────────────────────────────────────
@@ -170,5 +123,6 @@ views_per_user = Counter(e["user_id"] for e in history)
 avg = sum(views_per_user.values()) / len(views_per_user)
 print(f"\n[history] total={len(history)}  avg/user={avg:.1f}")
 print(f"  min={min(views_per_user.values())}  max={max(views_per_user.values())}")
+print(f"  interaction summary={summarize_interactions(history)}")
 
 print(f"\n[saved] users.json + view_history.json -> {DATA}")

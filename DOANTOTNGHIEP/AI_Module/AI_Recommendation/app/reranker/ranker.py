@@ -15,17 +15,18 @@ import pandas as pd
 from app.reranker.features import compute_user_stats, compute_features, get_feature_names
 from app.reranker.trainer import get_model
 from app.recommender.indexer import IndexBundle, get_index
+from app.recommender.interactions import aggregate_interactions, interaction_count
 from app.recommender.profile import build_user_profile
 
 CANDIDATE_FETCH  = 80   # lấy bao nhiêu candidates từ FAISS trước khi re-rank
 DEFAULT_K        = 10
-MIN_VIEWS_FOR_LGBM = 5  # dưới ngưỡng này → FAISS đáng tin hơn LightGBM
+MIN_VIEWS_FOR_LGBM = 5  # dưới 5 tín hiệu hiệu dụng → ưu tiên FAISS
 
 
 @dataclass
 class RankedResult:
     room:         dict
-    lgbm_score:   float   # xác suất user thích phòng (LightGBM)
+    lgbm_score:   float   # ranking score (không phải xác suất)
     faiss_score:  float   # cosine similarity từ tầng 1
     is_cold_start: bool = False
 
@@ -51,8 +52,9 @@ def rerank(
         bundle = get_index()
 
     model   = get_model()
-    n_views = len(view_history)
-    is_cold = n_views == 0
+    interactions = aggregate_interactions(view_history)
+    n_signals = interaction_count(interactions)
+    is_cold = n_signals == 0
 
     # ── Tầng 1: FAISS retrieval ───────────────────────────────────────────────
     profile = build_user_profile(user, view_history, bundle.room_cache)
@@ -68,7 +70,7 @@ def rerank(
     positions = positions[0]
 
     # ── Filter cơ bản ─────────────────────────────────────────────────────────
-    viewed_ids  = {e["room_id"] for e in view_history}
+    viewed_ids  = set(interactions)
     user_stats  = compute_user_stats(view_history, bundle.room_cache)
     user_district = user.get("district")
 
@@ -90,7 +92,7 @@ def rerank(
     # ── Bypass LightGBM khi không đủ data ────────────────────────────────────
     # Dưới MIN_VIEWS_FOR_LGBM: user stats quá thưa → LightGBM không đáng tin
     # → Giữ nguyên thứ tự FAISS (đã dùng address profile → đủ tốt cho cold start)
-    if n_views < MIN_VIEWS_FOR_LGBM:
+    if n_signals < MIN_VIEWS_FOR_LGBM:
         return [
             RankedResult(
                 room=room,
@@ -111,7 +113,12 @@ def rerank(
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        lgbm_scores = model.predict_proba(feature_matrix)[:, 1]
+        # Backward compatible with the existing classifier artifact. Models
+        # trained by the new pipeline are LGBMRanker and expose predict().
+        if hasattr(model, "predict_proba"):
+            lgbm_scores = model.predict_proba(feature_matrix)[:, 1]
+        else:
+            lgbm_scores = model.predict(feature_matrix)
 
     # ── Assemble results ──────────────────────────────────────────────────────
     results = [
@@ -124,7 +131,7 @@ def rerank(
         for i, (room, faiss_score) in enumerate(candidates)
     ]
 
-    # Sort theo LightGBM score
+    # Sort theo LightGBM ranking score
     results.sort(key=lambda r: r.lgbm_score, reverse=True)
     return results[:k]
 

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Demo AI gợi ý phòng trọ</title>
+    <link rel="stylesheet" href="/demo/styles.css" />
+  </head>
+  <body>
+    <header class="page-header">
+      <div>
+        <p class="eyebrow">AI RECOMMENDATION MODULE</p>
+        <h1>Demo gợi ý phòng trọ</h1>
+        <p class="subtitle">FAISS truy xuất ứng viên và LightGBM xếp hạng lại kết quả.</p>
+      </div>
+      <div id="health" class="health health-loading">Đang kiểm tra API…</div>
+    </header>
+
+    <main>
+      <section class="panel control-panel">
+        <div class="field">
+          <label for="user-select">Hồ sơ người dùng demo</label>
+          <select id="user-select" disabled>
+            <option>Đang tải…</option>
+          </select>
+        </div>
+        <div class="actions">
+          <button id="reload-button" class="button button-primary" type="button">Tải lại gợi ý</button>
+          <button id="reset-button" class="button button-secondary" type="button">Đặt lại dữ liệu</button>
+        </div>
+      </section>
+
+      <p id="message" class="message" role="status" aria-live="polite"></p>
+
+      <section class="summary-grid">
+        <article class="panel">
+          <h2>Hồ sơ hiện tại</h2>
+          <dl id="user-summary" class="definition-list"></dl>
+        </article>
+        <article class="panel">
+          <h2>Hồ sơ AI suy ra</h2>
+          <dl id="preference-summary" class="definition-list"></dl>
+        </article>
+        <article class="panel">
+          <h2>Pipeline</h2>
+          <dl id="pipeline-summary" class="definition-list"></dl>
+        </article>
+      </section>
+
+      <section class="panel section-block">
+        <div class="section-heading">
+          <div>
+            <h2>Lịch sử xem gần đây</h2>
+            <p>Dữ liệu này chỉ nằm trong bộ nhớ của module demo.</p>
+          </div>
+        </div>
+        <div id="history-list" class="history-list"></div>
+      </section>
+
+      <section class="section-block">
+        <div class="section-heading">
+          <div>
+            <h2>Gợi ý dành cho người dùng</h2>
+            <p>Bấm “Ghi nhận lượt xem” để quan sát danh sách được tính lại.</p>
+          </div>
+        </div>
+        <div id="recommendation-list" class="recommendation-grid"></div>
+      </section>
+    </main>
+
+    <script src="/demo/app.js" defer></script>
+  </body>
+</html>

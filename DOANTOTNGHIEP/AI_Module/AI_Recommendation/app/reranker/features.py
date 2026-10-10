@@ -13,28 +13,48 @@ from collections import Counter
 
 import numpy as np
 
-# ─── Vocabulary (giữ nhất quán với extractor.py) ──────────────────────────────
+from app.features.extractor import get_extractor
+from app.recommender.interactions import aggregate_interactions, profile_weight
 
-CITIES      = ["Ha Noi", "Ho Chi Minh"]
-ROOM_TYPES  = ["can_ho_dich_vu", "chung_cu_mini", "nha_tro", "phong_tro"]
-AMENITIES   = [
-    "ban_cong", "bep_rieng", "camera_an_ninh", "dieu_hoa",
-    "giu_xe", "may_giat", "thang_may", "tu_lanh", "wc_rieng", "wifi",
-]
+# ─── Vocabulary shared with the FAISS feature config ─────────────────────────
+
+_ROOM_CONFIG = get_extractor().config
+
+
+def _config_vocab(section: str, field: str) -> list[str]:
+    return next(
+        item["vocab"] for item in _ROOM_CONFIG[section]
+        if item["field"] == field
+    )
+
+
+def _config_max(field: str) -> float:
+    return float(next(
+        item["max"] for item in _ROOM_CONFIG["numerical"]
+        if item["field"] == field
+    ))
+
+
+CITIES = _config_vocab("categorical", "city")
+ROOM_TYPES = _config_vocab("categorical", "room_type")
+AMENITIES = _config_vocab("multi_label", "amenities")
 
 # Tọa độ trung tâm mỗi quận — dùng để tính khoảng cách địa lý
 DISTRICT_COORDS = {
     # HCM
-    "Quận 1": (10.7769, 106.7009), "Quận 3": (10.7800, 106.6890),
+    "Quận 1": (10.7769, 106.7009), "Quận 2": (10.7872, 106.7518),
+    "Quận 3": (10.7780, 106.6920),
     "Quận 4": (10.7580, 106.7040), "Quận 5": (10.7545, 106.6620),
     "Quận 6": (10.7480, 106.6340), "Quận 7": (10.7300, 106.7200),
-    "Quận 8": (10.7230, 106.6280), "Quận 10": (10.7740, 106.6680),
+    "Quận 8": (10.7230, 106.6280), "Quận 9": (10.8412, 106.7856),
+    "Quận 10": (10.7740, 106.6680),
     "Quận 11": (10.7630, 106.6480), "Quận 12": (10.8680, 106.6560),
-    "Bình Thạnh": (10.8120, 106.7140), "Gò Vấp": (10.8380, 106.6650),
-    "Phú Nhuận": (10.7990, 106.6800), "Tân Bình": (10.8020, 106.6520),
-    "Tân Phú": (10.7900, 106.6270), "Bình Tân": (10.7530, 106.6010),
-    "Thủ Đức": (10.8700, 106.7650), "Hóc Môn": (10.8930, 106.5960),
-    "Bình Chánh": (10.6880, 106.5990),
+    "Quận Bình Thạnh": (10.8120, 106.7140), "Quận Gò Vấp": (10.8380, 106.6650),
+    "Quận Phú Nhuận": (10.7990, 106.6800), "Quận Tân Bình": (10.8020, 106.6520),
+    "Quận Tân Phú": (10.7900, 106.6270), "Quận Bình Tân": (10.7530, 106.6010),
+    "Quận Thủ Đức": (10.8700, 106.7650),
+    "Huyện Hóc Môn": (10.8930, 106.5960), "Huyện Bình Chánh": (10.6880, 106.5990),
+    "Huyện Nhà Bè": (10.6824, 106.7334), "Huyện Củ Chi": (11.0014, 106.4828),
     # Hà Nội
     "Hoàn Kiếm": (21.0285, 105.8542), "Ba Đình": (21.0358, 105.8342),
     "Đống Đa": (21.0245, 105.8412), "Hai Bà Trưng": (21.0138, 105.8612),
@@ -42,10 +62,18 @@ DISTRICT_COORDS = {
     "Cầu Giấy": (21.0350, 105.7900), "Long Biên": (21.0430, 105.8870),
     "Nam Từ Liêm": (21.0130, 105.7650), "Bắc Từ Liêm": (21.0680, 105.7590),
     "Tây Hồ": (21.0680, 105.8240), "Hà Đông": (20.9610, 105.7760),
+    "Gia Lâm": (21.0058, 105.9312), "Đông Anh": (21.1473, 105.8453),
+    "Sóc Sơn": (21.2432, 105.8543), "Thường Tín": (20.8662, 105.8640),
+    "Hoài Đức": (21.0506, 105.7256),
+    # Đà Nẵng
+    "Quận Hải Châu": (16.0544, 108.2022), "Quận Thanh Khê": (16.0707, 108.1787),
+    "Quận Sơn Trà": (16.0748, 108.2333), "Quận Ngũ Hành Sơn": (15.9996, 108.2672),
+    "Quận Liên Chiểu": (16.1022, 108.1490), "Quận Cẩm Lệ": (16.0155, 108.2115),
+    "Huyện Hoà Vang": (15.9826, 108.1426),
 }
 
-PRICE_MAX = 18_000_000
-AREA_MAX  = 60.0
+PRICE_MAX = _config_max("price")
+AREA_MAX = _config_max("area")
 
 
 # ─── Geo utils ────────────────────────────────────────────────────────────────
@@ -69,46 +97,57 @@ def compute_user_stats(view_history: list[dict], room_cache: dict) -> dict:
     Tính thống kê tổng hợp từ lịch sử xem của user.
     Trả về dict dùng để tính interaction features với từng candidate room.
     """
-    viewed_rooms = [
-        room_cache[e["room_id"]]
-        for e in view_history
-        if e["room_id"] in room_cache
+    interactions = aggregate_interactions(view_history)
+    weighted_rooms = [
+        (room_cache[room_id], profile_weight(interaction), interaction)
+        for room_id, interaction in interactions.items()
+        if room_id in room_cache
     ]
 
-    if not viewed_rooms:
+    if not weighted_rooms:
         return _empty_user_stats()
 
-    prices = [r["price"] for r in viewed_rooms]
-    areas  = [r["area"]  for r in viewed_rooms]
+    total_weight = sum(weight for _, weight, _ in weighted_rooms)
+    avg_price = sum(r["price"] * weight for r, weight, _ in weighted_rooms) / total_weight
+    avg_area = sum(r["area"] * weight for r, weight, _ in weighted_rooms) / total_weight
 
-    avg_price = sum(prices) / len(prices)
-    std_price = (sum((p - avg_price)**2 for p in prices) / len(prices)) ** 0.5
+    std_price = (
+        sum(weight * (r["price"] - avg_price) ** 2 for r, weight, _ in weighted_rooms)
+        / total_weight
+    ) ** 0.5
+    std_area = (
+        sum(weight * (r["area"] - avg_area) ** 2 for r, weight, _ in weighted_rooms)
+        / total_weight
+    ) ** 0.5
 
-    avg_area  = sum(areas) / len(areas)
-    std_area  = (sum((a - avg_area)**2 for a in areas) / len(areas)) ** 0.5
-
-    type_counter     = Counter(r["room_type"] for r in viewed_rooms)
-    district_counter = Counter(r["district"]  for r in viewed_rooms)
-    city_counter     = Counter(r["city"]      for r in viewed_rooms)
+    type_counter: Counter = Counter()
+    district_counter: Counter = Counter()
+    city_counter: Counter = Counter()
+    for room, weight, _ in weighted_rooms:
+        type_counter[room["room_type"]] += weight
+        district_counter[room["district"]] += weight
+        city_counter[room["city"]] += weight
 
     preferred_type     = type_counter.most_common(1)[0][0]
     preferred_district = district_counter.most_common(1)[0][0]
     preferred_city     = city_counter.most_common(1)[0][0]
 
     amenity_freq = {a: 0.0 for a in AMENITIES}
-    for r in viewed_rooms:
-        for a in r.get("amenities", []):
+    for room, weight, _ in weighted_rooms:
+        for a in room.get("amenities", []):
             if a in amenity_freq:
-                amenity_freq[a] += 1
+                amenity_freq[a] += weight
     for a in amenity_freq:
-        amenity_freq[a] /= len(viewed_rooms)  # normalize → frequency [0,1]
+        amenity_freq[a] /= total_weight  # normalize → weighted frequency [0,1]
+
+    n_views = sum(int(item.get("view_count", 0)) for _, _, item in weighted_rooms)
 
     return {
         "avg_price":        avg_price,
         "std_price":        std_price,
         "avg_area":         avg_area,
         "std_area":         std_area,
-        "n_views":          len(viewed_rooms),
+        "n_views":          n_views,
         "preferred_type":   preferred_type,
         "preferred_district": preferred_district,
         "preferred_city":   preferred_city,
@@ -209,7 +248,10 @@ def compute_features(
             dist_km = _haversine_km(ref_coords[0], ref_coords[1], room["lat"], room["lng"])
     feats.append(min(dist_km / 20.0, 1.0))  # normalize: 20km = max
 
-    # ── 9. Amenity frequency profile (10 feats) ───────────────────────────────
+    # ── 9. Room amenity density (1 feat) ──────────────────────────────────────
+    feats.append(len(room_amenities) / max(len(AMENITIES), 1))
+
+    # ── 10. Amenity frequency profile (config-driven) ─────────────────────────
     for amenity in AMENITIES:
         has_amenity  = 1.0 if amenity in room_amenities else 0.0
         user_pref    = user_freq.get(amenity, 0.0)
@@ -236,6 +278,8 @@ def get_feature_names() -> list[str]:
         "amenity_overlap_count", "amenity_jaccard", "amenity_weighted_match",
         # Geo
         "geo_distance_norm",
+        # Room amenity density
+        "room_amenity_count_norm",
     ]
     # Per-amenity match
     for a in AMENITIES:

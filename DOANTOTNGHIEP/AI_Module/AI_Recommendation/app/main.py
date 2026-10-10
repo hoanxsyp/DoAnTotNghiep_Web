@@ -5,6 +5,8 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -47,3 +49,11 @@ app.add_middleware(
 )
 
 app.include_router(router, prefix="/api/v1")
+
+STATIC_DIR = Path(__file__).parent / "static"
+app.mount("/demo", StaticFiles(directory=STATIC_DIR, html=True), name="demo")
+
+
+@app.get("/", include_in_schema=False)
+def root():
+    return RedirectResponse(url="/demo/")
