@@ -2,16 +2,18 @@ import { useState } from 'react';
 import { Outlet, useNavigate, useLocation, Link as RouterLink } from 'react-router-dom';
 import {
   Box, Drawer, AppBar, Toolbar, List, ListItemButton, ListItemIcon, ListItemText,
-  Typography, IconButton, Avatar, Menu, MenuItem, Divider, useTheme, Tooltip,
+  Typography, IconButton, Avatar, Menu, MenuItem, Divider, useTheme, Tooltip, Badge,
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import HomeIcon from '@mui/icons-material/Home';
 import LogoutIcon from '@mui/icons-material/Logout';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
+import { selectUnreadMessages } from '@/redux/chatSlice';
 import useAuth from '@/hooks/useAuth';
 import useResponsive from '@/hooks/useResponsive';
 import { logout } from '@/redux/authSlice';
 import NotificationBell from '@/components/common/NotificationBell';
+import MessagesButton from '@/components/common/MessagesButton';
 import ThemeToggle from '@/components/common/ThemeToggle';
 
 const DRAWER_WIDTH = 264;
@@ -28,6 +30,8 @@ const DashboardLayout = ({ menu = [], title = 'Bảng điều khiển' }) => {
   const location = useLocation();
   const dispatch = useDispatch();
   const { user } = useAuth();
+  // Số hiển thị cạnh mục menu có khai báo `badge` (config/menus.js).
+  const badges = { unreadMessages: useSelector(selectUnreadMessages) };
 
   const [mobileOpen, setMobileOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
@@ -70,7 +74,13 @@ const DashboardLayout = ({ menu = [], title = 'Bảng điều khiển' }) => {
                     onClick={() => isMobile && setMobileOpen(false)}
                     sx={{ mx: 1, borderRadius: 2, mb: 0.25 }}
                   >
-                    <ListItemIcon sx={{ minWidth: 40 }}>{item.icon}</ListItemIcon>
+                    <ListItemIcon sx={{ minWidth: 40 }}>
+                      {item.badge ? (
+                        <Badge badgeContent={badges[item.badge] || 0} color="error" max={99}>
+                          {item.icon}
+                        </Badge>
+                      ) : item.icon}
+                    </ListItemIcon>
                     <ListItemText primary={item.label} primaryTypographyProps={{ fontSize: 14 }} />
                   </ListItemButton>
                 );
@@ -112,6 +122,7 @@ const DashboardLayout = ({ menu = [], title = 'Bảng điều khiển' }) => {
             </IconButton>
           </Tooltip>
           <ThemeToggle />
+          <MessagesButton />
           <NotificationBell />
           <IconButton onClick={(e) => setAnchorEl(e.currentTarget)}>
             <Avatar src={user?.avatarUrl} sx={{ width: 34, height: 34 }}>

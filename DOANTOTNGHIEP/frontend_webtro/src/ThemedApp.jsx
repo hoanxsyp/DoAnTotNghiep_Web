@@ -6,6 +6,7 @@ import { selectThemeMode } from '@/redux/uiSlice';
 import { bootstrapAuth } from '@/redux/authSlice';
 import { setAuthFailureHandler } from '@/api/axiosClient';
 import { clearSession } from '@/redux/authSlice';
+import useChatRealtime from '@/hooks/useChatRealtime';
 
 /**
  * Bọc ứng dụng bằng theme (sáng/tối theo uiSlice) và chạy bootstrapAuth một lần lúc mở app để
@@ -22,6 +23,9 @@ const ThemedApp = ({ children }) => {
     setAuthFailureHandler(() => dispatch(clearSession()));
     dispatch(bootstrapAuth());
   }, [dispatch]);
+
+  // Kết nối chat realtime suốt phiên đăng nhập (badge "Tin nhắn", hội thoại mới ở mọi trang).
+  useChatRealtime();
 
   return (
     <ThemeProvider theme={theme}>
