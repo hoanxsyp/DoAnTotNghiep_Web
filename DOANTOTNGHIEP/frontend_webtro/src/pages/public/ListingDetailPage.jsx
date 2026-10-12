@@ -179,7 +179,8 @@ const ListingDetailPage = () => {
 
     listingApi
       .getRelated(id)
-      .then((data) => setRelated(toItems(data)))
+      // Mỗi mục là { listing, matchScore, matchReasons } -> lấy listing để ListingCard đọc được.
+      .then((data) => setRelated(toItems(data).map((x) => x.listing ?? x)))
       .catch(() => setRelated([]));
   }, [id, notFound, loadComments]);
 
