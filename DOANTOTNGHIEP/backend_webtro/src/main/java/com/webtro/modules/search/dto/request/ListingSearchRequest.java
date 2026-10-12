@@ -51,8 +51,9 @@ public class ListingSearchRequest {
     @Schema(description = "Loại tin theo id", example = "1")
     private Long categoryId;
 
-    @Schema(description = "Loại tin theo mã (dùng cho URL SEO, thay cho categoryId)")
-    private CategoryCode categoryCode;
+    @Schema(description = "Loại tin theo mã (dùng cho URL SEO, thay cho categoryId). Nhiều mã - ngữ nghĩa OR: "
+            + "categoryCode=A,B hoặc categoryCode=A&categoryCode=B")
+    private List<CategoryCode> categoryCode;
 
     @DecimalMin(value = "0", message = "Giá từ không được âm")
     @DecimalMax(value = "999999999.99", message = "Giá từ vượt ngưỡng cho phép")

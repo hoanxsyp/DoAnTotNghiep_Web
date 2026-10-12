@@ -169,7 +169,7 @@ public class ListingSearchServiceImpl implements ListingSearchService {
         addIfPresent(specs, ListingSpecifications.districtId(r.getDistrictId()));
         addIfPresent(specs, ListingSpecifications.wardId(r.getWardId()));
         addIfPresent(specs, ListingSpecifications.categoryId(r.getCategoryId()));
-        addIfPresent(specs, ListingSpecifications.categoryCode(r.getCategoryCode()));
+        addIfPresent(specs, ListingSpecifications.categoryCodes(r.getCategoryCode()));
         addIfPresent(specs, ListingSpecifications.priceFrom(r.getPriceFrom()));
         addIfPresent(specs, ListingSpecifications.priceTo(r.getPriceTo()));
         addIfPresent(specs, ListingSpecifications.areaFrom(r.getAreaFrom()));

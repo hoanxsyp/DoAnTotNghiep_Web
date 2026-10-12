@@ -105,11 +105,12 @@ public final class ListingSpecifications {
     }
 
     /**
-     * Lọc theo mã danh mục (SEO). Vì {@link Listing} chỉ giữ {@code category_id} (Long, canonical
-     * luật 8) nên khớp qua subquery EXISTS trên bảng {@code categories}.
+     * Lọc theo mã danh mục (SEO), nhiều mã - ngữ nghĩa OR. Vì {@link Listing} chỉ giữ
+     * {@code category_id} (Long, canonical luật 8) nên khớp qua subquery EXISTS trên bảng
+     * {@code categories}.
      */
-    public static Specification<Listing> categoryCode(CategoryCode code) {
-        if (code == null) {
+    public static Specification<Listing> categoryCodes(Collection<CategoryCode> codes) {
+        if (codes == null || codes.isEmpty()) {
             return null;
         }
         return (root, query, cb) -> {
@@ -118,7 +119,7 @@ public final class ListingSpecifications {
             sub.select(cat.get("id"));
             sub.where(
                     cb.equal(cat.get("id"), root.get("categoryId")),
-                    cb.equal(cat.get("code"), code));
+                    cat.get("code").in(codes));
             return cb.exists(sub);
         };
     }

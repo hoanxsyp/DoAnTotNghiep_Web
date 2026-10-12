@@ -298,7 +298,7 @@ public class ChatbotServiceImpl implements ChatbotService {
                 .curfewType(s.curfewType())
                 .petAllowed(s.petAllowed())
                 .parkingAvailable(s.parkingAvailable())
-                .categoryCode(s.categoryCode())
+                .categoryCode(s.categoryCode() == null ? null : List.of(s.categoryCode()))
                 .build();
     }
 
