@@ -21,7 +21,7 @@ import { GENDER_REQUIREMENT, FURNITURE_STATUS, PAGE_SIZE } from '@/constants';
 const toItems = (d) => (Array.isArray(d) ? d : d?.items ?? []);
 
 const SORTS = [
-  { value: 'relevance,desc', label: 'Liên quan nhất' },
+  { value: 'RELEVANCE', label: 'Liên quan nhất' },
   { value: 'publishedAt,desc', label: 'Mới nhất' },
   { value: 'price,asc', label: 'Giá thấp → cao' },
   { value: 'price,desc', label: 'Giá cao → thấp' },
@@ -304,7 +304,7 @@ const SearchPage = () => {
   }, [searchParams]);
 
   const page = Number(searchParams.get('page')) || 0;
-  const sort = searchParams.get('sort') || 'relevance,desc';
+  const sort = searchParams.get('sort') || 'RELEVANCE';
 
   const activeFilterCount = FILTER_KEYS.filter(
     (k) => k !== 'keyword' && searchParams.get(k),

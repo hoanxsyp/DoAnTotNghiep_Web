@@ -109,7 +109,7 @@ const HomePage = () => {
       .catch(() => {});
 
     searchApi
-      .searchListings({ promoted: true, size: 4, sort: 'priority,desc' })
+      .searchListings({ promoted: true, size: 4, sort: 'RELEVANCE' })
       .then((d) => alive && setFeatured({ data: toItems(d), loading: false, error: false }))
       .catch(() => alive && setFeatured({ data: [], loading: false, error: true }));
 
