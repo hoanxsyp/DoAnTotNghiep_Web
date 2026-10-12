@@ -48,6 +48,7 @@ import com.webtro.modules.listing.service.ListingOwnerStatsPublisher;
 import com.webtro.modules.listing.service.ListingService;
 import com.webtro.modules.listing.service.ListingVisibilityService;
 import com.webtro.modules.listing.service.TrustScoreService;
+import com.webtro.modules.listing.spi.FavoriteStatusGateway;
 import com.webtro.modules.listing.statemachine.ListingEvent;
 import com.webtro.modules.listing.statemachine.ListingStateMachine;
 import com.webtro.modules.payment.entity.PromotionPackage;
@@ -120,6 +121,7 @@ public class ListingServiceImpl implements ListingService {
     private final AmenityRepository amenityRepository;
     private final LandlordProfileRepository landlordProfileRepository;
     private final PromotionPackageRepository promotionPackageRepository;
+    private final FavoriteStatusGateway favoriteStatusGateway;
 
     // ==================================================================
     //  CRUD
@@ -551,7 +553,11 @@ public class ListingServiceImpl implements ListingService {
         }
 
         boolean authenticated = viewerId != null;
-        return mapper.toDetail(listing, authenticated, owner || privileged);
+        ListingDetailResponse detail = mapper.toDetail(listing, authenticated, owner || privileged);
+        if (authenticated) {
+            detail.setFavoritedByMe(favoriteStatusGateway.isFavorited(viewerId, listing.getId()));
+        }
+        return detail;
     }
 
     @Override

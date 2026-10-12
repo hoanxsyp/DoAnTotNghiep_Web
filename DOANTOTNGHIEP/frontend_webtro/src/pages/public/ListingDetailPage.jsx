@@ -187,8 +187,13 @@ const ListingDetailPage = () => {
       else await favoriteApi.add(id);
       notify.success(prev ? 'Đã bỏ lưu tin.' : 'Đã lưu tin vào danh sách của bạn.');
     } catch (err) {
-      setFavorited(prev);
-      notify.apiError(err);
+      // 409/404: server đã ở trạng thái đích -> chỉ đồng bộ lại UI.
+      if (err.errorCode === 'FAVORITE_ALREADY_EXISTS') setFavorited(true);
+      else if (err.errorCode === 'FAVORITE_NOT_FOUND') setFavorited(false);
+      else {
+        setFavorited(prev);
+        notify.apiError(err);
+      }
     }
   };
 

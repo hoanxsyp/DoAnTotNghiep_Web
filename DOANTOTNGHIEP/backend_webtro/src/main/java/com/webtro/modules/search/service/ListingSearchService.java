@@ -46,6 +46,7 @@ public interface ListingSearchService {
      *
      * @param ownerId  id chủ trọ (owner của tin)
      * @param pageable phân trang (size ép ≤ 100; sort do service quyết định)
+     * @param viewerId người đang xem ({@code null} nếu là khách) — để gắn cờ {@code favoritedByMe}
      */
-    PageResponse<ListingSummaryResponse> listByOwner(Long ownerId, Pageable pageable);
+    PageResponse<ListingSummaryResponse> listByOwner(Long ownerId, Pageable pageable, Long viewerId);
 }

@@ -53,6 +53,8 @@ public class RecommendationResponse {
         private Integer trustScore;
         private BigDecimal averageRating;
         private Boolean promoted;
+        /** Người xem đã lưu tin này chưa — chỉ có khi đã đăng nhập, ngược lại null. */
+        private Boolean favoritedByMe;
         private BigDecimal matchScore;
         private ScoreBreakdown scoreBreakdown;
         private List<String> matchReasons;

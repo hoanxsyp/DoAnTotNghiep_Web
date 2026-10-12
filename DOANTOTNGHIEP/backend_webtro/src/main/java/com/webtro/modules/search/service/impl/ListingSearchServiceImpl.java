@@ -19,6 +19,7 @@ import com.webtro.modules.listing.entity.Listing;
 import com.webtro.modules.listing.mapper.ListingMapper;
 import com.webtro.modules.listing.repository.ListingRepository;
 import com.webtro.modules.listing.service.ListingVisibilityService;
+import com.webtro.modules.listing.spi.FavoriteStatusGateway;
 import com.webtro.modules.search.dto.request.ListingSearchRequest;
 import com.webtro.modules.search.dto.response.RelatedListingItem;
 import com.webtro.modules.search.dto.response.RelatedListingsResponse;
@@ -74,6 +75,7 @@ public class ListingSearchServiceImpl implements ListingSearchService {
     private final ApplicationEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
     private final WardRepository wardRepository;
+    private final FavoriteStatusGateway favoriteStatusGateway;
 
     // ---------------------------------------------------------------------
     //  SRCH-01..08 — tìm kiếm & lọc
@@ -98,11 +100,23 @@ public class ListingSearchServiceImpl implements ListingSearchService {
         PageResponse<ListingSummaryResponse> response =
                 PageResponse.from(page, listing -> listingMapper.toSummary(listing, false));
 
-        // Lưu lịch sử tìm kiếm CHỈ khi đã đăng nhập, phi đồng bộ, không chặn response ([§3.7]).
+        // Đã đăng nhập: gắn cờ favoritedByMe (1 truy vấn IN cho cả trang) và lưu lịch sử tìm kiếm
+        // phi đồng bộ, không chặn response ([§3.7]).
         if (principal != null) {
+            markFavorited(response, principal.getId());
             publishSearchHistory(principal.getId(), request, page.getTotalElements());
         }
         return response;
+    }
+
+    /** Gắn cờ favoritedByMe cho cả trang bằng 1 truy vấn IN; khách ({@code viewerId == null}) giữ null. */
+    private void markFavorited(PageResponse<ListingSummaryResponse> response, Long viewerId) {
+        if (viewerId == null || response.getItems().isEmpty()) {
+            return;
+        }
+        Set<Long> favorited = favoriteStatusGateway.favoritedListingIds(viewerId,
+                response.getItems().stream().map(ListingSummaryResponse::getId).toList());
+        response.getItems().forEach(item -> item.setFavoritedByMe(favorited.contains(item.getId())));
     }
 
     /**
@@ -235,7 +249,7 @@ public class ListingSearchServiceImpl implements ListingSearchService {
 
     @Override
     @Transactional(readOnly = true)
-    public PageResponse<ListingSummaryResponse> listByOwner(Long ownerId, Pageable pageable) {
+    public PageResponse<ListingSummaryResponse> listByOwner(Long ownerId, Pageable pageable, Long viewerId) {
         Instant now = Instant.now();
         Set<ListingStatus> publicStatuses = listingVisibilityService.publicStatuses();
 
@@ -248,7 +262,10 @@ public class ListingSearchServiceImpl implements ListingSearchService {
 
         Page<Listing> page = listingRepository.findAll(Specification.allOf(specs), sanitizePageable(pageable));
         // Chỉ tin public → luôn ở góc nhìn khách (ownerView = false).
-        return PageResponse.from(page, listing -> listingMapper.toSummary(listing, false));
+        PageResponse<ListingSummaryResponse> response =
+                PageResponse.from(page, listing -> listingMapper.toSummary(listing, false));
+        markFavorited(response, viewerId);
+        return response;
     }
 
     // ---------------------------------------------------------------------
