@@ -33,12 +33,19 @@ const NotificationBell = () => {
     dispatch(fetchRecent());
   };
 
+  // API trả đường dẫn ở `targetUrl`. Lỗi đánh dấu đã đọc không được chặn việc mở thông báo.
   const handleItemClick = async (n) => {
-    await notificationApi.markAsRead(n.id);
-    dispatch(fetchUnreadCount());
     setAnchorEl(null);
-    if (n.actionUrl) {
-      navigate(n.actionUrl);
+    if (n.targetUrl) {
+      navigate(n.targetUrl);
+    }
+    if (!n.read) {
+      try {
+        await notificationApi.markAsRead(n.id);
+      } catch {
+        // bỏ qua
+      }
+      dispatch(fetchUnreadCount());
     }
   };
 
