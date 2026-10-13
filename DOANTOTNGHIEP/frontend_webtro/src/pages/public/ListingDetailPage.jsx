@@ -19,7 +19,6 @@ import reviewApi from '@/api/reviewApi';
 import favoriteApi from '@/api/favoriteApi';
 import contactApi from '@/api/contactApi';
 import reportApi from '@/api/reportApi';
-import ListingGrid from '@/components/listing/ListingGrid';
 import CommentThread from '@/components/interaction/CommentThread';
 import RatingStars from '@/components/interaction/RatingStars';
 import TrustScoreBadge from '@/components/listing/TrustScoreBadge';
@@ -102,8 +101,6 @@ const ListingDetailPage = () => {
   const [reviews, setReviews] = useState({ items: [], summary: null });
   const [reviewsLoading, setReviewsLoading] = useState(true);
 
-  const [related, setRelated] = useState([]);
-
   const [loginPrompt, setLoginPrompt] = useState(null);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportReason, setReportReason] = useState('');
@@ -176,12 +173,6 @@ const ListingDetailPage = () => {
       .then((data) => setReviews({ items: toItems(data), summary: data?.summary || null }))
       .catch(() => setReviews({ items: [], summary: null }))
       .finally(() => setReviewsLoading(false));
-
-    listingApi
-      .getRelated(id)
-      // Mỗi mục là { listing, matchScore, matchReasons } -> lấy listing để ListingCard đọc được.
-      .then((data) => setRelated(toItems(data).map((x) => x.listing ?? x)))
-      .catch(() => setRelated([]));
   }, [id, notFound, loadComments]);
 
   const handleToggleFavorite = async () => {
@@ -743,16 +734,6 @@ const ListingDetailPage = () => {
                 )}
               </Stack>
             </Paper>
-
-            {/* Tin liên quan */}
-            {related.length > 0 && (
-              <Box sx={{ mt: 2 }}>
-                <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
-                  ✨ Tin tương tự
-                </Typography>
-                <ListingGrid items={related.slice(0, 3)} columns={{ xs: 1, sm: 1, md: 1 }} cardVariant="horizontal" showFavorite={false} />
-              </Box>
-            )}
           </Box>
         </Grid>
       </Grid>
