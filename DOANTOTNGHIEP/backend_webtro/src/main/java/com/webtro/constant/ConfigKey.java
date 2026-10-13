@@ -27,7 +27,6 @@ public final class ConfigKey {
     public static final String MOD_AUTOHIDE_REPORT_COUNT = "moderation.autohide.report_count";
     public static final String MOD_AUTOHIDE_DISTINCT_REPORTERS = "moderation.autohide.distinct_reporters";
     public static final String MOD_AUTOHIDE_WINDOW_HOURS = "moderation.autohide.window_hours";
-    public static final String MOD_AUTOHIDE_SENTIMENT_REQUIRES_PRIOR_WARNING = "moderation.autohide.sentiment_requires_prior_warning";
     public static final String MOD_THRESHOLD_WARNING_COUNT = "moderation.threshold.warning_count";
     public static final String MOD_THRESHOLD_WARNING_WINDOW_DAYS = "moderation.threshold.warning_window_days";
     public static final String MOD_THRESHOLD_LOCKED_LISTING_COUNT = "moderation.threshold.locked_listing_count";
@@ -37,8 +36,6 @@ public final class ConfigKey {
 
     // ============================= Trust ============================
     public static final String TRUST_BASE_SCORE = "trust.base_score";
-    public static final String TRUST_WEIGHT_POSITIVE_COMMENT = "trust.weight.positive_comment";
-    public static final String TRUST_WEIGHT_NEGATIVE_COMMENT = "trust.weight.negative_comment";
     public static final String TRUST_WEIGHT_AVERAGE_RATING = "trust.weight.average_rating";
     public static final String TRUST_WEIGHT_VALID_REPORT = "trust.weight.valid_report";
     public static final String TRUST_WEIGHT_VIOLATION_WARNING = "trust.weight.violation_warning";
@@ -51,22 +48,6 @@ public final class ConfigKey {
     public static final String TRUST_RESPONSE_RATE_SLA_HOURS = "trust.response_rate.sla_hours";
     public static final String TRUST_RESPONSE_RATE_MIN_CONVERSATIONS = "trust.response_rate.min_conversations";
     public static final String TRUST_RESPONSE_RATE_NEUTRAL_PERCENT = "trust.response_rate.neutral_percent";
-
-    // ======================= AI - Sentiment =========================
-    public static final String AI_SENTIMENT_ENABLED = "ai.sentiment.enabled";
-    public static final String AI_SENTIMENT_MIN_COMMENTS_L1 = "ai.sentiment.min_comments_l1";
-    public static final String AI_SENTIMENT_NEGATIVE_RATIO_L1 = "ai.sentiment.negative_ratio_l1";
-    public static final String AI_SENTIMENT_MIN_COMMENTS_L2 = "ai.sentiment.min_comments_l2";
-    public static final String AI_SENTIMENT_NEGATIVE_RATIO_L2 = "ai.sentiment.negative_ratio_l2";
-    public static final String AI_SENTIMENT_NEED_REVIEW_COUNT_FOR_LOCK = "ai.sentiment.need_review_count_for_lock";
-    public static final String AI_SENTIMENT_NEED_REVIEW_WINDOW_DAYS = "ai.sentiment.need_review_window_days";
-    public static final String AI_SENTIMENT_LANDLORD_ALERT_LISTING_COUNT = "ai.sentiment.landlord_alert_listing_count";
-    public static final String AI_SENTIMENT_MIN_LENGTH = "ai.sentiment.min_length";
-    public static final String AI_SENTIMENT_NEW_ACCOUNT_DAYS = "ai.sentiment.new_account_days";
-    public static final String AI_SENTIMENT_NEW_ACCOUNT_WEIGHT = "ai.sentiment.new_account_weight";
-    public static final String AI_SENTIMENT_TIMEOUT_MS = "ai.sentiment.timeout_ms";
-    public static final String AI_SENTIMENT_MAX_RETRY = "ai.sentiment.max_retry";
-    public static final String AI_SENTIMENT_LOW_CONFIDENCE_THRESHOLD = "ai.sentiment.low_confidence_threshold";
 
     // ==================== AI - Recommendation =======================
     public static final String AI_RECOMMENDATION_ENABLED = "ai.recommendation.enabled";

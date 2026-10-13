@@ -1,7 +1,6 @@
 package com.webtro.modules.interaction.specification;
 
 import com.webtro.common.enums.CommentStatus;
-import com.webtro.common.enums.SentimentLabel;
 import com.webtro.modules.interaction.entity.Comment;
 import org.springframework.data.jpa.domain.Specification;
 
@@ -22,11 +21,6 @@ public final class CommentSpecifications {
     /** Lọc theo trạng thái bình luận. */
     public static Specification<Comment> statusEq(CommentStatus status) {
         return (root, q, cb) -> cb.equal(root.get("status"), status);
-    }
-
-    /** Lọc theo nhãn cảm xúc do AI gán. */
-    public static Specification<Comment> sentimentEq(SentimentLabel sentiment) {
-        return (root, q, cb) -> cb.equal(root.get("sentimentLabel"), sentiment);
     }
 
     /** Lọc theo cờ spam. */

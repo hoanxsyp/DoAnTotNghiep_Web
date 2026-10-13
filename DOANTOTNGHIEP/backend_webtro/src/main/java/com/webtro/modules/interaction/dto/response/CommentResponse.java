@@ -7,7 +7,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 
@@ -30,12 +29,6 @@ public class CommentResponse {
     private String status;
     private AuthorResponse author;
 
-    @Schema(description = "Nhãn cảm xúc do AI gán (gồm PENDING_ANALYSIS khi chưa phân tích)")
-    private String sentimentLabel;
-
-    @Schema(description = "Điểm cảm xúc [-1, 1]")
-    private BigDecimal sentimentScore;
-
     @Schema(description = "Người xem hiện tại có sửa được không (tác giả + trong cửa sổ)")
     private Boolean editable;
 
@@ -44,9 +37,6 @@ public class CommentResponse {
 
     @Schema(description = "Người xem hiện tại có xóa được không")
     private Boolean deletable;
-
-    @Schema(description = "Đã kích hoạt phân tích lại sentiment (sau khi sửa)")
-    private Boolean reanalysisTriggered;
 
     private Instant editedAt;
     private Instant createdAt;

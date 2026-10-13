@@ -12,12 +12,7 @@ import com.webtro.modules.listing.entity.Listing;
 import com.webtro.modules.listing.repository.ListingAmenityRepository;
 import com.webtro.modules.listing.repository.ListingImageRepository;
 import com.webtro.modules.listing.repository.ListingRepository;
-import com.webtro.modules.listing.service.ListingCategoryCountPublisher;
-import com.webtro.modules.listing.service.ListingOwnerStatsPublisher;
 import com.webtro.modules.listing.service.ListingVisibilityService;
-import com.webtro.modules.listing.service.TrustScoreService;
-import com.webtro.modules.listing.statemachine.ListingEvent;
-import com.webtro.modules.listing.statemachine.ListingStateMachine;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -28,7 +23,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -44,8 +38,6 @@ import java.util.stream.Collectors;
  *
  * <p>Bọc {@code ListingRepository} + các repository tra cứu của module listing; mọi truy vấn bỏ qua
  * tin đã xóa mềm và dùng {@link ListingVisibilityService#publicStatuses()} thay vì so cứng ACTIVE.
- * Thao tác đổi trạng thái đi qua {@link ListingStateMachine}; tính lại điểm uy tín qua
- * {@link TrustScoreService}.
  */
 @Component
 @RequiredArgsConstructor
@@ -57,10 +49,6 @@ public class ListingDataGatewayAdapter implements ListingDataGateway {
     private final CategoryRepository categoryRepository;
     private final WardRepository wardRepository;
     private final ListingVisibilityService visibilityService;
-    private final ListingCategoryCountPublisher categoryCountPublisher;
-    private final ListingOwnerStatsPublisher ownerStatsPublisher;
-    private final ListingStateMachine stateMachine;
-    private final TrustScoreService trustScoreService;
 
     // ==================================================================
     //  Đọc thuộc tính
@@ -201,41 +189,6 @@ public class ListingDataGatewayAdapter implements ListingDataGateway {
 
     @Override
     @Transactional
-    public void applySentimentCounts(Long listingId, int positiveCount, int negativeCount) {
-        listingRepository.findAliveById(listingId).ifPresent(l -> {
-            l.setPositiveCommentCount(Math.max(0, positiveCount));
-            l.setNegativeCommentCount(Math.max(0, negativeCount));
-            listingRepository.save(l);
-            // Cập nhật điểm uy tín tin (đọc lại hai bộ đếm vừa ghi) — canonical §5.8.
-            trustScoreService.recalculateAndSaveListing(listingId);
-        });
-    }
-
-    @Override
-    @Transactional
-    public boolean flagNeedReview(Long listingId, String reason) {
-        Optional<Listing> opt = listingRepository.findAliveById(listingId);
-        if (opt.isEmpty()) {
-            return false;
-        }
-        Listing l = opt.get();
-        // AI chỉ gắn cờ khi tin đang ACTIVE; không ở trạng thái cho phép thì bỏ qua (không lỗi).
-        if (!stateMachine.canTransition(l.getStatus(), ListingEvent.FLAG_NEED_REVIEW)) {
-            return false;
-        }
-        ListingCategoryCountPublisher.Snapshot categoryCountBefore = categoryCountPublisher.snapshot(l);
-        ListingOwnerStatsPublisher.Snapshot ownerStatsBefore = ownerStatsPublisher.snapshot(l);
-        l.setStatus(stateMachine.transition(l.getStatus(), ListingEvent.FLAG_NEED_REVIEW));
-        l.setNeedReviewCount(nz(l.getNeedReviewCount()) + 1);
-        l.setLastNeedReviewAt(Instant.now());
-        listingRepository.save(l);
-        categoryCountPublisher.publishIfChanged(categoryCountBefore, l);
-        ownerStatsPublisher.publishIfChanged(ownerStatsBefore, l);
-        return true;
-    }
-
-    @Override
-    @Transactional
     public void markPriceDeviation(Long listingId, boolean deviationFlagged, Long predictionHistoryId) {
         listingRepository.findAliveById(listingId).ifPresent(l -> {
             l.setPriceDeviationFlag(deviationFlagged);
@@ -244,14 +197,6 @@ public class ListingDataGatewayAdapter implements ListingDataGateway {
             }
             listingRepository.save(l);
         });
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public boolean hasPriorWarning(Long listingId) {
-        return listingRepository.findAliveById(listingId)
-                .map(l -> nz(l.getNeedReviewCount()) > 0)
-                .orElse(false);
     }
 
     @Override
@@ -379,10 +324,6 @@ public class ListingDataGatewayAdapter implements ListingDataGateway {
                 .filter(p -> p != null && !p.isBlank())
                 .reduce((a, b) -> a + ", " + b)
                 .orElse(null);
-    }
-
-    private static int nz(Integer v) {
-        return v == null ? 0 : v;
     }
 
     private static int intOf(BigDecimal v) {

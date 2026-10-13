@@ -160,14 +160,6 @@ public interface ListingRepository
     // ==================================================================
 
     /**
-     * Tin bị AI đánh dấu cần kiểm tra do cảm xúc tiêu cực ({@code need_review_count > 0}) — nguồn cho
-     * danh sách cảnh báo sentiment ở màn quản trị AI ({@code AI_LOG_VIEW}). Bỏ qua tin đã xóa mềm;
-     * thứ tự sắp xếp do {@link Pageable} quyết định (mặc định theo {@code last_need_review_at} gần nhất).
-     */
-    @Query("SELECT l FROM Listing l WHERE l.needReviewCount > 0 AND l.deletedAt IS NULL")
-    Page<Listing> findSentimentAlerts(Pageable pageable);
-
-    /**
      * Tin bị AI đánh cờ lệch giá ({@code price_deviation_flag = true}) — nguồn cho danh sách tin
      * nghi ngờ lệch giá ở màn quản trị AI ({@code AI_LOG_VIEW}). Bỏ qua tin đã xóa mềm.
      */

@@ -3,7 +3,6 @@ package com.webtro.modules.admin.service;
 import com.webtro.common.PageResponse;
 import com.webtro.common.enums.AiModule;
 import com.webtro.modules.admin.dto.request.UpdateConfigRequest;
-import com.webtro.modules.admin.dto.response.AiAlertResponse;
 import com.webtro.modules.admin.dto.response.AiConfigResponse;
 import com.webtro.modules.admin.dto.response.AiLogResponse;
 import com.webtro.modules.admin.dto.response.AiPriceDeviationResponse;
@@ -26,12 +25,6 @@ public interface AdminAiService {
 
     /** Xem log AI của một module (canonical 4.19.1); khoảng {@code from..to} tối đa 90 ngày. */
     AiLogResponse getLogs(AiModule module, Instant from, Instant to, Pageable pageable);
-
-    /**
-     * Danh sách tin bị AI đánh dấu cần kiểm tra do cảm xúc tiêu cực ({@code need_review_count > 0}),
-     * kèm tỷ lệ tiêu cực — cần {@code AI_LOG_VIEW}.
-     */
-    PageResponse<AiAlertResponse> getSentimentAlerts(Pageable pageable);
 
     /**
      * Danh sách tin bị AI đánh cờ lệch giá ({@code price_deviation_flag = true}) — cần {@code AI_LOG_VIEW}.

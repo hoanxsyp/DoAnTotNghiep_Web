@@ -12,12 +12,11 @@ import java.math.BigDecimal;
 public interface TrustScoreService {
 
     /**
-     * Tính điểm uy tín tin theo công thức §5.8:
-     * base + Pos·wPos − Neg·wNeg + AvgRating·wRating − ValidReport·wReport − Warning·wWarn,
-     * kẹp vào [min, max].
+     * Tính điểm uy tín tin: base + AvgRating·wRating − ValidReport·wReport − Warning·wWarn, kẹp vào
+     * [min, max]. Công thức §5.8 gốc còn hai số hạng theo cảm xúc bình luận (Pos·wPos − Neg·wNeg);
+     * module phân tích cảm xúc đã bị loại khỏi hệ thống nên hai số hạng này không còn.
      */
-    int calculateListingTrustScore(int positiveComments, int negativeComments,
-                                    BigDecimal averageRating, int validReports, int violationWarnings);
+    int calculateListingTrustScore(BigDecimal averageRating, int validReports, int violationWarnings);
 
     /** Tính lại và LƯU điểm uy tín cho một tin (đọc số liệu từ listing). */
     void recalculateAndSaveListing(Long listingId);

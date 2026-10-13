@@ -6,8 +6,6 @@ import com.webtro.common.enums.AuditActorType;
 import com.webtro.common.enums.BannedKeywordScope;
 import com.webtro.common.enums.CommentStatus;
 import com.webtro.common.enums.NotificationType;
-import com.webtro.common.enums.SentimentLabel;
-import com.webtro.common.event.CommentCreatedEvent;
 import com.webtro.constant.ConfigKey;
 import com.webtro.constant.ErrorCode;
 import com.webtro.constant.RoleCode;
@@ -37,14 +35,12 @@ import com.webtro.security.SecurityUtils;
 import com.webtro.util.HtmlSanitizer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -53,9 +49,6 @@ import java.util.stream.Collectors;
 
 /**
  * Hiện thực nghiệp vụ bình luận (CMT) — canonical 4.7.1–4.7.5, {@code [§3.11]}.
- *
- * <p>Kích hoạt phân tích cảm xúc bằng cách phát {@link CommentCreatedEvent} (canonical luật 7:
- * interaction KHÔNG gọi ngược module ai). Listener AI chạy sau commit.
  */
 @Slf4j
 @Service
@@ -71,7 +64,6 @@ public class CommentServiceImpl implements CommentService {
     private final RateLimitService rateLimitService;
     private final SystemConfigService systemConfig;
     private final AuditLogService auditLogService;
-    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     @Transactional(readOnly = true)
@@ -108,7 +100,6 @@ public class CommentServiceImpl implements CommentService {
 
         return CommentPageResponse.builder()
                 .page(mapped)
-                .sentimentSummary(summarize(roots))
                 .build();
     }
 
@@ -143,7 +134,6 @@ public class CommentServiceImpl implements CommentService {
                 .parent(parent)
                 .content(HtmlSanitizer.stripAllHtml(request.getContent()))
                 .status(status)
-                .sentimentLabel(SentimentLabel.PENDING_ANALYSIS)
                 .isOwnerReply(parent != null && userId.equals(listing.ownerId()))
                 .containsBannedKeyword(mild)
                 .build();
@@ -154,9 +144,6 @@ public class CommentServiceImpl implements CommentService {
             commentRepository.save(parent);
         }
         syncCommentCount(listingId);
-
-        // Kích hoạt AI sentiment (async, sau commit) — canonical 4.7.2 quy tắc 2.
-        eventPublisher.publishEvent(new CommentCreatedEvent(comment.getId(), listingId));
 
         // Thông báo chủ trọ (IN_APP) khi bình luận hiển thị và không phải tự bình luận.
         if (status == CommentStatus.VISIBLE && !userId.equals(listing.ownerId())) {
@@ -205,19 +192,11 @@ public class CommentServiceImpl implements CommentService {
             c.setStatus(CommentStatus.PENDING);
         }
         c.setEditedAt(Instant.now());
-        // Đưa về chờ phân tích lại — canonical 4.7.4.
-        c.setSentimentLabel(SentimentLabel.PENDING_ANALYSIS);
-        c.setSentimentScore(null);
-        c.setSentimentConfidence(null);
         commentRepository.save(c);
         syncCommentCount(c.getListingId());
 
-        eventPublisher.publishEvent(new CommentCreatedEvent(c.getId(), c.getListingId()));
-
         UserGateway.UserBrief author = userGateway.findBrief(userId).orElse(null);
-        CommentResponse resp = buildSingle(c, author, listingOwnerId(c.getListingId()), userId, true);
-        resp.setReanalysisTriggered(true);
-        return resp;
+        return buildSingle(c, author, listingOwnerId(c.getListingId()), userId, true);
     }
 
     @Override
@@ -264,15 +243,12 @@ public class CommentServiceImpl implements CommentService {
 
     @Override
     @Transactional(readOnly = true)
-    public PageResponse<AdminCommentResponse> adminListComments(CommentStatus status, SentimentLabel sentiment,
-                                                                Boolean isSpam, String keyword, Long listingId,
+    public PageResponse<AdminCommentResponse> adminListComments(CommentStatus status, Boolean isSpam,
+                                                                String keyword, Long listingId,
                                                                 Pageable pageable) {
         Specification<Comment> spec = CommentSpecifications.notDeleted();
         if (status != null) {
             spec = spec.and(CommentSpecifications.statusEq(status));
-        }
-        if (sentiment != null) {
-            spec = spec.and(CommentSpecifications.sentimentEq(sentiment));
         }
         if (isSpam != null) {
             spec = spec.and(CommentSpecifications.spamEq(isSpam));
@@ -340,9 +316,7 @@ public class CommentServiceImpl implements CommentService {
         if (Boolean.TRUE.equals(c.getIsSpam())) {
             throw new ConflictException(ErrorCode.COMMENT_INVALID_TRANSITION);
         }
-        // Đánh dấu spam và đưa trọng số uy tín về 0 để loại khỏi công thức tính điểm uy tín.
         c.setIsSpam(true);
-        c.setSentimentWeight(BigDecimal.ZERO);
         commentRepository.save(c);
 
         auditLogService.record(AuditAction.COMMENT_SPAM, AuditActorType.USER, moderatorId,
@@ -415,16 +389,5 @@ public class CommentServiceImpl implements CommentService {
         boolean editable = viewerId != null && viewerId.equals(c.getUserId())
                 && c.getStatus() == CommentStatus.VISIBLE && Instant.now().isBefore(until);
         return commentMapper.toResponse(c, author, editable, editable ? until : null, deletable, List.of());
-    }
-
-    private CommentPageResponse.SentimentSummary summarize(List<Comment> comments) {
-        long positive = comments.stream().filter(c -> c.getSentimentLabel() == SentimentLabel.POSITIVE).count();
-        long neutral = comments.stream().filter(c -> c.getSentimentLabel() == SentimentLabel.NEUTRAL).count();
-        long negative = comments.stream().filter(c -> c.getSentimentLabel() == SentimentLabel.NEGATIVE).count();
-        long mixed = comments.stream().filter(c -> c.getSentimentLabel() == SentimentLabel.MIXED).count();
-        long pending = comments.stream().filter(c -> c.getSentimentLabel() == SentimentLabel.PENDING_ANALYSIS).count();
-        return CommentPageResponse.SentimentSummary.builder()
-                .positive(positive).neutral(neutral).negative(negative).mixed(mixed).pendingAnalysis(pending)
-                .build();
     }
 }

@@ -196,14 +196,6 @@ public class Listing extends AuditableEntity {
     @lombok.Builder.Default
     private Integer commentCount = 0;
 
-    @Column(name = "negative_comment_count", nullable = false)
-    @lombok.Builder.Default
-    private Integer negativeCommentCount = 0;
-
-    @Column(name = "positive_comment_count", nullable = false)
-    @lombok.Builder.Default
-    private Integer positiveCommentCount = 0;
-
     @Column(name = "need_review_count", nullable = false)
     @lombok.Builder.Default
     private Integer needReviewCount = 0;

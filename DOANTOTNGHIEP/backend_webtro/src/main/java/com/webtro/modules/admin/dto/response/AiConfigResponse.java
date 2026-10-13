@@ -24,9 +24,6 @@ public class AiConfigResponse {
     @Schema(description = "Bật/tắt từng module AI (khóa *.enabled)")
     private List<ConfigItemResponse> modules;
 
-    @Schema(description = "Ngưỡng phân tích cảm xúc (ai.sentiment.*)")
-    private List<ConfigItemResponse> sentiment;
-
     @Schema(description = "Cấu hình gợi ý tin (ai.recommendation.*)")
     private List<ConfigItemResponse> recommendation;
 

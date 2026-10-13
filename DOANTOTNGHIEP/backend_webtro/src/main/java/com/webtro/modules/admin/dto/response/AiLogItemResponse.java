@@ -12,8 +12,8 @@ import java.math.BigDecimal;
 import java.time.Instant;
 
 /**
- * Một dòng log AI (canonical 4.19.1) — DTO hợp nhất cho cả 4 module (SENTIMENT/RECOMMENDATION/
- * PRICE/CHATBOT). Các field không dùng của module hiện tại bị bỏ khỏi JSON ({@code NON_NULL}).
+ * Một dòng log AI (canonical 4.19.1) — DTO hợp nhất cho các module (RECOMMENDATION/PRICE/CHATBOT).
+ * Các field không dùng của module hiện tại bị bỏ khỏi JSON ({@code NON_NULL}).
  */
 @Getter
 @Setter
@@ -21,7 +21,7 @@ import java.time.Instant;
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
-@Schema(name = "AiLogItemResponse", description = "Một dòng log AI (hợp nhất 4 module)")
+@Schema(name = "AiLogItemResponse", description = "Một dòng log AI (hợp nhất các module)")
 public class AiLogItemResponse {
 
     @Schema(description = "Id bản ghi log")
@@ -33,17 +33,6 @@ public class AiLogItemResponse {
     // ---- chung ----
     private Long userId;
     private Long listingId;
-
-    // ---- SENTIMENT ----
-    private Long commentId;
-    private String label;
-    private BigDecimal score;
-    private BigDecimal confidence;
-    private String action;
-    private Boolean isRiskComment;
-    private Integer processingMs;
-    private Integer retryCount;
-    private String errorMessage;
 
     // ---- RECOMMENDATION ----
     private String source;

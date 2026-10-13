@@ -46,9 +46,6 @@ public enum NotificationType {
     /** Tin bị báo cáo nhiều */
     REPORT_THRESHOLD("Tin bị báo cáo nhiều"),
 
-    /** AI cảnh báo tiêu cực */
-    AI_NEGATIVE_ALERT("AI cảnh báo tiêu cực"),
-
     /** Tài khoản bị khóa */
     ACCOUNT_LOCKED("Tài khoản bị khóa"),
 

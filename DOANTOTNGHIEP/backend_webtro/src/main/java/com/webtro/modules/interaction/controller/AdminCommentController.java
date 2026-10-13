@@ -4,7 +4,6 @@ import com.webtro.common.ApiResponse;
 import com.webtro.common.BulkActionResponse;
 import com.webtro.common.PageResponse;
 import com.webtro.common.enums.CommentStatus;
-import com.webtro.common.enums.SentimentLabel;
 import com.webtro.exception.BusinessException;
 import com.webtro.constant.ErrorCode;
 import com.webtro.modules.interaction.dto.request.BulkCommentActionRequest;
@@ -42,20 +41,19 @@ public class AdminCommentController {
 
     private final CommentService commentService;
 
-    /** Danh sách bình luận cho kiểm duyệt: lọc theo trạng thái/cảm xúc/spam/từ khóa/tin. */
+    /** Danh sách bình luận cho kiểm duyệt: lọc theo trạng thái/spam/từ khóa/tin. */
     @GetMapping
     @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Danh sách bình luận (kiểm duyệt)",
-            description = "Lọc theo trạng thái, nhãn cảm xúc, cờ spam, từ khóa nội dung và tin; phân trang.")
+            description = "Lọc theo trạng thái, cờ spam, từ khóa nội dung và tin; phân trang.")
     public ResponseEntity<ApiResponse<PageResponse<AdminCommentResponse>>> list(
             @RequestParam(required = false) CommentStatus status,
-            @RequestParam(required = false) SentimentLabel sentiment,
             @RequestParam(required = false) Boolean isSpam,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Long listingId,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         PageResponse<AdminCommentResponse> data = commentService.adminListComments(
-                status, sentiment, isSpam, keyword, listingId, pageable);
+                status, isSpam, keyword, listingId, pageable);
         return ResponseEntity.ok(ApiResponse.success(data, "Lấy danh sách bình luận thành công"));
     }
 

@@ -119,29 +119,11 @@ public interface ListingDataGateway {
     List<ComparableListing> findComparables(ComparableQuery query);
 
     /**
-     * Cập nhật hai bộ đếm denormalized {@code positive_comment_count}/{@code negative_comment_count}
-     * của tin (module ai đếm từ {@code sentiment_results} rồi đẩy sang).
-     */
-    void applySentimentCounts(Long listingId, int positiveCount, int negativeCount);
-
-    /**
-     * Chuyển tin {@code ACTIVE} → {@code NEED_REVIEW} qua {@code ListingStateMachine} (sự kiện
-     * {@code FLAG_NEED_REVIEW}) khi tỷ lệ tiêu cực vượt ngưỡng. Không làm gì nếu tin không ở
-     * {@code ACTIVE}. AI KHÔNG tự khóa tin (canonical mục 10).
-     *
-     * @return {@code true} nếu đã chuyển sang {@code NEED_REVIEW}
-     */
-    boolean flagNeedReview(Long listingId, String reason);
-
-    /**
      * Ghi cờ lệch giá lên tin ({@code price_deviation_flag}) + gắn {@code price_prediction_id} bản
      * mới nhất. TUYỆT ĐỐI không đổi trạng thái/không chặn (canonical mục 10.4 bước 6).
      */
     void markPriceDeviation(Long listingId, boolean deviationFlagged, Long predictionHistoryId);
 
-    /** Tin đã từng bị cảnh báo trước đó chưa (điều kiện thứ ba của auto-hide sentiment §5.3). */
-    boolean hasPriorWarning(Long listingId);
-
-    /** Chủ tin (để đề xuất kiểm tra tài khoản khi nhiều tin bị cảnh báo §9.1). */
+    /** Chủ tin. */
     Optional<Long> ownerOf(Long listingId);
 }

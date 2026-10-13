@@ -35,12 +35,8 @@ public class TrustScoreServiceImpl implements com.webtro.modules.listing.service
     private final LandlordProfileRepository landlordProfileRepository;
 
     @Override
-    public int calculateListingTrustScore(int positiveComments, int negativeComments,
-                                          BigDecimal averageRating, int validReports,
-                                          int violationWarnings) {
+    public int calculateListingTrustScore(BigDecimal averageRating, int validReports, int violationWarnings) {
         int base = config.getInt(ConfigKey.TRUST_BASE_SCORE);
-        int wPos = config.getInt(ConfigKey.TRUST_WEIGHT_POSITIVE_COMMENT);
-        int wNeg = config.getInt(ConfigKey.TRUST_WEIGHT_NEGATIVE_COMMENT);
         int wRating = config.getInt(ConfigKey.TRUST_WEIGHT_AVERAGE_RATING);
         int wReport = config.getInt(ConfigKey.TRUST_WEIGHT_VALID_REPORT);
         int wWarn = config.getInt(ConfigKey.TRUST_WEIGHT_VIOLATION_WARNING);
@@ -49,8 +45,6 @@ public class TrustScoreServiceImpl implements com.webtro.modules.listing.service
 
         BigDecimal rating = averageRating == null ? BigDecimal.ZERO : averageRating;
         BigDecimal score = BigDecimal.valueOf(base)
-                .add(BigDecimal.valueOf((long) positiveComments * wPos))
-                .subtract(BigDecimal.valueOf((long) negativeComments * wNeg))
                 .add(rating.multiply(BigDecimal.valueOf(wRating)))
                 .subtract(BigDecimal.valueOf((long) validReports * wReport))
                 .subtract(BigDecimal.valueOf((long) violationWarnings * wWarn));
@@ -67,11 +61,9 @@ public class TrustScoreServiceImpl implements com.webtro.modules.listing.service
 
         // Số liệu đọc trực tiếp từ các cột đếm sẵn của tin. Báo cáo hợp lệ và cảnh báo vi phạm được
         // quy về điểm uy tín ở cấp chủ trọ (§5.8), nên ở cấp tin để 0 nếu chưa có bộ đếm riêng.
-        int positive = nz(listing.getPositiveCommentCount());
-        int negative = nz(listing.getNegativeCommentCount());
         BigDecimal avgRating = listing.getAverageRating() == null ? BigDecimal.ZERO : listing.getAverageRating();
 
-        int score = calculateListingTrustScore(positive, negative, avgRating, 0, 0);
+        int score = calculateListingTrustScore(avgRating, 0, 0);
         listing.setTrustScore(BigDecimal.valueOf(score).setScale(2, RoundingMode.HALF_UP));
         listingRepository.save(listing);
     }

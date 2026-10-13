@@ -16,7 +16,6 @@ import com.webtro.common.enums.ReportSeverity;
 import com.webtro.common.enums.ReportStatus;
 import com.webtro.common.enums.ReportTargetType;
 import com.webtro.common.enums.ReviewStatus;
-import com.webtro.common.enums.SentimentLabel;
 import com.webtro.common.enums.SubscriptionStatus;
 import com.webtro.common.enums.ToiletType;
 import com.webtro.common.enums.UserStatus;
@@ -108,7 +107,7 @@ import java.util.UUID;
 /**
  * Gieo DỮ LIỆU MẪU THẬT vào cơ sở dữ liệu lúc ứng dụng khởi động — người dùng, tin đăng (kèm ảnh
  * JPEG thật), tiện ích, bình luận, đánh giá, theo dõi, báo cáo, thông báo, thanh toán + đẩy tin.
- * Mục đích: có sẵn dữ liệu phong phú để demo mọi trang (tìm kiếm, chi tiết, AI cảm xúc, kiểm duyệt,
+ * Mục đích: có sẵn dữ liệu phong phú để demo mọi trang (tìm kiếm, chi tiết, kiểm duyệt,
  * doanh thu) mà không phải bấm tay.
  *
  * <p><b>Chạy sau</b> {@link AdminAccountInitializer} ({@code @Order(1)}) để chắc chắn vai trò/role
@@ -498,7 +497,7 @@ public class DemoDataInitializer implements ApplicationRunner {
 
         // ============================ 3. TƯƠNG TÁC ============================
         // Bộ đếm tích lũy theo listingId để cập nhật denormalize sau.
-        Map<Long, int[]> counters = new HashMap<>(); // [views, favorites, comments, pos, neg, reviewCount, reviewSum]
+        Map<Long, int[]> counters = new HashMap<>(); // [views, favorites, comments, (bỏ), (bỏ), reviewCount, reviewSum]
         for (Listing l : listings) {
             counters.put(l.getId(), new int[7]);
         }
@@ -539,7 +538,7 @@ public class DemoDataInitializer implements ApplicationRunner {
             viewCreated++;
         }
 
-        // 3.3 COMMENT (~30, đa cảm xúc, có sẵn nhãn/điểm cho trang AI)
+        // 3.3 COMMENT (~30: khen, chê, hỏi đáp)
         String[] posComments = {
                 "Phòng đẹp, chủ nhà thân thiện, mình đã ở 6 tháng rất hài lòng.",
                 "Khu vực an ninh, sạch sẽ, giá cả hợp lý, rất đáng để thuê.",
@@ -565,49 +564,25 @@ public class DemoDataInitializer implements ApplicationRunner {
         for (int k = 0; k < 30; k++) {
             Listing listing = listings.get((k * 7 + 2) % listings.size());
             User tenant = tenants.get(k % tenants.size());
-            int mood = k % 5; // 0,1 tích cực; 2,3 tiêu cực/trung tính; 4 chờ phân tích
+            int mood = k % 5; // 0,1 khen; 2 chê; 3,4 hỏi đáp
             String content;
-            SentimentLabel label;
-            BigDecimal score;
-            BigDecimal confidence;
             if (mood == 0 || mood == 1) {
                 content = posComments[k % posComments.length];
-                label = SentimentLabel.POSITIVE;
-                score = new BigDecimal("0.720");
-                confidence = new BigDecimal("0.910");
             } else if (mood == 2) {
                 content = negComments[k % negComments.length];
-                label = SentimentLabel.NEGATIVE;
-                score = new BigDecimal("-0.650");
-                confidence = new BigDecimal("0.880");
             } else if (mood == 3) {
                 content = neuComments[k % neuComments.length];
-                label = SentimentLabel.NEUTRAL;
-                score = new BigDecimal("0.050");
-                confidence = new BigDecimal("0.700");
             } else {
                 content = neuComments[(k + 2) % neuComments.length];
-                label = SentimentLabel.PENDING_ANALYSIS; // để demo hàng chờ phân tích AI
-                score = null;
-                confidence = null;
             }
             commentRepository.save(Comment.builder()
                     .listingId(listing.getId())
                     .userId(tenant.getId())
                     .content(content)
                     .status(CommentStatus.VISIBLE)
-                    .sentimentLabel(label)
-                    .sentimentScore(score)
-                    .sentimentConfidence(confidence)
-                    .isRiskComment(label == SentimentLabel.NEGATIVE && k % 10 == 2)
                     .build());
             int[] c = counters.get(listing.getId());
             c[2]++;
-            if (label == SentimentLabel.POSITIVE) {
-                c[3]++;
-            } else if (label == SentimentLabel.NEGATIVE) {
-                c[4]++;
-            }
             commentCreated++;
         }
 
@@ -662,8 +637,6 @@ public class DemoDataInitializer implements ApplicationRunner {
             l.setViewCount(c[0] + 5 + (idx % 9) * 7);        // thêm nền nhẹ theo index
             l.setFavoriteCount(c[1]);
             l.setCommentCount(c[2]);
-            l.setPositiveCommentCount(c[3]);
-            l.setNegativeCommentCount(c[4]);
             l.setReviewCount(c[5]);
             if (c[5] > 0) {
                 l.setAverageRating(BigDecimal.valueOf(c[6])
@@ -835,7 +808,7 @@ public class DemoDataInitializer implements ApplicationRunner {
                 NotificationType.NEW_REVIEW, NotificationType.LISTING_EXPIRING,
                 NotificationType.PAYMENT_SUCCESS, NotificationType.NEW_MATCHING_LISTING,
                 NotificationType.FOLLOWED_LANDLORD_NEW_LISTING, NotificationType.REPORT_THRESHOLD,
-                NotificationType.AI_NEGATIVE_ALERT, NotificationType.ACCOUNT_VERIFICATION
+                NotificationType.ACCOUNT_VERIFICATION
         };
         String[] titles = {
                 "Tin của bạn đã được duyệt",
@@ -846,7 +819,6 @@ public class DemoDataInitializer implements ApplicationRunner {
                 "Có tin mới phù hợp với nhu cầu của bạn",
                 "Chủ trọ bạn theo dõi vừa đăng tin mới",
                 "Một tin đăng bị báo cáo nhiều lần",
-                "Cảnh báo: tin có nhiều bình luận tiêu cực",
                 "Hồ sơ chủ trọ của bạn đã được xác minh"
         };
         String[] contents = {
@@ -858,7 +830,6 @@ public class DemoDataInitializer implements ApplicationRunner {
                 "Chúng tôi tìm thấy một tin đăng phù hợp với bộ lọc bạn đã lưu.",
                 "Chủ trọ bạn đang theo dõi vừa đăng một tin mới, xem ngay.",
                 "Hệ thống ghi nhận nhiều báo cáo cho một tin đăng, vui lòng kiểm tra.",
-                "Tin có tỷ lệ bình luận tiêu cực cao, nên rà soát nội dung.",
                 "Hồ sơ chủ trọ của bạn đã được xác minh thành công."
         };
         int created = 0;

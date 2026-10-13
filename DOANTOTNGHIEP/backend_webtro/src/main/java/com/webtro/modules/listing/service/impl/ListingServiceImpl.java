@@ -626,25 +626,6 @@ public class ListingServiceImpl implements ListingService {
                 .daysRemaining(remainingDays(listing.getExpiredAt()))
                 .build();
 
-        int comment = nz(listing.getCommentCount());
-        int positive = nz(listing.getPositiveCommentCount());
-        int negative = nz(listing.getNegativeCommentCount());
-        int neutral = Math.max(0, comment - positive - negative);
-        BigDecimal negativeRatio = comment == 0 ? BigDecimal.ZERO
-                : BigDecimal.valueOf(negative).divide(BigDecimal.valueOf(comment), 3, RoundingMode.HALF_UP);
-        BigDecimal ratioL1 = config.getDecimal(ConfigKey.AI_SENTIMENT_NEGATIVE_RATIO_L1);
-        int minCommentsL1 = config.getInt(ConfigKey.AI_SENTIMENT_MIN_COMMENTS_L1);
-        boolean flagged = comment >= minCommentsL1 && negativeRatio.compareTo(ratioL1) >= 0;
-
-        ListingStatsResponse.SentimentSummary sentiment = ListingStatsResponse.SentimentSummary.builder()
-                .positive(positive)
-                .neutral(neutral)
-                .negative(negative)
-                .negativeRatio(negativeRatio)
-                .needReviewThresholdRatio(ratioL1)
-                .flagged(flagged)
-                .build();
-
         ListingStatsResponse.Promotion promotion = ListingStatsResponse.Promotion.builder()
                 .promoted(Boolean.TRUE.equals(listing.getIsPromoted()))
                 .priority(nz(listing.getPromotionPriority()))
@@ -657,7 +638,6 @@ public class ListingServiceImpl implements ListingService {
                 .title(listing.getTitle())
                 .status(listing.getStatus().name())
                 .summary(summary)
-                .sentimentSummary(sentiment)
                 .promotion(promotion)
                 .timeSeries(List.of())
                 .build();
