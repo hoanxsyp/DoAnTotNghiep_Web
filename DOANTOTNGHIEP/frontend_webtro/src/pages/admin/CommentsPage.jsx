@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   Box, Stack, TextField, MenuItem, Chip, Typography, IconButton,
-  InputAdornment, Menu, ListItemIcon, ListItemText, Button, Tooltip,
+  InputAdornment, Menu, ListItemIcon, ListItemText, Button,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
@@ -9,7 +9,6 @@ import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import ReportGmailerrorredIcon from '@mui/icons-material/ReportGmailerrorred';
 import adminApi from '@/api/adminApi';
-import { SENTIMENT_META } from '@/constants';
 import { COMMENT_STATUS_META, metaChip } from '@/config/adminMeta';
 import { notify } from '@/utils/toast';
 import { fromNow } from '@/utils/format';
@@ -19,11 +18,10 @@ import AdminDataTable from '@/components/admin/AdminDataTable';
 import ConfirmDialog from '@/components/admin/ConfirmDialog';
 
 const STATUS_OPTIONS = ['VISIBLE', 'PENDING', 'HIDDEN', 'DELETED'];
-const SENTIMENT_OPTIONS = ['POSITIVE', 'NEUTRAL', 'NEGATIVE', 'MIXED', 'PENDING_ANALYSIS'];
 
 /**
- * Kiểm duyệt bình luận + xem cảm xúc AI (docs/04 §10.9, API 4.x). Ẩn/hiện, đánh dấu spam (loại khỏi
- * thống kê điểm uy tín — canonical §10.1). Quyền COMMENT_MODERATE. Lọc theo trạng thái + sentiment.
+ * Kiểm duyệt bình luận (docs/04 §10.9, API 4.x). Ẩn/hiện, đánh dấu spam. Quyền COMMENT_MODERATE.
+ * Lọc theo trạng thái + từ khóa.
  */
 const CommentsPage = () => {
   const {
@@ -32,7 +30,6 @@ const CommentsPage = () => {
 
   const [keyword, setKeyword] = useState('');
   const [status, setStatus] = useState('');
-  const [sentiment, setSentiment] = useState('');
   const [menuAnchor, setMenuAnchor] = useState(null);
   const [active, setActive] = useState(null);
   const [dialog, setDialog] = useState(null); // hide | spam
@@ -42,7 +39,6 @@ const CommentsPage = () => {
     setParams({
       keyword: keyword.trim() || undefined,
       status: status || undefined,
-      sentiment: sentiment || undefined,
       ...next,
     });
   };
@@ -88,16 +84,6 @@ const CommentsPage = () => {
       ),
     },
     {
-      key: 'sentiment', label: 'Cảm xúc', render: (r) => {
-        const m = metaChip(SENTIMENT_META, r.sentimentLabel);
-        return (
-          <Tooltip title={r.sentimentScore != null ? `Điểm: ${r.sentimentScore}` : ''}>
-            <Chip size="small" label={m.label} color={m.color} variant="outlined" />
-          </Tooltip>
-        );
-      },
-    },
-    {
       key: 'status', label: 'Trạng thái', render: (r) => {
         const m = metaChip(COMMENT_STATUS_META, r.status);
         return <Chip size="small" label={m.label} color={m.color} />;
@@ -128,10 +114,6 @@ const CommentsPage = () => {
         <TextField select size="small" label="Trạng thái" value={status} onChange={(e) => { setStatus(e.target.value); applyFilters({ status: e.target.value || undefined }); }} sx={{ minWidth: 160 }}>
           <MenuItem value="">Tất cả</MenuItem>
           {STATUS_OPTIONS.map((s) => <MenuItem key={s} value={s}>{COMMENT_STATUS_META[s].label}</MenuItem>)}
-        </TextField>
-        <TextField select size="small" label="Cảm xúc" value={sentiment} onChange={(e) => { setSentiment(e.target.value); applyFilters({ sentiment: e.target.value || undefined }); }} sx={{ minWidth: 160 }}>
-          <MenuItem value="">Tất cả</MenuItem>
-          {SENTIMENT_OPTIONS.map((s) => <MenuItem key={s} value={s}>{SENTIMENT_META[s].label}</MenuItem>)}
         </TextField>
         <Button variant="contained" onClick={() => applyFilters()}>Tìm</Button>
       </Stack>
@@ -183,7 +165,7 @@ const CommentsPage = () => {
       <ConfirmDialog
         open={dialog === 'spam'}
         title="Đánh dấu spam"
-        message="Bình luận spam sẽ bị loại khỏi thống kê điểm uy tín chủ trọ."
+        message="Đánh dấu bình luận này là spam?"
         confirmText="Đánh dấu spam"
         confirmColor="error"
         requireReason

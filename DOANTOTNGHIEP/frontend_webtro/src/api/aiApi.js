@@ -7,7 +7,6 @@ import { unwrap } from './apiHelper';
 const aiApi = {
   getRecommendations: (payload) => unwrap(axiosClient.post('/ai/recommendations', payload)),
   predictPrice: (payload) => unwrap(axiosClient.post('/ai/price-prediction', payload)),
-  analyzeSentiment: (payload) => unwrap(axiosClient.post('/ai/sentiment/analyze', payload)),
 };
 
 export default aiApi;

@@ -100,7 +100,6 @@ export const BANNED_KEYWORD_SCOPE_META = {
 };
 
 export const AI_MODULE_META = {
-  SENTIMENT: 'Phân tích cảm xúc',
   RECOMMENDATION: 'Gợi ý',
   CHATBOT: 'Trợ lý ảo',
   PRICE: 'Dự đoán giá',

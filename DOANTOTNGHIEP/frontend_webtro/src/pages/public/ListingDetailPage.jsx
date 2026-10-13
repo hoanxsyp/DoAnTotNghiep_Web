@@ -61,8 +61,6 @@ const mapComment = (c) => ({
   canEdit: c.editable,
   canDelete: c.deletable,
   parentId: c.parentCommentId,
-  sentimentLabel: c.sentimentLabel,
-  sentimentScore: c.sentimentScore,
   replies: (c.replies || []).map(mapComment),
 });
 
