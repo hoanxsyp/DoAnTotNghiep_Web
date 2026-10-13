@@ -2,8 +2,11 @@
 
 Hệ thống website trung gian kết nối **chủ trọ** với **người thuê**, hỗ trợ đăng tin, tìm kiếm,
 lọc, lưu tin, liên hệ, bình luận, đánh giá, báo cáo vi phạm, thanh toán đẩy tin và kiểm duyệt —
-kèm **4 module AI**: phân tích cảm xúc bình luận, gợi ý tin đăng, chatbot tìm trọ và dự đoán
-giá thuê.
+kèm **3 module AI**: gợi ý tin đăng, chatbot tìm trọ và dự đoán giá thuê.
+
+> **Module phân tích cảm xúc bình luận đã bị loại khỏi hệ thống** (migration `V21`): bình luận
+> không còn được gán nhãn cảm xúc và không còn ảnh hưởng điểm uy tín. Các tài liệu thiết kế trong
+> `docs/` vẫn còn mô tả module này ở nhiều chỗ.
 
 > **Phạm vi khu vực:** hệ thống giới hạn trong **khu vực Hà Nội** — danh mục địa giới chỉ
 > seed 1 tỉnh (Thành phố Hà Nội) với 12 quận nội thành và các phường thực tế; người dùng chỉ
