@@ -173,28 +173,6 @@ services:
     networks:
       - webtro-net
 
-  # --------------------------- AI: Sentiment -------------------------
-  sentiment-api:
-    build:
-      context: ./AI_Module/AI_SentimentAnalysis
-      dockerfile: Dockerfile
-    container_name: webtro-ai-sentiment-api
-    restart: unless-stopped
-    environment:
-      PYTHONUNBUFFERED: "1"
-      TF_CPP_MIN_LOG_LEVEL: "2"
-      TZ: UTC
-    ports:
-      - "${SENTIMENT_API_EXPOSED_PORT:-5000}:5000"
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=5)"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 90s
-    networks:
-      - webtro-net
-
   # ------------------------- AI: Recommendation ----------------------
   recommendation-api:
     build:
@@ -243,14 +221,11 @@ services:
     container_name: webtro-ai-portal
     restart: unless-stopped
     depends_on:
-      sentiment-api:
-        condition: service_healthy
       rental-api:
         condition: service_healthy
     environment:
       PYTHONUNBUFFERED: "1"
       RENTAL_API_URL: http://rental-api:8000
-      SENTIMENT_API_URL: http://sentiment-api:5000
       TZ: UTC
     ports:
       - "${AI_PORTAL_EXPOSED_PORT:-8501}:8501"
