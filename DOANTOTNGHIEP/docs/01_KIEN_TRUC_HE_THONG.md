@@ -84,7 +84,6 @@ mindmap
       Hạn hiển thị + job hết hạn
       publiclyVisible qua 1 method duy nhất
     Trục 2 — Niềm tin giữa người thuê và chủ trọ
-      TrustScore tin và chủ trọ
       Đánh giá cần tương tác hợp lệ
       Report + ngưỡng tự động ẩn
       Xác thực chủ trọ thủ công
@@ -101,7 +100,7 @@ mindmap
 | Trục | Thành phần kiến trúc hiện thực trục đó | Mục |
 |---|---|---|
 | 1. Tin đăng chất lượng và dễ tìm | `ListingStateMachine`, `ListingVisibilityService.publicStatuses()`, module `search` + index DB, `ListingExpiryJob`, `BannedKeyword` | 3.2, 5.2, 9 |
-| 2. Niềm tin | `TrustScoreRecalcJob`, `moderation` module, `ViolationWarning`, `MaskUtil`, `AuditLog`, `Verification` | 5, 10 |
+| 2. Niềm tin | `moderation` module, `ViolationWarning`, `MaskUtil`, `AuditLog`, `Verification` | 5, 10 |
 | 3. AI hỗ trợ, không thay thế | 4 interface AI + `@Async` executor riêng + `ai.*.enabled` config + `AI_LOG_VIEW` | 6 |
 
 ---
@@ -214,7 +213,7 @@ Một deployable unit `backend`, bên trong chia **package dọc theo nghiệp v
 |---|---|---|
 | Duyệt tin `[§5.1]` | `listings` + `moderation_actions` + `notifications` + `audit_logs` | Cần saga + compensating transaction |
 | Thanh toán thành công `[§3.14]` | `payments` + `promotion_subscriptions` + `listings` + `notifications` | Cần saga; rủi ro tin được đẩy mà chưa trả tiền |
-| Bình luận + sentiment `[§8.3]` | `comments` + `sentiment_results` + `listings.trust_score` + `notifications` | Eventual consistency, khó giải thích trong báo cáo |
+| Bình luận + sentiment `[§8.3]` | `comments` + `sentiment_results` + `notifications` | Eventual consistency, khó giải thích trong báo cáo |
 
 Với monolith, mỗi nghiệp vụ trên là **một `@Transactional` ACID duy nhất** (canonical §3, luật 5). Đây là lựa chọn đúng về mặt kỹ thuật, không chỉ vì "đơn giản hơn".
 
@@ -351,7 +350,7 @@ sequenceDiagram
 | # | Module | Trách nhiệm | Entity sở hữu | Mã chức năng phụ trách (mục 2 tài liệu nghiệp vụ) |
 |---|---|---|---|---|
 | 1 | **auth** | Đăng ký, đăng nhập, đăng xuất, refresh + rotation + reuse detection, quên/đổi mật khẩu, xác thực email/phone, gán role, khóa/mở khóa tài khoản. Phát hành và thu hồi token. | `roles`, `refresh_tokens`, `password_reset_tokens`, `verifications` | `AUTH-01` đăng ký, `AUTH-02` đăng nhập, `AUTH-03` đăng xuất, `AUTH-04` quên mật khẩu, `AUTH-05` đổi mật khẩu, `AUTH-06` xác thực email/SĐT, `AUTH-07` phân quyền theo vai trò, `AUTH-08` khóa/mở khóa tài khoản `[§2.1]` |
-| 2 | **user** | Hồ sơ cá nhân, hồ sơ chủ trọ, thông tin liên hệ, xem hồ sơ công khai, theo dõi chủ trọ, trạng thái xác thực chủ trọ, điểm uy tín chủ trọ. | `users`, `user_profiles`, `landlord_profiles`, `follows` | `USER-01` xem hồ sơ, `USER-02` cập nhật hồ sơ, `USER-03` quản lý thông tin liên hệ, `USER-04` xem hồ sơ chủ trọ, `USER-05` theo dõi/bỏ theo dõi, `USER-06` quản lý trạng thái xác thực chủ trọ `[§2.2]`; `FOLLOW-01`, `FOLLOW-02` `[§2.5]` |
+| 2 | **user** | Hồ sơ cá nhân, hồ sơ chủ trọ, thông tin liên hệ, xem hồ sơ công khai, theo dõi chủ trọ, trạng thái xác thực chủ trọ. | `users`, `user_profiles`, `landlord_profiles`, `follows` | `USER-01` xem hồ sơ, `USER-02` cập nhật hồ sơ, `USER-03` quản lý thông tin liên hệ, `USER-04` xem hồ sơ chủ trọ, `USER-05` theo dõi/bỏ theo dõi, `USER-06` quản lý trạng thái xác thực chủ trọ `[§2.2]`; `FOLLOW-01`, `FOLLOW-02` `[§2.5]` |
 | 3 | **catalog** | Dữ liệu tra cứu ít đổi, dùng chung: loại tin `[§0.3]`, cây hành chính tỉnh/huyện/xã, tiện ích theo nhóm. Là module bị phụ thuộc nhiều nhất, **không phụ thuộc ai**. | `categories`, `provinces`, `districts`, `wards`, `amenities` | `ADM-05` quản lý danh mục, `ADM-06` quản lý khu vực, `ADM-07` quản lý tiện ích `[§2.12]`; `[§10.5]` |
 | 4 | **listing** | Vòng đời tin đăng (state machine), CRUD tin, ảnh, tiện ích của tin, gia hạn, thống kê tin, quy tắc hiển thị công khai. **Chủ sở hữu `ListingStateMachine` và `ListingVisibilityService`.** | `listings`, `listing_images`, `listing_amenities` | `LIST-01` tạo nháp, `LIST-02` đăng tin, `LIST-03` sửa tin, `LIST-04` gửi duyệt, `LIST-05` duyệt/từ chối (thực thi state), `LIST-06` ẩn, `LIST-07` đóng, `LIST-08` xóa mềm, `LIST-09` gia hạn, `LIST-10` thống kê tin, `LIST-11` quản lý ảnh, `LIST-12` quản lý tiện ích `[§2.3]` |
 | 5 | **search** | Truy vấn tìm kiếm + lọc + sắp xếp + phân trang, tin liên quan, gợi ý mở rộng khi ít kết quả, ghi lịch sử tìm kiếm, xen tin được đẩy mà vẫn giữ tính liên quan `[§3.7]`. **Chỉ đọc**, không sở hữu entity nghiệp vụ. | *(không sở hữu entity riêng; đọc `listings` qua `ListingQueryService`; ghi `search_histories` qua module `interaction`)* | `SRCH-01` từ khóa, `SRCH-02` khu vực, `SRCH-03` giá, `SRCH-04` diện tích, `SRCH-05` loại tin, `SRCH-06` tiện ích, `SRCH-07` lọc ở ghép theo giới tính/số người, `SRCH-08` sắp xếp, `SRCH-09` tin liên quan `[§2.4]` |
@@ -359,7 +358,7 @@ sequenceDiagram
 | 7 | **moderation** | Báo cáo vi phạm, xử lý report, hành động kiểm duyệt, cảnh báo vi phạm, từ khóa cấm, ngưỡng tự động ẩn `[§5.3]`, ngưỡng khóa `[§5.4]`. | `reports`, `moderation_actions`, `violation_warnings`, `banned_keywords` | `RPT-01` báo cáo tin, `RPT-02` báo cáo bình luận, `RPT-03` báo cáo người dùng, `RPT-04` xử lý báo cáo, `RPT-05` gửi cảnh báo vi phạm, `RPT-06` khóa tin/tài khoản `[§2.8]`; `CMT-04`, `REV-03` (quyết định kiểm duyệt) `[§2.7]` |
 | 8 | **payment** | Gói dịch vụ, tạo giao dịch, callback cổng thanh toán, kích hoạt gói, lịch sử thanh toán, đẩy tin, nhãn nổi bật, coupon. | `promotion_packages`, `payments`, `promotion_subscriptions`, `coupons` | `PAY-01` xem gói, `PAY-02` mua gói đẩy tin, `PAY-03` tạo giao dịch, `PAY-04` xác nhận thanh toán, `PAY-05` kích hoạt gói, `PAY-06` lịch sử thanh toán; `PROMO-01` đẩy tin lên đầu, `PROMO-02` gắn nhãn nổi bật `[§2.9]` |
 | 9 | **notification** | Thông báo in-app, gửi email qua template Thymeleaf, đánh dấu đã đọc, digest. Là module **hạ nguồn** — ai cũng gọi được, nó không gọi ngược lên. | `notifications` | `NOTI-01` thông báo trong hệ thống, `NOTI-02` email xác thực, `NOTI-03` email cảnh báo, `NOTI-04` có người liên hệ, `NOTI-05` tin sắp hết hạn, `NOTI-06` kết quả duyệt tin `[§2.10]` |
-| 10 | **ai** | 4 engine sau interface: sentiment, recommendation, chatbot, price. Tính lại điểm uy tín tin/chủ trọ. Log AI + cấu hình ngưỡng. **Chỉ đề xuất, không quyết định** `[§10.10]`. | `sentiment_results`, `recommendation_logs`, `prediction_histories`, `chatbot_conversations`, `chatbot_messages` | `AI-01` phân tích cảm xúc, `AI-02` cập nhật uy tín tin, `AI-03` cập nhật uy tín chủ trọ, `AI-04` gợi ý cá nhân hóa, `AI-05` chatbot, `AI-06` dự đoán giá, `AI-07` quản lý log AI, `AI-08` cấu hình ngưỡng AI `[§2.11]` |
+| 10 | **ai** | 4 engine sau interface: sentiment, recommendation, chatbot, price. Log AI + cấu hình ngưỡng. **Chỉ đề xuất, không quyết định** `[§10.10]`. | `sentiment_results`, `recommendation_logs`, `prediction_histories`, `chatbot_conversations`, `chatbot_messages` | `AI-01` phân tích cảm xúc, `AI-04` gợi ý cá nhân hóa, `AI-05` chatbot, `AI-06` dự đoán giá, `AI-07` quản lý log AI, `AI-08` cấu hình ngưỡng AI `[§2.11]` |
 | 11 | **admin** | Dashboard, thống kê, cấu hình hệ thống, cấu hình AI, audit log. Là **mặt tiền quản trị**: điều phối các module khác, tự mình chứa rất ít nghiệp vụ. | `audit_logs`, `system_configs`, `ai_configs` | `ADM-01` dashboard, `ADM-02` quản lý người dùng, `ADM-03` quản lý chủ trọ, `ADM-04` quản lý tin đăng, `ADM-08` quản lý gói dịch vụ, `ADM-09` quản lý thanh toán, `ADM-10` quản lý báo cáo/khiếu nại, `ADM-11` quản lý bình luận/đánh giá, `ADM-12` quản lý AI, `ADM-13` thống kê và báo cáo, `ADM-14` quản lý cấu hình hệ thống `[§2.12]` |
 
 **Làm rõ các mã chức năng nằm ở nhiều module** (tránh tranh chấp khi code):
@@ -371,7 +370,6 @@ sequenceDiagram
 | `ADM-04` quản lý tin đăng | `listing` | `admin` | Admin sửa trạng thái vẫn phải đi qua state machine |
 | `ADM-11` quản lý bình luận/đánh giá | `interaction` (dữ liệu) + `moderation` (quyết định) | `admin` | `[§10.9]`: *"Không sửa nội dung đánh giá của người dùng. Chỉ ẩn hoặc khôi phục"* |
 | `HIST-01` ghi lịch sử xem | `interaction` | `listing` (gọi khi xem chi tiết) | `[§3.8]` bước 5 |
-| `AI-02/AI-03` cập nhật uy tín | `ai` (`TrustScoreCalculator`) | — | Ghi `listings.trust_score` / `landlord_profiles.trust_score` **qua `ListingService`/`UserService`** (luật 4) |
 
 ### 3.3. Sơ đồ phụ thuộc giữa các module
 
@@ -595,7 +593,6 @@ backend_webtro/
     │   │   ├── scheduler/
     │   │   │   ├── ListingExpiryJob.java             # mỗi giờ (canonical §11)
     │   │   │   ├── ListingExpiryReminderJob.java     # 08:00 hằng ngày
-    │   │   │   ├── TrustScoreRecalcJob.java          # 02:00 hằng ngày
     │   │   │   ├── SentimentRetryJob.java            # mỗi 10 phút
     │   │   │   ├── RecommendationPrecomputeJob.java  # mỗi 6 giờ
     │   │   │   ├── NewMatchingListingNotifyJob.java  # 07:30 hằng ngày — tin mới khớp nhu cầu [§9.2]
@@ -740,7 +737,7 @@ backend_webtro/
     │   │       │   ├── controller/    SentimentController · RecommendationController
     │   │       │   │                  ChatbotController · PricePredictionController · AdminAiController
     │   │       │   ├── service/       SentimentService · RecommendationService · ChatbotService
-    │   │       │   │                  PricePredictionService · TrustScoreService · AiConfigService · AiLogService
+    │   │       │   │                  PricePredictionService · AiConfigService · AiLogService
     │   │       │   ├── service/impl/  (…Impl)
     │   │       │   ├── engine/
     │   │       │   │   ├── sentiment/      SentimentAnalyzer (interface)
@@ -753,7 +750,7 @@ backend_webtro/
     │   │       │   │   │                   IntentClassifier · SlotExtractor · ChatbotResponseBuilder · FaqKnowledgeBase
     │   │       │   │   └── price/          PriceEstimator (interface) · ComparableHedonicPriceEstimator
     │   │       │   │                       ComparableFinder · HedonicAdjuster · ConfidenceCalculator
-    │   │       │   ├── listener/      CommentSentimentListener · TrustScoreListener
+    │   │       │   ├── listener/      CommentSentimentListener
     │   │       │   ├── repository/    SentimentResultRepository · RecommendationLogRepository
     │   │       │   │                  PredictionHistoryRepository · ChatbotConversationRepository
     │   │       │   │                  ChatbotMessageRepository
@@ -892,7 +889,7 @@ frontend_webtro/
     ├── components/
     │   ├── common/                    # Loading · Skeleton · EmptyState · ErrorState · ErrorBoundary
     │   │                              # ConfirmDialog · Pagination · ImageUploader · ImageGallery
-    │   │                              # StarRating · TrustScoreBadge · StatusChip · PriceText
+    │   │                              # StarRating · StatusChip · PriceText
     │   │                              # MaskedPhone · CopyButton · SeoHead · LazyImage
     │   ├── layout/                    # Header · Footer · Sidebar · UserMenu · NotificationBell · MobileDrawer
     │   ├── listing/                   # ListingCard · ListingList · ListingDetailInfo · ListingImageSlider
@@ -1372,7 +1369,6 @@ graph TB
         RE["<b>RecommendationEngine</b><br/>→ ContentBasedRecommendationEngine<br/>SYNC + cache 15'"]
         CB["<b>ChatbotEngine</b><br/>→ RuleBasedChatbotEngine<br/>SYNC"]
         PE["<b>PriceEstimator</b><br/>→ ComparableHedonicPriceEstimator<br/>SYNC"]
-        TSC["<b>TrustScoreCalculator</b> [§5.8]"]
     end
 
     subgraph OUT["Hệ quả — CHỈ đề xuất, KHÔNG quyết định [§10.10]"]
@@ -1398,11 +1394,9 @@ graph TB
     UI4 --> PE
 
     SA --> SR
-    SA --> TSC
     RE --> RL
     CB --> CC
     PE --> PH
-    TSC -->|"trust_score < ngưỡng"| FLAG
     SA -->|"vượt ngưỡng tiêu cực [§9.1]"| FLAG
     FLAG --> NOTI
     NOTI --> HUMAN
@@ -1447,7 +1441,7 @@ Hàng đợi là **`LinkedBlockingQueue` bên trong `ThreadPoolTaskExecutor`** (
 | **Interface** | `SentimentAnalyzer` — `SentimentOutput analyze(SentimentInput input)` |
 | **Impl** | `VietnameseLexiconSentimentAnalyzer` (canonical §10.1) |
 | **Thành phần phụ** | `SentimentLexicon` (từ điển có trọng số, nạp từ `resources/data/`), `NegationHandler`, `IntensifierHandler`, `EmojiHandler`, `TextNormalizer` |
-| **Service** | `SentimentService` → `SentimentServiceImpl` (transaction, lưu `sentiment_results`, gọi `TrustScoreService`) |
+| **Service** | `SentimentService` → `SentimentServiceImpl` (transaction, lưu `sentiment_results`) |
 | **Listener** | `CommentSentimentListener` — `@TransactionalEventListener(phase = AFTER_COMMIT) @Async("aiTaskExecutor")` |
 
 **Input** `[§9.1]`:
@@ -1494,7 +1488,6 @@ Hàng đợi là **`LinkedBlockingQueue` bên trong `ThreadPoolTaskExecutor`** (
 | Có **bình luận mới** | `CommentCreatedEvent` → listener |
 | Bình luận **được sửa** | `CommentUpdatedEvent` → phân tích lại, ghi đè `SentimentResult` |
 | Admin yêu cầu **phân tích lại** | `POST /api/ai/sentiment/analyze` (`AI_CONFIG_MANAGE`) |
-| Job tính lại khi **đổi cấu hình ngưỡng** | `TrustScoreRecalcJob` (02:00 hằng ngày) |
 | Retry `PENDING_ANALYSIS` | `SentimentRetryJob` (mỗi 10 phút) |
 | `ai.sentiment.enabled = false` | **Bỏ qua hoàn toàn** — bình luận vẫn lưu, sentiment = `PENDING_ANALYSIS` `[§10.10]` *"Bật/tắt từng module AI nếu cần bảo trì"* |
 
@@ -1511,11 +1504,11 @@ Hàng đợi là **`LinkedBlockingQueue` bên trong `ThreadPoolTaskExecutor`** (
 
 | Tình huống | Xử lý | Config |
 |---|---|---|
-| Bình luận quá ngắn | → `NEUTRAL`, **không** tính vào điểm uy tín | `ai.sentiment.min_length` = 10 |
+| Bình luận quá ngắn | → `NEUTRAL`, **không** tính vào thống kê cảm xúc | `ai.sentiment.min_length` = 10 |
 | Vừa khen vừa chê (có cả cụm dương và âm mạnh) | → `MIXED` | — |
 | Mỉa mai, confidence < 0.5 | Lưu confidence thấp, **không** kích hoạt hành động nặng | — |
 | **AI lỗi / timeout** | Bình luận **vẫn được lưu**; `sentiment = PENDING_ANALYSIS`; `SentimentRetryJob` xử lý lại | — |
-| Bình luận bị Moderator đánh dấu spam | **Loại khỏi thống kê** điểm uy tín | — |
+| Bình luận bị Moderator đánh dấu spam | **Loại khỏi thống kê** cảm xúc | — |
 | Bình luận từ tài khoản mới (<7 ngày) | Trọng số **0.5** | `ai.sentiment.new_account_days` = 7, `.new_account_weight` = 0.5 |
 
 **Timeout & lỗi:**
@@ -1572,9 +1565,8 @@ score = 0.22·locationMatch      // khu vực: ward → district → province
       + 0.08·amenityMatch       // tiện ích quan tâm
       + 0.08·occupantMatch      // số người ở                 [§9.2] "Số người ở"
       + 0.06·genderMatch        // giới tính — CHỈ tin ROOMMATE [§9.2] "Giới tính nếu là ở ghép"
-      + 0.06·trustScoreNorm     // uy tín tin, chuẩn hóa /100
       + 0.06·freshness          // độ mới
-                                // Σ trọng số = 1.00
+                                // Σ trọng số = 0.94 (đã bỏ số hạng uy tín 0.06)
 score = score × promotedBoost   // trần ai.recommendation.promoted_boost = 1.15
 ```
 
@@ -1591,7 +1583,6 @@ score = score × promotedBoost   // trần ai.recommendation.promoted_boost = 1.
 | `amenityMatch` | `\|A ∩ P\| / \|P\|` — `A` = tiện ích của tin, `P` = tiện ích quan tâm. `P = ∅` → `0.5` (trung tính) | Jaccard một chiều: không phạt tin có **thừa** tiện ích |
 | `occupantMatch` | `1.0` nếu `listing.max_occupants >= profile.preferredOccupants`; `0.5` nếu thiếu **đúng 1** chỗ; `0` nếu thiếu ≥ 2. `preferredOccupants = null` → `0.5` (trung tính) | Bất đối xứng có chủ đích: phòng **rộng hơn** nhu cầu vẫn dùng được, phòng **chật hơn** thì không `[§2.4]` SRCH‑07 |
 | `genderMatch` | Chỉ tính khi `listing.category = ROOMMATE`. `1.0` nếu `listing.gender_requirement = ANY` **hoặc** trùng `profile.preferredGenderRequirement`; `0` nếu xung khắc (VD hồ sơ `FEMALE_ONLY` × tin `MALE_ONLY`) | Xem quy tắc chuẩn hóa lại trọng số ngay dưới |
-| `trustScoreNorm` | `listings.trust_score / trust.max` (= 100) | Trục 2 `[§15]`: tin uy tín cao được ưu tiên |
 | `freshness` | `max(0, 1 − ageDays / listing.display_days)` — `display_days` = 30 | Tin càng mới càng cao; hết hạn hiển thị → `0` |
 
 **Quy tắc chuẩn hóa lại trọng số khi số hạng không áp dụng — bắt buộc:**
@@ -1604,9 +1595,9 @@ W(listing)               := Σ trọng số của applicableTerms(listing)
 score(listing)           := ( Σ_{t ∈ applicableTerms} w_t · t(listing) ) / W(listing)
 ```
 
-Với tin `ROOMMATE`: `W = 1.00` → công thức không đổi.
-Với tin **không** phải `ROOMMATE`: `W = 0.94` → 8 số hạng còn lại được **chia lại tỉ lệ** cho tổng về đúng `1.00`.
-Nhờ vậy `score` của **mọi** tin luôn nằm trong `[0, 1]` **trước** khi nhân `promotedBoost`, và tin `ROOMMATE` với tin thường **so sánh được với nhau** trên cùng thang. Hiện thực: `ListingScorer.score()` cộng dồn `(w_t, t)` vào một accumulator rồi chia cho tổng `w_t` đã cộng — không viết cứng `0.94` ở bất kỳ đâu.
+Với tin `ROOMMATE`: `W = 0.94` (đủ 8 số hạng).
+Với tin **không** phải `ROOMMATE`: `W = 0.88` → 7 số hạng còn lại được **chia lại tỉ lệ** cho tổng về đúng `1.00`.
+Nhờ vậy `score` của **mọi** tin luôn nằm trong `[0, 1]` **trước** khi nhân `promotedBoost`, và tin `ROOMMATE` với tin thường **so sánh được với nhau** trên cùng thang. Hiện thực: `ListingScorer.score()` cộng dồn `(w_t, t)` vào một accumulator rồi chia cho tổng `w_t` đã cộng — không viết cứng `0.94`/`0.88` ở bất kỳ đâu.
 
 > **Vì sao trần boost là 1.15, không phải 2.0:** `[§9.2]` *"Tin trả phí có thể tăng thứ hạng **nhưng vẫn cần phù hợp nhu cầu**"*; `[§3.7]` *"phải đảm bảo không làm mất tính liên quan"*; `[§10.6]` *"Mức ưu tiên cần có giới hạn để tránh làm sai kết quả tìm kiếm"*; `[§3.14]` *"Không cho phép tin vi phạm dùng tiền để vượt kiểm duyệt"*. Trần 1.15 nghĩa là tiền chỉ thắng khi hai tin **đã gần ngang nhau** về độ phù hợp — nó không thể kéo một tin lệch nhu cầu lên đầu. Đây là hiện thực của trục 1 `[§15]` "tin đăng chất lượng và **dễ tìm**".
 
@@ -1654,7 +1645,7 @@ Nhờ vậy `score` của **mọi** tin luôn nằm trong `[0, 1]` **trước** 
 | Loại tin của **chính user** | Không gợi ý tin của mình |
 | Ghi `RecommendationLog` | `[§9.2]` *"cần lưu RecommendationLog để giải thích và đánh giá hiệu quả"* |
 
-**Ghi `RecommendationLog` — 9 điểm thành phần phải khớp 1‑1 với 9 số hạng công thức:**
+**Ghi `RecommendationLog` — 8 điểm thành phần phải khớp 1‑1 với 8 số hạng công thức:**
 
 Bảng `recommendation_logs` (02_THIET_KE_DATABASE.md) lưu **từng** điểm thành phần, không chỉ điểm tổng. Đây là điều kiện để `[§9.2]` *"giải thích và đánh giá hiệu quả"* có thể thực hiện được — Admin xem log AI (`AI-07`, permission `AI_LOG_VIEW`) phải trả lời được câu *"vì sao tin này được gợi ý"*, mà điều đó bất khả thi nếu chỉ có điểm tổng.
 
@@ -1667,9 +1658,8 @@ Bảng `recommendation_logs` (02_THIET_KE_DATABASE.md) lưu **từng** điểm t
 | `amenity_score` | `amenityMatch` | |
 | `occupant_score` | `occupantMatch` | Cột bổ sung theo `[§9.2]` *"Số người ở"* |
 | `gender_score` | `genderMatch` | Cột bổ sung theo `[§9.2]` *"Giới tính nếu là ở ghép"*. **`NULL`** khi tin không phải `ROOMMATE` (số hạng không áp dụng) — `NULL` ở đây mang nghĩa *"không tính"*, khác hẳn `0` nghĩa *"tính và trượt"* |
-| `trust_score_norm` | `trustScoreNorm` | |
 | `freshness_score` | `freshness` | |
-| `applied_weight_sum` | `W(listing)` | `1.00` cho tin `ROOMMATE`, `0.94` cho tin còn lại. Lưu lại để **tái dựng** được điểm tổng từ các thành phần khi đối chiếu log |
+| `applied_weight_sum` | `W(listing)` | `0.94` cho tin `ROOMMATE`, `0.88` cho tin còn lại. Lưu lại để **tái dựng** được điểm tổng từ các thành phần khi đối chiếu log |
 | `promoted_boost` | hệ số đã nhân | `1.0` nếu tin không được đẩy |
 | `final_score` | `score` sau boost | |
 
@@ -1841,14 +1831,13 @@ Canonical §10 chốt: *"AI **không bao giờ** tự khóa tài khoản; chỉ 
 | AI **ĐƯỢC** | AI **KHÔNG BAO GIỜ ĐƯỢC** |
 |---|---|
 | Gắn `SentimentLabel` cho bình luận | Xóa / sửa / ẩn bình luận |
-| Tính lại `trust_score` tin và chủ trọ `[§5.7]` | Khóa tin (`LOCK`) |
-| Đề xuất `ACTIVE → NEED_REVIEW` (`FLAG_NEED_REVIEW`) | Khóa tài khoản (`UserStatus.LOCKED`) |
+| Đề xuất `ACTIVE → NEED_REVIEW` (`FLAG_NEED_REVIEW`) | Khóa tin (`LOCK`), khóa tài khoản (`UserStatus.LOCKED`) |
 | Gửi cảnh báo `AI_NEGATIVE_ALERT` tới Moderator/Admin | Từ chối tin (`REJECT`) |
 | Gợi ý tin, trả lời chatbot, đề xuất giá | **Chặn đăng tin** vì giá lệch `[§3.3]` `[§9.4]` |
 | Ghi `flagged` cho tin lệch giá | Duyệt tin tự động (chỉ `listing.auto_approve.trusted_landlord` — **mặc định `false`**, và là quyết định của **Admin qua config**, không phải của AI) |
 | Ghi log để người xem lại | Ẩn hành vi của mình khỏi log |
 
-> **Ghi chú về `listing.auto_approve.trusted_landlord`** (canonical §9, mặc định `false`): `[§3.3]` luồng phụ có nêu *"Nếu chủ trọ đã được xác thực uy tín, hệ thống có thể tự động duyệt tin ít rủi ro"*. Đây là **rule cấu hình do Admin bật**, dựa trên trạng thái xác thực thủ công + `trust_score` — **không** phải AI quyết định. Mặc định `false` đúng tinh thần `[§15]` trục 3. Khi bật, `ModerationAction` vẫn được ghi với actor `SYSTEM` để truy vết.
+> **Ghi chú về `listing.auto_approve.trusted_landlord`** (canonical §9, mặc định `false`): `[§3.3]` luồng phụ có nêu *"Nếu chủ trọ đã được xác thực, hệ thống có thể tự động duyệt tin ít rủi ro"*. Đây là **rule cấu hình do Admin bật**, dựa trên trạng thái xác thực thủ công + `trust_score` — **không** phải AI quyết định. Mặc định `false` đúng tinh thần `[§15]` trục 3. Khi bật, `ModerationAction` vẫn được ghi với actor `SYSTEM` để truy vết.
 
 ### 6.7. Vì sao rule-based/thống kê trong Java thay vì service ML riêng
 
@@ -1903,7 +1892,6 @@ Canonical §10 chốt: *"AI **không bao giờ** tự khóa tài khoản; chỉ 
 |---|---|---|---|
 | `ListingExpiryJob` | mỗi giờ | `0 0 * * * *` | `ACTIVE`/`NEED_REVIEW` quá `expired_at` → `EXPIRED` `[§5.2]` |
 | `ListingExpiryReminderJob` | 08:00 hằng ngày | `0 0 8 * * *` | Nhắc trước **3 ngày** và **1 ngày** `[§5.2]` |
-| `TrustScoreRecalcJob` | 02:00 hằng ngày | `0 0 2 * * *` | Tính lại điểm uy tín tin + chủ trọ `[§5.7]` |
 | `SentimentRetryJob` | mỗi 10 phút | `0 */10 * * * *` | Xử lý lại `PENDING_ANALYSIS` `[§9.1]` |
 | `RecommendationPrecomputeJob` | mỗi 6 giờ | `0 0 */6 * * *` | Tính trước gợi ý cho user hoạt động `[§5.5]` |
 | `NewMatchingListingNotifyJob` | 07:30 hằng ngày | `0 30 7 * * *` | Quét tin **mới `ACTIVE` trong 24h**, đối chiếu hồ sơ nhu cầu → `Notification` `NEW_MATCHING_LISTING` (in-app + email) `[§9.2]` |
@@ -1921,7 +1909,6 @@ Canonical §10 chốt: *"AI **không bao giờ** tự khóa tài khoản; chỉ 
 |---|---|---|---|
 | `ListingExpiryJob` | `status IN (ACTIVE, NEED_REVIEW) AND expired_at < NOW() AND deleted_at IS NULL` | `ListingStateMachine.transition(l, EXPIRE, SYSTEM)` | **Bắt buộc** đi qua state machine (canonical §5.1); xử lý theo lô 500 bản ghi; ghi `Notification` `LISTING_EXPIRED` `[§5.6]` |
 | `ListingExpiryReminderJob` | `status = ACTIVE AND DATE(expired_at) IN (today+3, today+1)` | `Notification` `LISTING_EXPIRING` (in-app + email) `[§5.6]` | Ngày nhắc đọc từ `listing.expiry.reminder_days` = `3,1` — **không hardcode** |
-| `TrustScoreRecalcJob` | Tin có bình luận/đánh giá/report mới trong 24h | `TrustScoreService.recalculate()` theo công thức `[§5.8]` | Trọng số từ `trust.weight.*`; kẹp trong `[trust.min, trust.max]` = [0,100]; `< trust.threshold.risky` (40) → nhãn rủi ro; `< trust.threshold.need_review` (25) → **đề xuất** `NEED_REVIEW` |
 | `SentimentRetryJob` | `sentiment_results.label = PENDING_ANALYSIS AND retry_count < ai.sentiment.max_retry` | Gọi lại `SentimentAnalyzer` | Đây là **lưới an toàn độ bền** cho in-process queue (mục 6.1) |
 | `RecommendationPrecomputeJob` | User có hoạt động trong 7 ngày | Tính + nạp sẵn vào cache Redis | Giảm độ trễ trang chủ `[§5.5]` *"hoặc job định kỳ tính trước"* |
 | `NewMatchingListingNotifyJob` | Tin `status = ACTIVE AND approved_at >= NOW() - 24h AND deleted_at IS NULL`; user `status = ACTIVE` có hoạt động trong 30 ngày | Gọi `RecommendationEngine` với `source = NOTIFICATION` → tin đạt ngưỡng → `NotificationService.create(NEW_MATCHING_LISTING)` (in-app + email) | Idempotent theo `(user_id, listing_id)`; tôn trọng `notification_preferences`; trần số tin/user/ngày. **Không** gửi cho tin của chính user. Đặc tả đầy đủ ở mục 7.4 |
@@ -1971,7 +1958,7 @@ Canonical §10 chốt: *"AI **không bao giờ** tự khóa tài khoản; chỉ 
 | `RejectedExecutionHandler` | **`CallerRunsPolicy`** | **`CallerRunsPolicy`** |
 | `waitForTasksToCompleteOnShutdown` | `true` | `true` |
 | `awaitTerminationSeconds` | 30 | 30 |
-| Dùng bởi | `CommentSentimentListener`, `TrustScoreListener` | `EmailService` (`SmtpEmailService`) |
+| Dùng bởi | `CommentSentimentListener` | `EmailService` (`SmtpEmailService`) |
 
 **Vì sao tách 2 executor, không dùng chung một:**
 
@@ -2227,7 +2214,6 @@ Hạ tầng: Redis 7.4 + `spring-boot-starter-data-redis` (Lettuce), `CacheManag
 | `idx_listings_status_category_price` | `(status, category_id, price)` | SRCH-05 + SRCH-03 |
 | `idx_listings_status_area` | `(status, area)` | SRCH-04 |
 | `idx_listings_owner_status` | `(owner_id, status)` | "Tin đăng của tôi" — trang landlord |
-| `idx_listings_status_trust_score` | `(status, trust_score)` | Sắp xếp uy tín + lọc tin rủi ro `[§5.8]` |
 | `idx_listings_deleted_at` | `(deleted_at)` | Soft delete filter |
 | `idx_favorites_user_listing` (UNIQUE `uk_favorites_user_listing`) | `(user_id, listing_id)` | `[§3.9]` *"Một người dùng chỉ lưu một tin một lần"* — **unique constraint là nơi thi hành luật này**, không phải if trong service |
 | `idx_view_histories_user_created` | `(user_id, created_at)` | HIST-02 + input recommendation |
@@ -2422,7 +2408,7 @@ Hạ tầng: Redis 7.4 + `spring-boot-starter-data-redis` (Lettuce), `CacheManag
 
 ### 10.4. Correlation id (`traceId`)
 
-**Vấn đề:** một request đăng bình luận chạm `CommentController` → `CommentServiceImpl` → `NotificationService` → (async) `SentimentAnalyzer` → `TrustScoreService`. Khi có lỗi, làm sao biết dòng log nào thuộc request nào giữa hàng nghìn dòng đan xen?
+**Vấn đề:** một request đăng bình luận chạm `CommentController` → `CommentServiceImpl` → `NotificationService` → (async) `SentimentAnalyzer`. Khi có lỗi, làm sao biết dòng log nào thuộc request nào giữa hàng nghìn dòng đan xen?
 
 **Giải pháp:** mỗi request có một `traceId` duy nhất, đi kèm **mọi** dòng log của request đó.
 
@@ -2488,7 +2474,7 @@ graph LR
 |---|---|
 | Công cụ DB | `mysqldump --single-transaction --routines --triggers --set-gtid-purged=OFF` |
 | **`--single-transaction` là bắt buộc** | Với InnoDB, nó chụp ảnh **nhất quán** mà **không khóa bảng** → website vẫn chạy trong lúc backup. Thiếu cờ này, backup có thể bắt được trạng thái giữa chừng: `payments = SUCCESS` nhưng `promotion_subscriptions` chưa kịp tạo → phục hồi ra dữ liệu **sai nghiệp vụ** |
-| Tần suất | **Hằng ngày 01:00** (trước `TrustScoreRecalcJob` 02:00 — backup trạng thái "sạch" trước khi job hàng loạt chạm dữ liệu) |
+| Tần suất | **Hằng ngày 01:00** (giờ ít truy cập, trước các job hàng loạt buổi sáng) |
 | Ảnh | `tar czf uploads-$(date +%F).tar.gz` từ volume `upload_data`; **hằng tuần** đầy đủ + **hằng ngày** incremental (`find -newer`) — ảnh chỉ thêm, hiếm khi sửa |
 | Giữ bao lâu | **7 bản ngày** + **4 bản tuần** + **3 bản tháng** (GFS — Grandfather-Father-Son). Đủ để phát hiện lỗi "âm thầm" xảy ra vài tuần trước |
 | Đặt ở đâu | **Ngoài host chạy Docker** (ổ ngoài / cloud storage). Backup nằm cùng máy với DB thì ổ cứng hỏng là mất cả hai — đó không phải backup, đó là bản sao |
@@ -3062,7 +3048,7 @@ Canonical §1.3: *"Không hardcode host/user/password ở bất kỳ đâu; toà
 | 15 | Mục tiêu **RPO ≤ 24h / RTO ≤ 2h** + quy trình khôi phục 4 kịch bản | 11.3 | Bổ sung vào canonical (mục mới) |
 | 16 | Interface **`FileStorage`** (tạo ngay, impl duy nhất `LocalFileStorage`) để mở đường cloud storage `[§11.6]` | 12.2 | Bổ sung vào cây package canonical §3 |
 | 17 | Cổng host `80`/`8080`/`3307`/`6380` (canonical §1.3 chỉ yêu cầu "không hardcode", không chốt số) | 2.2 | Bổ sung vào canonical §1.3 |
-| 18 | Công thức recommendation **9 số hạng** (tách `areaMatch` → `locationMatch` + `areaSizeMatch`; thêm `occupantMatch`, `genderMatch`) phủ đủ 11 mục "Dữ liệu đầu vào" `[§9.2]`; Σ trọng số = 1.00 | 6.3 | **Sửa** canonical §10.2 (công thức 6 số hạng hiện tại thiếu diện tích, số người ở, giới tính) |
+| 18 | Công thức recommendation **8 số hạng** (tách `areaMatch` → `locationMatch` + `areaSizeMatch`; thêm `occupantMatch`, `genderMatch`; đã bỏ số hạng uy tín) phủ các mục "Dữ liệu đầu vào" `[§9.2]`; Σ trọng số = 0.94, điểm chuẩn hóa theo tổng trọng số áp dụng | 6.3 | **Sửa** canonical §10.2 (công thức 6 số hạng hiện tại thiếu diện tích, số người ở, giới tính) |
 | 19 | Quy tắc chuẩn hóa lại trọng số khi `genderMatch` không áp dụng (tin ≠ `ROOMMATE`) | 6.3 | Bổ sung vào canonical §10.2 |
 | 20 | Cột điểm thành phần mới trong `recommendation_logs`: `location_score`, `area_size_score`, `occupant_score`, `gender_score`, `applied_weight_sum` | 6.3 | Chuyển cho `02_THIET_KE_DATABASE.md` |
 | 21 | Job **`NewMatchingListingNotifyJob`** (07:30 hằng ngày) — tác nhân duy nhất sinh `RecommendationSource.NOTIFICATION`; thay `NotificationDigestJob` chưa từng được đặc tả | 7.1, 7.4 | Bổ sung vào canonical §11 (10 job) + đổi tên trong cây package canonical §3 |
