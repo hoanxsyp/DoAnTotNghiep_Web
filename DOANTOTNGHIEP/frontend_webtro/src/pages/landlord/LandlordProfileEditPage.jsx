@@ -124,7 +124,6 @@ const LandlordProfileEditPage = () => {
               />
               <Divider sx={{ my: 2 }} />
               <Stack spacing={1}>
-                <Row label="Điểm uy tín" value={profile?.trustScore ?? '—'} />
                 <Row label="Tổng số tin" value={profile?.totalListings ?? 0} />
                 <Row label="Tin đang hiển thị" value={profile?.activeListings ?? 0} />
               </Stack>

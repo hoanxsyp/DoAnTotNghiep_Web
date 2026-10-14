@@ -5,7 +5,6 @@ import com.webtro.constant.RoleCode;
 import com.webtro.exception.ResourceNotFoundException;
 import com.webtro.modules.moderation.spi.UserModerationGateway;
 import com.webtro.modules.user.entity.User;
-import com.webtro.modules.user.repository.LandlordProfileRepository;
 import com.webtro.modules.user.repository.RoleRepository;
 import com.webtro.modules.user.repository.UserRepository;
 import com.webtro.modules.user.service.UserService;
@@ -13,25 +12,20 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.Optional;
 
 /**
  * Adapter (module {@code user}) hiện thực {@link UserModerationGateway} mà module {@code moderation}
- * cần — canonical luật 4. Bọc {@link UserRepository} + {@link LandlordProfileRepository} +
- * {@link RoleRepository} để đọc thông tin kiểm duyệt, và ủy quyền thao tác ghi (tạm khóa đăng tin)
+ * cần — canonical luật 4. Bọc {@link UserRepository} + {@link RoleRepository} để đọc thông tin
+ * kiểm duyệt, và ủy quyền thao tác ghi (tạm khóa đăng tin)
  * cho {@link UserService}.
  */
 @Component
 @RequiredArgsConstructor
 public class UserModerationGatewayAdapter implements UserModerationGateway {
 
-    private static final int DEFAULT_TRUST_SCORE = 100;
-
     private final UserRepository userRepository;
-    private final LandlordProfileRepository landlordProfileRepository;
     private final RoleRepository roleRepository;
     private final UserService userService;
 
@@ -67,20 +61,10 @@ public class UserModerationGatewayAdapter implements UserModerationGateway {
         userService.suspendPosting(userId, until, reason);
     }
 
-    /**
-     * Dựng {@link UserRef}. {@code trustScore} lấy từ hồ sơ chủ trọ (làm tròn về số nguyên); 100 nếu
-     * chưa phải chủ trọ. {@code isAdmin} khi có vai trò {@code ROLE_ADMIN}.
-     */
+    /** Dựng {@link UserRef}. {@code isAdmin} khi có vai trò {@code ROLE_ADMIN}. */
     private UserRef toRef(User user) {
-        int trustScore = landlordProfileRepository.findByUser_IdAndDeletedAtIsNull(user.getId())
-                .map(lp -> toInt(lp.getTrustScore()))
-                .orElse(DEFAULT_TRUST_SCORE);
         boolean isAdmin = user.getRole() != null && RoleCode.ADMIN.equals(user.getRole().getCode());
         return new UserRef(user.getId(), user.getFullName(), user.getEmail(),
-                user.getCreatedAt(), trustScore, isAdmin);
-    }
-
-    private int toInt(BigDecimal value) {
-        return value == null ? DEFAULT_TRUST_SCORE : value.setScale(0, RoundingMode.HALF_UP).intValue();
+                user.getCreatedAt(), isAdmin);
     }
 }

@@ -23,7 +23,7 @@ public interface ReviewService {
     /** Kiểm tra điều kiện đánh giá (luôn 200). */
     ReviewEligibilityResponse checkEligibility(Long listingId, Long userId);
 
-    /** Tạo đánh giá; cập nhật trung bình của tin + chủ trọ; kích hoạt tính lại uy tín. */
+    /** Tạo đánh giá; cập nhật trung bình của tin + chủ trọ. */
     ReviewResponse createReview(Long listingId, CreateReviewRequest request, Long userId);
 
     /** Sửa đánh giá trong cửa sổ {@code review.edit_window_hours} (chỉ tác giả). */
@@ -37,7 +37,7 @@ public interface ReviewService {
 
     /**
      * Ẩn đánh giá do kiểm duyệt ({@code status = HIDDEN}, ghi {@code hidden_reason/by/at}); tính lại
-     * trung bình sao của tin/chủ trọ + điểm uy tín. Gọi bởi adapter {@code ContentModerationGateway}
+     * trung bình sao của tin/chủ trọ. Gọi bởi adapter {@code ContentModerationGateway}
      * của module moderation.
      */
     void hideByModeration(Long reviewId, Long moderatorId, String reason);
@@ -53,13 +53,13 @@ public interface ReviewService {
 
     /**
      * Ẩn đánh giá vi phạm (dùng cho endpoint admin): đặt {@code HIDDEN}, ghi lý do/người/thời điểm,
-     * tính lại trung bình sao + uy tín và ghi AuditLog {@code REVIEW_HIDE}. Trả bản ghi sau khi ẩn.
+     * tính lại trung bình sao và ghi AuditLog {@code REVIEW_HIDE}. Trả bản ghi sau khi ẩn.
      */
     AdminReviewResponse adminHideReview(Long reviewId, Long moderatorId, String reason);
 
     /**
      * Khôi phục đánh giá đã ẩn về {@code VISIBLE} (xóa {@code hidden_reason/by/at}); cộng lại vào
-     * trung bình sao + uy tín và ghi AuditLog {@code REVIEW_UNHIDE}. Trả bản ghi sau khi khôi phục.
+     * trung bình sao và ghi AuditLog {@code REVIEW_UNHIDE}. Trả bản ghi sau khi khôi phục.
      */
     AdminReviewResponse unhideByModeration(Long reviewId, Long moderatorId);
 }

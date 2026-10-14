@@ -80,7 +80,6 @@ const LandlordsPage = () => {
     },
     { key: 'phone', label: 'Điện thoại', render: (r) => r.phone || '—' },
     { key: 'listingCount', label: 'Số tin', align: 'center', render: (r) => r.listingCount ?? 0 },
-    { key: 'trustScore', label: 'Uy tín', align: 'center', render: (r) => r.trustScore ?? '—' },
     {
       key: 'verificationStatus', label: 'Xác thực', render: (r) => {
         const m = metaChip(VERIFICATION_STATUS_META, r.verificationStatus || (r.verified ? 'VERIFIED' : 'NONE'));

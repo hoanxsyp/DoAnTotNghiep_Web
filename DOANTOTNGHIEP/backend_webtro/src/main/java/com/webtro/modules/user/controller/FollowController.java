@@ -37,7 +37,7 @@ import java.util.Set;
 public class FollowController {
 
     /** Trường sắp xếp hợp lệ cho danh sách đang theo dõi (mục 4.2.9). */
-    private static final Set<String> ALLOWED_SORT = Set.of("createdAt", "trustScore");
+    private static final Set<String> ALLOWED_SORT = Set.of("createdAt");
 
     private final FollowService followService;
 

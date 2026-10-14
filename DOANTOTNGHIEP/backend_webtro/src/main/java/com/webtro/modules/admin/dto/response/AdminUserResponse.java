@@ -12,7 +12,7 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Một người dùng trong màn quản trị (canonical 4.13.1). Các chỉ số uy tín/vi phạm lấy từ hồ sơ chủ
+ * Một người dùng trong màn quản trị (canonical 4.13.1). Các chỉ số vi phạm lấy từ hồ sơ chủ
  * trọ (nếu có).
  */
 @Getter
@@ -35,7 +35,6 @@ public class AdminUserResponse {
     private Boolean emailVerified;
     private Boolean phoneVerified;
     private Boolean landlordVerified;
-    private Integer trustScore;
     private Integer listingCount;
     private Integer activeListingCount;
     private Integer validReportCount;

@@ -45,7 +45,6 @@ public class ReportTargetGroupResponse {
         private String excerpt;
         private Long ownerId;
         private String ownerName;
-        private Integer ownerTrustScore;
         private Long ownerWarningCountLast30Days;
     }
 

@@ -2,8 +2,14 @@
 
 Hệ thống website trung gian kết nối **chủ trọ** với **người thuê**, hỗ trợ đăng tin, tìm kiếm,
 lọc, lưu tin, liên hệ, bình luận, đánh giá, báo cáo vi phạm, thanh toán đẩy tin và kiểm duyệt —
-kèm **4 module AI**: phân tích cảm xúc bình luận, gợi ý tin đăng, chatbot tìm trọ và dự đoán
-giá thuê.
+kèm **3 module AI**: gợi ý tin đăng, chatbot tìm trọ và dự đoán giá thuê.
+
+> **Đã loại khỏi hệ thống:**
+> - **Module phân tích cảm xúc bình luận** (migration `V21`): bình luận không còn được gán nhãn cảm xúc.
+> - **Điểm uy tín của tin đăng và chủ trọ** (migration `V22`): không còn tính, lưu hay hiển thị.
+>   Số sao đánh giá, cảnh báo vi phạm và khóa tài khoản vẫn giữ nguyên.
+>
+> Các tài liệu thiết kế trong `docs/` vẫn còn mô tả hai phần này ở nhiều chỗ.
 
 > **Phạm vi khu vực:** hệ thống giới hạn trong **khu vực Hà Nội** — danh mục địa giới chỉ
 > seed 1 tỉnh (Thành phố Hà Nội) với 12 quận nội thành và các phường thực tế; người dùng chỉ
@@ -137,7 +143,7 @@ compose (đang publish ra cổng `3307`), hãy đặt `DB_PORT=3307` khi chạy.
 ## 5. Nguyên tắc kỹ thuật
 
 - **Không hardcode**: mọi thông tin hạ tầng đọc từ biến môi trường; mọi ngưỡng nghiệp vụ
-  (thời hạn tin, ngưỡng cảnh báo AI, trọng số điểm uy tín…) nằm trong bảng `system_configs`,
+  (thời hạn tin, ngưỡng cảnh báo AI, ngưỡng kiểm duyệt…) nằm trong bảng `system_configs`,
   sửa được qua giao diện Admin lúc chạy.
 - **Schema thuộc quyền Flyway**: `ddl-auto=validate`, sai lệch entity ↔ migration làm ứng dụng
   fail ngay lúc khởi động thay vì âm thầm hỏng dữ liệu.

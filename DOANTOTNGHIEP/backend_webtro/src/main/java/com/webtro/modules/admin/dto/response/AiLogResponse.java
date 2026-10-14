@@ -19,7 +19,7 @@ import lombok.Setter;
 @Schema(name = "AiLogResponse", description = "Log AI theo module")
 public class AiLogResponse {
 
-    @Schema(description = "Module AI", example = "SENTIMENT")
+    @Schema(description = "Module AI", example = "RECOMMENDATION")
     private String module;
 
     @Schema(description = "Trang dữ liệu log")

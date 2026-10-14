@@ -4,6 +4,12 @@
 > **Cập nhật 2026-08-09:** phân quyền hiện hành là **role-only**. Hệ thống không còn entity/repository/bảng nghiệp vụ `permissions` hay `role_permissions`; Flyway `V15__drop_permission_tables.sql` drop hai bảng này sau các migration lịch sử. Backend kiểm tra bằng `@PreAuthorize("hasRole/hasAnyRole")` và `SecurityUtils.hasRole/hasAnyRole`; JWT chỉ chứa `role`. Tenant được phép tạo tin nhưng service chỉ chấp nhận `categoryCode = ROOMMATE`; Landlord/Admin tạo được mọi loại tin. Access token 15 phút, refresh token 1 ngày, cả hai lưu `localStorage`; khi refresh token còn dưới 15 phút và access token vẫn còn hạn, frontend chủ động gọi `/api/auth/refresh` để xoay refresh token.
 <!-- WEBTRO_ROLE_ONLY_UPDATE_END -->
 
+> **Cập nhật 2026-10-14:** hệ thống **không còn điểm uy tín** (trust score) cho tin đăng và chủ trọ.
+> Flyway `V22__drop_trust_score.sql` xóa `listings.trust_score`, `landlord_profiles.trust_score`,
+> `recommendation_logs.trust_score_norm` (kèm CHECK/INDEX) và toàn bộ khóa `trust.*` trong
+> `system_configs`; `TrustScoreRecalcJob` cũng bị xóa. Tài liệu này đã gỡ các cột, ràng buộc, cấu
+> hình và truy vấn đó (canonical mục 18).
+
 > **Phạm vi:** đặc tả đầy đủ 42 bảng hiện hành của hệ thống *Website quảng cáo và tìm kiếm phòng trọ*,
 > đủ chi tiết để viết thẳng ra file migration Flyway và entity JPA mà không cần hỏi lại.
 > (42 bảng hiện hành: đã cộng `notification_preferences`, đã bỏ `user_roles`, `permissions`, `role_permissions`, `listing_edit_histories`).
@@ -71,12 +77,11 @@ các cột đếm sẵn sau.
 | `listings` | `favorite_count` | `COUNT(favorites WHERE deleted_at IS NULL)` | Tăng/giảm trong cùng transaction lưu/bỏ lưu | `[§3.9]` |
 | `listings` | `contact_count` | `COUNT(contact_logs WHERE is_counted=1)` | Tăng nguyên tử khi ghi `contact_logs` hợp lệ | `[§3.10][§2.6]` |
 | `listings` | `comment_count` | `COUNT(comments WHERE status='VISIBLE')` | Tăng/giảm khi tạo/ẩn/xóa mềm bình luận | `[§3.11]` |
-| `listings` | `positive_comment_count`, `negative_comment_count` | `COUNT(sentiment_results JOIN comments)` | Cập nhật sau khi sentiment trả kết quả; `TrustScoreRecalcJob` tính lại toàn bộ 02:00 | `[§9.1][§5.8]` |
+| `listings` | `positive_comment_count`, `negative_comment_count` | `COUNT(sentiment_results JOIN comments)` | Cập nhật sau khi sentiment trả kết quả | `[§9.1]` |
 | `listings` | `average_rating`, `review_count` | `AVG/COUNT(reviews WHERE status='VISIBLE')` | Tính lại trong transaction tạo/sửa/ẩn review | `[§3.12][§8.6]` |
-| `listings` | `trust_score` | Công thức `[§5.8]` | Tính lại khi có sự kiện `[§5.7]` + `TrustScoreRecalcJob` | `[§5.8]` |
 | `listings` | `need_review_count` | `COUNT(moderation_actions WHERE action_type='FLAG_NEED_REVIEW')` | Tăng khi state machine chuyển sang `NEED_REVIEW` | `[§9.1]` (ngưỡng "NeedReview 3 lần trong 30 ngày") |
-| `landlord_profiles` | `total_listings`, `total_active_listings`, `average_rating`, `review_count`, `trust_score`, `locked_listing_count`, `warning_count` | tổng hợp từ `listings`/`reviews`/`violation_warnings` | Listing events cập nhật `total_listings`/`total_active_listings`, V18 backfill dữ liệu cũ; `TrustScoreRecalcJob` xử lý trust/review theo lịch và sự kiện | `[§10.3][§5.7]` |
-| `landlord_profiles` | `response_rate_percent`, `avg_response_minutes`, `response_conversation_count` | `conversations` (`created_at`, `first_response_at`) trong cửa sổ `trust.response_rate.window_days` | **Chỉ** `TrustScoreRecalcJob` 02:00 (§9.8) — cửa sổ trượt nên giá trị đổi theo thời gian **kể cả khi không có sự kiện**, không thể duy trì bằng UPDATE tăng dần | `[§5.7]` *"Chủ trọ phản hồi người thuê nhanh và đầy đủ nếu có module chat"* |
+| `landlord_profiles` | `total_listings`, `total_active_listings`, `average_rating`, `review_count`, `locked_listing_count`, `warning_count` | tổng hợp từ `listings`/`reviews`/`violation_warnings` | Listing events cập nhật `total_listings`/`total_active_listings`, V18 backfill dữ liệu cũ; review cập nhật trong transaction tạo/sửa/ẩn review | `[§10.3]` |
+| `landlord_profiles` | `response_rate_percent`, `avg_response_minutes`, `response_conversation_count` | `conversations` (`created_at`, `first_response_at`) trong cửa sổ 30 ngày | **Chưa có tiến trình ghi** — job tính trước đây (`TrustScoreRecalcJob`) đã bị xóa cùng điểm uy tín (§9.8). Cửa sổ trượt nên chỉ job định kỳ mới duy trì được | `[§5.7]` *"Chủ trọ phản hồi người thuê nhanh và đầy đủ nếu có module chat"* |
 | `conversations` | `last_message_at`, `last_message_preview`, `tenant_unread_count`, `landlord_unread_count` | `messages` | Cập nhật trong transaction gửi/đọc tin nhắn | `[§2.6]` |
 | `reports` | `listing_id` | suy ra từ `target_type` + `target_id` | Gán khi tạo report (kể cả report bình luận thì lấy `comment.listing_id`) | `[§3.13]` *"gom nhóm để xử lý"* |
 | `comments` | `sentiment_label`, `sentiment_score` | `sentiment_results` (bản mới nhất) | Ghi đè khi có kết quả mới | `[§6.3]` (Comment có `SentimentLabel`, `SentimentScore`) |
@@ -88,9 +93,10 @@ các cột đếm sẵn sau.
    `UPDATE listings SET favorite_count = favorite_count + 1 WHERE id = ?`
    (không `SELECT` rồi `SET` — tránh lost update), chạy trong **cùng `@Transactional`** với
    thao tác nghiệp vụ sinh ra nó. Không dùng trigger DB.
-2. **Tầng chống trôi:** `TrustScoreRecalcJob` (02:00 hằng ngày, canonical mục 11) **tính lại
-   từ nguồn sự thật** toàn bộ counter tổng hợp của `listings` và `landlord_profiles` bằng câu
-   `UPDATE ... JOIN (SELECT ... GROUP BY ...)`. Nhờ đó sai lệch do lỗi ứng dụng tự lành sau ≤ 24h.
+2. **Tầng chống trôi:** job đêm đối soát counter **từ nguồn sự thật** bằng câu
+   `UPDATE ... JOIN (SELECT ... GROUP BY ...)`. *(Job tổng hợp trước đây — `TrustScoreRecalcJob` —
+   đã bị xóa cùng điểm uy tín ở `V22`; hiện các counter `listings`/`landlord_profiles` chỉ dựa vào
+   tầng 1 và tầng 3.)*
 3. **Tầng chặn dưới:** `CHECK (view_count >= 0)`, `CHECK (favorite_count >= 0)`… để bug làm âm
    counter bị phát hiện ngay tại DB thay vì âm thầm.
 
@@ -104,7 +110,7 @@ các cột đếm sẵn sau.
 | Đối tượng | Quy ước | Ví dụ |
 |---|---|---|
 | Bảng DB | `snake_case`, **số nhiều** | `listings`, `listing_amenities` |
-| Cột DB | `snake_case` | `expired_at`, `trust_score` |
+| Cột DB | `snake_case` | `expired_at`, `average_rating` |
 | Khóa chính | `id` — `BIGINT UNSIGNED AUTO_INCREMENT` | |
 | Khóa ngoại | `<bảng_số_ít>_id` | `listing_id`, `owner_id` |
 | Index | `idx_<bảng>_<cột>[_<cột>]` | `idx_listings_status_expired_at` |
@@ -113,7 +119,7 @@ các cột đếm sẵn sau.
 | Java class | `PascalCase` | `ListingServiceImpl` |
 | Enum value | `UPPER_SNAKE_CASE` | `NEED_REVIEW` |
 | REST path | `kebab-case`, danh từ số nhiều | `/api/promotion-packages` |
-| JSON field | `camelCase` | `trustScore` |
+| JSON field | `camelCase` | `averageRating` |
 | React component | `PascalCase.jsx` | `ListingCard.jsx` |
 | React hook | `useCamelCase.js` | `useAuth.js` |
 
@@ -226,7 +232,6 @@ kiểm tra bằng ArchUnit test.
 | Vĩ độ | `DECIMAL(10,7)` | `BigDecimal` | Phạm vi ±90 → 2 chữ số phần nguyên (dư 1), 7 chữ số thập phân ≈ **1,1 cm** — thừa để định vị nhà trọ `[§3.3]` (*"Latitude/Longitude nếu có bản đồ"*). Chính xác tuyệt đối, không trôi như `DOUBLE`. |
 | Kinh độ | `DECIMAL(10,7)` | `BigDecimal` | Phạm vi ±180 → 3 chữ số phần nguyên vừa đủ (`180.0000000`). Chốt cùng `(10,7)` với vĩ độ cho đồng nhất, theo yêu cầu đề bài. |
 | Enum | `VARCHAR(N)` + `@Enumerated(EnumType.STRING)` | `enum` | Xem §1.7. |
-| Điểm uy tín | `DECIMAL(5,2)` | `BigDecimal` | `[§5.8]` công thức có `AverageRating * 5` → giá trị có phần thập phân; giới hạn 0–100. |
 | Sentiment score | `DECIMAL(4,3)` | `BigDecimal` | Canonical mục 10.1: `score ∈ [-1,1]`, cần 3 chữ số thập phân → `-1.000`…`1.000`. |
 | Confidence | `DECIMAL(4,3)` | `BigDecimal` | `∈ [0,1]`, so sánh với ngưỡng `0.5` (canonical mục 10.1). |
 | Rating | `TINYINT UNSIGNED` | `Integer` | `[§3.12]` *"Rating từ 1 đến 5"*. |
@@ -406,7 +411,6 @@ erDiagram
         datetime verified_at
         bigint verified_by
         varchar verification_note
-        decimal trust_score
         int response_rate_percent
         int avg_response_minutes
         int response_conversation_count
@@ -629,7 +633,6 @@ erDiagram
         varchar lock_severity
         datetime auto_hidden_at
         varchar auto_hide_reason
-        decimal trust_score
         decimal average_rating
         int review_count
         int view_count
@@ -739,7 +742,6 @@ erDiagram
         varchar lock_severity
         datetime auto_hidden_at
         varchar auto_hide_reason
-        decimal trust_score
         decimal average_rating
         int review_count
         int view_count
@@ -864,7 +866,6 @@ erDiagram
         varchar lock_severity
         datetime auto_hidden_at
         varchar auto_hide_reason
-        decimal trust_score
         decimal average_rating
         int review_count
         int view_count
@@ -972,7 +973,6 @@ erDiagram
         varchar lock_severity
         datetime auto_hidden_at
         varchar auto_hide_reason
-        decimal trust_score
         decimal average_rating
         int review_count
         int view_count
@@ -1100,7 +1100,6 @@ erDiagram
         varchar lock_severity
         datetime auto_hidden_at
         varchar auto_hide_reason
-        decimal trust_score
         decimal average_rating
         int review_count
         int view_count
@@ -1250,7 +1249,6 @@ erDiagram
         varchar lock_severity
         datetime auto_hidden_at
         varchar auto_hide_reason
-        decimal trust_score
         decimal average_rating
         int review_count
         int view_count
@@ -1403,7 +1401,6 @@ erDiagram
         varchar lock_severity
         datetime auto_hidden_at
         varchar auto_hide_reason
-        decimal trust_score
         decimal average_rating
         int review_count
         int view_count
@@ -1478,7 +1475,6 @@ erDiagram
         decimal price_score
         decimal category_score
         decimal amenity_score
-        decimal trust_score_norm
         decimal freshness_score
         decimal promoted_boost
         boolean is_cold_start
@@ -1605,7 +1601,6 @@ erDiagram
         varchar lock_severity
         datetime auto_hidden_at
         varchar auto_hide_reason
-        decimal trust_score
         decimal average_rating
         int review_count
         int view_count
@@ -1887,7 +1882,7 @@ erDiagram
 | `roles` | Định nghĩa 4 vai trò hệ thống và metadata role. |
 | `users` | Tài khoản đăng nhập, trạng thái tài khoản, và thông tin bảo mật. |
 | `user_profiles` | Hồ sơ mở rộng cho người dùng: nghề nghiệp, ngày sinh, địa chỉ chi tiết dạng text và tùy chọn ở ghép. |
-| `landlord_profiles` | Hồ sơ đặc thù chủ trọ: điểm uy tín, trạng thái xác thực. |
+| `landlord_profiles` | Hồ sơ đặc thù chủ trọ: trạng thái xác thực, số liệu tổng hợp. |
 | `verifications` | Lưu mã/phiên xác thực email, điện thoại theo user và loại kiểm tra. |
 | `refresh_tokens` | Quản lý chuỗi refresh token cho đăng nhập dài hạn. |
 | `password_reset_tokens` | Quản lý token đặt lại mật khẩu qua email. |
@@ -2134,10 +2129,9 @@ Phân quyền hiện hành dựa trực tiếp vào `users.role_id`:
 | `verified_at` | `DATETIME(6)` | Y | `NULL` | | | `[§10.3]` |
 | `verified_by` | `BIGINT UNSIGNED` | Y | `NULL` | | Admin/Moderator xác thực (thủ công) | `[§13.2]` *"Chỉ cần trạng thái xác thực thủ công bởi Admin"* |
 | `verification_note` | `VARCHAR(500)` | Y | `NULL` | | Lý do xác thực/hủy xác thực | `[§10.3]` |
-| `trust_score` | `DECIMAL(5,2)` | N | `100.00` | IDX | Điểm uy tín chủ trọ | `[§2.11]` AI-03, `[§5.7][§5.8]` |
-| `response_rate_percent` | `TINYINT UNSIGNED` | Y | `NULL` | | **Tỷ lệ phản hồi** — % hội thoại mà chủ trọ đã trả lời **trong SLA** `trust.response_rate.sla_hours`, tính trên cửa sổ `trust.response_rate.window_days`. `NULL` = **chưa đủ dữ liệu** (`allow_chat = FALSE` hoặc số hội thoại < `trust.response_rate.min_conversations`) ⇒ **không** tính vào điểm uy tín và API trả `null`. Do `TrustScoreRecalcJob` cập nhật (§9.8) | `[§5.7]` *"Chủ trọ phản hồi người thuê **nhanh và đầy đủ** nếu có module chat"* |
-| `avg_response_minutes` | `INT UNSIGNED` | Y | `NULL` | | Thời gian phản hồi **trung bình** (phút) trong cùng cửa sổ, chỉ tính hội thoại **đã** được phản hồi. Chỉ để **hiển thị** (*"Phản hồi trong ~2 giờ"*), **không** vào công thức uy tín — vế "nhanh" đã được mã hóa bằng SLA trong `response_rate_percent` | `[§5.7][§10.3]` |
-| `response_conversation_count` | `INT UNSIGNED` | N | `0` | | Số hội thoại **mẫu** trong cửa sổ (mẫu số của `response_rate_percent`). Cho phép đối chiếu và giải thích được điểm | `[§5.7]` |
+| `response_rate_percent` | `TINYINT UNSIGNED` | Y | `NULL` | | **Tỷ lệ phản hồi** — % hội thoại mà chủ trọ đã trả lời **trong SLA** 24 giờ, tính trên cửa sổ 30 ngày. `NULL` = **chưa đủ dữ liệu** (`allow_chat = FALSE` hoặc số hội thoại < 3) ⇒ API trả `null`. Hiện **chưa có tiến trình ghi** (§9.8) | `[§5.7]` *"Chủ trọ phản hồi người thuê **nhanh và đầy đủ** nếu có module chat"* |
+| `avg_response_minutes` | `INT UNSIGNED` | Y | `NULL` | | Thời gian phản hồi **trung bình** (phút) trong cùng cửa sổ, chỉ tính hội thoại **đã** được phản hồi. Chỉ để **hiển thị** (*"Phản hồi trong ~2 giờ"*) | `[§5.7][§10.3]` |
+| `response_conversation_count` | `INT UNSIGNED` | N | `0` | | Số hội thoại **mẫu** trong cửa sổ (mẫu số của `response_rate_percent`). Cho phép đối chiếu và giải thích được tỷ lệ | `[§5.7]` |
 | `average_rating` | `DECIMAL(3,2)` | N | `0.00` | | Trung bình rating mọi tin của chủ trọ (denormalize) | `[§8.6]` *"Tính lại AverageRating của tin và chủ trọ"* |
 | `review_count` | `INT UNSIGNED` | N | `0` | | | `[§8.6]` |
 | `total_listings` | `INT UNSIGNED` | N | `0` | | *"Xem số tin đã đăng"* | `[§10.3]` |
@@ -2156,7 +2150,6 @@ Phân quyền hiện hành dựa trực tiếp vào `users.role_id`:
 | Tên | Cột | Lý do |
 |---|---|---|
 | `idx_landlord_profiles_verification_status` | `(verification_status)` | Hàng đợi xác thực chủ trọ `[§2.2]` USER-06 |
-| `idx_landlord_profiles_trust_score` | `(trust_score)` | Danh sách chủ trọ rủi ro `[§10.3]`; đầu vào recommendation `[§9.2]` |
 
 **Unique** `uk_landlord_profiles_user_id (user_id)`.
 **Foreign key**
@@ -2169,16 +2162,11 @@ Phân quyền hiện hành dựa trực tiếp vào `users.role_id`:
 
 ```sql
 CONSTRAINT ck_landlord_profiles_verif CHECK (verification_status IN ('PENDING','VERIFIED','REJECTED','EXPIRED')),
-CONSTRAINT ck_landlord_profiles_trust CHECK (trust_score BETWEEN 0 AND 100),
 CONSTRAINT ck_landlord_profiles_rating CHECK (average_rating BETWEEN 0 AND 5),
 CONSTRAINT ck_landlord_profiles_response_rate CHECK (response_rate_percent IS NULL
                                                      OR response_rate_percent BETWEEN 0 AND 100)
 ```
 
-> `trust_score BETWEEN 0 AND 100` chốt đúng `[§5.8]` (*"Điểm tối thiểu 0, tối đa 100"*).
-> Cận này **cũng** được `SystemConfig` `trust.min`/`trust.max` kiểm ở tầng service; DB là lưới
-> cuối. Nếu Admin đổi `trust.max` > 100 thì check DB sẽ chặn — đây là **cố ý**: dải điểm là
-> hợp đồng nghiệp vụ `[§5.8]`, hai key config chỉ để hiệu chỉnh **trong** dải đó.
 
 #### 3.8. `verifications`
 
@@ -2477,8 +2465,9 @@ CONSTRAINT ck_amenities_price_impact CHECK (price_impact_ratio BETWEEN -1 AND 1)
 Khớp **chính xác** danh sách thuộc tính `[§6.3] Listing` (Id, OwnerId, CategoryId, Title,
 Description, Price, Area, DepositAmount, WardId, AddressDetail,
 Latitude, Longitude, RoomCount, ToiletCount, MaxOccupants, CurrentOccupants, GenderRequirement,
-PetAllowed, ParkingAvailable, CurfewType, FurnitureStatus, Status, TrustScore, AverageRating,
-ViewCount, FavoriteCount, ContactCount, PublishedAt, ExpiredAt, CreatedAt, UpdatedAt) và bổ sung
+PetAllowed, ParkingAvailable, CurfewType, FurnitureStatus, Status, AverageRating,
+ViewCount, FavoriteCount, ContactCount, PublishedAt, ExpiredAt, CreatedAt, UpdatedAt — `TrustScore`
+đã bỏ ở `V22`) và bổ sung
 các cột bắt buộc để thỏa `[§3.3][§3.7][§5.8][§9.1][§9.4][§10.4]` + canonical mục 5.1/5.2.
 
 | Cột | Kiểu | Null | Mặc định | Khóa | Mô tả nghiệp vụ | Căn cứ |
@@ -2515,7 +2504,6 @@ các cột bắt buộc để thỏa `[§3.3][§3.7][§5.8][§9.1][§9.4][§10.4
 | `lock_severity` | `VARCHAR(10)` | Y | `NULL` | | `ReportSeverity` — *"mức độ vi phạm"*; bắt buộc khi `LOCKED` | `[§10.4]`, canonical 5.1 (*"LOCK … bắt buộc lý do + severity"*) |
 | `auto_hidden_at` | `DATETIME(6)` | Y | `NULL` | IDX | Mốc **hệ thống** tự động ẩn tin. `NOT NULL` ⇒ tin đang bị ẩn bởi chế tài, **chủ trọ không được tự hiện lại** (chặn `UNHIDE_BY_OWNER`, §6.1); chỉ Moderator/Admin gỡ được. Phân biệt tường minh với `HIDE_BY_OWNER` (cột này `NULL`) | `[§5.3]` *"Tin có thể bị **tự động ẩn**"* — §6.1, §9.6 |
 | `auto_hide_reason` | `VARCHAR(500)` | Y | `NULL` | | Lý do tự động ẩn (ví dụ *"Tỷ lệ bình luận tiêu cực 62% (13/21) và tin đã bị cảnh báo 2 lần trước đó"*). **Bắt buộc** khi `auto_hidden_at IS NOT NULL`; hiển thị cho chủ trọ trong `notifications(VIOLATION_WARNING)` và cho Moderator ở hàng đợi | `[§5.3][§10.4]` (*"phải nhập lý do"* — chế tài tự động cũng không ngoại lệ) |
-| `trust_score` | `DECIMAL(5,2)` | N | `100.00` | IDX | Điểm uy tín tin, công thức `[§5.8]`; mặc định = `trust.base_score` | `[§5.8]` |
 | `average_rating` | `DECIMAL(3,2)` | N | `0.00` | IDX | Denormalize `AVG(reviews.rating)` | `[§6.3][§8.6]` |
 | `review_count` | `INT UNSIGNED` | N | `0` | | Số đánh giá `VISIBLE` | `[§8.6]` |
 | `view_count` | `INT UNSIGNED` | N | `0` | IDX | Lượt xem hợp lệ (đã khử trùng lặp) | `[§6.3][§3.8]` |
@@ -2542,9 +2530,9 @@ các cột bắt buộc để thỏa `[§3.3][§3.7][§5.8][§9.1][§9.4][§10.4
 | `deleted_at` | `DATETIME(6)` | Y | `NULL` | IDX | Xóa mềm; Admin **vẫn xem được** | `[§3.6]` |
 
 > **Điều chỉnh so với danh sách bắt buộc trong đề bài — giải thích:**
-> Đề bài liệt kê `trust_score, average_rating, review_count, view_count, favorite_count,
+> Đề bài liệt kê `average_rating, review_count, view_count, favorite_count,
 > contact_count, comment_count, negative_comment_count, positive_comment_count,
-> need_review_count` — giữ nguyên **toàn bộ**. Bổ sung thêm 8 cột không có trong danh sách,
+> need_review_count` — giữ nguyên **toàn bộ** (riêng `trust_score` đã bỏ ở `V22`). Bổ sung thêm 8 cột không có trong danh sách,
 > mỗi cột có căn cứ nghiệp vụ cứng:
 > `lock_severity` (canonical 5.1 bắt buộc *"LOCK … lý do + severity"*, `[§10.4]` *"mức độ vi phạm"*);
 > `last_need_review_at` (cửa sổ 30 ngày `[§9.1]`);
@@ -2568,7 +2556,6 @@ các cột bắt buộc để thỏa `[§3.3][§3.7][§5.8][§9.1][§9.4][§10.4
 | `idx_listings_status_expired_at` | `(status, expired_at)` | `ListingExpiryJob` mỗi giờ (canonical 11) |
 | `idx_listings_owner_id_status` | `(owner_id, status)` | Màn hình `/quan-ly/tin-dang` `[§7.3]` |
 | `idx_listings_ward_category_area` | `(ward_id, category_id, area, status)` | Bước 1 tìm comparable dự đoán giá `[§9.4]` |
-| `idx_listings_status_trust_score` | `(status, trust_score)` | Danh sách tin rủi ro < 40 điểm `[§5.8][§10.4]` |
 | `idx_listings_auto_hidden_at` | `(auto_hidden_at)` | Hàng đợi Moderator *"tin bị hệ thống tự động ẩn, chờ xử lý"* `[§5.3][§10.8]`; cột **thưa** (đại đa số `NULL`, không vào index) ⇒ index rất nhỏ |
 | `idx_listings_price_deviation_flag` | `(price_deviation_flag, status)` | *"Admin có thể dùng danh sách tin lệch giá lớn để kiểm duyệt"* `[§9.4]` |
 | `idx_listings_promoted_until` | `(is_promoted, promoted_until)` | `PromotionExpiryJob` mỗi giờ (canonical 11) |
@@ -2613,7 +2600,6 @@ CONSTRAINT ck_listings_electricity        CHECK (electricity_price IS NULL OR el
 CONSTRAINT ck_listings_water              CHECK (water_price IS NULL OR water_price >= 0),
 CONSTRAINT ck_listings_latitude           CHECK (latitude  IS NULL OR latitude  BETWEEN -90  AND 90),
 CONSTRAINT ck_listings_longitude          CHECK (longitude IS NULL OR longitude BETWEEN -180 AND 180),
-CONSTRAINT ck_listings_trust_score        CHECK (trust_score BETWEEN 0 AND 100),
 CONSTRAINT ck_listings_average_rating     CHECK (average_rating BETWEEN 0 AND 5),
 CONSTRAINT ck_listings_occupants          CHECK (current_occupants IS NULL OR max_occupants IS NULL
                                                 OR current_occupants <= max_occupants),
@@ -2913,8 +2899,7 @@ cạnh lệnh cập nhật `last_message_at`/`message_count` (§1.2 tầng 1 —
 nhắn thứ 2 trở đi của chủ trọ update 0 dòng.
 
 > **Vì sao là cột trên `conversations` chứ không `MIN(messages.created_at)` khi cần?**
-> `[§5.7]` dùng dữ liệu này để tính điểm uy tín cho **mọi** chủ trọ mỗi đêm
-> (`TrustScoreRecalcJob`). Suy ra từ `messages` cần một subquery `MIN(created_at) ... WHERE
+> Tỷ lệ phản hồi (§9.8) cần dữ liệu này cho **mọi** chủ trọ theo cửa sổ trượt. Suy ra từ `messages` cần một subquery `MIN(created_at) ... WHERE
 > sender là chủ trọ GROUP BY conversation_id` trên bảng **lớn nhất** của nhóm interaction,
 > cho **toàn bộ** hội thoại — chính xác kiểu truy vấn mà §1.2 tồn tại để tránh. Cột này còn mang
 > nghĩa nghiệp vụ riêng (mốc bất biến) mà `MIN()` không diễn đạt được: xóa mềm tin nhắn đầu tiên
@@ -2961,9 +2946,9 @@ SentimentLabel, SentimentScore, CreatedAt, UpdatedAt) + bổ sung theo `[§3.11]
 | `sentiment_label` | `VARCHAR(20)` | N | `'PENDING_ANALYSIS'` | IDX | `SentimentLabel` — bản mới nhất (denormalize từ `sentiment_results`) | `[§6.3][§9.1]` |
 | `sentiment_score` | `DECIMAL(4,3)` | Y | `NULL` | | `∈ [-1,1]` | `[§6.3]`, canonical 10.1 |
 | `sentiment_confidence` | `DECIMAL(4,3)` | Y | `NULL` | | `∈ [0,1]`; < 0.5 → không kích hoạt hành động nặng | canonical 10.1, `[§9.1]` |
-| `sentiment_weight` | `DECIMAL(3,2)` | N | `1.00` | | 0.5 nếu tài khoản < 7 ngày; 0 nếu quá ngắn hoặc bị đánh spam → **loại khỏi thống kê uy tín** | `[§9.1]` + canonical 10.1 |
+| `sentiment_weight` | `DECIMAL(3,2)` | N | `1.00` | | 0.5 nếu tài khoản < 7 ngày; 0 nếu quá ngắn hoặc bị đánh spam → **loại khỏi thống kê cảm xúc** | `[§9.1]` + canonical 10.1 |
 | `is_risk_comment` | `BOOLEAN` | N | `FALSE` | IDX | Output `IsRiskComment` của module sentiment | `[§9.1]` (mục Output) |
-| `is_spam` | `BOOLEAN` | N | `FALSE` | IDX | Moderator đánh dấu → *"loại khỏi thống kê điểm uy tín"* | `[§9.1]` + canonical 10.1 |
+| `is_spam` | `BOOLEAN` | N | `FALSE` | IDX | Moderator đánh dấu → loại khỏi thống kê cảm xúc | `[§9.1]` + canonical 10.1 |
 | `is_owner_reply` | `BOOLEAN` | N | `FALSE` | | `user_id = listing.owner_id` — hiển thị nhãn "Chủ trọ"; **không** tính vào sentiment của tin | `[§3.11]` CMT-03 |
 | `reply_count` | `INT UNSIGNED` | N | `0` | | Số trả lời `VISIBLE` | `[§3.11]` |
 | `contains_banned_keyword` | `BOOLEAN` | N | `FALSE` | IDX | *"Bình luận chứa từ cấm chuyển sang Pending hoặc Hidden"* | `[§3.11][§11.10]` |
@@ -2993,7 +2978,7 @@ chống spam làm bằng rate limit Redis (canonical 8) + `comment_restricted_un
 | Tên | Cột → đích | ON DELETE | ON UPDATE | Lý do |
 |---|---|---|---|---|
 | `fk_comments_listings` | `listing_id → listings(id)` | `CASCADE` | `RESTRICT` | Sở hữu bởi tin. `[§3.6]` cấm **xóa cứng tin có bình luận** — nhánh này chỉ chạy khi purge tin `DELETED` quá hạn lưu trữ. |
-| `fk_comments_users` | `user_id → users(id)` | `RESTRICT` | `RESTRICT` | `[§10.2]` *"Không xóa cứng user có… report"*; bình luận là dữ liệu kiểm duyệt + đầu vào điểm uy tín `[§5.8]`. |
+| `fk_comments_users` | `user_id → users(id)` | `RESTRICT` | `RESTRICT` | `[§10.2]` *"Không xóa cứng user có… report"*; bình luận là dữ liệu kiểm duyệt. |
 | `fk_comments_parent` | `parent_id → comments(id)` | `CASCADE` | `RESTRICT` | Self-FK. Xóa **cứng** bình luận cha thì trả lời mất ngữ cảnh hoàn toàn → xóa theo. (Xóa nghiệp vụ là xóa mềm nên trả lời **vẫn hiển thị** dưới bình luận "đã bị xóa" — đúng `[§3.11]`.) |
 
 **Check**
@@ -3048,7 +3033,7 @@ người dùng tự xóa để viết lại.
 | Tên | Cột → đích | ON DELETE | ON UPDATE | Lý do |
 |---|---|---|---|---|
 | `fk_reviews_listings` | `listing_id → listings(id)` | `CASCADE` | `RESTRICT` | Sở hữu bởi tin. |
-| `fk_reviews_users` | `user_id → users(id)` | `RESTRICT` | `RESTRICT` | Đánh giá là nội dung công khai + đầu vào điểm uy tín `[§5.8]`; `[§10.9]` *"Không sửa nội dung đánh giá của người dùng. Chỉ ẩn hoặc khôi phục"* ⇒ càng không được xóa theo. |
+| `fk_reviews_users` | `user_id → users(id)` | `RESTRICT` | `RESTRICT` | Đánh giá là nội dung công khai + nguồn của số sao trung bình; `[§10.9]` *"Không sửa nội dung đánh giá của người dùng. Chỉ ẩn hoặc khôi phục"* ⇒ càng không được xóa theo. |
 
 **Check**
 
@@ -3061,8 +3046,7 @@ CONSTRAINT ck_reviews_hidden_reason CHECK (status <> 'HIDDEN' OR hidden_reason I
 
 > `ck_reviews_content_required` hiện thực `[§3.12]` *"Nội dung đánh giá có thể bắt buộc nếu
 > rating <= 2"*. Tài liệu gốc dùng chữ *"có thể"* → **quyết định của Senior Architect: chốt
-> BẮT BUỘC**. Lý do: đánh giá 1–2 sao là tín hiệu mạnh nhất kéo `trust_score` xuống (`AverageRating*5`,
-> `[§5.8]`) và là đầu vào để Moderator xử lý `[§10.9]`; một sao trần trụi không có nội dung thì
+> BẮT BUỘC**. Lý do: đánh giá 1–2 sao kéo số sao trung bình của tin và chủ trọ xuống và là đầu vào để Moderator xử lý `[§10.9]`; một sao trần trụi không có nội dung thì
 > Moderator **không thể** xác minh, và nó là công cụ dìm hàng rẻ tiền nhất. Ghi vào ADR-08 (§11).
 
 ---
@@ -3086,7 +3070,7 @@ EvidenceImageUrl, Status, Severity, CreatedAt, ResolvedAt) + bổ sung theo `[§
 | `evidence_image_url` | `VARCHAR(500)` | Y | `NULL` | | *"ảnh bằng chứng nếu có"* | `[§3.13][§6.3]` |
 | `status` | `VARCHAR(10)` | N | `'PENDING'` | IDX | `ReportStatus` | `[§6.3]` + canonical 5 |
 | `severity` | `VARCHAR(10)` | N | `'MEDIUM'` | IDX | `ReportSeverity`. Suy ra từ `reason` khi tạo (`SCAM`→`CRITICAL`, `FAKE_IMAGE`→`HIGH`, …), Moderator chỉnh được | `[§6.3][§5.3]` *"số lượng và **mức độ nghiêm trọng** vượt ngưỡng"* |
-| `is_valid` | `BOOLEAN` | Y | `NULL` | IDX | `NULL` = chưa xử lý; `TRUE` = *"report được xác nhận đúng"* → trừ 10 điểm uy tín; `FALSE` = report sai → đếm để hạn chế tài khoản | `[§5.7][§5.8][§3.13]` *"Nếu report sai nhiều lần, tài khoản báo cáo có thể bị hạn chế"* |
+| `is_valid` | `BOOLEAN` | Y | `NULL` | IDX | `NULL` = chưa xử lý; `TRUE` = *"report được xác nhận đúng"* → tăng `valid_report_count`; `FALSE` = report sai → đếm để hạn chế tài khoản | `[§3.13]` *"Nếu report sai nhiều lần, tài khoản báo cáo có thể bị hạn chế"* |
 | `resolution_note` | `VARCHAR(1000)` | Y | `NULL` | | *"Gửi phản hồi cho người báo cáo"* | `[§10.8]` |
 | `resolved_by` | `BIGINT UNSIGNED` | Y | `NULL` | FK, IDX | Moderator/Admin xử lý | `[§10.8]` |
 | `resolved_at` | `DATETIME(6)` | Y | `NULL` | | | `[§6.3]` |
@@ -3154,7 +3138,7 @@ CONSTRAINT ck_reports_resolved CHECK (
 ```
 
 > `ck_reports_resolved` ép `[§3.13]` *"Tất cả thao tác xử lý report cần có log"* + `[§5.7]`
-> (*"report được xác nhận đúng"* phải là dữ liệu có thật để tính điểm uy tín).
+> (*"report được xác nhận đúng"* phải là dữ liệu có thật cho `valid_report_count`).
 
 #### 3.30. `moderation_actions`
 
@@ -3695,7 +3679,7 @@ sentiment"*).
 | `confidence` | `DECIMAL(4,3)` | Y | `NULL` | IDX | `∈ [0,1]`. < 0.5 → *"không tự động xử lý nặng"* | `[§9.1]` Output `ConfidenceScore` |
 | `is_risk_comment` | `BOOLEAN` | N | `FALSE` | IDX | | `[§9.1]` Output `IsRiskComment` |
 | `suggested_action` | `VARCHAR(15)` | N | `'NONE'` | IDX | `SentimentAction`: `NONE` / `WATCH` / `NEED_REVIEW` | `[§9.1]` Output *"Gợi ý hành động"* |
-| `weight` | `DECIMAL(3,2)` | N | `1.00` | | Trọng số dùng khi tính uy tín (0.5 nếu tài khoản mới, 0 nếu quá ngắn/spam) | `[§9.1]` + canonical 10.1 |
+| `weight` | `DECIMAL(3,2)` | N | `1.00` | | Trọng số khi thống kê cảm xúc (0.5 nếu tài khoản mới, 0 nếu quá ngắn/spam) | `[§9.1]` + canonical 10.1 |
 | `matched_positive_terms` | `JSON` | Y | `NULL` | | Cụm từ dương đã khớp — **giải thích được** cho Admin | `[§10.10]` *"Xem log phân tích sentiment"* |
 | `matched_negative_terms` | `JSON` | Y | `NULL` | | Cụm từ âm đã khớp | `[§10.10]` |
 | `negation_applied` | `BOOLEAN` | N | `FALSE` | | Đã áp dụng xử lý phủ định ("không", "chẳng", "chưa") | canonical 10.1 |
@@ -3764,7 +3748,6 @@ CONSTRAINT ck_sentiment_results_pending CHECK (label <> 'PENDING_ANALYSIS' OR an
 | `price_score` | `DECIMAL(5,4)` | Y | `NULL` | | `0.25·priceMatch` | canonical 10.2 |
 | `category_score` | `DECIMAL(5,4)` | Y | `NULL` | | `0.15·categoryMatch` | canonical 10.2 |
 | `amenity_score` | `DECIMAL(5,4)` | Y | `NULL` | | `0.10·amenityMatch` | canonical 10.2 |
-| `trust_score_norm` | `DECIMAL(5,4)` | Y | `NULL` | | `0.10·trustScoreNorm` | canonical 10.2 |
 | `freshness_score` | `DECIMAL(5,4)` | Y | `NULL` | | `0.10·freshness` | canonical 10.2 |
 | `promoted_boost` | `DECIMAL(4,3)` | N | `1.000` | | Hệ số đẩy, **trần 1.15** (`ai.recommendation.promoted_boost`) | `[§9.2]` *"Tin trả phí có thể tăng thứ hạng nhưng vẫn cần phù hợp nhu cầu"* |
 | `is_cold_start` | `BOOLEAN` | N | `FALSE` | IDX | | `[§9.2]` *"Cold start"* |
@@ -3990,7 +3973,7 @@ của một đối tượng; `idx_audit_logs_action_created_at (action, created_
 | `config_value` | `TEXT` | N | — | | Giá trị hiện tại (chuỗi hóa) | canonical 9 |
 | `default_value` | `TEXT` | N | — | | Giá trị mặc định canonical mục 9 → nút "Khôi phục mặc định" | `[§10.14]` |
 | `value_type` | `VARCHAR(10)` | N | — | | `ConfigValueType`: `STRING`/`INT`/`DECIMAL`/`BOOLEAN`/`JSON` — `SystemConfigService` ép kiểu an toàn | canonical 9 |
-| `group_name` | `VARCHAR(30)` | N | — | IDX | `LISTING`, `MODERATION`, `TRUST`, `AI_SENTIMENT`, `AI_RECOMMENDATION`, `AI_PRICE`, `AI_CHATBOT`, `INTERACTION`, `PROMOTION`, `SECURITY`, `SPAM` — render tab màn hình `/admin/cau-hinh` | `[§10.14]` |
+| `group_name` | `VARCHAR(30)` | N | — | IDX | `LISTING`, `MODERATION`, `AI_SENTIMENT`, `AI_RECOMMENDATION`, `AI_PRICE`, `AI_CHATBOT`, `INTERACTION`, `PROMOTION`, `SECURITY`, `SPAM` — render tab màn hình `/admin/cau-hinh` | `[§10.14]` |
 | `label` | `VARCHAR(150)` | N | — | | Nhãn tiếng Việt | `[§10.14]` |
 | `description` | `VARCHAR(500)` | Y | `NULL` | | Giải thích + trích dẫn `[§x.y]` | `[§10.14]` |
 | `min_value` / `max_value` | `DECIMAL(15,4)` | Y | `NULL` | | Cận hợp lệ cho `INT`/`DECIMAL` — validate trước khi lưu | `[§10.14]` |
@@ -4202,8 +4185,6 @@ hằng số canonical mục 5. Đã ghi tại từng bảng ở §3. Đây là t
 | `ck_listings_price_positive` | `listings` | `price > 0` | `[§3.3]` *"Giá > 0"* |
 | `ck_listings_area_positive` | `listings` | `area > 0` | `[§3.3]` *"Diện tích > 0"* |
 | `ck_reviews_rating` | `reviews` | `rating BETWEEN 1 AND 5` | `[§3.12]` *"Rating từ 1 đến 5"* |
-| `ck_listings_trust_score` | `listings` | `trust_score BETWEEN 0 AND 100` | `[§5.8]` *"Điểm tối thiểu 0, tối đa 100"* |
-| `ck_landlord_profiles_trust` | `landlord_profiles` | `trust_score BETWEEN 0 AND 100` | `[§5.8]` |
 | `ck_comments_sentiment_score` | `comments` | `score BETWEEN -1 AND 1` | canonical 10.1 |
 | `ck_sentiment_results_confidence` | `sentiment_results` | `confidence BETWEEN 0 AND 1` | canonical 10.1 |
 | `ck_comments_content_length` | `comments` | `CHAR_LENGTH(content) BETWEEN 3 AND 1000` | `[§3.11]` |
@@ -4263,7 +4244,6 @@ hằng số canonical mục 5. Đã ghi tại từng bảng ở §3. Đây là t
 | 5 | **Tự động ẩn: ≥5 report từ ≥5 tài khoản khác nhau trong 24h** | Cross-row + cửa sổ thời gian + `COUNT(DISTINCT)` | `ReportServiceImpl.afterCreate()` chạy truy vấn §9.4, đọc 3 config `moderation.autohide.*` | `[§5.3]` |
 | 6 | **3 cảnh báo / 30 ngày → khóa đăng tin**; **5 tin khóa / 60 ngày → khóa tài khoản**; **10 bình luận spam / 1 giờ** | Cross-row + cửa sổ thời gian | `ModerationServiceImpl` đọc 6 config `moderation.threshold.*`; truy vấn §9.5 | `[§5.4]` |
 | 7 | **Tỷ lệ bình luận tiêu cực ≥ 40% với ≥5 bình luận** → `NEED_REVIEW` | Cross-row + tỷ lệ | `SentimentServiceImpl` đọc `ai.sentiment.min_comments_l1`, `negative_ratio_l1`… | `[§9.1]` |
-| 8 | **Điểm uy tín** theo công thức `[§5.8]` với **trọng số cấu hình được** | Cột sinh không đọc được `system_configs` | `TrustScoreCalculator` + `TrustScoreRecalcJob` (02:00) | `[§5.8][§5.7]` |
 | 9 | **`publiclyVisible`** = `ACTIVE` hoặc (`NEED_REVIEW` và config bật) | Phụ thuộc config runtime | `ListingVisibilityService.publicStatuses()` — **method duy nhất**, mọi truy vấn công khai dùng nó | canonical 5.2, `[§5.1]` |
 | 10 | **Cửa sổ sửa**: bình luận 30 phút, đánh giá 24 giờ | Phụ thuộc config + thời điểm request | `CommentServiceImpl.update()` / `ReviewServiceImpl.update()` đọc `comment.edit_window_minutes`, `review.edit_window_hours` | `[§3.11][§3.12]` |
 | 11 | **Đánh giá yêu cầu đã liên hệ** (`review.require_contact = true`) | Cross-table (`contact_logs`) + config | `ReviewServiceImpl.create()` kiểm tra `contact_logs` tồn tại | `[§3.12]` |
@@ -4411,7 +4391,6 @@ tập kết quả rồi mới `LIMIT` — với 4.000 dòng khớp thì đó là
 | Giá tăng / giảm | `idx_listings_status_price (status, price)` | B-tree đọc được cả hai chiều ⇒ **một** index phục vụ cả ASC và DESC. |
 | Diện tích | dùng `idx_listings_search` khi có đủ prefix; ngược lại filesort | Chấp nhận: sắp theo diện tích là tiêu chí hiếm dùng. |
 | Phổ biến (lượt xem) | `idx_listings_status_view_count (status, view_count)` | Cũng phục vụ "tin nổi bật" trang chủ `[§7.1]`. |
-| Uy tín | `idx_listings_status_trust_score (status, trust_score)` | Cũng phục vụ *"Tin dưới 40 điểm: đánh dấu rủi ro"* `[§5.8]`. |
 
 **Đánh đổi phải nêu rõ:** khi truy vấn **vừa** lọc nhiều tiêu chí **vừa** sắp xếp, MySQL chỉ chọn
 được **một** index. Nó sẽ hoặc (a) dùng `idx_listings_search` để lọc rồi filesort, hoặc (b) dùng
@@ -4541,7 +4520,6 @@ ngram trên `TEXT` là thao tác **nặng** (đọc + tokenize toàn bộ `descr
 | `idx_permissions_module` | `permissions` | `(module)` | BTREE | Đã bị drop bởi V15 | `[§11.2]` |
 | `idx_role_permissions_permission_id` | `role_permissions` | `(permission_id)` | BTREE | Đã bị drop bởi V15 | `[§11.2]` |
 | `idx_landlord_profiles_verification_status` | `landlord_profiles` | `(verification_status)` | BTREE | Hàng đợi xác thực | USER-06 |
-| `idx_landlord_profiles_trust_score` | `landlord_profiles` | `(trust_score)` | BTREE | Chủ trọ rủi ro | `[§10.3]` |
 | `idx_verifications_user_type_status` | `verifications` | `(user_id, type, status)` | BTREE | Lấy yêu cầu đang chờ | `[§3.2]` |
 | `idx_verifications_status_expires_at` | `verifications` | `(status, expires_at)` | BTREE | `TokenCleanupJob` | canonical 11 |
 | `idx_refresh_tokens_user_id` | `refresh_tokens` | `(user_id)` | BTREE | Thu hồi khi khóa tài khoản | AUTH-08 |
@@ -4563,7 +4541,6 @@ ngram trên `TEXT` là thao tác **nặng** (đọc + tokenize toàn bộ `descr
 | `idx_listings_status_published_at` | `listings` | `(status, published_at)` | BTREE | Sắp "mới nhất" | SRCH-08 |
 | `idx_listings_status_price` | `listings` | `(status, price)` | BTREE | Sắp theo giá | SRCH-08 |
 | `idx_listings_status_view_count` | `listings` | `(status, view_count)` | BTREE | Sắp "phổ biến", tin nổi bật | `[§7.1]` |
-| `idx_listings_status_trust_score` | `listings` | `(status, trust_score)` | BTREE | Tin rủi ro < 40 điểm | `[§5.8]` |
 | `idx_listings_auto_hidden_at` | `listings` | `(auto_hidden_at)` | BTREE | Hàng đợi tin bị **tự động ẩn** chờ Moderator xử lý | `[§5.3][§10.8]` — §6.1 |
 | `idx_listings_status_expired_at` | `listings` | `(status, expired_at)` | BTREE | `ListingExpiryJob` | `[§5.2]` |
 | `idx_listings_owner_id_status` | `listings` | `(owner_id, status)` | BTREE | Quản lý tin của chủ trọ | `[§7.3]` |
@@ -4614,7 +4591,7 @@ ngram trên `TEXT` là thao tác **nặng** (đọc + tokenize toàn bộ `descr
 | `idx_moderation_actions_moderator_id_created_at` | `moderation_actions` | `(moderator_id, created_at)` | BTREE | Thống kê + FK | ADM-13 |
 | `idx_moderation_actions_target` | `moderation_actions` | `(target_type, target_id, created_at)` | BTREE | Lịch sử của đối tượng | `[§10.8]` |
 | `idx_violation_warnings_user_id_created_at` | `violation_warnings` | `(user_id, created_at)` | BTREE | **Đếm 3 cảnh báo / 30 ngày** | `[§5.4]` — §9.5 |
-| `idx_violation_warnings_listing_id` | `violation_warnings` | `(listing_id)` | BTREE | Công thức uy tín + FK | `[§5.8]` |
+| `idx_violation_warnings_listing_id` | `violation_warnings` | `(listing_id)` | BTREE | FK | `[§5.4]` |
 | `idx_violation_warnings_report_id` | `violation_warnings` | `(report_id)` | BTREE | FK | |
 | `idx_violation_warnings_issued_by` | `violation_warnings` | `(issued_by)` | BTREE | FK | |
 | `idx_banned_keywords_active_scope` | `banned_keywords` | `(is_active, applies_to)` | BTREE | Nạp từ điển vào cache | `[§11.10]` |
@@ -4842,7 +4819,7 @@ stateDiagram-v2
 | `REJECT` | `status='REJECTED'`, `reject_reason` (bắt buộc) | `moderation_actions(REJECT)`, `audit_logs(LISTING_REJECT)`, `notifications(LISTING_REJECTED)` | `[§10.4][§11.4][§5.6]` |
 | `EXPIRE` | `status='EXPIRED'` | `notifications(LISTING_EXPIRED)` | `[§5.2][§5.6]` |
 | `FLAG_NEED_REVIEW` | `status='NEED_REVIEW'`, `need_review_count += 1`, `last_need_review_at=now()` | `moderation_actions(FLAG_NEED_REVIEW)`, `notifications(AI_NEGATIVE_ALERT)` tới Moderator | `[§9.1][§4.4][§5.6]` |
-| `AUTO_HIDE_BY_SYSTEM` **[BỔ SUNG]** | `status='HIDDEN'`, `auto_hidden_at=now()`, `auto_hide_reason` (bắt buộc) | `moderation_actions(HIDE, moderator_id = NULL)` — actor SYSTEM, hợp lệ với `ck_moderation_actions_system` (§4.3); `notifications(VIOLATION_WARNING)` cho **chủ trọ** (kèm lý do + cách khắc phục); `notifications(AI_NEGATIVE_ALERT)` cho **Moderator** (vào hàng đợi kiểm duyệt). **Không** ghi `audit_logs` (không có actor người — `[§11.4]` là nhật ký hành động **của quản trị viên**); **không** ghi `violation_warnings` (đó là chế tài **do người** ban hành `[§5.4]`, và tính vào công thức uy tín — để SYSTEM tự ghi sẽ thành phạt điểm hai lần với cùng một sự kiện sentiment) | `[§5.3][§4.4][§5.6][§10.10]` — §9.6 |
+| `AUTO_HIDE_BY_SYSTEM` **[BỔ SUNG]** | `status='HIDDEN'`, `auto_hidden_at=now()`, `auto_hide_reason` (bắt buộc) | `moderation_actions(HIDE, moderator_id = NULL)` — actor SYSTEM, hợp lệ với `ck_moderation_actions_system` (§4.3); `notifications(VIOLATION_WARNING)` cho **chủ trọ** (kèm lý do + cách khắc phục); `notifications(AI_NEGATIVE_ALERT)` cho **Moderator** (vào hàng đợi kiểm duyệt). **Không** ghi `audit_logs` (không có actor người — `[§11.4]` là nhật ký hành động **của quản trị viên**); **không** ghi `violation_warnings` (đó là chế tài **do người** ban hành `[§5.4]`) | `[§5.3][§4.4][§5.6][§10.10]` — §9.6 |
 | `UNHIDE_BY_MODERATOR` **[BỔ SUNG]** | `status='ACTIVE'`, `auto_hidden_at=NULL`, `auto_hide_reason=NULL` | `moderation_actions(UNHIDE)` (có `moderator_id`), `audit_logs(LISTING_EDIT)` | `[§10.4]` *"Mở khóa tin cần ghi nhận người thực hiện"* |
 | `LOCK` | `status='LOCKED'`, `lock_reason`, `lock_severity` (cả hai bắt buộc) | `moderation_actions(LOCK)`, `audit_logs(LISTING_LOCK)`, `notifications(LISTING_LOCKED)`, `violation_warnings`, `landlord_profiles.locked_listing_count += 1` | `[§10.4][§5.4][§11.4]` |
 | `UNLOCK` | `status='HIDDEN'`, `lock_reason=NULL`, `lock_severity=NULL` | `moderation_actions(UNLOCK)`, `audit_logs(LISTING_UNLOCK)` | canonical 5.1, `[§10.4]` |
@@ -4958,7 +4935,7 @@ spring:
 | 2 | `V2__seed_roles_permissions.sql` | Migration lịch sử seed role và dữ liệu permission cũ | ✔ Giữ nguyên để không phá checksum; schema cuối cùng được V15 dọn permission |
 | 3 | `V3__seed_catalog_categories_amenities.sql` | 7 category `[§0.3]` + `required_fields` theo loại `[§10.5]` + toàn bộ amenity theo 4 nhóm `[§10.5]` | ✔ **Bắt buộc** — không có category thì `LIST-01` không tạo được tin (`category_id NOT NULL`) |
 | 4 | `V4__seed_administrative_units.sql` | 63 tỉnh + ~700 quận/huyện + ~10.500 phường/xã (dữ liệu GSO) | ✔ **Bắt buộc** — `ward_id` là `NOT NULL` trong `listings`; province/district suy ra qua ward |
-| 5 | `V5__seed_system_configs.sql` | **Toàn bộ 105 config key** = 85 key của canonical mục 9 (100%) + 16 key bổ sung (§8.6: 10 rate limit, 5 tỷ lệ phản hồi `[§5.7]`, 1 tự động ẩn theo sentiment `[§5.3]`) | ✔ **Bắt buộc** — `SystemConfigService.getInt("listing.display_days")` thiếu key → ném exception → không duyệt được tin nào |
+| 5 | `V5__seed_system_configs.sql` | **Toàn bộ 105 config key** = 85 key của canonical mục 9 (100%) + 16 key bổ sung (§8.6: 10 rate limit, 5 tỷ lệ phản hồi `[§5.7]`, 1 tự động ẩn theo sentiment `[§5.3]`). *15 khóa `trust.*` trong số này đã bị `V22` xóa* | ✔ **Bắt buộc** — `SystemConfigService.getInt("listing.display_days")` thiếu key → ném exception → không duyệt được tin nào |
 | 6 | `V6__seed_banned_keywords.sql` | Bộ từ khóa cấm khởi tạo `[§11.10]` | ✘ Không bắt buộc — bảng rỗng thì validator `@NoBannedKeyword` chỉ đơn giản không chặn gì. Nhưng seed để hệ thống có tác dụng ngay |
 | 7 | `V7__seed_promotion_packages.sql` | 4 gói đẩy tin `[§10.6]` | ✘ Không bắt buộc cho luồng lõi — nhưng `PAY-01` trả danh sách rỗng nếu thiếu |
 | 8 | `V8__seed_sentiment_lexicon.sql` | Từ điển cảm xúc tiếng Việt + bảng hệ số hedonic + từ khóa intent chatbot → ghi vào `ai_configs` | ✔ **Bắt buộc** — `ai.sentiment.enabled=true` (canonical 9) mà từ điển rỗng thì mọi bình luận ra `NEUTRAL` score 0 ⇒ AI-01 **không hoạt động**, vi phạm canonical 13.1 (*"không code rỗng"*) |
@@ -5020,7 +4997,7 @@ không bế tắc.
 
 | Phương án | Ưu | Nhược |
 |---|---|---|
-| **File resource** (`src/main/resources/ai/sentiment-vi-lexicon.json`) | Nạp nhanh, versioned theo git, không tốn bảng, dễ review diff | **Admin không sửa được** → vi phạm `[§10.10]` (*"Cấu hình ngưỡng bình luận tiêu cực"*, *"Cấu hình trọng số điểm uy tín"*) và `[§2.11]` AI-08 (*"Cấu hình ngưỡng AI"*). Mọi tinh chỉnh từ điển = **rebuild + redeploy**. Không audit được ai đổi gì `[§11.4]`. Không truy vết được kết quả AI theo phiên bản từ điển. |
+| **File resource** (`src/main/resources/ai/sentiment-vi-lexicon.json`) | Nạp nhanh, versioned theo git, không tốn bảng, dễ review diff | **Admin không sửa được** → vi phạm `[§10.10]` (*"Cấu hình ngưỡng bình luận tiêu cực"*) và `[§2.11]` AI-08 (*"Cấu hình ngưỡng AI"*). Mọi tinh chỉnh từ điển = **rebuild + redeploy**. Không audit được ai đổi gì `[§11.4]`. Không truy vết được kết quả AI theo phiên bản từ điển. |
 | **Bảng riêng `sentiment_lexicon`** | Truy vấn được từng từ | **Thêm một bảng ngoài canonical mục 6 mà không có căn cứ nghiệp vụ bắt buộc** — khác hẳn `notification_preferences` (§3.38), thứ được `[§11.12]` yêu cầu tường minh và không có chỗ lưu nào khác. Và không cần: từ điển **luôn** được nạp **toàn bộ** vào RAM khi khởi động (analyzer chạy in-memory), không bao giờ truy vấn từng dòng ⇒ mô hình quan hệ không mang lại giá trị nào. |
 | **`ai_configs` dạng JSON** (module=`SENTIMENT`) | Admin sửa được qua UI `[§10.10]`; có `version` để truy vết `sentiment_results.analyzer_version`; audit `AI_CONFIG_CHANGE` `[§11.4]`; cache Redis; **không** thêm bảng nào chỉ để chứa dữ liệu vốn đã nằm toàn bộ trong RAM; `is_enabled` phục vụ *"Bật/tắt từng module AI"* `[§10.10]` | JSON lớn (~40 KB) trong một dòng — chấp nhận được với `JSON` (tối đa 1 GB) |
 
@@ -5041,7 +5018,7 @@ Các dòng V8 seed vào `ai_configs`:
 | `SENTIMENT` | `lexicon.teencode` | `KEYWORD_MAP` | `{"k":"không","ko":"không","dc":"được","vs":"với","j":"gì","z":"vậy"}` | canonical 10.1 (*"teencode"*) |
 | `PRICE` | `hedonic.coefficients` | `COEFFICIENT_MAP` | `{"FULL_FURNITURE":0.12,"PRIVATE_TOILET":0.08,"ELEVATOR":0.07,"PARKING":0.05,"FREE_CURFEW":0.03,"STREET_FRONT":0.15}` — **đúng** canonical 10.4 bước 4 | `[§9.4]` |
 | `PRICE` | `hedonic.distance_center` | `COEFFICIENT_MAP` | `{"0-2km":0.10,"2-5km":0.05,"5-10km":0.0,">10km":-0.05}` — *"khoảng cách trung tâm"* | canonical 10.4 |
-| `RECOMMENDATION` | `score.weights` | `COEFFICIENT_MAP` | `{"area":0.30,"price":0.25,"category":0.15,"amenity":0.10,"trust":0.10,"freshness":0.10}` — **đúng** canonical 10.2 | `[§9.2]` |
+| `RECOMMENDATION` | `score.weights` | `COEFFICIENT_MAP` | `{"area":0.30,"price":0.25,"category":0.15,"amenity":0.10,"freshness":0.10}` — bản seed ban đầu (đã bỏ số hạng uy tín; công thức hiện hành 8 số hạng hardcode trong engine, canonical 10.2) | `[§9.2]` |
 | `RECOMMENDATION` | `behavior.weights` | `COEFFICIENT_MAP` | `{"view":1,"search":2,"favorite":3,"contact":5}` — **đúng** canonical 10.2 | `[§9.2]` |
 | `CHATBOT` | `intent.keywords` | `KEYWORD_MAP` | Từ khóa + regex có trọng số cho 8 `ChatbotIntent` | `[§9.3]` |
 | `CHATBOT` | `slot.patterns` | `KEYWORD_MAP` | Regex trích slot: `"dưới (\\d+) *(triệu\|tr)"`, `"(\\d+) *- *(\\d+) *(triệu\|tr)"`, `"quận (\\d+)"` | `[§9.3]` + canonical 10.3 |
@@ -5244,16 +5221,6 @@ Tổng: 9 + 5 + 8 + 7 = **29 amenity**.
 | `moderation.threshold.locked_listing_window_days` | `60` | `INT` | `MODERATION` | `[§5.4]` |
 | `moderation.threshold.spam_comment_count` | `10` | `INT` | `MODERATION` | `[§5.4]` |
 | `moderation.threshold.spam_comment_window_hours` | `1` | `INT` | `MODERATION` | `[§5.4]` |
-| `trust.base_score` | `100` | `INT` | `TRUST` | `[§5.8]` |
-| `trust.weight.positive_comment` | `1` | `DECIMAL` | `TRUST` | `[§5.8]` |
-| `trust.weight.negative_comment` | `2` | `DECIMAL` | `TRUST` | `[§5.8]` |
-| `trust.weight.average_rating` | `5` | `DECIMAL` | `TRUST` | `[§5.8]` |
-| `trust.weight.valid_report` | `10` | `DECIMAL` | `TRUST` | `[§5.8]` |
-| `trust.weight.violation_warning` | `15` | `DECIMAL` | `TRUST` | `[§5.8]` |
-| `trust.min` | `0` | `INT` | `TRUST` | `[§5.8]` |
-| `trust.max` | `100` | `INT` | `TRUST` | `[§5.8]` |
-| `trust.threshold.risky` | `40` | `INT` | `TRUST` | `[§5.8]` |
-| `trust.threshold.need_review` | `25` | `INT` | `TRUST` | `[§5.8]` |
 | `ai.sentiment.enabled` | `true` | `BOOLEAN` | `AI_SENTIMENT` | `[§10.10]` |
 | `ai.sentiment.min_comments_l1` | `5` | `INT` | `AI_SENTIMENT` | `[§9.1]` |
 | `ai.sentiment.negative_ratio_l1` | `0.40` | `DECIMAL` | `AI_SENTIMENT` | `[§9.1]` |
@@ -5287,11 +5254,6 @@ sentiment, §9.6) sẽ **không có chỗ thực thi** hoặc phải hardcode ng
 
 | `config_key` | `default_value` | `value_type` | `group_name` | Nguồn |
 |---|---|---|---|---|
-| `trust.weight.landlord_response_rate` | `10` | `DECIMAL` | `TRUST` | `[§5.7]` *"Chủ trọ phản hồi người thuê nhanh và đầy đủ nếu có module chat"* — §9.2. Cố ý **nhỏ hơn** `trust.weight.violation_warning` (15): tín hiệu hành vi không được lấn át chế tài vi phạm |
-| `trust.response_rate.window_days` | `30` | `INT` | `TRUST` | `[§5.7]` — cửa sổ trượt; điểm uy tín phản ánh hành vi **hiện tại**. Trùng cửa sổ 30 ngày của `[§5.4]` cho nhất quán vận hành |
-| `trust.response_rate.sla_hours` | `24` | `INT` | `TRUST` | `[§5.7]` vế *"**nhanh**"* — phản hồi sau mốc này tính như **chưa** phản hồi (§9.8) |
-| `trust.response_rate.min_conversations` | `3` | `INT` | `TRUST` | `[§5.7]` — dưới ngưỡng mẫu ⇒ `NULL`, **không** kết luận. Cùng tinh thần `ai.price.min_samples` (canonical 10.4 bước 2) |
-| `trust.response_rate.neutral_percent` | `70` | `INT` | `TRUST` | `[§5.7]` — mốc trung tính của `ResponseTerm` (§9.2); đúng mốc này ⇒ điểm không đổi, ngang chủ trọ tắt chat `[§3.10]` |
 | `moderation.autohide.sentiment_requires_prior_warning` | `true` | `BOOLEAN` | `MODERATION` | `[§5.3]` *"AI sentiment phát hiện tỷ lệ bình luận tiêu cực cao **VÀ** tin đã từng bị cảnh báo trước đó"* — liên từ **và** trong nghiệp vụ gốc; `false` là **cố ý** hạ lá chắn chống dìm hàng (§9.6, ADR-17) |
 
 Và seed **10 key rate limit** mà canonical mục 8 đã chốt giá trị nhưng mục 9 chỉ nêu tên key
@@ -5317,19 +5279,17 @@ Và seed **10 key rate limit** mà canonical mục 8 đã chốt giá trị như
   (`security.login.*`, `spam.listing.new_account_daily`, …) mà không nêu đủ tên từng key con và
   không đưa vào bảng mục 9. Chúng bắt buộc phải tồn tại vì canonical mục 8 chốt giá trị cụ thể và
   canonical 13.4 cấm hardcode ngưỡng. Tên key con được đặt bám sát tiền tố canonical.
-- **5 key `trust.response_rate.*` + `trust.weight.landlord_response_rate`:** canonical mục 9 không
-  có key nào cho tỷ lệ phản hồi, nhưng `[§5.7]` liệt kê *"Chủ trọ phản hồi người thuê nhanh và đầy
-  đủ nếu có module chat"* là một trong năm sự kiện cập nhật điểm uy tín chủ trọ ⇒ bắt buộc có chỗ
-  thực thi (§9.2, §9.8). Tên key bám tiền tố `trust.*` của canonical.
+- **5 key tỷ lệ phản hồi (`trust.response_rate.*`, `trust.weight.landlord_response_rate`):** đã bị
+  `V22` xóa cùng điểm uy tín nên không còn liệt kê ở bảng trên.
 - **`moderation.autohide.sentiment_requires_prior_warning`:** canonical mục 9 có đủ 3 key
   `moderation.autohide.*` cho ngưỡng report `[§5.3]` nhưng **không có** key nào cho điều kiện tự
   động ẩn thứ ba của cùng mục `[§5.3]` (sentiment + đã từng bị cảnh báo) ⇒ bắt buộc (§9.6, ADR-17).
   Tên key bám tiền tố `moderation.autohide.*` của canonical.
 
-Tổng số dòng V5: 85 (canonical mục 9) + 16 (bổ sung) = **105 config**.
-`config_value` được seed **bằng** `default_value`; `is_editable = TRUE` cho tất cả trừ
-`trust.min`/`trust.max` (`FALSE` — dải điểm là hợp đồng nghiệp vụ `[§5.8]`, đã bị `CHECK` ở DB chặn,
-xem §3.7).
+Tổng số dòng V5: 85 (canonical mục 9) + 16 (bổ sung) = **105 config**. `V22` xóa 15 khóa
+`trust.*` (10 khóa điểm uy tín của canonical + 5 khóa tỷ lệ phản hồi) ⇒ còn **90 config** hiện hành;
+các dòng `trust.*` đã được gỡ khỏi bảng trên.
+`config_value` được seed **bằng** `default_value`; `is_editable = TRUE` cho tất cả.
 
 ### 8.7. V6 — `banned_keywords` khởi tạo `[§11.10]`
 
@@ -5403,7 +5363,7 @@ nêu tên bảng); bắt buộc vì `[§2.9]` PROMO-02 *"Gắn nhãn tin nổi b
 ```sql
 SELECT l.id, l.slug, l.title, l.price, l.area, l.address_detail,
        d.province_id, w.district_id, l.ward_id, l.category_id,
-       l.trust_score, l.average_rating, l.review_count, l.view_count,
+       l.average_rating, l.review_count, l.view_count,
        l.is_promoted, l.promotion_priority, l.published_at,
        img.url AS primary_image_url
 FROM listings l
@@ -5485,208 +5445,11 @@ và `LEFT JOIN listing_images` (join không ảnh hưởng số dòng vì là `L
 SELECT COUNT(*) FROM listings l WHERE /* ... cùng điều kiện ... */;
 ```
 
-### 9.2. Tính TrustScore `[§5.8]`
+### 9.2. Tính TrustScore — đã loại bỏ
 
-Công thức `[§5.8]`, **trọng số đọc từ `system_configs`** (canonical 13.4 — không hardcode):
-
-```
-ListingTrustScore = trust.base_score
-  + PositiveCommentCount * trust.weight.positive_comment
-  - NegativeCommentCount * trust.weight.negative_comment
-  + AverageRating        * trust.weight.average_rating
-  - ValidReportCount     * trust.weight.valid_report
-  - ViolationWarningCount* trust.weight.violation_warning
-  , kẹp trong [trust.min, trust.max]
-```
-
-**Truy vấn `TrustScoreRecalcJob` (02:00 hằng ngày, canonical mục 11)** — tính lại **hàng loạt** từ
-nguồn sự thật, đồng thời sửa mọi counter denormalize đã trôi (§1.2 tầng 2):
-
-```sql
-UPDATE listings l
-LEFT JOIN (
-    SELECT c.listing_id,
-           SUM(CASE WHEN c.sentiment_label = 'POSITIVE' THEN c.sentiment_weight ELSE 0 END) AS pos_cnt,
-           SUM(CASE WHEN c.sentiment_label = 'NEGATIVE' THEN c.sentiment_weight ELSE 0 END) AS neg_cnt,
-           SUM(CASE WHEN c.status = 'VISIBLE' THEN 1 ELSE 0 END)                            AS cmt_cnt
-    FROM comments c
-    WHERE c.deleted_at IS NULL
-      AND c.is_spam = FALSE            -- [§9.1] "Bình luận bị Moderator xác định spam KHÔNG dùng tính điểm"
-      AND c.is_owner_reply = FALSE     -- [§3.11] phản hồi của chủ trọ không tính vào cảm xúc về tin
-      AND c.sentiment_label <> 'PENDING_ANALYSIS'
-    GROUP BY c.listing_id
-) cm ON cm.listing_id = l.id
-LEFT JOIN (
-    SELECT r.listing_id,
-           AVG(r.rating) AS avg_rating,
-           COUNT(*)      AS rv_cnt
-    FROM reviews r
-    WHERE r.deleted_at IS NULL AND r.status = 'VISIBLE'
-    GROUP BY r.listing_id
-) rv ON rv.listing_id = l.id
-LEFT JOIN (
-    SELECT rp.listing_id, COUNT(*) AS valid_report_cnt
-    FROM reports rp
-    WHERE rp.deleted_at IS NULL
-      AND rp.is_valid = TRUE           -- [§5.7] "Có report được xác nhận đúng"
-    GROUP BY rp.listing_id
-) rc ON rc.listing_id = l.id
-LEFT JOIN (
-    SELECT vw.listing_id, COUNT(*) AS warning_cnt
-    FROM violation_warnings vw
-    WHERE vw.listing_id IS NOT NULL
-    GROUP BY vw.listing_id
-) wc ON wc.listing_id = l.id
-SET l.positive_comment_count = COALESCE(cm.pos_cnt, 0),
-    l.negative_comment_count = COALESCE(cm.neg_cnt, 0),
-    l.comment_count          = COALESCE(cm.cmt_cnt, 0),
-    l.average_rating         = COALESCE(rv.avg_rating, 0),
-    l.review_count           = COALESCE(rv.rv_cnt, 0),
-    l.trust_score = GREATEST(:trustMin, LEAST(:trustMax,
-          :baseScore
-        + COALESCE(cm.pos_cnt, 0) * :wPositiveComment
-        - COALESCE(cm.neg_cnt, 0) * :wNegativeComment
-        + COALESCE(rv.avg_rating, 0) * :wAverageRating
-        - COALESCE(rc.valid_report_cnt, 0) * :wValidReport
-        - COALESCE(wc.warning_cnt, 0) * :wViolationWarning
-    ))
-WHERE l.deleted_at IS NULL
-  AND l.status NOT IN ('DRAFT', 'DELETED');
-```
-
-**Index được dùng:**
-
-| Bảng dẫn xuất | Index | Vai trò |
-|---|---|---|
-| `comments` | `idx_comments_listing_id_sentiment (listing_id, sentiment_label, is_spam)` | Gom nhóm theo tin, lọc spam — **loose index scan** cho `GROUP BY listing_id` |
-| `reviews` | `idx_reviews_listing_id_status_created_at (listing_id, status, ...)` | Prefix `(listing_id, status)` phục vụ `GROUP BY` + lọc `VISIBLE` |
-| `reports` | `idx_reports_listing_id_created_at (listing_id, created_at)` | `GROUP BY listing_id`; `is_valid` lọc trên dòng (chấp nhận — số report nhỏ) |
-| `violation_warnings` | `idx_violation_warnings_listing_id (listing_id)` | `GROUP BY listing_id` |
-| `listings` | PRIMARY | Join đích theo `id` |
-
-> **Vì sao `SUM(sentiment_weight)` chứ không `COUNT(*)`:** `[§9.1]` yêu cầu *"Bình luận từ tài khoản
-> mới tạo có thể có **trọng số thấp hơn**"* (0.5, config `ai.sentiment.new_account_weight`) và
-> *"Bình luận quá ngắn: … **bỏ qua tính điểm**"* (weight = 0). `sentiment_weight` mã hóa cả hai quy
-> tắc, nên `SUM` là phép đếm **có trọng số** đúng nghiệp vụ. Cột `positive_comment_count`/
-> `negative_comment_count` do đó là `INT UNSIGNED` chứa giá trị đã làm tròn — chấp nhận sai số
-> ≤ 0.5 điểm, không ảnh hưởng ngưỡng 40/25 `[§5.8]`.
-
-**Tính lại đơn lẻ (khi có sự kiện `[§5.7]`)** dùng cùng công thức nhưng thêm `AND l.id = :listingId`
-— chạy trong `@Transactional` của `CommentServiceImpl`/`ReviewServiceImpl`/`ReportServiceImpl`.
-
-**Điểm uy tín chủ trọ `[§5.7]`** (`landlord_profiles.trust_score`) = trung bình `trust_score` các
-tin của chủ trọ, trừ cảnh báo cấp tài khoản, **cộng/trừ số hạng tỷ lệ phản hồi**:
-
-```
-LandlordTrustScore = AVG(trust_score các tin)
-  - WarningCount * trust.weight.violation_warning
-  + ResponseTerm                                   -- [§5.7], xem dưới
-  , kẹp trong [trust.min, trust.max]
-
-ResponseTerm =
-    0                                              nếu response_rate_percent IS NULL
-    (response_rate_percent - trust.response_rate.neutral_percent) / 100
-        * trust.weight.landlord_response_rate      ngược lại
-```
-
-**Số hạng `ResponseTerm` — giải thích từng lựa chọn** (`[§5.7]`: *"Chủ trọ phản hồi người thuê
-**nhanh và đầy đủ** **nếu có module chat**"*):
-
-| Lựa chọn | Vì sao |
-|---|---|
-| Chỉ áp dụng khi `landlord_profiles.allow_chat = TRUE` | `[§5.7]` có mệnh đề điều kiện tường minh *"**nếu có module chat**"*. `[§3.10]` cho phép chủ trọ tắt chat (*"Nếu chủ trọ tắt chat, hệ thống chỉ hiển thị số điện thoại"*) — **không được** phạt điểm uy tín vì dùng một quyền được nghiệp vụ cho phép. `allow_chat = FALSE` ⇒ `response_rate_percent = NULL` ⇒ `ResponseTerm = 0` (trung tính, không thưởng không phạt) |
-| Yêu cầu ≥ `trust.response_rate.min_conversations` hội thoại | Chủ trọ mới có 1 hội thoại chưa trả lời sẽ ra tỷ lệ 0% — một mẫu quá nhỏ **không** phải bằng chứng về hành vi. Dưới ngưỡng ⇒ `NULL` ⇒ trung tính. Cùng tinh thần với `ai.price.min_samples` (canonical 10.4 bước 2) và `ai.sentiment.min_comments_l1` `[§9.1]`: **thiếu mẫu thì không kết luận** |
-| Chuẩn hóa quanh `neutral_percent` (70) thay vì cộng thẳng | Cộng thẳng `rate/100 × w` thì **mọi** chủ trọ bật chat đều được điểm thưởng so với chủ trọ tắt chat ⇒ biến `allow_chat` thành cái bẫy điểm. Chuẩn hóa quanh mốc trung tính cho: phản hồi tốt (100%) → **+0,3·w**; phản hồi kém (0%) → **−0,7·w**; đúng mốc 70% → **0**, ngang với chủ trọ tắt chat |
-| Vế "nhanh" nằm trong **định nghĩa** của tỷ lệ, không phải số hạng riêng | Một hội thoại chỉ được tính là "đã phản hồi" khi `first_response_at ≤ created_at + trust.response_rate.sla_hours`. Trả lời sau 5 ngày **không** phải *"nhanh"* `[§5.7]` ⇒ tính như chưa trả lời. Nhờ vậy **một** con số mã hóa cả *"nhanh"* lẫn *"đầy đủ"*, không cần cân hai trọng số rời |
-| Cửa sổ trượt `trust.response_rate.window_days` (30) | `[§5.7]` là *"khi nào **cập nhật**"* điểm — điểm uy tín phải phản ánh hành vi **hiện tại**. Không giới hạn cửa sổ thì một chủ trọ từng chăm chỉ 2 năm trước sẽ mãi mãi giữ điểm thưởng |
-
-`response_rate_percent`, `avg_response_minutes`, `response_conversation_count` được tính ở §9.8 và
-ghi thẳng trong cùng câu `UPDATE` dưới đây (cùng `TrustScoreRecalcJob`, cùng transaction):
-
-```sql
-UPDATE landlord_profiles lp
-LEFT JOIN (
-    SELECT l.owner_id,
-           AVG(l.trust_score) AS avg_listing_trust,
-           COUNT(*)           AS total_listings,
-           SUM(CASE WHEN l.status = 'ACTIVE' THEN 1 ELSE 0 END) AS active_listings,
-           SUM(CASE WHEN l.status = 'LOCKED' THEN 1 ELSE 0 END) AS locked_listings
-    FROM listings l
-    WHERE l.deleted_at IS NULL AND l.status <> 'DRAFT'
-    GROUP BY l.owner_id
-) ls ON ls.owner_id = lp.user_id
-LEFT JOIN (
-    SELECT vw.user_id, COUNT(*) AS warning_cnt
-    FROM violation_warnings vw
-    GROUP BY vw.user_id
-) w ON w.user_id = lp.user_id
-LEFT JOIN (
-    SELECT l.owner_id, AVG(r.rating) AS avg_rating, COUNT(*) AS rv_cnt
-    FROM reviews r
-    JOIN listings l ON l.id = r.listing_id
-    WHERE r.deleted_at IS NULL AND r.status = 'VISIBLE'
-    GROUP BY l.owner_id
-) rv ON rv.owner_id = lp.user_id
-LEFT JOIN (
-    -- §9.8 — tỷ lệ phản hồi trong cửa sổ trượt; "đã phản hồi" = có first_response_at TRONG SLA
-    SELECT l.owner_id,
-           COUNT(*) AS conv_cnt,
-           SUM(CASE WHEN c.first_response_at IS NOT NULL
-                     AND c.first_response_at <= c.created_at + INTERVAL :slaHours HOUR
-                    THEN 1 ELSE 0 END) AS responded_cnt,
-           AVG(CASE WHEN c.first_response_at IS NOT NULL
-                    THEN TIMESTAMPDIFF(MINUTE, c.created_at, c.first_response_at) END)
-               AS avg_response_minutes
-    FROM conversations c
-    JOIN listings l ON l.id = c.listing_id
-    WHERE c.deleted_at IS NULL
-      AND c.created_at >= :now - INTERVAL :responseWindowDays DAY
-    GROUP BY l.owner_id
-) rs ON rs.owner_id = lp.user_id
-SET lp.total_listings        = COALESCE(ls.total_listings, 0),
-    lp.total_active_listings = COALESCE(ls.active_listings, 0),
-    lp.locked_listing_count  = COALESCE(ls.locked_listings, 0),
-    lp.warning_count         = COALESCE(w.warning_cnt, 0),
-    lp.average_rating        = COALESCE(rv.avg_rating, 0),
-    lp.review_count          = COALESCE(rv.rv_cnt, 0),
-    lp.response_conversation_count = COALESCE(rs.conv_cnt, 0),
-    lp.avg_response_minutes  = ROUND(rs.avg_response_minutes),
-    -- NULL khi tắt chat [§3.10] hoặc chưa đủ mẫu -> số hạng phản hồi trung tính
-    lp.response_rate_percent = IF(lp.allow_chat = TRUE
-                                  AND COALESCE(rs.conv_cnt, 0) >= :minConversations,
-                                  ROUND(rs.responded_cnt * 100.0 / rs.conv_cnt),
-                                  NULL),
-    lp.trust_score = GREATEST(:trustMin, LEAST(:trustMax,
-          COALESCE(ls.avg_listing_trust, :baseScore)
-        - COALESCE(w.warning_cnt, 0) * :wViolationWarning
-        + IF(lp.allow_chat = TRUE AND COALESCE(rs.conv_cnt, 0) >= :minConversations,
-             (rs.responded_cnt * 100.0 / rs.conv_cnt - :responseNeutralPercent) / 100.0
-                 * :wLandlordResponseRate,
-             0)                                    -- [§5.7] "nếu có module chat"
-    ))
-WHERE lp.deleted_at IS NULL;
-```
-
-> **Thứ tự bắt buộc trong `TrustScoreRecalcJob`:** câu `UPDATE listings` (ở trên) phải chạy **trước**
-> câu này, vì `AVG(l.trust_score)` đọc kết quả của nó. `lp.response_rate_percent` và
-> `lp.trust_score` được gán trong **cùng một** câu `UPDATE`: MySQL đánh giá vế phải của mọi phép gán
-> trên **giá trị cũ** của dòng, nên `trust_score` **không** được đọc `lp.response_rate_percent` vừa
-> gán — đó chính là lý do biểu thức `IF(...)` được lặp lại nguyên văn ở cả hai vế thay vì tham chiếu
-> cột. Đây là đánh đổi có chủ ý: một lần quét thay vì hai câu `UPDATE` nối tiếp.
-
-Index dùng: `idx_listings_owner_id_status (owner_id, status)`,
-`idx_violation_warnings_user_id_created_at (user_id, ...)` (prefix `user_id`),
-`idx_reviews_listing_id_status_created_at (listing_id, status, ...)` khi join từ `reviews` sang `listings`,
-`idx_conversations_listing_id_last_message_at (listing_id, last_message_at)` khi join từ `conversations` sang `listings` (§9.8).
-
-**[BỔ SUNG NGOÀI CANONICAL]** — số hạng `ResponseTerm` và 5 config key
-`trust.weight.landlord_response_rate`, `trust.response_rate.window_days`,
-`trust.response_rate.sla_hours`, `trust.response_rate.min_conversations`,
-`trust.response_rate.neutral_percent` (§8.6). Canonical mục 9 chốt công thức uy tín chủ trọ
-không có số hạng phản hồi, nhưng `[§5.7]` liệt kê *"Chủ trọ phản hồi người thuê nhanh và đầy đủ
-nếu có module chat"* là một trong năm sự kiện cập nhật điểm uy tín chủ trọ ⇒ phải có chỗ thực thi.
-Trọng số mặc định `10` cố ý **nhỏ hơn** `trust.weight.violation_warning` (15): hành vi phản hồi là
-tín hiệu **mềm**, không được lấn át chế tài vi phạm `[§5.4]`.
+> Hệ thống **không còn tính điểm uy tín** cho tin đăng và chủ trọ (`V22`, canonical mục 18). Mục
+> này giữ số thứ tự để các tham chiếu không lệch. Công thức, câu `UPDATE` hàng loạt và
+> `TrustScoreRecalcJob` đã bị xóa.
 
 ### 9.3. Tìm comparable cho dự đoán giá `[§9.4]`
 
@@ -6005,20 +5768,21 @@ nên **không** seek được range trên `expired_at`. **Sửa:** viết lại 
 
 ### 9.8. Tỷ lệ phản hồi của chủ trọ `[§5.7]`
 
-`[§5.7]`: điểm uy tín chủ trọ cập nhật khi *"Chủ trọ phản hồi người thuê **nhanh và đầy đủ nếu có
-module chat**"*. Đây cũng là nguồn dữ liệu **duy nhất** của field `responseRatePercent` trong
+`[§5.7]` nêu chỉ số *"Chủ trọ phản hồi người thuê **nhanh và đầy đủ nếu có module chat**"*. Đây là
+nguồn dữ liệu **duy nhất** của field `responseRatePercent` trong
 `03_THIET_KE_API.md` mục 5.5 (`PublicUserResponse`) và mục 4.2.
 
-**Định nghĩa chốt** (mọi tham số đọc từ `system_configs`, §8.6):
+**Định nghĩa chốt** (tham số thiết kế: cửa sổ 30 ngày, SLA 24 giờ, tối thiểu 3 hội thoại — các khóa
+`trust.response_rate.*` đã bị `V22` xóa):
 
 ```
-Mẫu   := các hội thoại của chủ trọ tạo trong trust.response_rate.window_days ngày gần nhất
+Mẫu   := các hội thoại của chủ trọ tạo trong 30 ngày gần nhất
 Đạt   := hội thoại có first_response_at IS NOT NULL
-         AND first_response_at <= created_at + trust.response_rate.sla_hours
+         AND first_response_at <= created_at + 24 giờ
 
 responseRatePercent := ROUND(COUNT(Đạt) / COUNT(Mẫu) * 100)
                        -- NULL nếu allow_chat = FALSE [§3.10]
-                       --      hoặc COUNT(Mẫu) < trust.response_rate.min_conversations
+                       --      hoặc COUNT(Mẫu) < 3
 avgResponseMinutes  := AVG(TIMESTAMPDIFF(MINUTE, created_at, first_response_at))
                        -- chỉ trên hội thoại ĐÃ phản hồi (bất kể SLA); NULL nếu chưa có cái nào
 ```
@@ -6045,10 +5809,10 @@ sau đó `idx_conversations_listing_id_last_message_at (listing_id, last_message
 để đọc hội thoại theo `listing_id`. `first_response_at` được đọc từ dòng `conversations`; số hội thoại
 của một chủ trọ trong cửa sổ 30 ngày thường nhỏ nên chi phí join chấp nhận được và tránh lặp FK bắc cầu.
 
-**Ai ghi, ghi khi nào:** `TrustScoreRecalcJob` (02:00 hằng ngày, canonical mục 11 — *"tính lại điểm
-uy tín tin + chủ trọ `[§5.7]`"*) chạy **bản hàng loạt** của truy vấn này (câu `UPDATE landlord_profiles`
-ở §9.2) và ghi vào `landlord_profiles.response_rate_percent` / `avg_response_minutes` /
-`response_conversation_count`. **Không** tính tại thời điểm đọc API: `[§11.3]` yêu cầu phân trang
+**Ai ghi, ghi khi nào:** trước đây `TrustScoreRecalcJob` chạy bản hàng loạt của truy vấn này và ghi
+vào `landlord_profiles.response_rate_percent` / `avg_response_minutes` / `response_conversation_count`.
+Job đó đã bị xóa cùng điểm uy tín (`V22`) ⇒ **hiện chưa có tiến trình nào ghi** ba cột này (luôn
+`NULL`/`0`); khi triển khai lại cần một job định kỳ riêng. **Không** tính tại thời điểm đọc API: `[§11.3]` yêu cầu phân trang
 nhanh, mà `03` mục 5.5 khai báo `responseRatePercent` hiển thị **"luôn"** — kể cả trong danh sách
 tin, nơi 20 tin/trang sẽ thành 20 lần gom nhóm trên `conversations` (đúng vấn đề §1.2 tồn tại để
 tránh). Đọc API = đọc **một cột** đã tính sẵn.
@@ -6057,7 +5821,7 @@ tránh). Đọc API = đọc **một cột** đã tính sẵn.
 
 | Field API | Nguồn DB | Khi `NULL` |
 |---|---|---|
-| `responseRatePercent` (mục 5.5, 4.2) | `landlord_profiles.response_rate_percent` | Trả `null` — frontend ẩn chỉ số này. `null` ≠ `0`: `0` nghĩa là *"chưa từng trả lời ai"*, `null` nghĩa là *"chưa đo được"* (tắt chat `[§3.10]` hoặc chưa đủ `trust.response_rate.min_conversations` hội thoại) |
+| `responseRatePercent` (mục 5.5, 4.2) | `landlord_profiles.response_rate_percent` | Trả `null` — frontend ẩn chỉ số này. `null` ≠ `0`: `0` nghĩa là *"chưa từng trả lời ai"*, `null` nghĩa là *"chưa đo được"* (tắt chat `[§3.10]` hoặc chưa đủ 3 hội thoại) |
 | `avgResponseMinutes` (nếu hiển thị *"Phản hồi trong ~X"*) | `landlord_profiles.avg_response_minutes` | Trả `null` khi chưa có hội thoại nào được phản hồi |
 
 > **Vì sao cửa sổ trượt bắt buộc phải để job tính, không thể tăng dần bằng UPDATE:** một hội thoại
@@ -6126,7 +5890,7 @@ HIST-02, 1 cho thống kê LIST-10.
 | `search_histories` | **180 ngày** | Xóa vật lý theo lô | Nhẹ hơn `view_histories`; hữu ích cho thống kê từ khóa theo mùa `[§2.12]` ADM-13 |
 | `chatbot_messages` + `chatbot_conversations` | **90 ngày** | Xóa vật lý theo lô (`CASCADE` từ conversation) | `[§3.15]` chỉ yêu cầu *"ghi log câu hỏi phổ biến để cải thiện FAQ"* — thống kê intent đã được **tổng hợp** trước khi xóa (xem dưới) |
 | `notifications` | **90 ngày** nếu `is_read = TRUE`; **365 ngày** nếu chưa đọc | Xóa vật lý | Thông báo đã đọc là dữ liệu chết. Chưa đọc thì giữ lâu hơn để user không mất thông tin |
-| `sentiment_results` | **Vô hạn** với `is_latest = TRUE`; **12 tháng** với phiên bản cũ | Xóa phiên bản cũ | Bản hiện hành là đầu vào điểm uy tín `[§5.8]`, không được xóa. Phiên bản cũ chỉ để so sánh chất lượng AI `[§10.10]` |
+| `sentiment_results` | **Vô hạn** với `is_latest = TRUE`; **12 tháng** với phiên bản cũ | Xóa phiên bản cũ | Bản hiện hành là nguồn thống kê cảm xúc `[§9.1]`, không được xóa. Phiên bản cũ chỉ để so sánh chất lượng AI `[§10.10]` |
 | `prediction_histories` | **Vô hạn** nếu `listing_id IS NOT NULL`; **12 tháng** nếu `listing_id IS NULL` | Xóa bản mồ côi | `[§9.4]` *"Kết quả dự đoán cần lưu để phục vụ báo cáo"* — nhưng bản dự đoán từ form bỏ dở (không thành tin) hết giá trị sau 1 năm |
 | `audit_logs` | **24 tháng** trong DB | Xuất ra file `.csv.gz` rồi xóa khỏi DB | `[§11.4]` + `[§11.5]` — audit không mất, chỉ chuyển sang lưu trữ lạnh |
 | Tin `status='DELETED'` | **12 tháng** | Purge vật lý **chỉ khi** không có `payments`/`reports` tham chiếu | `[§3.6]` *"Không xóa cứng tin nếu có thanh toán, báo cáo hoặc bình luận liên quan"* — FK `RESTRICT` (§3.35) sẽ **chặn** nếu vi phạm |
@@ -6214,7 +5978,7 @@ Không xóa cứng dữ liệu nghiệp vụ quan trọng"*.
 
 | Hạng mục | Quyết định |
 |---|---|
-| **Backup logic** | `mysqldump --single-transaction --routines --triggers --set-gtid-purged=OFF` chạy **02:30 hằng ngày** (trước `TrustScoreRecalcJob` 02:00? — **không**, sau: 02:30 để backup chứa điểm uy tín đã tính lại). `--single-transaction` cho InnoDB ⇒ **không khóa bảng**, ứng dụng chạy bình thường trong lúc dump |
+| **Backup logic** | `mysqldump --single-transaction --routines --triggers --set-gtid-purged=OFF` chạy **02:30 hằng ngày** (giờ ít truy cập). `--single-transaction` cho InnoDB ⇒ **không khóa bảng**, ứng dụng chạy bình thường trong lúc dump |
 | **Nơi lưu** | Volume riêng `./backups` mount vào container `mysql`, **ngoài** volume dữ liệu — để hỏng đĩa dữ liệu không kéo theo mất backup. Nén `gzip`. Đặt tên `webtro_YYYYMMDD_HHmm.sql.gz` |
 | **Lưu giữ backup** | 7 bản hằng ngày + 4 bản hằng tuần (Chủ nhật) + 12 bản hằng tháng (ngày 1). Xóa bản cũ hơn tự động |
 | **Binlog** | Bật `log_bin` + `binlog_expire_logs_seconds = 604800` (7 ngày) ⇒ **point-in-time recovery**: khôi phục bản dump đêm qua rồi replay binlog tới đúng giây trước sự cố. Đây là điều biến *"kế hoạch khôi phục"* `[§11.5]` thành khả thi thật — không có binlog thì mất tối đa 24 giờ dữ liệu |
@@ -6251,11 +6015,11 @@ môi trường chạy — một lần chạy nhầm file dump lên prod sẽ **x
 | **ADR-05** | **FULLTEXT với `WITH PARSER ngram`, `ngram_token_size=2`, truy vấn `BOOLEAN MODE`** | Tìm từ khóa tiếng Việt `[§3.7]` SRCH-01 | `LIKE '%...%'` (full scan); parser mặc định (mất âm tiết ≤2 ký tự do `innodb_ft_min_token_size=3` ⇒ **"ở ghép"**, **"Gò Vấp"** hỏng); `NATURAL LANGUAGE MODE` | ngram index mọi cặp ký tự ⇒ không mất âm tiết ngắn, khớp được từ ghép. `BOOLEAN MODE` **bắt buộc** vì `NATURAL LANGUAGE MODE` có **ngưỡng 50%**: từ `"phòng"`, `"trọ"` xuất hiện ở ~100% tin sẽ bị **loại hoàn toàn** — lỗi chí mạng với chính website phòng trọ | Index lớn hơn ~2–3×; có false positive; không tìm được từ 1 ký tự. Bắt buộc escape ký tự boolean ở tầng ứng dụng (cũng là `[§3.7]` *"không cho phép ký tự nguy hiểm"*) | `[§3.7][§11.6]` — §5.5 |
 | **ADR-06** | **`reports.target_id` / `moderation_actions.target_id` / `notifications.ref_id` là tham chiếu ĐA HÌNH, không có FK** | Một report trỏ tới `LISTING`/`COMMENT`/`USER`/`REVIEW` `[§2.8]` | (a) 4 cột nullable + 4 FK + CHECK "đúng 1 non-null"; (b) 4 bảng report riêng | SQL **không có** FK đa hình. (a) sinh 4 index rời rạc và mọi truy vấn gom nhóm phải `COALESCE`; (b) nhân 4 màn hình Admin, trái `[§10.8]` *"Gom nhóm report theo tin **hoặc** user"* (yêu cầu **một** hàng đợi) | Mất toàn vẹn tham chiếu ở DB cho `target_id`. Bù: `ReportServiceImpl.create()` **bắt buộc** nạp đối tượng đích qua service tương ứng → 404 nếu không có (§4.4 mục 15) + integration test | `[§2.8][§10.8]` — §3.29 |
 | **ADR-07** | **"Report hợp lệ" trong ngưỡng tự động ẩn = `status <> 'REJECTED'`, KHÔNG phải `is_valid = TRUE`** | `[§5.3]` nói *"số report **hợp lệ** vượt ngưỡng"* nhưng **không định nghĩa** "hợp lệ" | `is_valid = TRUE` (đã được Moderator xác nhận đúng) | Nếu đòi `is_valid = TRUE` thì phải có Moderator xử lý **trước** — mà lúc đó Moderator đã tự quyết định, ngưỡng tự động trở nên vô nghĩa. `[§4.4]` mô tả rõ trình tự: báo cáo → **hệ thống** chuyển `NeedReview` → **rồi** Moderator xem. Tự động **trước**, người **sau** | Report ác ý có thể đẩy tin sạch vào `NEED_REVIEW`. Rủi ro thấp: cần **5 tài khoản khác nhau** trong 24h `[§5.3]`, và `NEED_REVIEW` **vẫn hiển thị** theo mặc định (`listing.need_review.publicly_visible=true`), đúng `[§3.13]` *"Report không tự động khóa tin ngay"* | `[§5.3][§4.4][§3.13]` — §9.4 |
-| **ADR-08** | **Nội dung đánh giá BẮT BUỘC khi `rating <= 2`** (`ck_reviews_content_required`) | `[§3.12]` nói *"Nội dung đánh giá **có thể** bắt buộc nếu rating <= 2"* — mơ hồ | Để tùy chọn; đưa vào `system_configs` | Đánh giá 1–2 sao là tín hiệu **mạnh nhất** kéo `trust_score` xuống (`AverageRating*5`, `[§5.8]`) và là đầu vào để Moderator xử lý `[§10.9]`. Một sao trần trụi **không thể** xác minh và là công cụ dìm hàng rẻ nhất. Không đưa vào config vì đây là ràng buộc **toàn vẹn dữ liệu** (DB biểu diễn được) chứ không phải ngưỡng có thể điều chỉnh | Người dùng bực khi bị bắt viết lý do. Đánh đổi chấp nhận được — đây chính là mục đích | `[§3.12][§5.8][§10.9]` — §3.28 |
-| **ADR-09** | **Từ điển cảm xúc + hệ số hedonic + tri thức chatbot lưu trong `ai_configs` (JSON), KHÔNG lưu file resource, KHÔNG tạo bảng riêng** | V8 cần seed từ điển; chọn nơi lưu | (a) `src/main/resources/ai/sentiment-vi-lexicon.json`; (b) bảng `sentiment_lexicon` riêng | (a) **Admin không sửa được** ⇒ vi phạm `[§10.10]` (*"Cấu hình trọng số điểm uy tín"*, *"Cấu hình ngưỡng bình luận tiêu cực"*) và `[§2.11]` AI-08; mọi tinh chỉnh = rebuild + redeploy; không audit được `[§11.4]`. (b) thêm bảng ngoài canonical mục 6 **mà không có căn cứ nghiệp vụ bắt buộc** (tương phản: `notification_preferences` §3.38 được `[§11.12]` yêu cầu tường minh), và **vô ích**: từ điển luôn nạp toàn bộ vào RAM, không bao giờ truy vấn từng dòng ⇒ mô hình quan hệ không mang lại gì. `ai_configs` cho: Admin sửa qua UI, `version` để truy vết `sentiment_results.analyzer_version`, audit `AI_CONFIG_CHANGE`, cache Redis, `is_enabled` cho *"bật/tắt module AI"* | JSON ~40 KB trong một dòng; không diff được bằng git (bù bằng `audit_logs.old_value/new_value`) | `[§10.10][§2.11]`, canonical mục 6/10.1 — §7.3 |
+| **ADR-08** | **Nội dung đánh giá BẮT BUỘC khi `rating <= 2`** (`ck_reviews_content_required`) | `[§3.12]` nói *"Nội dung đánh giá **có thể** bắt buộc nếu rating <= 2"* — mơ hồ | Để tùy chọn; đưa vào `system_configs` | Đánh giá 1–2 sao kéo số sao trung bình của tin và chủ trọ xuống và là đầu vào để Moderator xử lý `[§10.9]`. Một sao trần trụi **không thể** xác minh và là công cụ dìm hàng rẻ nhất. Không đưa vào config vì đây là ràng buộc **toàn vẹn dữ liệu** (DB biểu diễn được) chứ không phải ngưỡng có thể điều chỉnh | Người dùng bực khi bị bắt viết lý do. Đánh đổi chấp nhận được — đây chính là mục đích | `[§3.12][§10.9]` — §3.28 |
+| **ADR-09** | **Từ điển cảm xúc + hệ số hedonic + tri thức chatbot lưu trong `ai_configs` (JSON), KHÔNG lưu file resource, KHÔNG tạo bảng riêng** | V8 cần seed từ điển; chọn nơi lưu | (a) `src/main/resources/ai/sentiment-vi-lexicon.json`; (b) bảng `sentiment_lexicon` riêng | (a) **Admin không sửa được** ⇒ vi phạm `[§10.10]` (*"Cấu hình ngưỡng bình luận tiêu cực"*) và `[§2.11]` AI-08; mọi tinh chỉnh = rebuild + redeploy; không audit được `[§11.4]`. (b) thêm bảng ngoài canonical mục 6 **mà không có căn cứ nghiệp vụ bắt buộc** (tương phản: `notification_preferences` §3.38 được `[§11.12]` yêu cầu tường minh), và **vô ích**: từ điển luôn nạp toàn bộ vào RAM, không bao giờ truy vấn từng dòng ⇒ mô hình quan hệ không mang lại gì. `ai_configs` cho: Admin sửa qua UI, `version` để truy vết `sentiment_results.analyzer_version`, audit `AI_CONFIG_CHANGE`, cache Redis, `is_enabled` cho *"bật/tắt module AI"* | JSON ~40 KB trong một dòng; không diff được bằng git (bù bằng `audit_logs.old_value/new_value`) | `[§10.10][§2.11]`, canonical mục 6/10.1 — §7.3 |
 | **ADR-10** | **Median / percentile / IQR của dự đoán giá tính ở tầng Java, không ở SQL** | Canonical 10.4 bước 3/5 cần median(price/m²) và percentile 25/50/75 | Window function `NTILE`/`ROW_NUMBER` trong SQL | MySQL 8.4 **không có** `PERCENTILE_CONT`/`MEDIAN`. Mô phỏng bằng window function làm câu SQL phức tạp, khó test, không tái dùng. Tập comparable tối đa vài trăm dòng ⇒ tính bằng Java rẻ, rõ ràng, unit-test được từng bước hedonic | Chuyển vài trăm dòng về JVM mỗi lần dự đoán. Không đáng kể (dự đoán chạy khi chủ trọ nhập form, không phải đường nóng) | `[§9.4]`, canonical 10.4 — §9.3 |
 | **ADR-11** | **`DATETIME(6)` thay vì `TIMESTAMP`, toàn hệ thống UTC** | Cần mốc thời gian nhất quán, `[§5.2][§3.8]` phụ thuộc cửa sổ thời gian chính xác | `TIMESTAMP` | `TIMESTAMP` chết ở **2038** (32-bit epoch) và **tự chuyển đổi timezone theo session** — một client kết nối sai timezone làm dữ liệu **đọc ra sai**, phá `view.dedup_minutes` và `expired_at`. `DATETIME(6)` lưu nguyên văn giá trị đã chuẩn hóa UTC ở tầng ứng dụng, có microgiây (cần cho thứ tự `messages` trong cùng giây) | Mất tính năng tự chuyển timezone của `TIMESTAMP` — **đây là điều mong muốn**. Ứng dụng chịu trách nhiệm chuẩn hóa (JVM `-Duser.timezone=UTC`, JDBC `connectionTimeZone=UTC`) | canonical 7.3 — §1.4 |
-| **ADR-12** | **Denormalize counter (`view_count`, `favorite_count`, `trust_score`, `average_rating`…) + đồng bộ 3 tầng, KHÔNG dùng trigger** | Trang tìm kiếm 20 tin/trang; `COUNT()`/`AVG()` mỗi tin ⇒ ~5 subquery tổng hợp trên các bảng lớn nhất mỗi request | (a) `COUNT()` khi đọc; (b) trigger MySQL duy trì counter | (a) không chịu nổi tải `[§11.3]`. (b) trigger **không đọc được** `system_configs` qua cache Redis (logic đếm phụ thuộc `view.dedup_minutes`, `contact.dedup_minutes`, `ai.sentiment.min_length`) ⇒ vi phạm canonical 13.4 (*"Không hardcode ngưỡng"*); và trigger không unit-test được. **Ba tầng**: UPDATE nguyên tử trong cùng transaction → `TrustScoreRecalcJob` 02:00 tính lại từ nguồn sự thật (sai lệch tự lành ≤24h) → `CHECK (col >= 0)` chặn dưới | Counter có thể trôi tạm thời trong ≤24h nếu ứng dụng lỗi. Chấp nhận: không có counter nào ảnh hưởng tính đúng đắn của tiền hay quyền | `[§11.3][§5.7][§5.8]` — §1.2 |
+| **ADR-12** | **Denormalize counter (`view_count`, `favorite_count`, `average_rating`…) + đồng bộ 3 tầng, KHÔNG dùng trigger** | Trang tìm kiếm 20 tin/trang; `COUNT()`/`AVG()` mỗi tin ⇒ ~5 subquery tổng hợp trên các bảng lớn nhất mỗi request | (a) `COUNT()` khi đọc; (b) trigger MySQL duy trì counter | (a) không chịu nổi tải `[§11.3]`. (b) trigger **không đọc được** `system_configs` qua cache Redis (logic đếm phụ thuộc `view.dedup_minutes`, `contact.dedup_minutes`, `ai.sentiment.min_length`) ⇒ vi phạm canonical 13.4 (*"Không hardcode ngưỡng"*); và trigger không unit-test được. **Ba tầng**: UPDATE nguyên tử trong cùng transaction → job đêm đối soát từ nguồn sự thật (job cũ `TrustScoreRecalcJob` đã xóa ở `V22`) → `CHECK (col >= 0)` chặn dưới | Counter có thể trôi tạm thời trong ≤24h nếu ứng dụng lỗi. Chấp nhận: không có counter nào ảnh hưởng tính đúng đắn của tiền hay quyền | `[§11.3][§5.7][§5.8]` — §1.2 |
 | **ADR-13** | **`ON DELETE`: `RESTRICT` mặc định; `CASCADE` chỉ cho dữ liệu sở hữu không có giá trị audit; `SET NULL` cho tham chiếu tùy chọn** | Mỗi FK phải chọn một chính sách | `CASCADE` toàn bộ (tiện); `RESTRICT` toàn bộ (an toàn tuyệt đối) | `CASCADE` toàn bộ sẽ **xóa bằng chứng**: xóa user → mất `reports`, `payments`, `moderation_actions`, vi phạm `[§10.2]` và `[§11.4]`. `RESTRICT` toàn bộ làm không dọn nổi dữ liệu test và để lại rác mồ côi. **Luật chốt**: dữ liệu nghiệp vụ/audit → `RESTRICT` (`payments`, `reports`, `contact_logs`, `reviews`, `comments`, `listings.owner_id`); dữ liệu sở hữu thuần (`listing_images`, `favorites`, `messages`, token, `notifications`) → `CASCADE`; tham chiếu tùy chọn nullable (`resolved_by`, `price_prediction_id`, `moderator_id`, `actor_id`) → `SET NULL`. `ON UPDATE` **luôn** `RESTRICT` (id `AUTO_INCREMENT` không bao giờ đổi; `CASCADE` chỉ tạo ảo tưởng) | Xóa cứng một user "sạch" cần dọn thủ công theo thứ tự. Chấp nhận — `[§10.2]` vốn cấm xóa cứng user có dữ liệu nghiệp vụ | `[§3.6][§10.2][§11.4][§11.5]` |
 | **ADR-14** | **`DataRetentionJob` (03:30) dọn log hành vi theo tuổi; dữ liệu nghiệp vụ KHÔNG BAO GIỜ bị dọn** | 15,8 GB/năm tăng vô hạn làm backup/restore `[§11.5]` bất khả thi | Giữ tất cả vô hạn; partition theo tháng | Giữ tất cả ⇒ `mysqldump` hàng chục GB, restore ngoài cửa sổ bảo trì ⇒ *"kế hoạch khôi phục"* `[§11.5]` chỉ là câu chữ. Partition thêm phức tạp vận hành, chưa cần ở quy mô này. Phân loại: `view_histories` 90 ngày, `recommendation_logs` 60, `search_histories` 180, `chatbot_messages` 90, `notifications` 90/365, `audit_logs` 24 tháng (xuất file rồi xóa). Kết quả: **~4,5 GB ổn định + 0,3 GB/năm** thay vì +15,8 GB/năm. Dữ liệu nghiệp vụ (`listings`, `payments`, `reports`, `comments`, `contact_logs`) **không nằm trong danh sách** | Mất lịch sử xem > 90 ngày. Không ảnh hưởng: `listings.view_count` đã cộng dồn (LIST-10 nguyên vẹn), recommendation chỉ dùng hành vi gần đây (canonical 10.2) | `[§11.5][§11.1]` — §10.2 |
 | **ADR-15** | **`system_configs` (ngưỡng vô hướng) tách bạch tuyệt đối với `ai_configs` (tri thức có cấu trúc, có `version`)** | Hai bảng cấu hình có nguy cơ chồng lấn | Gộp làm một bảng | Canonical mục 6 chốt **cả hai** bảng tồn tại; canonical mục 9 là danh sách **đóng** của `system_configs`. Ranh giới: mọi key `ai.*` **vô hướng** (canonical mục 9) → `system_configs`; mọi thứ AI cần **ngoài** danh sách đó (từ điển, hệ số, FAQ) → `ai_configs`. `ai_configs` có `version` vì kết quả AI phải truy vết được về phiên bản tri thức đã dùng `[§10.10]`; `system_configs` không cần | Lập trình viên phải nhớ tra bảng nào. Bù bằng: hai service riêng (`SystemConfigService` / `AiConfigService`), `ConfigKey` constant chỉ chứa key của `system_configs` | canonical mục 6/9, `[§10.10]` — §3.46 |
@@ -6299,7 +6063,7 @@ review đối chiếu. File canonical **không bị sửa**.
 | `listings.last_need_review_at` | `[§9.1]` cửa sổ 30 ngày |
 | `listings.auto_hidden_at`, `listings.auto_hide_reason` | `[§5.3]` *"Tin có thể bị **tự động ẩn**"* — phân biệt ẩn bởi SYSTEM với `HIDE_BY_OWNER`, chặn chủ trọ tự gỡ chế tài, ép lý do `[§10.4]` — ADR-17, §6.1 |
 | `conversations.first_response_at` | `[§5.7]` *"Chủ trọ phản hồi người thuê **nhanh và đầy đủ** nếu có module chat"* — không có cột này thì tỷ lệ/tốc độ phản hồi **không đo được**, và `03_THIET_KE_API.md` mục 5.5 `responseRatePercent` không có nguồn dữ liệu — §3.25, §9.8 |
-| `landlord_profiles.response_rate_percent`, `avg_response_minutes`, `response_conversation_count` | `[§5.7]` — denormalize cửa sổ trượt do `TrustScoreRecalcJob` ghi; nguồn của field `responseRatePercent` (`03` mục 5.5/4.2, *"điều kiện hiển thị: luôn"*) — §3.7, §9.8 |
+| `landlord_profiles.response_rate_percent`, `avg_response_minutes`, `response_conversation_count` | `[§5.7]` — denormalize cửa sổ trượt (hiện chưa có job ghi); nguồn của field `responseRatePercent` (`03` mục 5.5/4.2, *"điều kiện hiển thị: luôn"*) — §3.7, §9.8 |
 | `listings.expiry_reminder_sent_at` | `[§5.2]` chống gửi trùng nhắc hết hạn |
 | `listings.renew_count` | `[§3.5]` giới hạn gia hạn |
 | `listings.floor_count` | `[§0.3]` *"Nhà nguyên căn — Có số phòng, **số tầng**"* |
@@ -6309,7 +6073,7 @@ review đối chiếu. File canonical **không bị sửa**.
 | `landlord_profiles.free_renew_used_this_month`, `free_renew_reset_at` | `[§3.5]` + config `listing.renew.free_per_month` |
 | `users.comment_restricted_until`, `contact_restricted_until` | `[§5.4]` *"tạm khóa chức năng bình luận"*, `[§3.10]` *"hạn chế liên hệ"* |
 
-### A.3. Config key bổ sung (16)
+### A.3. Config key bổ sung (16 — còn 11 sau `V22`)
 
 **Nhóm 1 — rate limit (10):**
 `security.login.max_attempts`, `security.login.window_minutes`, `security.login.lock_minutes`,
@@ -6321,15 +6085,9 @@ Canonical mục 8 chốt **giá trị** cho các rate limit này và mục 9 nê
 tồn tại trong `system_configs` vì canonical 13.4 cấm hardcode ngưỡng. Tên key con bám sát tiền tố
 canonical. — §8.6
 
-**Nhóm 2 — tỷ lệ phản hồi của chủ trọ `[§5.7]` (5):**
-`trust.weight.landlord_response_rate` (10), `trust.response_rate.window_days` (30),
-`trust.response_rate.sla_hours` (24), `trust.response_rate.min_conversations` (3),
-`trust.response_rate.neutral_percent` (70).
-
-Canonical mục 9 không có key nào cho tỷ lệ phản hồi và công thức uy tín chủ trọ ở canonical không có
-số hạng tương ứng; nhưng `[§5.7]` liệt kê *"Chủ trọ phản hồi người thuê **nhanh và đầy đủ** nếu có
-module chat"* là một trong năm sự kiện cập nhật điểm uy tín chủ trọ ⇒ bắt buộc có chỗ thực thi.
-— §9.2, §9.8
+**Nhóm 2 — tỷ lệ phản hồi của chủ trọ `[§5.7]` (5) — đã xóa ở `V22`:**
+5 khóa `trust.response_rate.*` / `trust.weight.landlord_response_rate` bị xóa cùng điểm uy tín. Tham
+số thiết kế của tỷ lệ phản hồi (30 ngày, 24 giờ, 3 hội thoại) ghi ở §9.8.
 
 **Nhóm 3 — điều kiện tự động ẩn theo sentiment `[§5.3]` (1):**
 `moderation.autohide.sentiment_requires_prior_warning` (`true`).
@@ -6366,8 +6124,7 @@ ADR-17
 | Vị trí `floorCount` | `[§0.3]` chỉ nói nhà nguyên căn *"có số phòng, số tầng"* | Cột `listings.floor_count` nullable, chỉ validate khi `category = WHOLE_HOUSE` qua `optional_fields` | §8.4 |
 | "Tỷ lệ bình luận tiêu cực **cao**" (điều kiện tự động ẩn) | `[§5.3]` *"AI sentiment phát hiện tỷ lệ bình luận tiêu cực **cao**"* — không định lượng | = ngưỡng **L2** của `[§9.1]` (≥ `ai.sentiment.min_comments_l2` bình luận **và** ≥ `ai.sentiment.negative_ratio_l2` tiêu cực) — mức duy nhất mà `[§9.1]` gọi là *"cảnh báo mức **cao**"*. **Không** dùng L1: `[§9.1]` chốt L1 chỉ đáng *"đánh dấu NeedReview"* | ADR-17 — §9.6 |
 | "Tin đã từng bị cảnh báo trước đó" | `[§5.3]` — không nói cảnh báo nào | = `listings.need_review_count > 0` (hệ thống đã cảnh báo) **HOẶC** có `violation_warnings` của tin (người đã cảnh báo `[§5.4]`). Là điều kiện **AND** với tỷ lệ tiêu cực, đúng liên từ *"và"* của nghiệp vụ gốc | ADR-17 — §9.6 |
-| "Phản hồi **nhanh và đầy đủ**" | `[§5.7]` — không định lượng | *"đầy đủ"* = có `conversations.first_response_at`; *"nhanh"* = trong `trust.response_rate.sla_hours` (24h). **Gộp làm một** chỉ số `response_rate_percent`: hội thoại chỉ được tính "đạt" khi phản hồi **trong** SLA ⇒ một con số mã hóa cả hai vế, không phải cân hai trọng số rời | §9.2, §9.8 |
-| Chủ trọ **tắt chat** thì tính điểm phản hồi thế nào | `[§5.7]` *"**nếu có module chat**"*; `[§3.10]` cho phép tắt chat | `ResponseTerm = 0` (trung tính) khi `allow_chat = FALSE` hoặc chưa đủ `trust.response_rate.min_conversations` hội thoại. **Không** phạt điểm vì dùng một quyền nghiệp vụ cho phép; API trả `responseRatePercent = null` (≠ `0`) | §9.2, §9.8 |
+| "Phản hồi **nhanh và đầy đủ**" | `[§5.7]` — không định lượng | *"đầy đủ"* = có `conversations.first_response_at`; *"nhanh"* = trong 24 giờ. **Gộp làm một** chỉ số `response_rate_percent`: hội thoại chỉ được tính "đạt" khi phản hồi **trong** SLA ⇒ một con số mã hóa cả hai vế, không phải cân hai trọng số rời | §9.2, §9.8 |
 | Loại thông báo nào *"không quan trọng"* (được tắt) | `[§11.12]` *"Có thể tắt **một số** loại thông báo **không quan trọng**"* — không liệt kê | 6 loại tắt được (`LISTING_EXPIRING`, `LISTING_EXPIRED`, `NEW_CONTACT`, `NEW_COMMENT`, `NEW_REVIEW`, `FOLLOWED_LANDLORD_NEW_LISTING`); 10 loại **không** tắt được (kết quả kiểm duyệt, chế tài, giao dịch tiền, hàng đợi Moderator). Trùng **chính xác** `03_THIET_KE_API.md` mục 4.10.6 | §3.38 |
 
 ### A.6. Bảng bổ sung ngoài canonical (1)

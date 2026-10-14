@@ -51,9 +51,10 @@ const SavedListingsPage = () => {
     setRemoving(null);
     if (!listing) return;
     try {
-      await favoriteApi.remove(listing.id);
+      // it.id là id bản ghi lưu; API bỏ lưu nhận id TIN (listingId).
+      await favoriteApi.remove(listing.listingId);
       notify.success('Đã bỏ lưu tin');
-      setItems((prev) => prev.filter((i) => i.id !== listing.id));
+      setItems((prev) => prev.filter((i) => i.listingId !== listing.listingId));
       setTotalElements((n) => Math.max(0, n - 1));
     } catch (e) {
       notify.apiError(e, 'Bỏ lưu tin thất bại');
@@ -96,7 +97,7 @@ const SavedListingsPage = () => {
             {items.map((it) => (
               <Grid item xs={12} sm={6} md={4} lg={3} key={it.id}>
                 <ListingCard
-                  listing={{ ...it, favoritedByMe: true }}
+                  listing={{ ...it, id: it.listingId, favoritedByMe: true }}
                   showFavorite
                   unavailable={!!it.notAvailable}
                   onFavoriteToggle={() => setRemoving(it)}

@@ -16,6 +16,9 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
     /** Danh sách tin nhắn của một hội thoại theo thời gian tăng dần (phân trang). */
     Page<Message> findByConversation_IdAndDeletedAtIsNullOrderByCreatedAtAsc(Long conversationId, Pageable pageable);
 
+    /** Danh sách tin nhắn theo sort của {@code pageable} (vd. createdAt DESC để lấy trang tin MỚI nhất). */
+    Page<Message> findByConversation_IdAndDeletedAtIsNull(Long conversationId, Pageable pageable);
+
     /** Đếm tin nhắn chưa đọc trong một hội thoại (không tính tin do chính người nhận gửi). */
     long countByConversation_IdAndSenderIdNotAndIsReadFalseAndDeletedAtIsNull(Long conversationId, Long readerId);
 }

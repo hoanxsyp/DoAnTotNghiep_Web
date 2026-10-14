@@ -69,14 +69,6 @@ export const REPORT_REASONS = {
   OTHER: 'Khác',
 };
 
-export const SENTIMENT_META = {
-  POSITIVE: { label: 'Tích cực', color: 'success' },
-  NEUTRAL: { label: 'Trung lập', color: 'default' },
-  NEGATIVE: { label: 'Tiêu cực', color: 'error' },
-  MIXED: { label: 'Khen chê lẫn lộn', color: 'warning' },
-  PENDING_ANALYSIS: { label: 'Đang phân tích', color: 'info' },
-};
-
 export const PAYMENT_STATUS_META = {
   PENDING: { label: 'Chờ thanh toán', color: 'warning' },
   SUCCESS: { label: 'Thành công', color: 'success' },

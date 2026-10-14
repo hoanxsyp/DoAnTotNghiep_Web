@@ -61,7 +61,6 @@ public class ChatbotMessageResponse {
         private BigDecimal area;
         private String shortAddress;
         private String thumbnailUrl;
-        private Integer trustScore;
         private BigDecimal averageRating;
         private Boolean promoted;
     }

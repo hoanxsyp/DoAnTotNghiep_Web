@@ -1,12 +1,10 @@
 package com.webtro.modules.user.service.impl;
 
 import com.webtro.common.PageResponse;
-import com.webtro.common.enums.TrustLabel;
 import com.webtro.constant.ErrorCode;
 import com.webtro.constant.RoleCode;
 import com.webtro.exception.ConflictException;
 import com.webtro.exception.ResourceNotFoundException;
-import com.webtro.modules.listing.service.TrustScoreService;
 import com.webtro.modules.user.dto.response.FollowResponse;
 import com.webtro.modules.user.dto.response.FollowingItemResponse;
 import com.webtro.modules.user.entity.Follow;
@@ -25,7 +23,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -47,11 +44,6 @@ public class FollowServiceImpl implements FollowService {
     private final RoleRepository roleRepository;
     private final LandlordProfileRepository landlordProfileRepository;
     private final FollowMapper followMapper;
-
-    /** {@code @Lazy} để phá vòng phụ thuộc tiềm ẩn user ↔ listing (xem UserServiceImpl). */
-    @org.springframework.context.annotation.Lazy
-    @org.springframework.beans.factory.annotation.Autowired
-    private TrustScoreService trustScoreService;
 
     @Override
     @Transactional
@@ -106,10 +98,7 @@ public class FollowServiceImpl implements FollowService {
             User landlord = follow.getLandlord();
             LandlordProfile lp = landlordProfileRepository
                     .findByUser_IdAndDeletedAtIsNull(landlord.getId()).orElse(null);
-            TrustLabel label = (lp != null && lp.getTrustScore() != null)
-                    ? trustScoreService.labelOf(lp.getTrustScore().setScale(0, java.math.RoundingMode.HALF_UP).intValue())
-                    : null;
-            items.add(followMapper.toItem(follow, landlord, lp, label));
+            items.add(followMapper.toItem(follow, landlord, lp));
         }
 
         sortItems(items, pageable);
@@ -123,18 +112,10 @@ public class FollowServiceImpl implements FollowService {
         return PageResponse.from(page);
     }
 
-    /** Sắp xếp theo createdAt (mặc định) hoặc trustScore, giảm dần theo hướng của Sort. */
+    /** Sắp xếp theo thời điểm theo dõi (createdAt), theo hướng của Sort (mặc định giảm dần). */
     private void sortItems(List<FollowingItemResponse> items, Pageable pageable) {
-        boolean byTrust = pageable.getSort().stream()
-                .anyMatch(o -> "trustScore".equals(o.getProperty()));
-        Comparator<FollowingItemResponse> comparator;
-        if (byTrust) {
-            comparator = Comparator.comparing(
-                    i -> i.getTrustScore() == null ? BigDecimal.ZERO : BigDecimal.valueOf(i.getTrustScore()));
-        } else {
-            comparator = Comparator.comparing(FollowingItemResponse::getFollowedAt,
-                    Comparator.nullsLast(Comparator.naturalOrder()));
-        }
+        Comparator<FollowingItemResponse> comparator = Comparator.comparing(
+                FollowingItemResponse::getFollowedAt, Comparator.nullsLast(Comparator.naturalOrder()));
         boolean ascending = pageable.getSort().stream()
                 .findFirst().map(org.springframework.data.domain.Sort.Order::isAscending)
                 .orElse(false);

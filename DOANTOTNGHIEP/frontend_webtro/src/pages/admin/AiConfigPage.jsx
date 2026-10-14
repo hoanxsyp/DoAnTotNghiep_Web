@@ -8,16 +8,14 @@ import PageLoader from '@/components/common/PageLoader';
 
 const GROUP_TITLES = {
   modules: 'Bật/tắt module AI',
-  sentiment: 'Phân tích cảm xúc',
   recommendation: 'Gợi ý tin đăng',
   price: 'Dự đoán giá',
   chatbot: 'Trợ lý ảo',
-  trustWeights: 'Trọng số điểm uy tín',
 };
 
 /**
- * Cấu hình AI (docs/04 §10.10, API 4.19.5/4.19.6). Bật/tắt module, chỉnh ngưỡng cảm xúc + trọng số
- * uy tín. Quyền AI_CONFIG_MANAGE (chỉ Admin). Lưu bắt buộc kèm lý do (audit).
+ * Cấu hình AI (docs/04 §10.10, API 4.19.5/4.19.6). Bật/tắt module, chỉnh tham số module. Quyền
+ * AI_CONFIG_MANAGE (chỉ Admin). Lưu bắt buộc kèm lý do (audit).
  */
 const AiConfigPage = () => {
   const [data, setData] = useState(null);

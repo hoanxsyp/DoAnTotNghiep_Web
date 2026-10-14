@@ -64,7 +64,7 @@ const FollowingPage = () => {
       ) : items.length === 0 ? (
         <EmptyState
           title="Bạn chưa theo dõi chủ trọ nào"
-          description="Theo dõi chủ trọ uy tín để không bỏ lỡ tin đăng mới của họ."
+          description="Theo dõi chủ trọ để không bỏ lỡ tin đăng mới của họ."
           action={<Button variant="contained" onClick={() => navigate('/tim-kiem')}>Khám phá tin đăng</Button>}
         />
       ) : (
@@ -92,7 +92,6 @@ const FollowingPage = () => {
                           {l.verified && <VerifiedIcon color="success" sx={{ fontSize: 18 }} />}
                         </Stack>
                         <Stack direction="row" spacing={1} sx={{ mt: 0.5, flexWrap: 'wrap' }}>
-                          <Chip size="small" variant="outlined" label={`Uy tín ${l.trustScore ?? '—'}`} />
                           {l.averageRating != null && (
                             <Chip size="small" variant="outlined" icon={<StarIcon />} label={`${l.averageRating}`} />
                           )}

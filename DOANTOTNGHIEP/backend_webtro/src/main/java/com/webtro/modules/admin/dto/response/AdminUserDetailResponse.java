@@ -81,7 +81,6 @@ public class AdminUserDetailResponse {
         private Long verifiedById;
         private String verificationNote;
 
-        private Integer trustScore;
         private BigDecimal averageRating;
         private Integer reviewCount;
         private Integer responseRatePercent;

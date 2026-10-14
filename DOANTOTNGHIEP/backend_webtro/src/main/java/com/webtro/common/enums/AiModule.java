@@ -1,14 +1,11 @@
 package com.webtro.common.enums;
 
 /**
- * 4 module AI [§9].
+ * Các module AI [§9].
  *
  * <p>Lưu DB dạng chuỗi (@Enumerated(EnumType.STRING)); không dùng ORDINAL.
  */
 public enum AiModule {
-
-    /** Phân tích cảm xúc */
-    SENTIMENT("Phân tích cảm xúc"),
 
     /** Gợi ý tin */
     RECOMMENDATION("Gợi ý tin"),

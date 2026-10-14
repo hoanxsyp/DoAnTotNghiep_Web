@@ -52,7 +52,6 @@ public class UserMapper {
         return UserProfileResponse.LandlordSummary.builder()
                 .verified(lp.getVerifiedAt() != null)
                 .verifiedAt(lp.getVerifiedAt())
-                .trustScore(toInt(lp.getTrustScore()))
                 .totalListings(lp.getTotalListings())
                 .activeListings(lp.getTotalActiveListings())
                 .averageRating(lp.getAverageRating())

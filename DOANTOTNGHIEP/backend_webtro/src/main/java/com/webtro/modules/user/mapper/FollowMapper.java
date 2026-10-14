@@ -1,6 +1,5 @@
 package com.webtro.modules.user.mapper;
 
-import com.webtro.common.enums.TrustLabel;
 import com.webtro.modules.user.dto.response.FollowingItemResponse;
 import com.webtro.modules.user.entity.Follow;
 import com.webtro.modules.user.entity.LandlordProfile;
@@ -22,9 +21,8 @@ public class FollowMapper {
      * @param follow     quan hệ theo dõi
      * @param landlord   chủ trọ được theo dõi
      * @param lp         hồ sơ chủ trọ (có thể null)
-     * @param trustLabel nhãn uy tín đã tính sẵn (null nếu không có hồ sơ)
      */
-    public FollowingItemResponse toItem(Follow follow, User landlord, LandlordProfile lp, TrustLabel trustLabel) {
+    public FollowingItemResponse toItem(Follow follow, User landlord, LandlordProfile lp) {
         FollowingItemResponse.FollowingItemResponseBuilder builder = FollowingItemResponse.builder()
                 .landlordId(landlord.getId())
                 .fullName(landlord.getFullName())
@@ -33,8 +31,6 @@ public class FollowMapper {
 
         if (lp != null) {
             builder.verified(lp.getVerifiedAt() != null)
-                    .trustScore(toInt(lp.getTrustScore()))
-                    .trustLabel(trustLabel)
                     .averageRating(lp.getAverageRating())
                     .activeListingCount(lp.getTotalActiveListings());
         } else {

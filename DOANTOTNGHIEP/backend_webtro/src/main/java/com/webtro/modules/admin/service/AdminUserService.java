@@ -50,7 +50,6 @@ public interface AdminUserService {
     /** Danh sách chủ trọ có lọc/phân trang (canonical 4.13.6). */
     PageResponse<AdminLandlordResponse> listLandlords(String keyword,
                                                       List<VerificationStatus> verificationStatuses,
-                                                      Integer minTrustScore, Integer maxTrustScore,
                                                       Boolean postingSuspended, Pageable pageable);
 
     /** Xác thực chủ trọ (canonical 4.13.7): đặt VERIFIED + ghi audit + thông báo. */

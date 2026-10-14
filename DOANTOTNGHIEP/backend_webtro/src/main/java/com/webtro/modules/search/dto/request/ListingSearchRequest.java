@@ -51,8 +51,9 @@ public class ListingSearchRequest {
     @Schema(description = "Loại tin theo id", example = "1")
     private Long categoryId;
 
-    @Schema(description = "Loại tin theo mã (dùng cho URL SEO, thay cho categoryId)")
-    private CategoryCode categoryCode;
+    @Schema(description = "Loại tin theo mã (dùng cho URL SEO, thay cho categoryId). Nhiều mã - ngữ nghĩa OR: "
+            + "categoryCode=A,B hoặc categoryCode=A&categoryCode=B")
+    private List<CategoryCode> categoryCode;
 
     @DecimalMin(value = "0", message = "Giá từ không được âm")
     @DecimalMax(value = "999999999.99", message = "Giá từ vượt ngưỡng cho phép")
@@ -129,11 +130,6 @@ public class ListingSearchRequest {
     @Schema(description = "Lọc tin có thể vào ở từ ngày này trở về trước (available_from <= giá trị)")
     private LocalDate availableFrom;
 
-    @Min(value = 0, message = "Điểm uy tín tối thiểu là 0")
-    @Max(value = 100, message = "Điểm uy tín tối đa là 100")
-    @Schema(description = "Lọc tin có trust_score >= giá trị này", example = "40")
-    private Integer minTrustScore;
-
     @Schema(description = "Vĩ độ tâm tìm kiếm (đi cùng longitude + radiusKm)")
     private Double latitude;
 
@@ -145,7 +141,7 @@ public class ListingSearchRequest {
     @Schema(description = "Bán kính tìm quanh tâm (km)", example = "5")
     private Double radiusKm;
 
-    @Schema(description = "Sắp xếp: RELEVANCE | publishedAt,desc | price,asc | area,desc | viewCount,desc | trustScore,desc | distance,asc ...",
+    @Schema(description = "Sắp xếp: RELEVANCE | publishedAt,desc | price,asc | area,desc | viewCount,desc | distance,asc ...",
             example = "RELEVANCE")
     private String sort;
 }

@@ -4,6 +4,10 @@
 > **Cập nhật 2026-08-09:** phân quyền hiện hành là **role-only**. Hệ thống không còn entity/repository/bảng nghiệp vụ `permissions` hay `role_permissions`; Flyway `V15__drop_permission_tables.sql` drop hai bảng này sau các migration lịch sử. Backend kiểm tra bằng `@PreAuthorize("hasRole/hasAnyRole")` và `SecurityUtils.hasRole/hasAnyRole`; JWT chỉ chứa `role`. Tenant được phép tạo tin nhưng service chỉ chấp nhận `categoryCode = ROOMMATE`; Landlord/Admin tạo được mọi loại tin. Access token 15 phút, refresh token 1 ngày, cả hai lưu `localStorage`; khi refresh token còn dưới 15 phút và access token vẫn còn hạn, frontend chủ động gọi `/api/auth/refresh` để xoay refresh token.
 <!-- WEBTRO_ROLE_ONLY_UPDATE_END -->
 
+> **Cập nhật 2026-10-14:** hệ thống **không còn điểm uy tín** (trust score) cho tin đăng và chủ trọ
+> (Flyway `V22`, canonical mục 18). Các mục review, ca kiểm thử và bug liên quan tới điểm uy tín
+> trong tài liệu này đã được gỡ; công thức gợi ý còn 8 số hạng.
+
 > **Mục đích tài liệu:** Chia toàn bộ hệ thống (Backend + Frontend) thành **03 cụm công việc cân bằng** để giao cho **03 người** cùng *kiểm tra luồng hoạt động, review nghiệp vụ, soát API, soát dữ liệu DB → BE → API → FE → người dùng, phát hiện bug và đề xuất chỉnh sửa*. Đây **KHÔNG** phải tài liệu phát triển tính năng mới — mục tiêu là **hoàn thiện & bảo đảm chất lượng** website hiện có.
 
 > **Cách dùng:** Mỗi người đọc phần "# Người N" của mình để hiểu đầy đủ cụm phụ trách (không cần hỏi thêm). Đọc mục **"Module dùng chung"** và **"Bản đồ phụ thuộc"** ở cuối để biết ranh giới phối hợp và thứ tự đọc. Tuân theo **"Sơ đồ quy trình review"** khi thực hiện.
@@ -45,7 +49,7 @@
 | Cụm | Người | Trọng tâm nghiệp vụ | Mã chức năng | Số mã |
 |---|---|---|---|---|
 | **A** | **Người 1** | Danh tính, Tài khoản người dùng, Thông báo, Kiểm duyệt/Quản trị người dùng | AUTH·USER·NOTI · ADM-01/02/03/10/13 · RPT-03/04/05/06 | **29** |
-| **B** | **Người 2** | Tin đăng (vòng đời), Tìm kiếm/Lọc, Danh mục địa giới, AI gợi ý/định giá/uy tín | LIST·SRCH · ADM-04/05/06/07 · AI-02/03/04/06 · RPT-01 | **30** |
+| **B** | **Người 2** | Tin đăng (vòng đời), Tìm kiếm/Lọc, Danh mục địa giới, AI gợi ý/định giá | LIST·SRCH · ADM-04/05/06/07 · AI-04/06 · RPT-01 | **30** |
 | **C** | **Người 3** | Tương tác (lưu/liên hệ/chat/bình luận/đánh giá), Thanh toán & Đẩy tin, AI cảm xúc/chatbot, Cấu hình hệ thống | FAV·CONT·CMT·REV · PAY · AI-01/05/07/08 · ADM-08/09/11/12/14 · RPT-02 | **31** |
 
 ---
@@ -284,10 +288,10 @@ Quản lý **hồ sơ cá nhân** (mọi role) và **hồ sơ chủ trọ** (rol
 
 | File | Màn hình | Thành phần |
 |---|---|---|
-| `pages/tenant/ProfilePage.jsx` (route `/tai-khoan/ho-so`) | Hồ sơ cá nhân | Cột trái: `Avatar` + nút camera đổi ảnh (input file ẩn, validate JPG/PNG/WEBP + ≤5MB **ở client TRƯỚC khi upload**), nút "Xóa ảnh"; hiển thị email/SĐT kèm icon `VerifiedIcon` nếu đã xác thực; box tóm tắt hồ sơ chủ trọ nếu có (huy hiệu xác thực, uy tín, số tin, đánh giá). Cột phải: form `react-hook-form` + Yup (họ tên, giới tính `select`, ngày sinh `DatePicker` MUI-X, địa chỉ, giới thiệu `multiline`), nút "Khôi phục" (reset về data đã load) và "Lưu thay đổi" (disable khi `!isDirty`). |
+| `pages/tenant/ProfilePage.jsx` (route `/tai-khoan/ho-so`) | Hồ sơ cá nhân | Cột trái: `Avatar` + nút camera đổi ảnh (input file ẩn, validate JPG/PNG/WEBP + ≤5MB **ở client TRƯỚC khi upload**), nút "Xóa ảnh"; hiển thị email/SĐT kèm icon `VerifiedIcon` nếu đã xác thực; box tóm tắt hồ sơ chủ trọ nếu có (huy hiệu xác thực, số tin, đánh giá). Cột phải: form `react-hook-form` + Yup (họ tên, giới tính `select`, ngày sinh `DatePicker` MUI-X, địa chỉ, giới thiệu `multiline`), nút "Khôi phục" (reset về data đã load) và "Lưu thay đổi" (disable khi `!isDirty`). |
 | `pages/tenant/ChangePasswordPage.jsx` | (đã mô tả ở Module 1) | — |
-| `pages/tenant/FollowingPage.jsx` (route `/tai-khoan/dang-theo-doi`) | Danh sách chủ trọ đang theo dõi | Grid card 3 cột, mỗi card: `Avatar` + `Badge` số tin mới kể từ lần ghé thăm gần nhất (`newListingCountSinceLastVisit`), tên (link tới hồ sơ công khai) + icon xác thực, chip uy tín + rating, nút "Xem hồ sơ"/"Bỏ theo dõi" (có `ConfirmDialog`). `EmptyState` khi chưa theo dõi ai, có CTA "Khám phá tin đăng". Pagination MUI. |
-| `pages/public/LandlordProfilePage.jsx` (route công khai `/chu-tro/:id`) | Hồ sơ công khai chủ trọ | `TrustScoreBadge`, `RatingStars`, nút Follow/Unfollow (điều hướng `/dang-nhap` kèm `state.from` nếu chưa đăng nhập), lưới `ListingGrid` các tin đang hiển thị của chủ trọ có phân trang. |
+| `pages/tenant/FollowingPage.jsx` (route `/tai-khoan/dang-theo-doi`) | Danh sách chủ trọ đang theo dõi | Grid card 3 cột, mỗi card: `Avatar` + `Badge` số tin mới kể từ lần ghé thăm gần nhất (`newListingCountSinceLastVisit`), tên (link tới hồ sơ công khai) + icon xác thực, chip rating, nút "Xem hồ sơ"/"Bỏ theo dõi" (có `ConfirmDialog`). `EmptyState` khi chưa theo dõi ai, có CTA "Khám phá tin đăng". Pagination MUI. |
+| `pages/public/LandlordProfilePage.jsx` (route công khai `/chu-tro/:id`) | Hồ sơ công khai chủ trọ | `RatingStars`, nút Follow/Unfollow (điều hướng `/dang-nhap` kèm `state.from` nếu chưa đăng nhập), lưới `ListingGrid` các tin đang hiển thị của chủ trọ có phân trang. |
 | Không có trang riêng cho "Update Contact" (`PATCH /users/me/contact`) — API tồn tại ở `userApi.js`? | — | > Cần bổ sung theo source code: không tìm thấy nơi FE gọi `updateContact`/`getLandlordProfile`/`updateLandlordProfile`/`requestLandlordVerification` trong `pages/tenant/*` hiện tại — các API này tồn tại ở BE + `userApi.js` nhưng UI sử dụng nằm ở khu vực `pages/landlord/*` (thuộc phạm vi Người khác), cần đối chiếu chéo khi review. |
 
 `src/api/userApi.js` là điểm gọi API duy nhất (không có logic nghiệp vụ ở tầng này — chỉ gọi HTTP + `unwrap()` envelope).
@@ -314,7 +318,6 @@ Quản lý **hồ sơ cá nhân** (mọi role) và **hồ sơ chủ trọ** (rol
 - Unfollow: **xóa CỨNG** (`followRepository.delete()`), không xóa mềm — vì đây là dữ liệu quan hệ thuần túy, không cần audit lịch sử.
 - Danh sách "đang theo dõi": vì repository chỉ có `findByFollower_IdAndDeletedAtIsNull` trả `List` (không hỗ trợ `Pageable` trực tiếp — quyết định kỹ thuật đã chốt, không sửa), nên **phân trang + sort được thực hiện TRONG BỘ NHỚ** ở tầng service — chấp nhận được vì số chủ trọ 1 người theo dõi thường nhỏ, nhưng là điểm cần chú ý về hiệu năng nếu dữ liệu tăng.
 
-**Dependency nội bộ đáng chú ý:** cả `UserServiceImpl` và `FollowServiceImpl` inject `TrustScoreService` (module listing) bằng `@Lazy` để phá vòng phụ thuộc tiềm ẩn giữa module `user` ↔ `listing`.
 
 ### 4. Luồng hoạt động
 
@@ -351,7 +354,7 @@ flowchart TD
 | Bảng | Quan hệ | Field quan trọng |
 |---|---|---|
 | `user_profiles` | 1-1 với `users` (`uk_user_profiles_user_id`) | `date_of_birth`, `bio VARCHAR(500)`, `occupation`, `address_detail`, `preferred_gender_requirement` |
-| `landlord_profiles` | 1-1 với `users` | `display_name`, `contact_name/phone/email`, `allow_chat`, `verification_status` (`PENDING/VERIFIED/REJECTED/EXPIRED`), `verified_at/verified_by/verification_note`, `trust_score DECIMAL(5,2)` (0-100), `average_rating`, `review_count`, `total_listings`, `total_active_listings`, `valid_report_count`, `warning_count`, `locked_listing_count`, `posting_restricted_until`, `restrict_reason` |
+| `landlord_profiles` | 1-1 với `users` | `display_name`, `contact_name/phone/email`, `allow_chat`, `verification_status` (`PENDING/VERIFIED/REJECTED/EXPIRED`), `verified_at/verified_by/verification_note`, `average_rating`, `review_count`, `total_listings`, `total_active_listings`, `valid_report_count`, `warning_count`, `locked_listing_count`, `posting_restricted_until`, `restrict_reason` |
 | `follows` | N-1 `users` hai lần (`follower_id`, `landlord_id`) | UNIQUE (`follower_id`,`landlord_id`); `notify_new_listing BOOLEAN` (bật/tắt nhận thông báo tin mới theo từng chủ trọ) |
 | `verifications` (type=LANDLORD) | N-1 `users` | Dùng khi `submitLandlordVerification` — xem chi tiết ở Module 1 |
 
@@ -371,17 +374,17 @@ flowchart TD
 | GET | `/api/users/{id}/listings` | `Pageable` (`page,size`, mặc định sort `publishedAt,DESC`) | `PageResponse<ListingSummaryResponse>` | Public | — | — |
 | POST | `/api/users/{id}/follow` | — | `201` `FollowResponse{landlordId,following,followerCount,followedAt}` | Bearer | `isAuthenticated()` | `CANNOT_FOLLOW_SELF`, `TARGET_NOT_LANDLORD`, `ALREADY_FOLLOWING` |
 | DELETE | `/api/users/{id}/follow` | — | `204` | Bearer | `isAuthenticated()` | `NOT_FOLLOWING` |
-| GET | `/api/users/me/following` | `Pageable` (chỉ cho phép sort `createdAt`/`trustScore`) | `PageResponse<FollowingItemResponse>` | Bearer | `isAuthenticated()` | `INVALID_SORT_FIELD` (sort field lạ) |
+| GET | `/api/users/me/following` | `Pageable` (chỉ cho phép sort `createdAt`) | `PageResponse<FollowingItemResponse>` | Bearer | `isAuthenticated()` | `INVALID_SORT_FIELD` (sort field lạ) |
 
 ### 8. Dependency
 
-**Phụ thuộc vào:** Module 1 (entity `User`, `CustomUserDetails`), `TrustScoreService` (module listing, tính điểm/nhãn uy tín — `@Lazy`), `SystemConfigService` (cỡ ảnh tối đa), `FileStorage` (lưu ảnh + thumbnail), `ListingSearchService` (module search — dùng cho `GET /users/{id}/listings`).
+**Phụ thuộc vào:** Module 1 (entity `User`, `CustomUserDetails`), `SystemConfigService` (cỡ ảnh tối đa), `FileStorage` (lưu ảnh + thumbnail), `ListingSearchService` (module search — dùng cho `GET /users/{id}/listings`).
 
 **Module khác phụ thuộc vào nó:**
 - Module Notification: `FollowListener` đọc bảng `follows` để gửi thông báo tin mới.
 - Module Admin (Module 5): `AdminUserServiceImpl`/`AdminUserController` đọc/ghi `landlord_profiles` (xác thực, hạn chế đăng tin) và `UserProfileRepository`.
 - Module Moderation (Module 4): `UserGatewayAdapter`/`UserModerationGatewayAdapter` (SPI) cho phép module moderation gọi ngược vào module user (ví dụ `suspendPosting`) mà không phụ thuộc trực tiếp entity.
-- Module Payment/Listing: đọc `landlord_profiles.trust_score`, `allow_chat`, `verification_status` để hiển thị huy hiệu trên tin đăng.
+- Module Payment/Listing: đọc `landlord_profiles.allow_chat`, `verification_status` để hiển thị huy hiệu trên tin đăng.
 
 ### 9. Các trường hợp cần kiểm tra
 
@@ -394,7 +397,7 @@ flowchart TD
 - □ `updateContact` với SĐT đã thuộc về user khác → `PHONE_ALREADY_EXISTS`.
 - □ Follow chủ trọ đã bị khóa/xóa mềm → phải báo lỗi hợp lý (không follow được user không tồn tại).
 - □ Follow rồi Unfollow rồi Follow lại (cùng cặp) — kiểm tra không bị lỗi do unique index cũ (vì unfollow là xóa cứng nên phải insert lại được bình thường).
-- □ Danh sách Following: sort theo `trustScore` cả 2 chiều asc/desc, sort theo field KHÔNG hợp lệ (ví dụ `fullName`) → phải `400 INVALID_SORT_FIELD`.
+- □ Danh sách Following: sort theo `createdAt` cả 2 chiều asc/desc, sort theo field KHÔNG hợp lệ (ví dụ `fullName`) → phải `400 INVALID_SORT_FIELD`.
 - □ Phân trang Following khi có >20 chủ trọ (vượt 1 trang) — vì phân trang xử lý trong bộ nhớ, cần test với data lớn để phát hiện vấn đề hiệu năng sớm.
 - □ Xem hồ sơ công khai chủ trọ đã `LOCKED` bằng URL trực tiếp `/chu-tro/{id}` → phải nhận 404, không lộ dữ liệu.
 - □ Xem hồ sơ công khai chưa đăng nhập — SĐT/liên hệ phải bị che (kiểm theo `viewerAuthenticated` — xem code `LandlordProfilePage` phần che số điện thoại, mục 4.2.5 quy tắc 6 nêu trong Javadoc).
@@ -415,7 +418,6 @@ flowchart TD
 - **API naming**: `PATCH /users/me/contact` dùng verb PATCH đúng chuẩn REST (cập nhật một phần), trong khi `PUT /users/me/landlord-profile` dùng PUT (thay thế toàn bộ) — nhất quán tốt, nên giữ quy ước này khi thêm endpoint mới.
 - **Security**: kiểm tra kỹ `isAllowedImage` (đọc 12 byte đầu) có đủ để chặn file WEBP giả mạo tinh vi không, hay cần dựa hẳn vào `FileStorage` (đã có lớp kiểm sâu hơn) — tránh trùng lặp logic 2 nơi có thể lệch nhau khi 1 nơi được sửa mà nơi kia quên.
 - **DB**: `landlord_profiles` có rất nhiều cột đếm denormalized (`total_listings`, `warning_count`, `valid_report_count`...) — cần review cơ chế đồng bộ các cột này (job/trigger nào cập nhật) để đảm bảo không bị lệch số theo thời gian (data drift).
-- **Performance**: `getPublicProfile` gọi `TrustScoreService.labelOf()` mỗi lần xem hồ sơ — nên xác nhận có cache hay không vì trang hồ sơ chủ trọ có thể được xem rất nhiều lần (traffic cao).
 
 ### 12. Kết quả mong đợi
 
@@ -637,7 +639,7 @@ Phía đọc: FE gọi `GET /notifications?type=...&unreadOnly=...&page=&size=` 
    - `SEVERE_LOCK` → **yêu cầu quyền `LISTING_LOCK`** (chỉ Admin có, kiểm ở `guardLockPermission` — Moderator dù có `REPORT_RESOLVE` cũng KHÔNG được chọn kết quả này, trả `403`); nếu target là LISTING → khóa hẳn tin (`listingGateway.lock`); nếu KHÔNG phải LISTING (comment/review/user) → hạ xuống ẩn nội dung + issue warning (không tự khóa tài khoản trực tiếp — chỉ "đề xuất" cho Admin qua `accountLockSuggested`).
    - `result != NO_VIOLATION` mà thiếu `warningMessage` → `422 WARNING_REASON_REQUIRED`.
    - Bất biến bắt buộc `closeReport()`: report `RESOLVED`/`REJECTED` LUÔN có `resolved_by`, `resolved_at`, `is_valid` (ép ở code vì DB không CHECK được — cột FK `resolved_by` không dùng được trong CHECK do ràng buộc MySQL).
-   - Sau xử lý: `recalcTrust()` (tính lại điểm uy tín tin/chủ trọ qua `TrustScoreService`, best-effort — lỗi không chặn kiểm duyệt), `maybeSuspendPosting()` (nếu chủ đạt ngưỡng `moderation.threshold.warning_count`=3 cảnh báo/`moderation.threshold.warning_window_days`=30 ngày → tự tạm hạn chế đăng tin, gọi `userGateway.suspendPosting`), tính `accountLockSuggested` (nếu chủ có ≥ `moderation.threshold.locked_listing_count`=5 tin bị khóa trong `moderation.threshold.locked_listing_window_days`=60 ngày — CHỈ ĐỀ XUẤT, Admin tự quyết khóa tài khoản qua Module 5).
+   - Sau xử lý: `maybeSuspendPosting()` (nếu chủ đạt ngưỡng `moderation.threshold.warning_count`=3 cảnh báo/`moderation.threshold.warning_window_days`=30 ngày → tự tạm hạn chế đăng tin, gọi `userGateway.suspendPosting`), tính `accountLockSuggested` (nếu chủ có ≥ `moderation.threshold.locked_listing_count`=5 tin bị khóa trong `moderation.threshold.locked_listing_window_days`=60 ngày — CHỈ ĐỀ XUẤT, Admin tự quyết khóa tài khoản qua Module 5).
    - `resolveGroup`: áp 1 quyết định cho TOÀN BỘ report đang mở của cùng 1 đối tượng — kiểm quyền `LISTING_LOCK` TRƯỚC khi đóng bất kỳ report nào (tránh "cửa sau" vượt phân quyền qua thao tác hàng loạt).
 
 3. **Gửi cảnh báo trực tiếp (`createWarning`):** không cho cảnh báo Admin (`CANNOT_MODIFY_ADMIN`), không tự cảnh báo chính mình; nếu đạt ngưỡng → tự `suspendPosting` (giống luồng trong `resolveReport`).
@@ -676,7 +678,7 @@ flowchart TD
     N -- SEVERE_LOCK --> N4{Có quyền LISTING_LOCK?}
     N4 -- Không --> N5[403 REPORT_RESULT_FORBIDDEN]
     N4 -- Có --> N6[Khóa tin LOCKED + ViolationWarning + notifyUser LISTING_LOCKED]
-    N2 --> O[report RESOLVED + recalcTrust + kiểm ngưỡng suspendPosting]
+    N2 --> O[report RESOLVED + kiểm ngưỡng suspendPosting]
     N3 --> O
     N6 --> O
     N1 --> P[report REJECTED]
@@ -721,7 +723,7 @@ Khi Moderator xử lý: `ResolveReportRequest{result,moderatorResponse?,warningM
 
 ### 8. Dependency
 
-**Phụ thuộc vào (qua SPI, không đụng trực tiếp):** `ListingModerationGateway`, `UserModerationGateway`, `ContentModerationGateway`, `AuditGateway`, `TrustScoreService`, `NotificationService` (Module 3), `RateLimitService`, `SystemConfigService` (rất nhiều ngưỡng `moderation.*`/`report.*`/`spam.report.daily`), `FileStorage` (ảnh bằng chứng), `SecurityUtils` (kiểm quyền `LISTING_LOCK` bên trong service, không chỉ ở `@PreAuthorize`).
+**Phụ thuộc vào (qua SPI, không đụng trực tiếp):** `ListingModerationGateway`, `UserModerationGateway`, `ContentModerationGateway`, `AuditGateway`, `NotificationService` (Module 3), `RateLimitService`, `SystemConfigService` (rất nhiều ngưỡng `moderation.*`/`report.*`/`spam.report.daily`), `FileStorage` (ảnh bằng chứng), `SecurityUtils` (kiểm quyền `LISTING_LOCK` bên trong service, không chỉ ở `@PreAuthorize`).
 
 **Module khác phụ thuộc vào nó:**
 - Module Admin (Module 5): `AdminDashboardServiceImpl` đọc `reports` để tính chỉ số dashboard (`reports.pending`, `criticalPending`...).
@@ -795,8 +797,8 @@ Là **trung tâm điều hành** dành cho Admin (và một phần cho Moderator
 | File | Màn hình | Thành phần |
 |---|---|---|
 | `pages/admin/DashboardPage.jsx` (route `/admin/dashboard`, quyền `STATISTIC_VIEW` — chỉ Admin) | Bảng điều khiển tổng quan | 10 `StatCard` (tổng người dùng, chủ trọ, tài khoản bị khóa, tin đang hiển thị, tin chờ duyệt, báo cáo chờ xử lý, doanh thu tháng, doanh thu hôm nay, tỷ lệ thanh toán, cảnh báo AI) — một số card có `onClick` điều hướng sang trang liên quan (`/admin/kiem-duyet`, `/admin/bao-cao`, `/admin/ai/log`); 2 biểu đồ Chart.js (`Bar` top khu vực, `Doughnut` top danh mục); danh sách "Hoạt động cần chú ý" (`recentActivity`, mỗi item có `severity` ERROR/WARNING/INFO và `actionUrl`); nút "Làm mới". |
-| `pages/admin/UsersPage.jsx` (route `/admin/nguoi-dung`, quyền `USER_MANAGE`/`USER_ROLE_ASSIGN`) | Quản lý người dùng | Search theo tên/email/SĐT, filter vai trò + trạng thái; bảng (`AdminDataTable`) cột: người dùng (avatar+tên+email), điện thoại, vai trò (chip nhiều màu), uy tín, trạng thái (chip), ngày tạo, menu hành động (⋮) → "Khóa tài khoản" (mở `ConfirmDialog` bắt buộc nhập lý do `requireReason`) / "Mở khóa" (trực tiếp, không cần lý do) / "Phân quyền vai trò" (Dialog checkbox 4 role, cảnh báo "đổi vai trò sẽ thu hồi toàn bộ phiên đăng nhập"). |
-| `pages/admin/LandlordsPage.jsx` (route `/admin/chu-tro`, quyền `LANDLORD_VERIFY`) | Quản lý chủ trọ | Search + filter trạng thái xác thực (`PENDING/VERIFIED/REJECTED/EXPIRED/NONE`); bảng cột: chủ trọ, điện thoại, số tin, uy tín, trạng thái xác thực (chip + icon `VerifiedIcon`), ngày tạo; menu hành động: "Xác thực chủ trọ" (verify), "Hủy xác thực" (unverify, `requireReason`), "Từ chối yêu cầu xác thực" (reject, `requireReason`), "Hạn chế đăng tin" (restrict, `requireReason`) — mỗi hành động 1 `ConfirmDialog` riêng, gọi đúng API tương ứng trong `adminApi.js`. |
+| `pages/admin/UsersPage.jsx` (route `/admin/nguoi-dung`, quyền `USER_MANAGE`/`USER_ROLE_ASSIGN`) | Quản lý người dùng | Search theo tên/email/SĐT, filter vai trò + trạng thái; bảng (`AdminDataTable`) cột: người dùng (avatar+tên+email), điện thoại, vai trò (chip nhiều màu), trạng thái (chip), ngày tạo, menu hành động (⋮) → "Khóa tài khoản" (mở `ConfirmDialog` bắt buộc nhập lý do `requireReason`) / "Mở khóa" (trực tiếp, không cần lý do) / "Phân quyền vai trò" (Dialog checkbox 4 role, cảnh báo "đổi vai trò sẽ thu hồi toàn bộ phiên đăng nhập"). |
+| `pages/admin/LandlordsPage.jsx` (route `/admin/chu-tro`, quyền `LANDLORD_VERIFY`) | Quản lý chủ trọ | Search + filter trạng thái xác thực (`PENDING/VERIFIED/REJECTED/EXPIRED/NONE`); bảng cột: chủ trọ, điện thoại, số tin, trạng thái xác thực (chip + icon `VerifiedIcon`), ngày tạo; menu hành động: "Xác thực chủ trọ" (verify), "Hủy xác thực" (unverify, `requireReason`), "Từ chối yêu cầu xác thực" (reject, `requireReason`), "Hạn chế đăng tin" (restrict, `requireReason`) — mỗi hành động 1 `ConfirmDialog` riêng, gọi đúng API tương ứng trong `adminApi.js`. |
 | `pages/admin/StatisticsPage.jsx` (route `/admin/thong-ke`, quyền `STATISTIC_VIEW`) | Thống kê chi tiết | Filter khoảng ngày (`from/to`) + `granularity` (DAY/WEEK/MONTH); gọi song song `getStatistics` + `getRevenue` (`Promise.all`); biểu đồ `Line` (người dùng mới/tin mới/tin duyệt theo chuỗi ngày) + biểu đồ doanh thu; hiển thị `totals`/`rates` (tỷ lệ duyệt/từ chối/thuê thành công). |
 | `pages/admin/AuditLogPage.jsx` (route `/admin/audit-log`, quyền `AUDIT_LOG_VIEW`) | Nhật ký kiểm toán | CHỈ ĐỌC — không có nút thêm/sửa/xóa nào (đúng bản chất audit log bất biến); filter theo hành động (`AUDIT_ACTION_META`), loại đối tượng, khoảng ngày (client tự chặn >90 ngày trước khi gọi API — khớp giới hạn BE); bảng có nút icon mở `Dialog` chi tiết: người thực hiện + vai trò, đối tượng, thời gian, IP, Request ID (monospace, để đối chiếu log server), lý do (`reason`), bảng "Thay đổi" hiển thị `oldValue` (gạch ngang, đỏ) → `newValue` (xanh) từng field. |
 | `pages/admin/BannedKeywordsPage.jsx`, `pages/admin/ReportsPage.jsx` | (đã mô tả ở Module 4, cũng nằm dưới khu vực Admin Console nhưng thuộc nghiệp vụ Moderation) | — |
@@ -821,7 +823,7 @@ Là **trung tâm điều hành** dành cho Admin (và một phần cho Moderator
 - **Đổi vai trò (`updateRoles`)**: tập vai trò là THAY THẾ TOÀN BỘ (không phải thêm/bớt từng cái); nếu chọn `LANDLORD` thì tự động kèm `TENANT`; KHÔNG được tự gỡ vai trò `ADMIN` của chính mình; KHÔNG được đổi vai trò của Admin khác; gỡ vai trò cũ bằng SOFT DELETE (`UserRole.softDelete()`), thêm vai trò mới bằng insert; nếu vừa được cấp `LANDLORD` mà CHƯA có `landlord_profiles` → tự tạo hồ sơ chủ trọ rỗng (`verificationStatus=PENDING`); thu hồi TOÀN BỘ refresh token (đổi quyền phải re-login để có JWT mới với authority mới — nhất quán với thiết kế JWT "đóng băng" claims ở Module 1).
 - **Xác thực chủ trọ (`verifyLandlord`/`unverifyLandlord`/`rejectLandlordVerification`)**: đồng bộ CẢ hồ sơ (`landlord_profiles.verification_status`) LẪN các bản ghi `verifications` (type=LANDLORD) đang PENDING của user đó sang cùng trạng thái; verify → không cho verify lại (`LANDLORD_ALREADY_VERIFIED`); unverify → chỉ áp dụng khi đang VERIFIED, KHÔNG đụng `posting_restricted_until` (tách biệt 2 khái niệm "xác thực" và "hạn chế đăng tin"); reject → chỉ áp dụng khi CHƯA VERIFIED (nếu đã verified phải dùng unverify, không dùng reject) và CHƯA REJECTED.
 - **Hạn chế đăng tin (`restrictLandlordPosting`)**: `restrictedUntil` bắt buộc ở tương lai; quyền mở rộng cho cả `USER_MANAGE` (không chỉ `LANDLORD_VERIFY`) — cho phép Admin xử lý nhanh không cần đúng quyền chuyên biệt.
-- **Danh sách chủ trọ (`listLandlords`)**: whitelist field sort (`trustScore→trustScore`, `listingCount→totalListings`, `createdAt→createdAt`, `validReportCount→validReportCount`) để chặn SQL injection qua tên field lạ + giới hạn `size ≤ 100` (`MAX_PAGE_SIZE`).
+- **Danh sách chủ trọ (`listLandlords`)**: whitelist field sort (`listingCount→totalListings`, `createdAt→createdAt`, `validReportCount→validReportCount`) để chặn SQL injection qua tên field lạ + giới hạn `size ≤ 100` (`MAX_PAGE_SIZE`).
 
 **Dashboard/Statistics (`AdminDashboardServiceImpl`):** tổng hợp bằng `count(Specification)` trên các repository chỉ-đọc (User/Listing/Report) + query tổng hợp riêng (`AdminPaymentMetricsRepository`, `AdminUserRoleMetricsRepository`) + top khu vực/danh mục dùng cột đếm denormalized `listing_count` có sẵn trên `provinces`/`categories` (không phải COUNT JOIN trực tiếp — tối ưu hiệu năng).
 
@@ -888,7 +890,7 @@ flowchart TD
 | PUT | `/api/admin/users/{id}/lock` | `LockUserRequest{reason,notifyUser?,lockListings?}` | `UserActionResponse` | Bearer | `USER_MANAGE` | `LOCK_REASON_REQUIRED`, `CANNOT_LOCK_SELF`, `USER_ALREADY_LOCKED`(409), `CANNOT_MODIFY_ADMIN`(403) |
 | PUT | `/api/admin/users/{id}/unlock` | `UnlockUserRequest{reason?,unlockListings?}` | `UserActionResponse` | Bearer | `USER_MANAGE` | `USER_ALREADY_ACTIVE`(409), `CANNOT_MODIFY_ADMIN` |
 | PUT | `/api/admin/users/{id}/role` | `UpdateRoleRequest{role,reason}` | `UserActionResponse{previousRole,role,...}` | Bearer | `USER_ROLE_ASSIGN` | `ROLE_ASSIGN_INVALID`, `CANNOT_MODIFY_ADMIN`, `ROLE_NOT_FOUND` |
-| GET | `/api/admin/landlords` | `keyword?,verificationStatus[]?,minTrustScore?,maxTrustScore?,postingSuspended?`, `Pageable` (whitelist sort, mặc định `trustScore,ASC`, size ≤100) | `PageResponse<AdminLandlordResponse>` | Bearer | `LANDLORD_VERIFY` | `INVALID_SORT_FIELD` |
+| GET | `/api/admin/landlords` | `keyword?,verificationStatus[]?,postingSuspended?`, `Pageable` (whitelist sort, mặc định `createdAt,DESC`, size ≤100) | `PageResponse<AdminLandlordResponse>` | Bearer | `LANDLORD_VERIFY` | `INVALID_SORT_FIELD` |
 | PUT | `/api/admin/landlords/{id}/verify` | `VerifyLandlordRequest{note?}` (body tùy chọn) | `LandlordVerificationActionResponse` | Bearer | `LANDLORD_VERIFY` | `LANDLORD_ALREADY_VERIFIED`(409) |
 | PUT | `/api/admin/landlords/{id}/unverify` | `UnverifyLandlordRequest{reason}` | `LandlordVerificationActionResponse` | Bearer | `LANDLORD_VERIFY` | `LANDLORD_NOT_VERIFIED`(409, thực chất trạng thái ≠ VERIFIED) |
 | PUT | `/api/admin/landlords/{id}/reject-verification` | `RejectLandlordVerificationRequest{reason}` | `LandlordVerificationActionResponse` | Bearer | `LANDLORD_VERIFY` | `LANDLORD_ALREADY_VERIFIED`, `VALIDATION_FAILED` (đã REJECTED) |
@@ -899,7 +901,7 @@ flowchart TD
 
 ### 8. Dependency
 
-**Phụ thuộc vào:** Module 1 (`RefreshTokenRepository` để thu hồi phiên), Module 2 (`LandlordProfileRepository`, `UserProfileRepository`), Module 3 (`NotificationService`), `ListingRepository`/`ListingStateMachine` (module listing — khóa/mở tin kèm khóa user), `TrustScoreService`, `AuditLogService` (dùng chung bởi rất nhiều module khác qua interface, không chỉ Module 5), `SystemConfigService` (cache config, dùng bởi TOÀN hệ thống), `AdminPaymentMetricsRepository`/`AdminUserRoleMetricsRepository`/`SentimentResultRepository`/`ProvinceRepository`/`CategoryRepository` (cho Dashboard).
+**Phụ thuộc vào:** Module 1 (`RefreshTokenRepository` để thu hồi phiên), Module 2 (`LandlordProfileRepository`, `UserProfileRepository`), Module 3 (`NotificationService`), `ListingRepository`/`ListingStateMachine` (module listing — khóa/mở tin kèm khóa user), `AuditLogService` (dùng chung bởi rất nhiều module khác qua interface, không chỉ Module 5), `SystemConfigService` (cache config, dùng bởi TOÀN hệ thống), `AdminPaymentMetricsRepository`/`AdminUserRoleMetricsRepository`/`SentimentResultRepository`/`ProvinceRepository`/`CategoryRepository` (cho Dashboard).
 
 **Module khác phụ thuộc vào nó:**
 - `ModerationAuditGatewayAdapter`, `PaymentAuditGatewayAdapter` (module admin) — expose `AuditGateway` SPI cho module Moderation (Module 4) và Payment ghi audit log mà không đụng trực tiếp `AuditLogRepository`.
@@ -970,7 +972,7 @@ flowchart TD
 
 ---
 
-# Người 2 — Vòng đời Tin đăng, Tìm kiếm, Danh mục & AI Gợi ý/Định giá/Uy tín
+# Người 2 — Vòng đời Tin đăng, Tìm kiếm, Danh mục & AI Gợi ý/Định giá
 
 > Tài liệu này được viết từ việc đọc trực tiếp source code thật (BE Spring Boot 3.3.5/Java 21, FE React 18 + MUI v5) tại thời điểm rà soát. Mọi tên field, endpoint, bảng DB đều lấy nguyên văn từ code — không suy đoán. Chỗ nào không xác định được sẽ ghi `> Cần bổ sung theo source code`.
 
@@ -981,11 +983,11 @@ flowchart TD
 - **Module 1 — Listing lifecycle**: draft/submit/edit/hide/unhide/close/delete/renew/stats/images/amenities, `ListingStateMachine`, lưu trữ ảnh (`FileController`/`FileStorage`). Mã chức năng: LIST-01..12.
 - **Module 2 — Search & Filter & Related**: tìm kiếm/lọc động tin đăng, tin liên quan. Mã chức năng: SRCH-01..09.
 - **Module 3 — Catalog**: danh mục loại tin, tỉnh/huyện/xã, tiện ích + màn quản trị catalog. Mã chức năng: ADM-05, ADM-06, ADM-07.
-- **Module 4 — AI khám phá**: Recommendation (gợi ý cá nhân hóa), Suggested (endpoint GET tiện dụng), Price Estimation (dự đoán giá), TrustScore (uy tín tin + uy tín chủ trọ). Mã chức năng: AI-02, AI-03, AI-04, AI-06.
+- **Module 4 — AI khám phá**: Recommendation (gợi ý cá nhân hóa), Suggested (endpoint GET tiện dụng), Price Estimation (dự đoán giá). Mã chức năng: AI-04, AI-06.
 - **Module 5 — Admin Listing & Moderation Queue**: quản lý tin đăng phía Admin, hàng đợi kiểm duyệt, duyệt/từ chối/ẩn/khóa/gắn cờ/yêu cầu sửa/kiểm duyệt hàng loạt. Mã chức năng: ADM-04 (+ nhánh RPT-01 khi `targetType = LISTING`, xem ghi chú ranh giới ở Module 5 mục 1 và mục 8).
 - **Module 6 — Landlord Dashboard/Overview**: trang tổng quan hiệu quả tin đăng của chủ trọ.
 
-> **Ghi chú chia sẻ**: `ListingDetailPage.jsx` (frontend_webtro/src/pages/public/ListingDetailPage.jsx) do Người 2 sở hữu phần **hiển thị thông tin tin đăng** (ảnh, đặc điểm, giá, địa chỉ, chủ trọ, trạng thái, tin liên quan, gợi ý). Phần **bình luận** (`commentApi`, `CommentThread`), **đánh giá** (`reviewApi`, `RatingStars`), **liên hệ/report** (`contactApi`, `reportApi`) trong CÙNG trang này do **Người 3** phụ trách (module Interaction/Moderation). Khi review file này, chỉ chấm phần UI đọc `listing.*` (title, price, area, images, amenities, landlord, trustScore, related) — bỏ qua khối comment/review/contact/report.
+> **Ghi chú chia sẻ**: `ListingDetailPage.jsx` (frontend_webtro/src/pages/public/ListingDetailPage.jsx) do Người 2 sở hữu phần **hiển thị thông tin tin đăng** (ảnh, đặc điểm, giá, địa chỉ, chủ trọ, trạng thái, tin liên quan, gợi ý). Phần **bình luận** (`commentApi`, `CommentThread`), **đánh giá** (`reviewApi`, `RatingStars`), **liên hệ/report** (`contactApi`, `reportApi`) trong CÙNG trang này do **Người 3** phụ trách (module Interaction/Moderation). Khi review file này, chỉ chấm phần UI đọc `listing.*` (title, price, area, images, amenities, landlord, related) — bỏ qua khối comment/review/contact/report.
 
 ---
 
@@ -996,7 +998,7 @@ flowchart TD
 Đây là module lõi của toàn hệ thống Webtro: mọi tin phòng trọ mà người thuê nhìn thấy trên Search/Home/Detail đều bắt nguồn từ đây. Module quản lý toàn bộ vòng đời một tin đăng — từ lúc chủ trọ tạo nháp (`DRAFT`) cho tới khi tin được duyệt hiển thị (`ACTIVE`), bị ẩn/khóa/hết hạn/đóng/xóa. Toàn bộ logic chuyển trạng thái được gom vào **một cổng duy nhất**: `ListingStateMachine` (`backend_webtro/src/main/java/com/webtro/modules/listing/statemachine/ListingStateMachine.java`) — không service nào được phép `setStatus()` trực tiếp ngoài cổng này.
 
 Vai trò trong hệ thống:
-- Là nguồn dữ liệu cho Search (Module 2), Recommendation/Price/TrustScore (Module 4), trang chủ, trang chi tiết, dashboard Admin (Module 5) và dashboard chủ trọ (Module 6).
+- Là nguồn dữ liệu cho Search (Module 2), Recommendation/Price (Module 4), trang chủ, trang chi tiết, dashboard Admin (Module 5) và dashboard chủ trọ (Module 6).
 - Là nơi áp toàn bộ luật nghiệp vụ chống spam/lạm dụng: quota đăng tin/ngày, khóa đăng khi bị cảnh báo, bắt buộc xác thực email, tối thiểu số ảnh, giới hạn upload.
 - Là nơi phát sinh sự kiện (`ListingApprovedEvent`) để module Notification báo cho người theo dõi chủ trọ.
 
@@ -1014,7 +1016,6 @@ Vai trò trong hệ thống:
 | Component ảnh | `frontend_webtro/src/components/listing/ImageUploader.jsx` (326 dòng) | Chọn nhiều ảnh, preview, kéo-thả sắp thứ tự, đặt ảnh đại diện, giới hạn `maxFiles`/`maxSizeMb`. |
 | Gallery ảnh (trang chi tiết) | `frontend_webtro/src/components/listing/ImageGallery.jsx` | Hiển thị ảnh lớn + thumbnail, điều hướng. |
 | Thẻ tin (card) | `frontend_webtro/src/components/listing/ListingCard.jsx`, `ListingGrid.jsx` | Card hiển thị tin trong lưới kết quả (search/home/my-listings). |
-| Badge uy tín | `frontend_webtro/src/components/listing/TrustScoreBadge.jsx` | Chip/Alert hiển thị điểm/nhãn uy tín theo 3 biến thể `badge|inline|alert`. |
 
 **Giải thích chi tiết luồng form `ListingWizard`:**
 - Bước 0 (Loại tin): chọn `categoryId` từ danh sách `catalogApi.getCategories({ activeOnly: true })`.
@@ -1030,7 +1031,6 @@ Vai trò trong hệ thống:
 **Controller**: `ListingController` (`backend_webtro/src/main/java/com/webtro/modules/listing/controller/ListingController.java`) — chỉ nhận/trả DTO, ủy quyền toàn bộ nghiệp vụ cho `ListingService`; permission qua `@PreAuthorize`, quyền sở hữu (owner check) nằm trong service.
 
 **Service**: `ListingServiceImpl` (`.../listing/service/impl/ListingServiceImpl.java`, 1254 dòng) — cài `ListingService`. Ngoài ra:
-- `TrustScoreServiceImpl` — tính điểm uy tín tin/chủ trọ (chi tiết ở Module 4).
 - `ListingVisibilityServiceImpl` — quyết định tập trạng thái công khai (`publicStatuses()` mặc định chỉ `ACTIVE`, cộng thêm `NEED_REVIEW` nếu config `listing.need_review.publicly_visible = true`).
 
 **State machine**: `ListingStateMachine` + enum `ListingEvent` (16 sự kiện: `SAVE_DRAFT, SUBMIT, APPROVE, REJECT, HIDE_BY_OWNER, UNHIDE_BY_OWNER, AUTO_HIDE_BY_SYSTEM, UNHIDE_BY_MODERATOR, CLOSE, EXPIRE, FLAG_NEED_REVIEW, CLEAR_NEED_REVIEW, LOCK, UNLOCK, RENEW, SOFT_DELETE, RESUBMIT_AFTER_EDIT`). Bảng luật `Map<ListingEvent, Rule(from-states, to-state)>` khai báo tường minh; sai luật → `BusinessRuleException(LISTING_INVALID_TRANSITION)` (422).
@@ -1059,7 +1059,6 @@ Vai trò trong hệ thống:
 |---|---|---|
 | `ListingExpiryJob` | `0 10 * * * *` (mỗi giờ, phút 10) | `ACTIVE/NEED_REVIEW` quá `expiredAt` → `EXPIRE` qua state machine, báo `LISTING_EXPIRED`. Idempotent, mỗi tin 1 transaction riêng, tối đa 2000 tin/lần chạy. |
 | `ListingExpiryReminderJob` | `0 0 8 * * *` (08:00 UTC/ngày) | Nhắc trước hạn theo `listing.expiry_reminder_days` (mặc định `"3,1"`); chống gửi trùng bằng cột `expiry_reminder_sent_at`. |
-| `TrustScoreRecalcJob` | `0 0 2 * * *` (02:00 UTC/ngày) | Tính lại `trust_score` từng tin `ACTIVE/NEED_REVIEW`, sau đó tính điểm chủ trọ (AVG các tin còn hiệu lực). Xem Module 4. |
 
 **Event**: `ListingApprovedEvent(listingId, ownerId)` — publish khi tin được duyệt (tự động hoặc bởi Admin) để module Notification báo người theo dõi chủ trọ.
 
@@ -1077,7 +1076,7 @@ Vai trò trong hệ thống:
 6. Kiểm `canAutoApprove` — nếu đạt điều kiện tin tự chuyển `PENDING → ACTIVE` ngay (đặt `publishedAt`, `expiredAt`), phát `ListingApprovedEvent`; nếu không đạt, tin nằm ở `PENDING` chờ Admin (xem Module 5).
 7. Admin duyệt/từ chối (Module 5) → `ACTIVE` hoặc `REJECTED`.
 8. Tin `ACTIVE` xuất hiện trong Search/Home/Recommendation (Module 2, 4).
-9. Job nền: `TrustScoreRecalcJob` cập nhật điểm mỗi ngày; `ListingExpiryReminderJob`/`ListingExpiryJob` quản lý vòng đời hết hạn.
+9. Job nền: `ListingExpiryReminderJob`/`ListingExpiryJob` quản lý vòng đời hết hạn.
 
 ```mermaid
 flowchart TD
@@ -1127,7 +1126,7 @@ Ví dụ luồng **tạo tin** (Input → FE → API → BE validate → busines
 
 | Bảng | Vai trò | Quan hệ | Field quan trọng |
 |---|---|---|---|
-| `listings` | Bảng nghiệp vụ chính (audit + soft-delete) | N-1 tới `users` (owner_id), `categories`, `provinces`, `districts`, `wards`; 1-N tới `listing_images`, `listing_amenities` | `status` (10 giá trị, CHECK constraint), `slug` (UNIQUE), `trust_score` (DECIMAL 5,2, mặc định 100.00), `price_deviation_flag`, `price_prediction_id` (FK mềm sang `prediction_histories`, chỉ giữ Long), `view_count/favorite_count/contact_count/comment_count/positive_comment_count/negative_comment_count/need_review_count` (bộ đếm denormalized), `published_at/expired_at/expiry_reminder_sent_at`, `renew_count`, `is_promoted/promoted_until/promotion_priority`, `auto_hidden_at/auto_hide_reason`, `lock_reason/lock_severity` |
+| `listings` | Bảng nghiệp vụ chính (audit + soft-delete) | N-1 tới `users` (owner_id), `categories`, `provinces`, `districts`, `wards`; 1-N tới `listing_images`, `listing_amenities` | `status` (10 giá trị, CHECK constraint), `slug` (UNIQUE), `price_deviation_flag`, `price_prediction_id` (FK mềm sang `prediction_histories`, chỉ giữ Long), `view_count/favorite_count/contact_count/comment_count/positive_comment_count/negative_comment_count/need_review_count` (bộ đếm denormalized), `published_at/expired_at/expiry_reminder_sent_at`, `renew_count`, `is_promoted/promoted_until/promotion_priority`, `auto_hidden_at/auto_hide_reason`, `lock_reason/lock_severity` |
 | `listing_images` | 1-N với `listings` (CASCADE khi xóa listing) | `listing_id` FK | `is_primary`, `display_order`, `file_size` (CHECK 0 < size ≤ 5MB), `content_type` (CHECK IN jpeg/png/webp) |
 | `listing_amenities` | Bảng nối N-N `listings` ↔ `amenities` | UNIQUE (`listing_id`, `amenity_id`) | `amenity_id` chỉ giữ Long (không FK object) theo luật "canonical 8" — tránh phụ thuộc ngược sang module catalog |
 
@@ -1208,7 +1207,6 @@ Ví dụ luồng **tạo tin** (Input → FE → API → BE validate → busines
 
 ### 11. Các điểm cần review
 
-- **Business**: điều kiện `canAutoApprove` gộp 4 điều kiện (config bật, không lệch giá, trust ≥ ngưỡng risky, verified + 0 warning) — kiểm tra xem "trust ≥ ngưỡng risky" có đúng ý đồ hay nên là ngưỡng cao hơn (`good`) để tránh auto-duyệt tin ở vùng "bình thường" nhưng chưa thật sự tốt.
 - **Response/API naming**: `ListingActionResponse` dùng chung cho `submit/hide/unhide/close` nhưng field `closeReason` chỉ có ý nghĩa với `close` — response "đa năng" dễ gây nhầm field nào optional theo action nào; nên cân nhắc tách riêng hoặc tài liệu hóa rõ trong OpenAPI.
 - **DB**: không thấy cột `@Version` trên `Listing` (`AuditableEntity`) — nếu 2 admin/chủ trọ sửa đồng thời cùng 1 tin, bản ghi sau ghi đè bản ghi trước mà không cảnh báo (mất update). Cần xác nhận `AuditableEntity` có optimistic locking không.
 - **Validation**: `ListingCreateRequest.title` giới hạn cứng `@Size(max=150)` khớp cột DB, nhưng ngưỡng min/max thực tế lại đọc từ `SystemConfig` ở tầng service — 2 nguồn giới hạn khác nhau (annotation vs config) dễ lệch nếu admin đổi `listing.title.max` > 150 (không thể vì bị chặn ở Bean Validation trước khi tới service) — **đây là giới hạn cứng ẩn** mà admin cấu hình động không vượt qua được, cần ghi rõ trong tài liệu vận hành.
@@ -1254,7 +1252,7 @@ Vai trò: biến hàng chục tham số lọc (khu vực, giá, diện tích, ti
 
 **Specification**: `ListingSpecifications` (`.../search/specification/ListingSpecifications.java`, 358 dòng) — tập hợp ~25 phương thức tĩnh, mỗi phương thức MỘT tiêu chí lọc, 100% tham số hóa qua JPA Criteria (không nối chuỗi SQL). Điều kiện công khai bắt buộc: `alive()` (`deletedAt IS NULL`) + `statusIn(publicStatuses)` + `notExpired(now)`.
 
-**Sort whitelist**: `ListingSortOption` (enum) — `RELEVANCE, NEWEST, OLDEST, PRICE_ASC, PRICE_DESC, AREA_ASC, AREA_DESC, VIEW_DESC, TRUST_DESC, DISTANCE_ASC`; giá trị gửi lên không khớp whitelist (case-insensitive theo `param` literal) → `INVALID_SORT_FIELD` (400). `DISTANCE_ASC` **không sắp xếp chính xác** bằng Criteria thuần (không tính Haversine được) — rơi về sort theo `publishedAt DESC` (đã có comment thừa nhận hạn chế này trong code).
+**Sort whitelist**: `ListingSortOption` (enum) — `RELEVANCE, NEWEST, OLDEST, PRICE_ASC, PRICE_DESC, AREA_ASC, AREA_DESC, VIEW_DESC, DISTANCE_ASC`; giá trị gửi lên không khớp whitelist (case-insensitive theo `param` literal) → `INVALID_SORT_FIELD` (400). `DISTANCE_ASC` **không sắp xếp chính xác** bằng Criteria thuần (không tính Haversine được) — rơi về sort theo `publishedAt DESC` (đã có comment thừa nhận hạn chế này trong code).
 
 **Validation** (`validate()` trong service, đọc ngưỡng từ `SystemConfigService`):
 - `priceFrom > priceTo` → `PRICE_RANGE_INVALID`; `areaFrom > areaTo` → `AREA_RANGE_INVALID`.
@@ -1323,7 +1321,6 @@ Module này **không sở hữu bảng riêng** — chỉ đọc bảng `listing
 | `gender_requirement/furniture_status/curfew_type/toilet_type` | so khớp enum trực tiếp |
 | `pet_allowed/parking_available` | chỉ lọc khi `= true` (giá trị `false` không lọc gì — giữ cả 2 loại tin) |
 | `available_from` | `<=` giá trị yêu cầu |
-| `trust_score` | `>= minTrustScore` |
 | `latitude/longitude` | `withinBoundingBox()` — lọc thô hình chữ nhật quanh tâm bán kính km (không phải hình tròn chính xác) |
 | `is_promoted/promoted_until/promotion_priority` | dùng trong `orderBy()` (CASE WHEN), không phải filter |
 
@@ -1340,7 +1337,7 @@ Bảng `search_histories` (định nghĩa ở `V1__baseline_schema.sql`, migrati
 | GET | `/api/search/listings` | `ListingSearchRequest` (query, ~25 field) + `Pageable` | `ApiResponse<PageResponse<ListingSummaryResponse>>` | Tùy chọn (đăng nhập để lưu lịch sử tìm kiếm) | — | xem mục 3 | `PRICE_RANGE_INVALID`, `AREA_RANGE_INVALID`, `KEYWORD_TOO_LONG`, `KEYWORD_INVALID_CHARACTER`, `FILTER_COMBINATION_INVALID`, `TOO_MANY_AMENITY_FILTERS`, `INVALID_SORT_FIELD` |
 | GET | `/api/listings/{id}/related` | path `id`, query `size?` (1–24) | `ApiResponse<RelatedListingsResponse>` | Tùy chọn | — | `size` trong khoảng cho phép (Bean Validation `@Min/@Max`) | `LISTING_NOT_FOUND` (tin gốc không tồn tại) |
 
-`ListingSearchRequest` gồm: `keyword, provinceId, districtId, wardId, categoryId, categoryCode, priceFrom, priceTo, areaFrom, areaTo, amenityIds[], maxOccupants, genderRequirement, furnitureStatus, petAllowed, parkingAvailable, curfewType, toiletType, hasBalcony, hasAirConditioner, hasWashingMachine, hasElevator, roomCountFrom, toiletCountFrom, depositMax, availableFrom, minTrustScore, latitude, longitude, radiusKm, sort`.
+`ListingSearchRequest` gồm: `keyword, provinceId, districtId, wardId, categoryId, categoryCode, priceFrom, priceTo, areaFrom, areaTo, amenityIds[], maxOccupants, genderRequirement, furnitureStatus, petAllowed, parkingAvailable, curfewType, toiletType, hasBalcony, hasAirConditioner, hasWashingMachine, hasElevator, roomCountFrom, toiletCountFrom, depositMax, availableFrom, latitude, longitude, radiusKm, sort`.
 
 `RelatedListingsResponse` gồm `source` (cố định `"SIMILAR_LISTING"`) + `items[]` (`RelatedListingItem{ listing: ListingSummaryResponse, matchScore: double, matchReasons: List<String> }`).
 
@@ -1381,7 +1378,7 @@ Bảng `search_histories` (định nghĩa ở `V1__baseline_schema.sql`, migrati
 ### 11. Các điểm cần review
 
 - **Ưu tiên xác minh bug sort mặc định** (mục 10) bằng cách gọi trực tiếp `GET /api/search/listings?sort=relevance,desc` qua Postman/curl — nếu đúng là lỗi, đây là bug chặn toàn bộ trang tìm kiếm, mức độ ưu tiên cao nhất trong cả cụm.
-- **Business**: công thức tính điểm "tin liên quan" hoàn toàn tính ở tầng ứng dụng sau khi đã lấy tối đa 60 ứng viên từ DB — nếu tin phù hợp nằm ngoài 60 ứng viên đầu (sort theo `TRUST_DESC` trước khi tính điểm khớp), nó sẽ không bao giờ lọt vào top kết quả dù giá/khu vực rất khớp — nên xem lại có nên tăng `RELATED_CANDIDATE_CAP` hoặc đổi tiêu chí lấy ứng viên ban đầu.
+- **Business**: công thức tính điểm "tin liên quan" hoàn toàn tính ở tầng ứng dụng sau khi đã lấy tối đa 60 ứng viên từ DB — nếu tin phù hợp nằm ngoài 60 ứng viên đầu (sort theo tin mới nhất trước khi tính điểm khớp), nó sẽ không bao giờ lọt vào top kết quả dù giá/khu vực rất khớp — nên xem lại có nên tăng `RELATED_CANDIDATE_CAP` hoặc đổi tiêu chí lấy ứng viên ban đầu.
 - **API naming**: 2 endpoint cùng phục vụ tìm kiếm/khám phá lại nằm ở 2 controller khác nhau (`ListingSearchController` cho `/api/search/listings`+`/api/listings/{id}/related`, nhưng `/api/listings/suggested` lại ở `SuggestedListingController` của module `ai`) — về mặt kiến trúc có lý do (tránh phụ thuộc ngược), nhưng dễ gây khó khăn khi tra cứu API nếu không đọc kỹ ghi chú.
 - **Validation**: whitelist sort dùng `equalsIgnoreCase` trên chuỗi có dấu phẩy (`"publishedAt,desc"`) — cách thiết kế param dạng chuỗi ghép `field,direction` thay vì 2 tham số riêng (`sortBy`, `sortDir`) làm tăng khả năng lỗi chính tả từ FE (đã xảy ra với `RELEVANCE`).
 - **Security**: kiểm tra kỹ `DANGEROUS_KEYWORD` regex `[<>;]|--|/\*` có đủ chặn các vector LIKE-injection/ReDoS hay không — dù đã dùng Criteria tham số hóa (không nối chuỗi SQL) nên rủi ro SQL injection thực tế thấp, nhưng lớp lọc này nên được xác nhận là "phòng thủ sâu" chứ không phải lớp chặn chính.
@@ -1571,7 +1568,7 @@ flowchart TD
 - Không có danh mục/khu vực nào bị xóa cứng gây vỡ dữ liệu tham chiếu ở `listings`.
 - Ngưỡng validate giữa FE/BE đồng bộ, không còn tình trạng "form hợp lệ nhưng submit lỗi".
 
-## Module: AI khám phá (Recommendation + Suggested + Price + TrustScore)
+## Module: AI khám phá (Recommendation + Suggested + Price)
 
 ### 1. Module này dùng để làm gì?
 
@@ -1579,11 +1576,10 @@ flowchart TD
 
 - **AI-04 Gợi ý cá nhân hóa (Recommendation)**: `ContentBasedRecommendationEngine` — tính điểm khớp giữa hồ sơ hành vi người dùng (xem/tìm/lưu/liên hệ) và từng tin ứng viên bằng công thức cộng có trọng số 9 số hạng.
 - **AI-06 Dự đoán giá (Price Estimation)**: `ComparableHedonicPriceEstimator` — lấy giá trung vị/m² của các tin tương đương (so sánh) trong cùng khu vực + điều chỉnh phần trăm theo tiện nghi (hedonic pricing).
-- **AI-02 Uy tín tin & AI-03 Uy tín chủ trọ (TrustScore)**: `TrustScoreServiceImpl` — công thức cộng/trừ điểm tuyến tính từ số bình luận tích cực/tiêu cực, đánh giá trung bình, báo cáo hợp lệ, cảnh báo vi phạm.
 
-Vai trò trong hệ thống: tăng tỷ lệ tìm được phòng phù hợp (Recommendation), giúp chủ trọ định giá hợp lý tránh đăng giá quá lệch thị trường (Price), và là "lớp phòng vệ mềm" cảnh báo người thuê về tin/chủ trọ có dấu hiệu rủi ro (TrustScore) — **tất cả đều KHÔNG chặn hành động của người dùng** (đăng tin, liên hệ...), chỉ hiển thị cảnh báo/gợi ý.
+Vai trò trong hệ thống: tăng tỷ lệ tìm được phòng phù hợp (Recommendation), và giúp chủ trọ định giá hợp lý tránh đăng giá quá lệch thị trường (Price) — **tất cả đều KHÔNG chặn hành động của người dùng** (đăng tin, liên hệ...), chỉ hiển thị cảnh báo/gợi ý.
 
-**Nếu module này hỏng thì ảnh hưởng gì?** Recommendation lỗi → trang chủ/trang tìm kiếm rỗng kết quả 0 vẫn hoạt động bình thường vì có "cold start" dự phòng (tin mới + phổ biến), nhưng mất tính cá nhân hóa; Price lỗi → chủ trọ mất công cụ tham khảo giá khi đăng tin (không chặn đăng tin, vẫn đăng được); TrustScore lỗi/không cập nhật → điểm uy tín "đứng yên" ở giá trị cũ, ảnh hưởng gián tiếp tới `canAutoApprove` (Module 1) và thứ hạng sort `TRUST_DESC` (Module 2).
+**Nếu module này hỏng thì ảnh hưởng gì?** Recommendation lỗi → trang chủ/trang tìm kiếm rỗng kết quả 0 vẫn hoạt động bình thường vì có "cold start" dự phòng (tin mới + phổ biến), nhưng mất tính cá nhân hóa; Price lỗi → chủ trọ mất công cụ tham khảo giá khi đăng tin (không chặn đăng tin, vẫn đăng được).
 
 ### 2. Chức năng Frontend
 
@@ -1592,10 +1588,7 @@ Vai trò trong hệ thống: tăng tỷ lệ tìm được phòng phù hợp (Re
 | Khối "Giá AI đề xuất" trong form đăng tin | `frontend_webtro/src/components/listing/ListingWizard.jsx` (dòng ~382–419) | Card hiển thị giá đề xuất + khoảng (`priceRange.low–high`), nút "Tính lại" (`runPrediction`), cảnh báo mềm (`Alert severity="warning"`) khi `comparison.deviationFlagged=true`, luôn hiện `disclaimer` cuối card. |
 | Khối "Có thể bạn quan tâm" khi tìm kiếm 0 kết quả | `SearchPage.jsx` | Gọi `listingApi.getSuggested({ source: 'LOW_RESULT_SEARCH', size: 6 })`. |
 | Section gợi ý ở trang chủ | `HomePage.jsx` | > Cần bổ sung theo source code (đã xác nhận `HomePage.jsx` import `listingApi`/`searchApi`/`catalogApi`, cần đọc thêm phần thân file sau dòng 90 để xác nhận có gọi `getSuggested`/AI recommendation cho section riêng hay không). |
-| Badge/Alert điểm uy tín TIN | `TrustScoreBadge.jsx`, dùng trong `ListingCard.jsx` (props `trustLevel`, `trustLabel`, `lowTrustWarning`) và `ListingDetailPage.jsx` (destructure `trustLevel` từ response chi tiết) | 3 biến thể hiển thị: `badge` (chip số+nhãn), `inline` (chip nhỏ chỉ nhãn), `alert` (cảnh báo nhẹ, chỉ hiện khi khác `NORMAL`). |
-| Badge điểm uy tín CHỦ TRỌ | dùng trong `ListingDetailPage.jsx` (`landlord.trustLevel`, `landlord.trustScore`) và `LandlordProfilePage.jsx` (map `trustLabel → level` qua hàm `labelToLevel`) | Hiện tại uy tín thấp cạnh tên chủ trọ trong khối liên hệ. |
 
-**Quan trọng cần đọc kỹ ở đây (liên quan trực tiếp mục 10)**: component `TrustScoreBadge` nhận prop tên **`level`**, và cả `ListingCard.jsx`/`ListingDetailPage.jsx` đều lấy giá trị này từ biến cục bộ tên **`trustLevel`** được destructure ra từ response — nhưng như sẽ thấy ở mục 6/7, DTO backend đặt tên field là **`trustLabel`**, không phải `trustLevel`.
 
 ### 3. Chức năng Backend
 
@@ -1603,7 +1596,6 @@ Vai trò trong hệ thống: tăng tỷ lệ tìm được phòng phù hợp (Re
 - `AiRecommendationController` (`POST /api/ai/recommendations`) — kiểu REST "hành động" (POST vì có nhiều tham số ngữ cảnh + ghi log mỗi lần gọi).
 - `SuggestedListingController` (`GET /api/listings/suggested`) — bản GET tiện dụng của cùng 1 service, đặt trong module `ai` (không phải `listing`) để tránh phụ thuộc ngược `listing → ai`; nhận tham số qua query string cho tiện gọi từ trang chủ/trang tìm kiếm/trang 404.
 - `AiPriceController` (`POST /api/ai/price-prediction`, `GET /api/ai/price-prediction/histories`).
-- TrustScore **không có controller riêng** — không phải API độc lập, mà là service nội bộ (`TrustScoreService`) được `ListingServiceImpl` (đặt `canAutoApprove`), `ListingMapper` (map `trustLabel`/`lowTrustWarning` vào response), `LandlordDashboardServiceImpl` (Module 6), và job `TrustScoreRecalcJob` gọi.
 
 **Service & Engine** (interface tách khỏi cài đặt để dễ thay thuật toán sau này — đúng kiểu "Strategy Pattern"):
 
@@ -1613,7 +1605,6 @@ Vai trò trong hệ thống: tăng tỷ lệ tìm được phòng phù hợp (Re
 | `RecommendationService` | `RecommendationServiceImpl` | Điều phối: đọc tín hiệu hành vi qua gateway, gọi engine, ghi log, trả response |
 | `PriceEstimator` | `ComparableHedonicPriceEstimator` | Thuần thuật toán so sánh + hedonic |
 | `PriceEstimationService` | `PriceEstimationServiceImpl` | Điều phối: validate tham chiếu, mở rộng phạm vi WARD→DISTRICT→PROVINCE, gọi estimator, lưu lịch sử |
-| `TrustScoreService` | `TrustScoreServiceImpl` | Công thức tính điểm tin/chủ trọ, suy nhãn (`labelOf`) |
 
 **SPI Gateway** (module `ai` KHÔNG đụng trực tiếp entity của module khác — nguyên tắc kiến trúc hexagonal):
 - `ListingDataGateway` — đọc thuộc tính tin (`ListingAttr`), tìm ứng viên gợi ý (`findCandidates`), tìm tin so sánh giá (`findComparables`), ghi cờ lệch giá ngược lại (`markPriceDeviation`).
@@ -1638,17 +1629,17 @@ Vai trò trong hệ thống: tăng tỷ lệ tìm được phòng phù hợp (Re
 6. Nếu có hồ sơ → tìm ứng viên qua `ListingDataGateway.findCandidates` (theo tỉnh/huyện/danh mục có trọng số cao nhất + dải giá/diện tích, loại trừ tin đã loại + tin của chính mình), số lượng lấy = `size × 5` (đệm dư để chấm điểm rồi cắt).
 7. `engine.rank(profile, candidates, boostCap, size)` — chạy có timeout — tính điểm từng ứng viên theo công thức mục dưới, sort giảm dần, cắt còn `size`.
 8. Ghi `RecommendationLog` cho MỌI lần gọi (kể cả cold start) — dùng `batchId` (UUID) chung cho cả lô, `rankPosition` tăng dần.
-9. Trả `RecommendationResponse` gồm `items[]` (mỗi item có `scoreBreakdown` đầy đủ 9 thành phần + `matchReasons` — làm AI "giải thích được", không phải hộp đen).
+9. Trả `RecommendationResponse` gồm `items[]` (mỗi item có `scoreBreakdown` đầy đủ 8 thành phần + `matchReasons` — làm AI "giải thích được", không phải hộp đen).
 
-**Công thức tính điểm Recommendation** (9 số hạng, tổng trọng số = 1.00):
+**Công thức tính điểm Recommendation** (8 số hạng, tổng trọng số = 0.94, chuẩn hóa theo tổng trọng số áp dụng):
 
 ```
-score = 0.22·location + 0.12·area + 0.20·price + 0.12·category + 0.08·amenity
-      + 0.08·occupant + 0.06·gender + 0.06·trustNorm + 0.06·freshness
+score = ( 0.22·location + 0.12·area + 0.20·price + 0.12·category + 0.08·amenity
+        + 0.08·occupant + 0.06·gender + 0.06·freshness ) / W
 finalScore = score × promotedBoost   (trần 1.15, chỉ áp khi tin đang promoted còn hạn)
 ```
 
-Riêng `gender` (0.06) **chỉ áp dụng khi tin thuộc danh mục `ROOMMATE`**; với tin khác, bỏ số hạng này và **chuẩn hóa lại theo tổng trọng số thực áp dụng (0.94)** thay vì gán mặc định 1.0 — tránh thiên vị artificially đẩy điểm tin không phải ở ghép lên cao.
+Riêng `gender` (0.06) **chỉ áp dụng khi tin thuộc danh mục `ROOMMATE`**; với tin khác, bỏ số hạng này và **chuẩn hóa lại theo tổng trọng số thực áp dụng (W = 0.88; tin ở ghép W = 0.94)** thay vì gán mặc định 1.0 — tránh thiên vị artificially đẩy điểm tin không phải ở ghép lên cao.
 
 ```mermaid
 flowchart TD
@@ -1662,7 +1653,7 @@ flowchart TD
     F --> G{profile rỗng?}
     G -->|Có| H[Cold start: tin mới theo tỉnh/huyện hoặc toàn hệ thống]
     G -->|Không| I[findCandidates theo hint khu vực/danh mục/giá]
-    I --> J[engine.rank - có timeout - 9 số hạng]
+    I --> J[engine.rank - có timeout - 8 số hạng]
     H --> K[Ghi RecommendationLog cả 2 nhánh]
     J --> K
     K --> L[Trả RecommendationResponse kèm scoreBreakdown + matchReasons]
@@ -1679,39 +1670,19 @@ flowchart TD
 7. Nếu có `inputPrice` (giá chủ trọ định nhập) → tính `deviationRatio = (inputPrice - suggested)/suggested`; lệch quá `ai.price.deviation_flag_ratio` → `deviationFlagged=true` — **chỉ để cảnh báo mềm, `blocksPosting` LUÔN `false`**.
 8. Nếu có `listingId` (đang sửa tin) → ghi ngược cờ `price_deviation_flag` vào bảng `listings` qua `ListingDataGateway.markPriceDeviation`.
 
-**Công thức TrustScore tin** (`calculateListingTrustScore`):
-```
-score = base + positiveComments×wPos − negativeComments×wNeg + averageRating×wRating
-             − validReports×wReport − violationWarnings×wWarn
-score = clamp(score, TRUST_MIN, TRUST_MAX)
-```
-Ở cấp tin (`recalculateAndSaveListing`), `validReports`/`violationWarnings` cố định = 0 (được quy về cấp chủ trọ — comment trong code giải thích rõ "vì chưa có bộ đếm riêng ở cấp tin").
-
-**Công thức TrustScore chủ trọ** (`recalculateLandlord`):
-```
-avgTrust = AVG(trust_score của mọi tin còn sống của chủ trọ)  — nếu không có tin → dùng điểm nền (base)
-responseTerm = wResp × (responseRatePercent − neutralPercent) / 100   — chỉ tính khi đủ số hội thoại mẫu tối thiểu
-score = clamp(avgTrust − warningCount×wWarn + responseTerm, TRUST_MIN, TRUST_MAX)
-```
-
-**Suy nhãn** (`labelOf`): `score < ngưỡng need_review → NEED_REVIEW`; `score < ngưỡng risky → RISKY`; `score ≥ (risky + (max-risky)/2) → GOOD`; còn lại → `NORMAL`. **4 nhãn**, không phải 3 như FE đang hiểu (xem mục 10).
-
 ### 5. Dữ liệu chạy như thế nào
 
 **Price**: Input (form đăng tin bước "Giá & tiện ích") → FE build object gửi `POST /api/ai/price-prediction` với `categoryId/provinceId/districtId/wardId/area/roomCount/toiletCount/furnitureStatus/toiletType/amenityIds/inputPrice` → BE validate tham chiếu → tìm comparables → `PriceEstimator` tính (thuần Java, không network ngoài) → lưu `PredictionHistory` → map `PriceEstimate` (record nội bộ) sang `PricePredictionResponse` (DTO public, có `disclaimer` bắt buộc luôn xuất hiện) → FE lưu vào state `price`, hiển thị card, và **giá trị này KHÔNG tự động điền vào field `price`** — chỉ hiển thị tham khảo, người dùng tự quyết định nhập giá.
 
 **Recommendation**: Input là ngữ cảnh (`source`, có thể kèm `listingId`) chứ không phải form nhập liệu → FE gọi khi mount trang hoặc khi 0 kết quả tìm kiếm → BE tổng hợp hành vi (đọc, không ghi gì vào Listing/User) → chỉ ghi mới vào `recommendation_logs` → trả danh sách `RecommendationItem` (đã map sẵn từ `Listing` sang dạng rút gọn tương tự `ListingSummaryResponse` nhưng có thêm `scoreBreakdown`/`matchReasons`) → FE render `ListingGrid`.
 
-**TrustScore**: KHÔNG có luồng request/response trực tiếp từ người dùng — chỉ được **tính lại theo lịch** (`TrustScoreRecalcJob`, 02:00 UTC/ngày) hoặc đọc thụ động (giá trị `trust_score` hiện có trên `listings`/`landlord_profiles` được `ListingMapper` map vào mọi response tin, `LandlordDashboardServiceImpl` map vào dashboard chủ trọ). Nghĩa là **điểm hiển thị cho người dùng có độ trễ tối đa gần 24 giờ** so với hành vi thực tế (bình luận mới, báo cáo mới) — không phải real-time.
 
 ### 6. Database liên quan
 
 | Bảng | Vai trò | Quan hệ | Field quan trọng |
 |---|---|---|---|
-| `recommendation_logs` | Append-only, ghi mọi lần gợi ý (kể cả cold start) | N-1 `users` (nullable — khách vãng lai), N-1 `listings` | `session_id`, `source` (enum), `batch_id` (nhóm 1 lần gọi), `score` (DECIMAL 6,4), `rank_position`, 6 cột điểm thành phần (`area_score, price_score, category_score, amenity_score, trust_score_norm, freshness_score`), `promoted_boost` (CHECK 1.000–1.150), `is_cold_start`, `context` (JSON), `clicked_at` (NULL cho tới khi người dùng click — cần xác nhận có API nào set field này không, xem mục 11) |
+| `recommendation_logs` | Append-only, ghi mọi lần gợi ý (kể cả cold start) | N-1 `users` (nullable — khách vãng lai), N-1 `listings` | `session_id`, `source` (enum), `batch_id` (nhóm 1 lần gọi), `score` (DECIMAL 6,4), `rank_position`, các cột điểm thành phần (`location_score, area_size_score, price_score, category_score, amenity_score, occupant_score, gender_score, freshness_score`), `promoted_boost` (CHECK 1.000–1.150), `is_cold_start`, `context` (JSON), `clicked_at` (NULL cho tới khi người dùng click — cần xác nhận có API nào set field này không, xem mục 11) |
 | `prediction_histories` | Append-only, ghi mọi lần dự đoán giá | N-1 `users`, N-1 `listings` (nullable — có thể dự đoán trước khi tạo tin), + tham chiếu `category_id/province_id/district_id/ward_id` | `suggested_price/price_low/price_median/price_high/price_per_sqm`, `sample_size`, `scope_used` (`WARD/DISTRICT/PROVINCE`), `confidence` (`HIGH/MEDIUM/LOW/INSUFFICIENT_DATA`), `dispersion_ratio` (IQR/median), `adjustment_detail` (JSON — 6 yếu tố hedonic), `input_price/deviation_ratio/is_flagged`, `is_applied` (cần xác nhận cờ này được set khi nào — có thể đánh dấu "chủ trọ đã dùng giá gợi ý", xem mục 11), `estimator_version` (VARCHAR 20, hiện `"hedonic-1.0"`) |
-| `listings.trust_score` | Điểm uy tín TIN (denormalized trên bảng của Module 1) | — | DECIMAL(5,2), mặc định 100.00, CHECK 0–100 |
-| `landlord_profiles.trust_score` | Điểm uy tín CHỦ TRỌ (denormalized trên bảng của module `user`) | — | > Cần bổ sung theo source code (đã xác nhận field tồn tại qua `TrustScoreServiceImpl`/`LandlordDashboardServiceImpl`, cột DB cụ thể cần đọc thêm `LandlordProfile` entity + migration liên quan nếu cần review sâu hơn) |
 | `view_histories`, `search_histories` | Nguồn tín hiệu hành vi cho Recommendation (đọc qua `InteractionSignalGatewayAdapter`, KHÔNG thuộc module `ai`) | — | Xem chi tiết ở Module 2 mục 6 — **`search_histories` hiện luôn rỗng do bug đã nêu**, ảnh hưởng trực tiếp tới chất lượng gợi ý ở đây |
 | `listings.price_prediction_id` | FK mềm (chỉ giữ Long) trỏ về `prediction_histories.id` gần nhất | — | Ghi khi `markPriceDeviation` được gọi |
 | `listings.price_deviation_flag` | Cờ lệch giá (Boolean) | — | Đọc bởi `canAutoApprove` (Module 1) và bởi màn quản trị AI (`AdminAiController`, thuộc Người 1 phụ trách theo phân công, không mô tả sâu ở đây) |
@@ -1727,17 +1698,15 @@ score = clamp(avgTrust − warningCount×wWarn + responseTerm, TRUST_MIN, TRUST_
 
 `PricePredictionResponse` gồm: `available, predictionHistoryId, suggestedPrice, priceRange{low,medium,high}, confidence, confidenceScore, confidenceLabel, explanation{summary,basePrice,adjustments[],totalAdjustmentPercent,factorsInVietnamese}, comparable{sampleSize,scope,scopeLabel,scopeExpanded,periodDays,medianPricePerSqm,iqrRatio}, comparison{inputPrice,suggestedPrice,difference,deviationRatio,deviationPercent,deviationFlagged,thresholdRatio,verdict,verdictMessage,blocksPosting(luôn false)}, disclaimer, predictedAt`.
 
-`RecommendationResponse` gồm: `source, personalized, coldStart, coldStartStrategy[], coldStartNote, recommendationLogId, batchId, profileSummary{preferredPriceLow/High, preferredAreaLow/High, preferredOccupants, behaviorCounts{views,searches,favorites,contacts}, note}, items[]{id,slug,title,categoryCode,categoryName,price,area,shortAddress,thumbnailUrl,trustScore,averageRating,promoted,matchScore,scoreBreakdown{9 field},matchReasons[]}, generatedAt, cacheHit(luôn false — xem mục 10)`.
+`RecommendationResponse` gồm: `source, personalized, coldStart, coldStartStrategy[], coldStartNote, recommendationLogId, batchId, profileSummary{preferredPriceLow/High, preferredAreaLow/High, preferredOccupants, behaviorCounts{views,searches,favorites,contacts}, note}, items[]{id,slug,title,categoryCode,categoryName,price,area,shortAddress,thumbnailUrl,averageRating,promoted,matchScore,scoreBreakdown{8 field},matchReasons[]}, generatedAt, cacheHit(luôn false — xem mục 10)`.
 
 ### 8. Dependency
 
 **Phụ thuộc vào**: `catalog` (validate tham chiếu qua service interface — đúng pattern), `admin` (`SystemConfigService` cho toàn bộ ngưỡng/trọng số/thời gian timeout), và qua SPI gateway: `listing` (`ListingDataGateway` — implement thật nằm ở `modules/listing/adapter/ListingDataGatewayAdapter.java`), `interaction` (`InteractionSignalGateway` — implement ở `modules/interaction/adapter/`), `user` (`UserDataGateway`).
 
 **Module đang phụ thuộc vào nó**:
-- `listing` — `TrustScoreService` được `ListingServiceImpl` gọi trực tiếp (canAutoApprove) và `ListingMapper` gọi để map `trustLabel/lowTrustWarning` vào mọi response tin.
 - `admin` — màn quản trị AI (`AdminAiController`, ngoài phạm vi Người 2) đọc `PredictionHistory`/`RecommendationLog`/cờ lệch giá để hiển thị cảnh báo AI cho Admin.
-- `user` — `LandlordDashboardServiceImpl` gọi `TrustScoreService.labelOf` (Module 6).
-- FE: `ListingWizard` (Price), `SearchPage`/`HomePage` (Suggested), mọi nơi hiển thị `TrustScoreBadge`.
+- FE: `ListingWizard` (Price), `SearchPage`/`HomePage` (Suggested).
 
 ### 9. Các trường hợp cần kiểm tra
 
@@ -1753,14 +1722,9 @@ score = clamp(avgTrust − warningCount×wWarn + responseTerm, TRUST_MIN, TRUST_
 - □ Dự đoán giá không truyền `inputPrice` → `comparison` phải là `null` hoặc rỗng hợp lý (không lỗi vì thiếu field so sánh).
 - □ Dự đoán giá 2 lần liên tiếp cho cùng 1 `listingId` với `inputPrice` khác nhau → cả 2 lần đều lưu `PredictionHistory` riêng biệt (không ghi đè), và `listings.price_prediction_id`/`price_deviation_flag` phản ánh **lần gần nhất**.
 - □ Xem lịch sử dự đoán giá (`GET .../histories`) bằng tài khoản không phải chủ tin và không có `AI_LOG_VIEW` → `LISTING_FORBIDDEN`.
-- □ `TrustScoreRecalcJob` chạy khi 1 chủ trọ chưa có `LandlordProfile` (vd tài khoản LANDLORD mới toanh chưa từng tạo hồ sơ) → job phải bỏ qua êm (log DEBUG), không crash toàn job.
-- □ Sau khi `TrustScoreRecalcJob` chạy, kiểm tra `trust_score` của 1 tin có nhiều bình luận tiêu cực đã giảm đúng theo công thức; điểm chủ trọ = trung bình đúng của các tin còn sống (không tính tin đã xóa mềm).
-- □ Badge uy tín hiển thị đúng — **đây là nơi cần test UI thật cẩn thận nhất** vì nghi vấn field-name mismatch ở mục 10: mở 1 tin có `trustLabel` khác `NORMAL` (cần chỉnh dữ liệu test hoặc chờ tin thật đạt điều kiện), xác nhận Alert cảnh báo có thực sự hiện trên `ListingDetailPage` hay không.
 
 ### 10. Các lỗi dễ gặp
 
-- **[NGHIÊM TRỌNG — gần như chắc chắn là bug] Field-name mismatch `trustLabel` (BE) vs `trustLevel` (FE)**: `ListingDetailResponse.trustLabel` và `LandlordSummaryResponse.trustLabel` (BE, đã đọc trực tiếp source) đều đặt tên field là **`trustLabel`**. Trong khi đó `ListingDetailPage.jsx` (dòng 337) destructure `const { ..., trustScore, trustLevel } = listing;` và dùng `trustLevel` để quyết định hiện `TrustScoreBadge` (dòng 428, 670: `{trustLevel && trustLevel !== 'NORMAL' && (...)}`); `ListingCard.jsx` cũng nhận prop `trustLevel` riêng biệt với `trustLabel` (dòng 60–61: cả 2 đều được destructure nhưng chỉ `trustLevel` được dùng để tính `level`). Vì response thực tế không có field `trustLevel` (luôn `undefined`), **toàn bộ cảnh báo uy tín thấp trên trang chi tiết tin và badge uy tín trên card tin gần như chắc chắn KHÔNG BAO GIỜ hiển thị**, bất kể điểm uy tín thực tế của tin/chủ trọ thấp thế nào. Đây là bug ảnh hưởng trực tiếp tới mục tiêu "bảo vệ người thuê" của AI-02/AI-03 — cần verify bằng cách log `console.log(listing)` trên trang chi tiết thật hoặc dựng test data.
-- **`TrustLabel` có 4 giá trị (`GOOD, NORMAL, RISKY, NEED_REVIEW`) nhưng `TrustScoreBadge.jsx` chỉ định nghĩa `LEVEL_META` cho 3 giá trị (`NORMAL, RISKY, NEED_REVIEW`)** — comment trong file còn ghi rõ "Backend trả trustLevel: 'NORMAL' | 'RISKY' | 'NEED_REVIEW'" (thiếu `GOOD`). Nếu field-name được sửa đúng thành `trustLabel`, giá trị `GOOD` sẽ rơi vào nhánh `LEVEL_META[level] || LEVEL_META.NORMAL` — hiển thị nhầm thành "Bình thường" thay vì phân biệt "Tốt", làm mất tác dụng phân loại 4 cấp của BE.
 - **`RecommendationResponse.cacheHit` luôn `false`**: `RecommendationServiceImpl` hardcode `.cacheHit(false)` ở cả 2 nhánh (personalized và cold start) — không hề có `@Cacheable`/thao tác Redis nào trong service này, dù `ConfigKey.AI_RECOMMENDATION_CACHE_TTL_MINUTES` tồn tại trong hệ thống cấu hình (được nhắc tới trong Javadoc của `RecommendationPrecomputeJob` như một tính năng "trong tương lai"). Field `cacheHit` trong response hiện là **thông tin gây hiểu lầm** (misleading) — FE hoặc bên thứ 3 đọc field này sẽ luôn thấy `false` dù có cache hay không (vì thực chất không có cache).
 - **Chất lượng cá nhân hóa bị giảm do `search_histories` luôn rỗng** (bug đã nêu ở Module 2 mục 10): số hạng "tìm kiếm (trọng số 2)" trong `buildProfile()` không bao giờ có dữ liệu thật — hồ sơ sở thích chỉ còn dựa vào view/favorite/contact, làm giảm chất lượng gợi ý so với thiết kế ban đầu (vốn định dùng cả 2 nguồn tín hiệu).
 - **`PredictionHistory.is_applied`**: không tìm thấy đoạn code nào set giá trị `true` cho cột này trong `PriceEstimationServiceImpl`/`PriceMapper` — nếu tính năng "đánh dấu chủ trọ đã áp dụng giá gợi ý" từng được thiết kế, hiện nó là cột chết (luôn `false`/mặc định DB).
@@ -1768,7 +1732,6 @@ score = clamp(avgTrust − warningCount×wWarn + responseTerm, TRUST_MIN, TRUST_
 
 ### 11. Các điểm cần review
 
-- **Ưu tiên cao nhất**: xác minh và sửa bug field-name `trustLevel`/`trustLabel` — đây là bug 1 dòng nhưng ảnh hưởng tới toàn bộ mục tiêu bảo vệ người dùng của tính năng uy tín. Đề xuất: đổi tên biến FE từ `trustLevel` thành `trustLabel` xuyên suốt (`ListingDetailPage.jsx`, `ListingCard.jsx`, `LandlordProfilePage.jsx`) và bổ sung `GOOD` vào `LEVEL_META`.
 - **Business**: công thức Recommendation cộng điểm tuyến tính 9 số hạng là hợp lý cho rule-based, nhưng trọng số (`0.22/0.12/0.20/...`) đang hardcode ở tầng `ContentBasedRecommendationEngine` (hằng số Java `static final BigDecimal`) thay vì đọc từ `SystemConfigService` như hầu hết ngưỡng khác trong hệ thống — nghĩa là muốn tinh chỉnh trọng số phải deploy lại, không tự chỉnh qua Admin UI được (khác với Price — trọng số hedonic (`ai.price.hedonic.*`) ĐÃ đọc từ config, có sự bất nhất giữa 2 module con trong cùng cụm AI).
 - **Response/API naming**: nên bỏ field `cacheHit` khỏi `RecommendationResponse` hoặc thực sự cài cache (theo đúng ý đồ `AI_RECOMMENDATION_CACHE_TTL_MINUTES`), tránh field "ma" gây hiểu lầm khi tích hợp FE/đối tác thứ 3 sau này.
 - **DB**: cột `recommendation_logs.clicked_at` và `prediction_histories.is_applied` hiện chết — cần quyết định: (a) bổ sung API để ghi nhận, hoặc (b) xóa khỏi schema nếu không dùng, tránh gây hiểu lầm khi đọc DB trong tương lai.
@@ -1780,8 +1743,6 @@ score = clamp(avgTrust − warningCount×wWarn + responseTerm, TRUST_MIN, TRUST_
 
 - Gợi ý cá nhân hóa hoạt động đúng cho người dùng có hành vi thật (view/favorite/contact); cold start hoạt động mượt cho khách/user mới, không bao giờ trả trang trắng.
 - Dự đoán giá luôn trả disclaimer rõ ràng, không bao giờ chặn đăng tin dù giá lệch bao nhiêu; lưu đủ lịch sử phục vụ báo cáo chất lượng AI (Module ngoài phạm vi Người 2).
-- **Badge/Alert cảnh báo uy tín tin và chủ trọ hiển thị đúng thực tế** (sau khi khắc phục bug field-name) — người thuê thực sự nhìn thấy cảnh báo khi tin/chủ trọ có điểm uy tín thấp, đúng mục tiêu bảo vệ người dùng của AI-02/AI-03.
-- Điểm uy tín được tính lại đều đặn mỗi ngày, phản ánh đúng công thức đã tài liệu hóa, không có chủ trọ/tin nào bị bỏ sót trong job.
 
 ## Module: Admin Listing & Moderation Queue (Quản lý & Kiểm duyệt tin đăng)
 
@@ -1926,7 +1887,7 @@ flowchart TD
 
 ### 10. Các lỗi dễ gặp
 
-- **[Nghi vấn] Response quản trị thiếu field mà FE đang kỳ vọng** — `ModerationQueuePage.jsx` render `r.categoryName`, `r.ownerName`, `r.submittedAt`, `r.needReviewReason`/`r.autoHideReason`, nhưng `AdminListingResponse` (DTO thật, đã đọc trực tiếp) chỉ có `id, title, slug, categoryId, price, area, ownerId, status, statusLabel, trustScore, reportCount, priceDeviationFlagged, provinceId, districtId, wardId, publishedAt, expiredAt, createdAt, updatedAt` — **không có `categoryName/ownerName/submittedAt/needReviewReason/autoHideReason`**. Hệ quả: cột "Tin đăng" trong hàng đợi kiểm duyệt sẽ hiển thị tên danh mục/chủ trọ **rỗng** (fallback `''`), cột "Chờ từ" âm thầm dùng `createdAt` thay vì thời điểm submit thật (không lỗi nhưng sai ý nghĩa hiển thị nếu tin có nhiều lần sửa/gửi lại), và cột "Lý do cần kiểm tra" ở tab NEED_REVIEW **luôn hiện text mặc định "Cần kiểm tra"** thay vì lý do cụ thể vì `needReviewReason`/`autoHideReason` luôn `undefined`. Đây là điểm cần verify UI thật đầu tiên khi review Module 5.
+- **[Nghi vấn] Response quản trị thiếu field mà FE đang kỳ vọng** — `ModerationQueuePage.jsx` render `r.categoryName`, `r.ownerName`, `r.submittedAt`, `r.needReviewReason`/`r.autoHideReason`, nhưng `AdminListingResponse` (DTO thật, đã đọc trực tiếp) chỉ có `id, title, slug, categoryId, price, area, ownerId, status, statusLabel, reportCount, priceDeviationFlagged, provinceId, districtId, wardId, publishedAt, expiredAt, createdAt, updatedAt` — **không có `categoryName/ownerName/submittedAt/needReviewReason/autoHideReason`**. Hệ quả: cột "Tin đăng" trong hàng đợi kiểm duyệt sẽ hiển thị tên danh mục/chủ trọ **rỗng** (fallback `''`), cột "Chờ từ" âm thầm dùng `createdAt` thay vì thời điểm submit thật (không lỗi nhưng sai ý nghĩa hiển thị nếu tin có nhiều lần sửa/gửi lại), và cột "Lý do cần kiểm tra" ở tab NEED_REVIEW **luôn hiện text mặc định "Cần kiểm tra"** thay vì lý do cụ thể vì `needReviewReason`/`autoHideReason` luôn `undefined`. Đây là điểm cần verify UI thật đầu tiên khi review Module 5.
 - **`reason` là `VARCHAR(500) NOT NULL` ở DB nhưng không phải lúc nào tầng service cũng nhận `reason` bắt buộc từ request** (vd `hide`/`unhide`/`flag-need-review`/`clear-need-review` cho phép `reason` optional) — code xử lý đúng bằng hàm `sanitize(reason, defaultText)` để không bao giờ gửi NULL xuống DB, nhưng đây là điểm dễ quên khi thêm hành động mới trong tương lai (phải luôn nhớ `sanitize`, nếu quên sẽ vỡ ràng buộc NOT NULL ở DB ngay khi test).
 - **Nhầm giữa quyền `LISTING_MODERATE` và `LISTING_LOCK`**: dev mới dễ gán nhầm cả 2 quyền cho cùng 1 role Moderator, phá vỡ chủ đích thiết kế "chỉ Admin mới khóa được tin" (Moderator chỉ duyệt/từ chối/ẩn/gắn cờ).
 - **Self-invocation transaction**: nếu sau này có refactor gọi trực tiếp `this.approve(...)` thay vì qua `self.approve(...)` bên trong `bulkModerate`, transaction riêng theo từng tin sẽ **mất hiệu lực âm thầm** (không lỗi biên dịch, không lỗi runtime rõ ràng — chỉ phát hiện khi test 1 tin lỗi giữa lô và thấy toàn bộ lô bị rollback theo).
@@ -1952,12 +1913,12 @@ flowchart TD
 > **Cập nhật 2026-08-11:** lỗi mismatch được mô tả trong mục này đã được xử lý theo hướng (a): backend `GET /api/landlord/dashboard`
 > nhận `days=7|30|90` và trả các field frontend đang dùng (`activeCount`, `pendingCount`, `viewCount30d`,
 > `contactCount30d`, `chart`, `topListings`, `actionItems`, `landlordVerificationStatus`), đồng thời vẫn giữ các field
-> cũ (`totalListings`, `listingsByStatus`, `totalViews`, `totalFavorites`, `totalContacts`, khối trust) để không phá client cũ.
+> cũ (`totalListings`, `listingsByStatus`, `totalViews`, `totalFavorites`, `totalContacts`) để không phá client cũ.
 > Kiểm chứng local: DB `landlord1@webtro.local` có `PENDING=1`, API trả `pendingCount=1`.
 
 ### 1. Module này dùng để làm gì?
 
-Trang đầu tiên chủ trọ nhìn thấy sau khi đăng nhập vào khu vực quản lý (`/quan-ly/tong-quan`): tổng hợp nhanh "sức khỏe" của toàn bộ tin đăng — số tin theo trạng thái, tổng lượt xem/lưu/liên hệ, điểm uy tín, tỷ lệ phản hồi. Về bản chất đây là một **API tổng hợp (aggregation) mỏng**, không có nghiệp vụ ghi dữ liệu — chỉ đọc và cộng dồn số liệu đã có sẵn từ Module 1 (`ListingRepository`) và module `user` (`LandlordProfileRepository`).
+Trang đầu tiên chủ trọ nhìn thấy sau khi đăng nhập vào khu vực quản lý (`/quan-ly/tong-quan`): tổng hợp nhanh "sức khỏe" của toàn bộ tin đăng — số tin theo trạng thái, tổng lượt xem/lưu/liên hệ, đánh giá, tỷ lệ phản hồi. Về bản chất đây là một **API tổng hợp (aggregation) mỏng**, không có nghiệp vụ ghi dữ liệu — chỉ đọc và cộng dồn số liệu đã có sẵn từ Module 1 (`ListingRepository`) và module `user` (`LandlordProfileRepository`).
 
 Vai trò: giúp chủ trọ đánh giá nhanh hiệu quả kênh đăng tin của mình mà không cần vào từng tin xem thống kê riêng lẻ (đó là việc của `ListingStatsPage`/`getStats` ở Module 1).
 
@@ -1977,7 +1938,7 @@ Vai trò: giúp chủ trọ đánh giá nhanh hiệu quả kênh đăng tin củ
 **Service**: `LandlordDashboardServiceImpl` (`.../user/service/impl/LandlordDashboardServiceImpl.java`, 75 dòng — rất mỏng) — toàn bộ logic:
 1. `listingRepository.countByStatusForOwner(userId)` → map thành `Map<String,Long> listingsByStatus`.
 2. `listingRepository.countByOwner/sumViewCountForOwner/sumFavoriteCountForOwner/sumContactCountForOwner(userId)` → 4 số tổng **toàn thời gian** (không theo khoảng ngày).
-3. Đọc `LandlordProfile` (nếu có) → `trustScore` (làm tròn), `trustLabel` (qua `trustScoreService.labelOf`, tiêm `@Lazy` để tránh vòng phụ thuộc `user ↔ listing`), `responseRatePercent`, `averageRating`, `reviewCount`, `validReportCount`, `warningCount`.
+3. Đọc `LandlordProfile` (nếu có) → `responseRatePercent`, `averageRating`, `reviewCount`, `validReportCount`, `warningCount`.
 
 **Repository**: dùng lại `ListingRepository` (Module 1) + `LandlordProfileRepository` (module `user`) — không có repository riêng cho module này.
 
@@ -1998,7 +1959,7 @@ flowchart TD
     B --> C[Controller: KHÔNG đọc query param days]
     C --> D[Service: countByStatusForOwner]
     C --> E[Service: count/sum View/Favorite/Contact toàn thời gian]
-    C --> F[Service: đọc LandlordProfile - trustScore/trustLabel/response rate]
+    C --> F[Service: đọc LandlordProfile - đánh giá/response rate]
     D --> G[LandlordDashboardResponse phẳng]
     E --> G
     F --> G
@@ -2015,7 +1976,7 @@ flowchart TD
 - **BE validate**: không có validate đặc biệt (chỉ cần `LISTING_CREATE`).
 - **Business logic**: 100% là truy vấn tổng hợp, không có nhánh rẽ nghiệp vụ.
 - **DB**: 5 câu SQL (4 vào `listings`, 1 vào `landlord_profiles`), tất cả `readOnly=true`.
-- **Response**: `LandlordDashboardResponse` — DTO phẳng, có `@JsonInclude(NON_NULL)` (field null bị loại khỏi JSON — vd chủ trọ chưa có `LandlordProfile` thì cả cụm `trustScore/trustLabel/...` biến mất khỏi JSON thay vì trả `null` tường minh).
+- **Response**: `LandlordDashboardResponse` — DTO phẳng, có `@JsonInclude(NON_NULL)` (field null bị loại khỏi JSON — vd chủ trọ chưa có `LandlordProfile` thì cả cụm `responseRatePercent/averageRating/...` biến mất khỏi JSON thay vì trả `null` tường minh).
 - **FE update**: `setData(res)` — nhưng phần lớn UI (`StatCard` cho `activeCount/pendingCount`, `ChartCard`, "Việc cần xử lý", "Tin đăng nổi bật", `Alert` xác thực chủ trọ) đọc field không tồn tại trong `res` → hiển thị mặc định `0`/rỗng.
 
 ### 6. Database liên quan
@@ -2025,29 +1986,28 @@ Module này không sở hữu bảng riêng — chỉ đọc:
 | Bảng | Field đọc | Mục đích |
 |---|---|---|
 | `listings` | `status` (group by), `view_count`, `favorite_count`, `contact_count`, `owner_id`, `deleted_at` (loại tin đã xóa mềm khỏi mọi phép đếm/tổng) | Tổng hợp số liệu chủ trọ |
-| `landlord_profiles` | `trust_score`, `response_rate_percent`, `average_rating`, `review_count`, `valid_report_count`, `warning_count`, `deleted_at` | Khối uy tín/đánh giá |
+| `landlord_profiles` | `response_rate_percent`, `average_rating`, `review_count`, `valid_report_count`, `warning_count`, `deleted_at` | Khối đánh giá/vi phạm |
 
 ### 7. API liên quan
 
 | Method | URL | Request | Response (field THẬT) | Auth | Permission | Validation | Error |
 |---|---|---|---|---|---|---|---|
-| GET | `/api/landlord/dashboard` | Không tham số nào được BE dùng (FE gửi `days` nhưng bị bỏ qua) | `ApiResponse<LandlordDashboardResponse>` = `{ totalListings, listingsByStatus: Map<String,Long>, totalViews, totalFavorites, totalContacts, trustScore?, trustLabel?, responseRatePercent?, averageRating?, reviewCount?, validReportCount?, warningCount? }` | Bắt buộc | `LISTING_CREATE` | — | — |
+| GET | `/api/landlord/dashboard` | Không tham số nào được BE dùng (FE gửi `days` nhưng bị bỏ qua) | `ApiResponse<LandlordDashboardResponse>` = `{ totalListings, listingsByStatus: Map<String,Long>, totalViews, totalFavorites, totalContacts, responseRatePercent?, averageRating?, reviewCount?, validReportCount?, warningCount? }` | Bắt buộc | `LISTING_CREATE` | — | — |
 
 ### 8. Dependency
 
-**Phụ thuộc vào**: `listing` (`ListingRepository`), `user` (`LandlordProfileRepository`), `listing.TrustScoreService` (tiêm `@Lazy` — Module 4).
+**Phụ thuộc vào**: `listing` (`ListingRepository`), `user` (`LandlordProfileRepository`).
 
 **Module đang phụ thuộc vào nó**: chỉ `OverviewPage.jsx` (FE) — không module BE nào khác gọi tới.
 
 ### 9. Các trường hợp cần kiểm tra
 
-- □ Chủ trọ chưa có `LandlordProfile` (tài khoản mới, chưa từng tạo hồ sơ) → response vẫn trả 200, cụm field uy tín bị loại khỏi JSON (do `@JsonInclude(NON_NULL)`) — FE phải xử lý được trường hợp thiếu field, không crash.
+- □ Chủ trọ chưa có `LandlordProfile` (tài khoản mới, chưa từng tạo hồ sơ) → response vẫn trả 200, cụm field đánh giá/vi phạm bị loại khỏi JSON (do `@JsonInclude(NON_NULL)`) — FE phải xử lý được trường hợp thiếu field, không crash.
 - □ Chủ trọ có 0 tin đăng → `totalListings=0`, `listingsByStatus={}` (map rỗng), `totalViews/totalFavorites/totalContacts=0` — không lỗi 500.
 - □ So sánh số liệu `listingsByStatus` trả về với số đếm thực tế trên `MyListingsPage` (lọc theo từng status) — phải khớp nhau (cùng nguồn `listings`, khác cách tổng hợp).
 - □ Đổi dropdown "7/30/90 ngày" trên UI → xác nhận số liệu hiển thị **có thực sự đổi hay không** (dự đoán: KHÔNG đổi, vì BE bỏ qua `days` — đây là test case then chốt để xác nhận bug ở mục 10).
 - □ Gọi trực tiếp API bằng Postman với các giá trị `days` khác nhau → xác nhận response giống hệt nhau bất kể `days`.
 - □ Tài khoản không có quyền `LISTING_CREATE` (vd `TENANT` thường) gọi endpoint này → 403.
-- □ Trust label hiển thị đúng nhãn tiếng Việt tương ứng (`trustScoreService.labelOf` — 4 giá trị `GOOD/NORMAL/RISKY/NEED_REVIEW`, xem Module 4).
 
 ### 10. Các lỗi dễ gặp
 
@@ -2058,7 +2018,7 @@ Module này không sở hữu bảng riêng — chỉ đọc:
   - `data.chart` (mảng `{date, views, contacts}` cho line-chart) — BE không trả time-series nào cả.
   - `data.actionItems` (mảng việc cần xử lý kèm `severity/message/actionUrl`) — không tồn tại ở BE.
   - `data.topListings` (mảng tin nổi bật kèm `viewCount/contactCount`) — không tồn tại ở BE.
-  - `data.landlordVerificationStatus` — không tồn tại ở BE (chỉ có `trustLabel`, không phải trạng thái xác thực).
+  - `data.landlordVerificationStatus` — không tồn tại ở BE.
   
   **Hệ quả thực tế**: hầu hết `OverviewPage` sẽ hiển thị **toàn số 0 và rỗng** — 4 `StatCard` chính đều `?? 0`, biểu đồ xu hướng luôn rỗng (`chartData` = `null` vì `data?.chart` luôn `undefined`), khối "Việc cần xử lý" luôn hiện "Không có việc gì cần xử lý" (vì `actionItems` luôn `[]` do `data?.actionItems || []`), khối "Tin đăng nổi bật" luôn hiện "Chưa có dữ liệu", và Alert nhắc xác thực chủ trọ **không bao giờ hiện** (vì `data.landlordVerificationStatus` luôn `undefined`, điều kiện `data?.landlordVerificationStatus && ... !== 'VERIFIED'` luôn `false`). Đây gần như chắc chắn là trang có giao diện đẹp nhưng **không hiển thị đúng bất kỳ số liệu thật nào ngoài việc không crash** (nhờ toàn bộ FE dùng `?.`/`??` fallback an toàn).
 - **`isEmpty` tính sai theo cùng logic trên**: `const isEmpty = data && (data.activeCount + data.pendingCount) === 0 && ...` — vì `data.activeCount`/`data.pendingCount` luôn `undefined`, `undefined + undefined = NaN`, `NaN === 0` là `false` → `isEmpty` luôn `false` (trừ khi `topListings.length` cũng góp phần, nhưng biểu thức `&&` đã chặn ở `isEmpty` chưa chắc đúng) — nghĩa là màn "Bạn chưa có tin đăng nào" (empty state cho chủ trọ hoàn toàn mới) **có thể không bao giờ hiện đúng lúc**, trong khi số liệu thật vẫn hiện 0 lặng lẽ.
@@ -2086,17 +2046,17 @@ Module này không sở hữu bảng riêng — chỉ đọc:
 - □ Đọc source — đã đọc trực tiếp toàn bộ controller/service/entity/repository BE liên quan tới 6 module (`listing`, `search`, `catalog`, `ai`, `admin.listing`, `user.dashboard`) và các trang/component FE tương ứng; ghi rõ mọi field/endpoint đúng theo code thật, không suy đoán.
 - □ Chạy thử — dựng môi trường local (Flyway migrate V1..V12, seed data catalog/khu vực), chạy BE + FE, thử toàn bộ luồng: tạo tin → upload ảnh → gửi duyệt → (Admin) duyệt → hiển thị Search → xem chi tiết → gợi ý/định giá.
 - □ Test API — dùng Postman/curl gọi trực tiếp từng endpoint ở bảng mục 7 của mỗi module, đặc biệt ưu tiên xác minh 2 nghi vấn nghiêm trọng: (1) `sort=relevance,desc` mặc định của `SearchPage` có thực sự gây lỗi 400 hay không; (2) `PUT .../toggle` không có body có thực sự gây lỗi 400 hay không.
-- □ Test UI — thao tác trực tiếp trên FE (không chỉ đọc code) cho: `ListingWizard` (đủ 6 bước, cả nhánh lỗi validate từng bước), `SearchPage` (đủ tổ hợp filter + sort), `ModerationQueuePage` (2 tab, duyệt/từ chối/ẩn/gỡ cờ), `AreasPage`/`CategoriesPage`/`AmenitiesPage` (toggle + import), `OverviewPage` (đổi khoảng ngày), badge uy tín trên `ListingDetailPage`/`ListingCard`.
+- □ Test UI — thao tác trực tiếp trên FE (không chỉ đọc code) cho: `ListingWizard` (đủ 6 bước, cả nhánh lỗi validate từng bước), `SearchPage` (đủ tổ hợp filter + sort), `ModerationQueuePage` (2 tab, duyệt/từ chối/ẩn/gỡ cờ), `AreasPage`/`CategoriesPage`/`AmenitiesPage` (toggle + import), `OverviewPage` (đổi khoảng ngày).
 - □ Kiểm tra DB — sau mỗi hành động UI, đối chiếu trực tiếp bảng `listings`, `moderation_actions`, `audit_logs`, `recommendation_logs`, `prediction_histories`, `search_histories` để chắc chắn dữ liệu ghi đúng, đủ.
-- □ So sánh Business — đối chiếu hành vi thực tế với các quy tắc đã tài liệu hóa ở mục 4/5 mỗi module (đặc biệt bảng luật `ListingStateMachine`, công thức TrustScore, công thức Recommendation, mở rộng phạm vi Price WARD→DISTRICT→PROVINCE).
-- □ Ghi Bug — ưu tiên báo cáo theo thứ tự mức độ nghiêm trọng đã đánh dấu trong tài liệu này: (1) field-name `trustLevel`/`trustLabel` (Module 4), (2) mismatch `LandlordDashboardResponse` (Module 6), (3) mismatch `AdminListingResponse` ở hàng đợi kiểm duyệt (Module 5), (4) nghi vấn `sort` mặc định Search (Module 2), (5) nghi vấn `toggle`/`import` Catalog (Module 3), (6) `SearchPerformedEvent` không có listener (Module 2 & 4).
+- □ So sánh Business — đối chiếu hành vi thực tế với các quy tắc đã tài liệu hóa ở mục 4/5 mỗi module (đặc biệt bảng luật `ListingStateMachine`, công thức Recommendation, mở rộng phạm vi Price WARD→DISTRICT→PROVINCE).
+- □ Ghi Bug — ưu tiên báo cáo theo thứ tự mức độ nghiêm trọng đã đánh dấu trong tài liệu này: (1) mismatch `LandlordDashboardResponse` (Module 6), (2) mismatch `AdminListingResponse` ở hàng đợi kiểm duyệt (Module 5), (3) nghi vấn `sort` mặc định Search (Module 2), (4) nghi vấn `toggle`/`import` Catalog (Module 3), (5) `SearchPerformedEvent` không có listener (Module 2 & 4).
 - □ Ghi Improvement — các điểm ở mục 11 mỗi module không phải bug chặn nhưng đáng cải thiện (đồng bộ ngưỡng validate FE/BE, đưa trọng số Recommendation vào SystemConfig, bổ sung field còn thiếu, dọn cột DB chết `clicked_at`/`is_applied`...).
 - □ Tổng hợp báo cáo — gộp toàn bộ finding theo mẫu chung của nhóm, kèm mức độ ưu tiên và module ảnh hưởng, gửi lại cho Technical Lead trước khi merge.
 
 **Checklist riêng của cụm (Tin đăng/Tìm kiếm/Danh mục/AI)**:
 - □ Không có tin nào ngoài trạng thái công khai hợp lệ (`ACTIVE`, và `NEED_REVIEW` nếu config cho phép) lọt ra `Search`/`Related`/`Suggested`/`Recommendation`.
-- □ Mọi ngưỡng nghiệp vụ động (độ dài, quota, số ảnh, ngưỡng uy tín, trọng số hedonic) đều đọc từ `SystemConfigService`, không hardcode ở tầng service (ngoại lệ đã phát hiện: trọng số 9 số hạng Recommendation đang hardcode — xem Module 4 mục 11).
-- □ 4 job nền (`ListingExpiryJob`, `ListingExpiryReminderJob`, `TrustScoreRecalcJob`, `RecommendationPrecomputeJob`) chạy đúng lịch UTC, idempotent, không có tin/chủ trọ nào bị bỏ sót qua nhiều lần chạy liên tiếp.
+- □ Mọi ngưỡng nghiệp vụ động (độ dài, quota, số ảnh, trọng số hedonic) đều đọc từ `SystemConfigService`, không hardcode ở tầng service (ngoại lệ đã phát hiện: trọng số 8 số hạng Recommendation đang hardcode — xem Module 4 mục 11).
+- □ 3 job nền (`ListingExpiryJob`, `ListingExpiryReminderJob`, `RecommendationPrecomputeJob`) chạy đúng lịch UTC, idempotent, không có tin/chủ trọ nào bị bỏ sót qua nhiều lần chạy liên tiếp.
 - □ Toàn bộ input tự do của người dùng (title/description/address/lý do kiểm duyệt) đều qua `HtmlSanitizer.stripAllHtml` trước khi lưu DB.
 
 
@@ -2290,7 +2250,7 @@ flowchart TD
 - **Lọc theo ngày (`from`/`to`) ở `GET /api/history/views` không có tác dụng thật** — tham số được nhận nhưng `ViewHistoryRepository` không có finder lọc khoảng ngày, code có log cảnh báo ghi rõ điều này. Dev mới dễ tưởng đây là bug UI khi filter không ra kết quả đúng, thực chất là giới hạn ở BE.
 - Nhầm lẫn giữa xóa mềm (đa số module) và xóa cứng (`Favorite`, `ViewHistory`, `SearchHistory`) — nếu thêm cột `deleted_at` cho 2 bảng log sẽ vi phạm `ddl-auto=validate`.
 - Quên rằng `note` bị `HtmlSanitizer.stripAllHtml` — test nhập HTML/script vào note để xác nhận không XSS.
-- `favoriteCount` hiển thị sai nếu có thao tác xóa tin song song không qua `listingGateway.setFavoriteCount` (đồng bộ một chiều, không có job đối soát định kỳ riêng cho favorite — khác với review/trust score có job `TrustScoreRecalcJob`).
+- `favoriteCount` hiển thị sai nếu có thao tác xóa tin song song không qua `listingGateway.setFavoriteCount` (đồng bộ một chiều, không có job đối soát định kỳ riêng cho favorite).
 - Rate limit xóa lịch sử dùng **hằng số cứng trong controller** (`HISTORY_DELETE_MAX_PER_HOUR = 5`), KHÔNG đọc từ `system_configs` — sửa qua màn hình cấu hình hệ thống sẽ không có tác dụng với giới hạn này.
 
 ### 11. Các điểm cần review
@@ -2480,13 +2440,13 @@ flowchart TD
 
 Hai tính năng tương tác công khai trên trang chi tiết tin:
 
-- **Comment (bình luận — CMT-01..04)**: người dùng đã đăng nhập bình luận dưới tin đăng, hỗ trợ trả lời 1 cấp (không cho nested sâu hơn), tự động kích hoạt **AI phân tích cảm xúc** sau khi tạo/sửa (qua event, không đồng bộ). Kết quả cảm xúc ảnh hưởng tới **điểm uy tín (trust score)** của tin/chủ trọ.
+- **Comment (bình luận — CMT-01..04)**: người dùng đã đăng nhập bình luận dưới tin đăng, hỗ trợ trả lời 1 cấp (không cho nested sâu hơn), tự động kích hoạt **AI phân tích cảm xúc** sau khi tạo/sửa (qua event, không đồng bộ).
 - **Review (đánh giá — REV-01..03)**: người dùng đã từng liên hệ tin (tùy cấu hình `review.require_contact`) được để lại 1–5 sao + nội dung (bắt buộc nội dung nếu rating ≤ 2). Điểm trung bình tin/chủ trọ được cập nhật **tăng dần (incremental)** ngay trong transaction.
-- **Kiểm duyệt admin (ADM-11)**: Moderator/Admin (`COMMENT_MODERATE`/`REVIEW_MODERATE`) ẩn/khôi phục bình luận & đánh giá vi phạm, đánh dấu spam (loại khỏi công thức tính uy tín), xử lý hàng loạt bình luận.
+- **Kiểm duyệt admin (ADM-11)**: Moderator/Admin (`COMMENT_MODERATE`/`REVIEW_MODERATE`) ẩn/khôi phục bình luận & đánh giá vi phạm, đánh dấu spam, xử lý hàng loạt bình luận.
 
-**Vai trò trong hệ thống**: đây là nguồn "tín hiệu chất lượng" quan trọng nhất cho tin đăng — vừa phục vụ người dùng tham khảo, vừa là input chính cho AI cảm xúc và điểm uy tín tin/chủ trọ (một hệ thống chống lừa đảo/tin giả gián tiếp).
+**Vai trò trong hệ thống**: đây là nguồn "tín hiệu chất lượng" quan trọng nhất cho tin đăng — vừa phục vụ người dùng tham khảo, vừa là input chính cho AI cảm xúc (một hệ thống chống lừa đảo/tin giả gián tiếp).
 
-**Nếu hỏng**: mất niềm tin của người thuê (không còn đánh giá thực), AI cảm xúc không có dữ liệu để phân tích, điểm uy tín tin sai lệch, kiểm duyệt viên không kiểm soát được nội dung độc hại/spam.
+**Nếu hỏng**: mất niềm tin của người thuê (không còn đánh giá thực), AI cảm xúc không có dữ liệu để phân tích, kiểm duyệt viên không kiểm soát được nội dung độc hại/spam.
 
 ### 2. Chức năng Frontend
 
@@ -2504,7 +2464,7 @@ Hai tính năng tương tác công khai trên trang chi tiết tin:
 - **Controller**: `CommentController` (`/api/listings/{id}/comments`, `/api/comments/{id}/reply`, `/api/comments/{id}`), `ReviewController` (`/api/listings/{id}/reviews`, `/api/reviews/{id}`, `/api/reviews/my`, `/api/users/{id}/reviews`), `AdminCommentController` (`/api/admin/comments`), `AdminReviewController` (`/api/admin/reviews`).
 - **Service**: `CommentService`/`CommentServiceImpl`, `ReviewService`/`ReviewServiceImpl`.
 - **Repository**: `CommentRepository`, `ReviewRepository`, dùng `Specification` (`CommentSpecifications`, `ReviewSpecifications`) cho lọc admin động.
-- **SPI Gateway**: `ListingGateway` (brief tin, cập nhật `comment_count`, `review_count`/`average_rating`), `UserGateway` (brief tác giả, `isCommentSuspended`, cập nhật `LandlordAggregate`), `BannedKeywordGateway` (quét từ cấm), `TrustScoreService` (module listing — tính lại điểm uy tín sau mỗi thay đổi review).
+- **SPI Gateway**: `ListingGateway` (brief tin, cập nhật `comment_count`, `review_count`/`average_rating`), `UserGateway` (brief tác giả, `isCommentSuspended`, cập nhật `LandlordAggregate`), `BannedKeywordGateway` (quét từ cấm).
 - **Event**: `CommentCreatedEvent(commentId, listingId)` — phát sau tạo **và** sau sửa bình luận (canonical: sửa bình luận phải re-analyze cảm xúc).
 - **Validation**: `CreateCommentRequest`, `UpdateCommentRequest`, `CreateReviewRequest`, `ModerationReasonRequest` (lý do ẩn bắt buộc), `BulkCommentActionRequest`.
 - **Audit**: mọi hành động kiểm duyệt (`hide`/`unhide`/`spam` cho comment, `hide`/`unhide` cho review) đều ghi `AuditLogService.record(...)`.
@@ -2537,7 +2497,7 @@ flowchart TD
     N/O --> P[201 Created + CommentResponse]
 ```
 
-**Luồng tạo đánh giá (REV-01)**: kiểm tra `publiclyVisible`, không tự đánh giá tin mình, chưa từng đánh giá tin này (`uk_reviews_user_listing`), điều kiện `review.require_contact` (đã từng có `ContactLog` chưa), validate nội dung bắt buộc khi rating ≤ 2 → lưu `Review` → **cập nhật tăng dần** trung bình sao của tin (`applyListingAggregateOnAdd`) và của chủ trọ (`applyLandlordAggregateOnAdd`) → gọi `TrustScoreService.recalculateAndSaveListing`/`recalculateLandlord` → thông báo chủ trọ `NEW_REVIEW`.
+**Luồng tạo đánh giá (REV-01)**: kiểm tra `publiclyVisible`, không tự đánh giá tin mình, chưa từng đánh giá tin này (`uk_reviews_user_listing`), điều kiện `review.require_contact` (đã từng có `ContactLog` chưa), validate nội dung bắt buộc khi rating ≤ 2 → lưu `Review` → **cập nhật tăng dần** trung bình sao của tin (`applyListingAggregateOnAdd`) và của chủ trọ (`applyLandlordAggregateOnAdd`) → thông báo chủ trọ `NEW_REVIEW`.
 
 ### 5. Dữ liệu chạy như thế nào
 
@@ -2602,7 +2562,7 @@ flowchart TD
 
 ### 8. Dependency
 
-- **Phụ thuộc**: `ListingGateway`, `UserGateway`, `BannedKeywordGateway`, `TrustScoreService` (module listing), `AuditLogService`, `SystemConfigService` (`comment.edit_window_minutes`, `review.edit_window_hours`, `review.require_contact`, `spam.comment_per_minute`), `ContactLogRepository` (kiểm tra điều kiện review).
+- **Phụ thuộc**: `ListingGateway`, `UserGateway`, `BannedKeywordGateway`, `AuditLogService`, `SystemConfigService` (`comment.edit_window_minutes`, `review.edit_window_hours`, `review.require_contact`, `spam.comment_per_minute`), `ContactLogRepository` (kiểm tra điều kiện review).
 - **Được phụ thuộc bởi**: **Module AI Sentiment** (lắng nghe `CommentCreatedEvent`, đọc/ghi `comments.sentiment_*` qua `CommentDataGateway`), **RPT-02** (report nhắm vào comment), **ADM-11** (trang kiểm duyệt admin dùng trực tiếp service này).
 
 ### 9. Các trường hợp cần kiểm tra
@@ -2634,14 +2594,14 @@ flowchart TD
 - **`GET /api/reviews/my` LUÔN trả về trang rỗng** — đây là bug đã được chính code base ghi nhận rõ ràng (`log.warn(...)` trong `ReviewServiceImpl.listMyReviews`): `ReviewRepository` không có finder `findByUserIdAndDeletedAtIsNull(Long, Pageable)` (chỉ có finder theo cặp `userId+listingId`), nên service **chủ động trả `PageResponse.empty(...)`** để tránh dựng sai dữ liệu thay vì crash. Hệ quả: trang **"Đánh giá của tôi"** (`MyReviewsPage.jsx`) của mọi người dùng luôn hiển thị danh sách trống dù đã có đánh giá. Đây là điểm phải test và báo cáo **ưu tiên cao nhất** của module này.
 - Nhầm lẫn giữa `deleteComment` (tác giả xóa mềm, có cửa sổ thời gian) và `adminHideComment` (moderator ẩn, không cửa sổ, bắt buộc lý do, không đổi `status=DELETED` mà là `HIDDEN`) — 2 luồng khác nhau dùng chung endpoint `DELETE /api/comments/{id}` (dựa vào quyền hiện có của actor để rẽ nhánh) — dễ nhầm khi viết test.
 - `mapReviewPage` nhận tham số `rating` filter cho `GET /api/listings/{id}/reviews` nhưng **không áp dụng lọc ở DB** (ghi chú ngay trong code) — tương tự lỗi filter ở Module Contact, cần đối chiếu FE có tự lọc client-side hay không.
-- Trọng số uy tín `sentimentWeight` bị set về `0` khi đánh dấu spam — nếu sau đó "bỏ đánh dấu spam" không có endpoint riêng (chỉ có `hide`/`unhide`), nghĩa là **spam là hành động một chiều, không thể hoàn tác qua API** hiện có — kiểm tra đây có phải chủ đích hay thiếu tính năng.
+- `sentimentWeight` bị set về `0` khi đánh dấu spam — nếu sau đó "bỏ đánh dấu spam" không có endpoint riêng (chỉ có `hide`/`unhide`), nghĩa là **spam là hành động một chiều, không thể hoàn tác qua API** hiện có — kiểm tra đây có phải chủ đích hay thiếu tính năng.
 - `is_owner_reply` chỉ được set `true` khi `parent != null && userId == listing.ownerId()` — bình luận **gốc** (không phải reply) của chính chủ trọ trên tin của mình sẽ không được đánh dấu `is_owner_reply` dù về logic vẫn là chủ trọ đang bình luận trên tin của họ — cần xác nhận đây có đúng ý đồ (chỉ đánh dấu khi là "trả lời", không phải bình luận gốc).
 
 ### 11. Các điểm cần review
 
 - **Business (nghiêm trọng)**: fix `GET /api/reviews/my` — bổ sung finder repository, đây là tính năng người dùng nhìn thấy trực tiếp bị hỏng hoàn toàn.
 - **Business**: xác nhận `rating` filter ở review listing có cần lọc DB thật hay chấp nhận lọc FE.
-- **Consistency (đồng bộ số liệu)**: cập nhật trung bình sao là **tăng dần trong transaction** (không phải `SELECT AVG(...)` lại từ đầu) — rủi ro trôi số nếu có exception giữa chừng hoặc rollback một phần; có `TrustScoreRecalcJob` (02:00) bù sai số định kỳ theo code base, nên review job này có thật sự chạy đối soát review hay chỉ trust score (cần đọc thêm `TrustScoreRecalcJob` nếu review sâu hơn — nằm ngoài phạm vi file Người 3 nhưng ảnh hưởng trực tiếp).
+- **Consistency (đồng bộ số liệu)**: cập nhật trung bình sao là **tăng dần trong transaction** (không phải `SELECT AVG(...)` lại từ đầu) — rủi ro trôi số nếu có exception giữa chừng hoặc rollback một phần; hiện không có job đối soát định kỳ cho trung bình sao.
 - **Security**: quét từ cấm áp dụng scope `COMMENT` cho cả nội dung review — xác nhận đã đủ nghiêm với review (đánh giá tiêu cực thật có thể chứa ngôn từ gay gắt hợp lệ, không nên bị chặn nhầm).
 - **API naming**: `PUT /api/comments/{id}` dùng để "sửa trong cửa sổ cho phép" nhưng cũng là action duy nhất kích hoạt phân tích lại cảm xúc — có thể cân nhắc tách rõ hơn qua response field `reanalysisTriggered` (đã có sẵn, tốt).
 - **Performance**: `CommentServiceImpl.listComments` với `includeReplies=true` chạy 1 query riêng cho reply của **từng** bình luận gốc trong trang (N+1 theo số bình luận gốc/trang, N ≤ 20) — chấp nhận được ở quy mô hiện tại nhưng nên có `@Query` gộp nếu tin có hàng trăm bình luận gốc.
@@ -2854,14 +2814,14 @@ flowchart TD
 
 Đây là 1 trong 4 tính năng AI rule-based **chạy in-process** (không gọi service ngoài, không cần GPU/API key) trong phạm vi Người 3:
 
-- **AI-01 Sentiment (cảm xúc)**: phân tích cảm xúc bình luận bằng từ điển tiếng Việt có trọng số (`VietnameseLexiconSentimentAnalyzer`) — tự động chạy sau mỗi bình luận mới/sửa, gắn nhãn `POSITIVE/NEUTRAL/NEGATIVE/MIXED`, phát hiện rủi ro (lừa đảo, đòi cọc...), đề xuất hành động (`NONE/WATCH/NEED_REVIEW`), và **là input trực tiếp cho điểm uy tín (trust score)** của tin/chủ trọ.
+- **AI-01 Sentiment (cảm xúc)**: phân tích cảm xúc bình luận bằng từ điển tiếng Việt có trọng số (`VietnameseLexiconSentimentAnalyzer`) — tự động chạy sau mỗi bình luận mới/sửa, gắn nhãn `POSITIVE/NEUTRAL/NEGATIVE/MIXED`, phát hiện rủi ro (lừa đảo, đòi cọc...), và đề xuất hành động (`NONE/WATCH/NEED_REVIEW`).
 - **AI-05 Chatbot**: trợ lý hội thoại tìm phòng theo luật (`RuleBasedChatbotEngine`) — nhận diện 8 intent (FIND_ROOM, HOW_TO_POST, GLOSSARY, FAQ, GREETING, OUT_OF_SCOPE, SENSITIVE, UNKNOWN), trích xuất 11 loại slot (giá, diện tích, số người ở, khu vực...) qua regex, hỏi lại tối đa 3 lượt khi thiếu thông tin quan trọng, chỉ trả **tin công khai thật** (qua `ListingSearchService`, không bịa dữ liệu), kèm disclaimer bắt buộc.
 - **AI-07 Log AI**: lưu vết mọi lần chạy AI (bảng `sentiment_results` append-only có versioning `is_latest`, `chatbot_messages`) phục vụ audit/debug/thống kê — Admin xem qua `GET /api/admin/ai/logs`.
 - **AI-08 Cấu hình ngưỡng AI**: các tham số điều khiển hành vi AI (ngưỡng độ dài tối thiểu, ngưỡng tin cậy thấp, trọng số tài khoản mới, ngưỡng tỷ lệ tiêu cực L1/L2...) lưu ở bảng `ai_configs` (không lẫn với `system_configs`), quản lý qua `AdminAiController`.
 
 **Vai trò trong hệ thống**: AI là lớp "giám sát tự động" giúp phát hiện sớm tin có vấn đề (nhiều bình luận tiêu cực) và hỗ trợ người dùng tìm phòng nhanh hơn qua hội thoại tự nhiên, **KHÔNG thay thế quyết định của con người** — nguyên tắc cứng: AI chỉ đề xuất/gắn cờ, không tự khóa tài khoản hay tự ẩn tin.
 
-**Nếu hỏng**: bình luận vẫn được tạo bình thường (thiết kế cố ý — lỗi AI không chặn nghiệp vụ chính), nhưng mất khả năng cảnh báo sớm tin có nhiều phản hồi tiêu cực, mất tín hiệu đầu vào cho trust score, chatbot ngừng trả lời hoặc trả lời sai/bịa thông tin (rủi ro uy tín nếu disclaimer bị bỏ qua).
+**Nếu hỏng**: bình luận vẫn được tạo bình thường (thiết kế cố ý — lỗi AI không chặn nghiệp vụ chính), nhưng mất khả năng cảnh báo sớm tin có nhiều phản hồi tiêu cực, chatbot ngừng trả lời hoặc trả lời sai/bịa thông tin (rủi ro uy tín nếu disclaimer bị bỏ qua).
 
 ### 2. Chức năng Frontend
 
@@ -2882,7 +2842,7 @@ flowchart TD
 - **Service**: `SentimentService`/`SentimentServiceImpl`, `ChatbotService`/`ChatbotServiceImpl`, `AdminAiService`/`AdminAiServiceImpl` (module admin).
 - **Listener**: `CommentSentimentListener` — `@Async("aiTaskExecutor")` + `@TransactionalEventListener(AFTER_COMMIT)`, lắng nghe `CommentCreatedEvent` từ module interaction.
 - **Repository**: `SentimentResultRepository`, `ChatbotConversationRepository`, `ChatbotMessageRepository`.
-- **SPI Gateway**: `CommentDataGateway` (đọc snapshot bình luận, **ghi ngược** `comments.sentiment_*` — luồng ngược chiều interaction→ai→interaction hợp lệ vì đi qua gateway, không @Autowired trực tiếp entity), `ListingDataGateway` (đếm tin tích cực/tiêu cực trên tin, đọc `trustScore`, gắn cờ `flagNeedReview`), `UserDataGateway` (tuổi tài khoản để xác định "tài khoản mới").
+- **SPI Gateway**: `CommentDataGateway` (đọc snapshot bình luận, **ghi ngược** `comments.sentiment_*` — luồng ngược chiều interaction→ai→interaction hợp lệ vì đi qua gateway, không @Autowired trực tiếp entity), `ListingDataGateway` (đếm tin tích cực/tiêu cực trên tin, gắn cờ `flagNeedReview`), `UserDataGateway` (tuổi tài khoản để xác định "tài khoản mới").
 - **Job**: `scheduler/SentimentRetryJob.java` (mỗi 10 phút — xử lý lại bình luận còn `PENDING_ANALYSIS` do lỗi/timeout trước đó, tối đa `ai.sentiment.max_retry` lần).
 - **Cấu hình**: đọc qua `SystemConfigService` với các khóa `AI_SENTIMENT_ENABLED`, `AI_SENTIMENT_MIN_LENGTH`, `AI_SENTIMENT_LOW_CONFIDENCE_THRESHOLD`, `AI_SENTIMENT_NEW_ACCOUNT_DAYS`, `AI_SENTIMENT_NEW_ACCOUNT_WEIGHT`, `AI_SENTIMENT_MIN_COMMENTS_L1/L2`, `AI_SENTIMENT_NEGATIVE_RATIO_L1/L2`, `AI_SENTIMENT_TIMEOUT_MS`, `AI_SENTIMENT_MAX_RETRY`, `AI_CHATBOT_ENABLED`, `AI_CHATBOT_MAX_CLARIFY_TURNS`, `CHATBOT_MESSAGE_MAX_LENGTH`, `SPAM_CHATBOT_PER_MINUTE`, `CHATBOT_TIMEOUT_MS`.
 - **Timeout guard**: `AiModuleSupport.runWithTimeout(...)` bọc mọi lời gọi engine để tránh treo request nếu thuật toán chạy quá lâu (dù rule-based nên hiếm khi xảy ra).
@@ -2906,8 +2866,7 @@ flowchart TD
     I -- Không --> J[Hạ cờ is_latest bản cũ, INSERT sentiment_results mới]
     J --> K[Ghi ngược comments.sentiment_* qua CommentDataGateway]
     K --> L[Đếm lại positive/negative theo tin, applySentimentCounts]
-    L --> M[TrustScoreService.recalculateAndSaveListing]
-    M --> N{Tỷ lệ tiêu cực >= ngưỡng L1/L2?}
+    L --> N{Tỷ lệ tiêu cực >= ngưỡng L1/L2?}
     N -- L1 --> O[flagNeedReview tin + notifyModerators AI_NEGATIVE_ALERT]
     N -- L2 --> P[notifyModerators cảnh báo mức cao]
     N -- Không --> Q[Kết thúc]
@@ -2944,7 +2903,7 @@ flowchart TD
 
 ### 5. Dữ liệu chạy như thế nào
 
-- **Sentiment — Input**: nội dung bình luận (đọc lại từ DB qua `CommentDataGateway.findComment`, KHÔNG nhận trực tiếp từ event payload — event chỉ mang `commentId`/`listingId` theo luật ranh giới module) → **Business logic**: `VietnameseLexiconSentimentAnalyzer.analyze(text, minLength, lowConfidence, newAccount, newAccountWeight)` trả `SentimentOutcome{label, score, confidence, weight, action, riskComment, negationApplied, matchedTerms...}` → **DB**: `INSERT sentiment_results` (bản mới `is_latest=true`, bản cũ bị hạ `is_latest=false` — cưỡng chế "đúng 1 bản hiện hành" bằng cột sinh STORED `latest_uk` + unique index) → ghi ngược `comments.sentiment_label/score/confidence/weight/is_risk_comment` → **Response** (khi gọi endpoint chẩn đoán): `SentimentResponse` kèm `TrustScoreImpal{before, after, recalculated}` nếu `persist=true`.
+- **Sentiment — Input**: nội dung bình luận (đọc lại từ DB qua `CommentDataGateway.findComment`, KHÔNG nhận trực tiếp từ event payload — event chỉ mang `commentId`/`listingId` theo luật ranh giới module) → **Business logic**: `VietnameseLexiconSentimentAnalyzer.analyze(text, minLength, lowConfidence, newAccount, newAccountWeight)` trả `SentimentOutcome{label, score, confidence, weight, action, riskComment, negationApplied, matchedTerms...}` → **DB**: `INSERT sentiment_results` (bản mới `is_latest=true`, bản cũ bị hạ `is_latest=false` — cưỡng chế "đúng 1 bản hiện hành" bằng cột sinh STORED `latest_uk` + unique index) → ghi ngược `comments.sentiment_label/score/confidence/weight/is_risk_comment` → **Response** (khi gọi endpoint chẩn đoán): `SentimentResponse`.
 - **Chatbot — Input**: `ChatbotMessageRequest{message, sessionId?, conversationId?, resetContext?}` → **Business logic**: `ChatSlots` (record bất biến) được **gộp dần qua nhiều lượt** (lưu dạng JSON ở `chatbot_conversations.collected_filters`, parse/serialize bằng Jackson) → chuyển thành `ListingSearchRequest` gọi thẳng `ListingSearchService` (module search — dùng lại engine tìm kiếm thật, không có dữ liệu giả lập riêng cho chatbot) → **DB**: `INSERT chatbot_messages` (2 dòng mỗi lượt: USER kèm `intent`/`extractedSlots`, BOT kèm `resultListingIds`/`resultCount`/`isFallback`/`responseMs`) → **Response**: `ChatbotMessageResponse{reply, listings[], missingSlots[], clarifyTurn, searchUrl, disclaimer, flaggedForReview}`.
 
 ### 6. Database liên quan
@@ -2986,7 +2945,7 @@ flowchart TD
 | `module` (`SENTIMENT`/`RECOMMENDATION`/`CHATBOT`/`PRICE`), `config_key` (unique theo module) | |
 | `config_value` (JSON), `value_schema`, `is_enabled`, `version` (tăng dần mỗi lần đổi) | |
 
-> Note: các ngưỡng cụ thể như `AI_SENTIMENT_MIN_LENGTH`, `AI_SENTIMENT_NEGATIVE_RATIO_L1`... thực tế được code đọc qua **`SystemConfigService`** (bảng `system_configs`, nhóm khóa tiền tố `ai.`) chứ **không phải** bảng `ai_configs` — `AdminAiController.getConfig()`/`updateConfig()` thao tác trên nhóm `ai.*` + `trust.*` của `system_configs`, còn bảng `ai_configs` (JSON theo module) dùng cho cấu hình phức tạp hơn (vd. bộ từ điển mở rộng — chưa thấy code đọc/ghi trực tiếp bảng này trong các file đã đọc, > cần xác nhận thêm nếu có service khác dùng `AiConfigRepository`).
+> Note: các ngưỡng cụ thể như `AI_SENTIMENT_MIN_LENGTH`, `AI_SENTIMENT_NEGATIVE_RATIO_L1`... thực tế được code đọc qua **`SystemConfigService`** (bảng `system_configs`, nhóm khóa tiền tố `ai.`) chứ **không phải** bảng `ai_configs` — `AdminAiController.getConfig()`/`updateConfig()` thao tác trên nhóm `ai.*` của `system_configs`, còn bảng `ai_configs` (JSON theo module) dùng cho cấu hình phức tạp hơn (vd. bộ từ điển mở rộng — chưa thấy code đọc/ghi trực tiếp bảng này trong các file đã đọc, > cần xác nhận thêm nếu có service khác dùng `AiConfigRepository`).
 
 ### 7. API liên quan
 
@@ -3005,13 +2964,13 @@ flowchart TD
 
 ### 8. Dependency
 
-- **Phụ thuộc**: `CommentDataGateway`/`ListingDataGateway`/`UserDataGateway` (SPI trong module ai, adapter thật nằm ở module interaction/listing/user), `ListingSearchService` (module search — chatbot dùng lại engine tìm kiếm thật), `TrustScoreService` (module listing), `NotificationService`, `SystemConfigService`.
+- **Phụ thuộc**: `CommentDataGateway`/`ListingDataGateway`/`UserDataGateway` (SPI trong module ai, adapter thật nằm ở module interaction/listing/user), `ListingSearchService` (module search — chatbot dùng lại engine tìm kiếm thật), `NotificationService`, `SystemConfigService`.
 - **Được phụ thuộc bởi**: Module Comment (kích hoạt qua event, không gọi trực tiếp — đúng nguyên tắc luật 7), `AdminAiController`/`AdminAiService` (đọc log/cấu hình để hiển thị dashboard AI), có thể là input cho thống kê admin (`AiAlertResponse`, `AiPriceDeviationResponse` — Price/Recommendation là 2 AI khác ngoài phạm vi Người 3 nhưng dùng chung `AdminAiController`).
 
 ### 9. Các trường hợp cần kiểm tra
 
 - [ ] Bình luận mới → sau vài giây (async) có bản ghi `sentiment_results` mới với `is_latest=true`, bản cũ (nếu có) chuyển `is_latest=false`.
-- [ ] Bình luận quá ngắn (dưới `ai.sentiment.min_length`) → nhãn `NEUTRAL`, `weight=0`, không tính vào điểm uy tín (đúng ngoại lệ §9.1).
+- [ ] Bình luận quá ngắn (dưới `ai.sentiment.min_length`) → nhãn `NEUTRAL`, `weight=0`, không tính vào thống kê cảm xúc (đúng ngoại lệ §9.1).
 - [ ] Bình luận vừa khen vừa chê mạnh (có cả từ tích cực và tiêu cực "mạnh" ≥ ngưỡng `STRONG_TERM=0.5`) → nhãn `MIXED`.
 - [ ] Bình luận có phủ định ("không tốt") → điểm bị đảo dấu đúng, `negationApplied=true`.
 - [ ] Bình luận có từ tăng cường ("rất tệ") → điểm nhân hệ số 1.5.
@@ -3032,12 +2991,12 @@ flowchart TD
 - [ ] Chatbot: xem lịch sử hội thoại của người khác → 403 `FORBIDDEN`.
 - [ ] Chatbot rate limit (`spam.chatbot_per_minute`) theo user hoặc theo session (khách ẩn danh) — test cả 2 trường hợp.
 - [ ] Admin đổi ngưỡng AI (`PUT /api/admin/ai/config`) → có ghi audit log, ảnh hưởng **không hồi tố** (chỉ áp dụng bình luận mới sau đó).
-- [ ] Đổi khóa thuộc `ai.*`/`trust.*` qua `PUT /api/admin/system-configs` (nhầm endpoint) → 422 `CONFIG_KEY_UNKNOWN` (bị chặn, phải dùng đúng `/api/admin/ai/config`).
+- [ ] Đổi khóa thuộc `ai.*` qua `PUT /api/admin/system-configs` (nhầm endpoint) → 422 `CONFIG_KEY_UNKNOWN` (bị chặn, phải dùng đúng `/api/admin/ai/config`).
 
 ### 10. Các lỗi dễ gặp
 
 - **Độ trễ cảm giác "chưa cập nhật"**: vì phân tích chạy **bất đồng bộ** (`@Async`), response tạo bình luận trả về ngay với `sentimentLabel=PENDING_ANALYSIS` — QA/FE dễ nhầm là bug "cảm xúc không hoạt động" nếu kiểm tra ngay lập tức mà không đợi/refresh.
-- Nhầm 2 bảng cấu hình: đổi nhầm `ai.sentiment.negative_ratio_l1` qua `AdminSystemConfigController` sẽ bị chặn (422) — phải nhớ **mọi khóa `ai.*`/`trust.*` chỉ sửa được qua `AdminAiController`**, đây là điểm dễ gây bối rối khi mới join dự án vì cả hai đều là "system_configs" về bản chất lưu trữ.
+- Nhầm 2 bảng cấu hình: đổi nhầm `ai.sentiment.negative_ratio_l1` qua `AdminSystemConfigController` sẽ bị chặn (422) — phải nhớ **mọi khóa `ai.*` chỉ sửa được qua `AdminAiController`**, đây là điểm dễ gây bối rối khi mới join dự án vì cả hai đều là "system_configs" về bản chất lưu trữ.
 - `RuleBasedChatbotEngine` là **regex-based cho slot** (giá, diện tích, khu vực...) — câu hỏi diễn đạt khác thường (vd. viết tắt lạ, sai chính tả nhiều) dễ không trích được slot đúng, bot sẽ hỏi lại hoặc trả kết quả rộng hơn mong đợi — không phải "bug" theo nghĩa lỗi code mà là giới hạn cố hữu của rule-based, cần test với nhiều biến thể câu hỏi tiếng Việt thực tế (có dấu/không dấu, teencode).
 - `DataRetentionJob` xóa `chatbot_messages` cũ hơn 90 ngày bằng **hằng số cứng trong code** (không qua `system_configs`) — đổi cấu hình liên quan retention trên UI (nếu tồn tại) sẽ không có tác dụng.
 - Từ điển cảm xúc (`VietnameseLexiconSentimentAnalyzer`) hoàn toàn ở dạng **hardcode trong static block Java**, không load từ DB/file cấu hình — muốn thêm từ mới phải sửa code + build lại, không có UI quản lý từ điển (khác với `banned_keywords` có bảng DB riêng).
@@ -3047,7 +3006,7 @@ flowchart TD
 - **Business**: xác nhận ranh giới rõ ràng giữa "AI đề xuất" và "hành động thật" — `evaluateThresholds` chỉ gọi `flagNeedReview` (đặt cờ) chứ không tự ẩn tin/khóa tài khoản, đúng nguyên tắc §9.1; review lại xem có nơi nào khác vô tình để AI tự động hành động cứng không.
 - **Explainability**: `matched_positive_terms`/`matched_negative_terms` được lưu JSON — nên tận dụng hiển thị trên `AiLogsPage` để Moderator hiểu **vì sao** AI gắn nhãn một bình luận nào đó (tăng niềm tin vào hệ thống rule-based).
 - **Performance**: `evaluateThresholds` chạy `countByListingIdAndIsLatestTrue` + `countByListingIdAndLabelAndIsLatestTrue` (2 query COUNT) **sau mỗi bình luận** trên cùng 1 tin — với tin có hàng nghìn bình luận, tần suất COUNT lặp lại nhiều; có index `idx_sentiment_results_listing_id_label` hỗ trợ nên chấp nhận được, nhưng nên theo dõi khi dữ liệu lớn.
-- **Config discoverability**: nên bổ sung ghi chú rõ trong tài liệu API/Swagger về việc `ai.*`/`trust.*` tách khỏi `/api/admin/system-configs` để tránh nhầm lẫn khi có dev mới join.
+- **Config discoverability**: nên bổ sung ghi chú rõ trong tài liệu API/Swagger về việc `ai.*` tách khỏi `/api/admin/system-configs` để tránh nhầm lẫn khi có dev mới join.
 - **UX Chatbot**: `disclaimer` chỉ gắn khi có `listings` trả về (`listings.isEmpty() ? null : DISCLAIMER`) — kiểm tra FE có luôn hiển thị đúng khi disclaimer null (không nên hiện text rỗng).
 
 ### 12. Kết quả mong đợi
@@ -3063,7 +3022,7 @@ flowchart TD
 
 ### 1. Module này dùng để làm gì?
 
-Trung tâm cấu hình động của toàn hệ thống — thay vì hardcode các ngưỡng nghiệp vụ (thời gian hết hạn đơn hàng, cửa sổ sửa bình luận, giới hạn spam, ngưỡng AI...) trong code, tất cả được lưu ở bảng `system_configs` (theo tài liệu là **105 config key**, gom nhóm `LISTING/MODERATION/INTERACTION/PROMOTION/SECURITY/SPAM/UPLOAD/TRUST/AI`), cho phép Admin chỉnh sửa qua UI **không cần deploy lại code**. Mỗi module khác (Interaction, Payment, AI...) đều **đọc** giá trị qua `SystemConfigService` — đây là bảng có **fan-out phụ thuộc lớn nhất** trong toàn hệ thống dù Người 3 chỉ sở hữu phần ghi/quản trị.
+Trung tâm cấu hình động của toàn hệ thống — thay vì hardcode các ngưỡng nghiệp vụ (thời gian hết hạn đơn hàng, cửa sổ sửa bình luận, giới hạn spam, ngưỡng AI...) trong code, tất cả được lưu ở bảng `system_configs` (theo tài liệu là **105 config key**, gom nhóm `LISTING/MODERATION/INTERACTION/PROMOTION/SECURITY/SPAM/UPLOAD/AI`), cho phép Admin chỉnh sửa qua UI **không cần deploy lại code**. Mỗi module khác (Interaction, Payment, AI...) đều **đọc** giá trị qua `SystemConfigService` — đây là bảng có **fan-out phụ thuộc lớn nhất** trong toàn hệ thống dù Người 3 chỉ sở hữu phần ghi/quản trị.
 
 **Vai trò trong hệ thống**: là "bảng điều khiển" tập trung giúp vận hành linh hoạt (vd. tăng rate limit dịp cao điểm, tắt tạm AI khi có sự cố, đổi thời gian hết hạn đơn thanh toán) mà không cần can thiệp code.
 
@@ -3079,7 +3038,7 @@ Trung tâm cấu hình động của toàn hệ thống — thay vì hardcode c�
 
 ### 3. Chức năng Backend
 
-- **Controller**: `AdminSystemConfigController` (`/api/admin/system-configs`) — **chỉ** phần **không** thuộc `ai.*`/`trust.*` (2 nhóm đó do `AdminAiController` quản lý, xem Module AI mục 6).
+- **Controller**: `AdminSystemConfigController` (`/api/admin/system-configs`) — **chỉ** phần **không** thuộc `ai.*` (nhóm đó do `AdminAiController` quản lý, xem Module AI mục 6).
 - **Service**: `AdminSystemConfigService`/`AdminSystemConfigServiceImpl` (tầng quản trị: liệt kê theo nhóm, cập nhật hàng loạt + audit), `SystemConfigService`/`SystemConfigServiceImpl` (tầng đọc/ghi runtime dùng chung cho MỌI module, có cache).
 - **Repository**: `SystemConfigRepository`.
 - **Mapper**: `SystemConfigMapper` (ép kiểu `coerce(value, ConfigValueType)` để trả `Object` đúng kiểu JSON cho FE — INT/DECIMAL/BOOLEAN/STRING/JSON).
@@ -3092,7 +3051,7 @@ Trung tâm cấu hình động của toàn hệ thống — thay vì hardcode c�
 ```mermaid
 flowchart TD
     A[Admin: sửa 1 hoặc nhiều khóa trên UI] --> B[PUT /api/admin/system-configs]
-    B --> C{Khóa thuộc ai.* hoặc trust.*?}
+    B --> C{Khóa thuộc ai.*?}
     C -- Có --> C1[422 CONFIG_KEY_UNKNOWN, hướng dẫn dùng /api/admin/ai/config]
     C -- Không --> D{Khóa tồn tại trong DB?}
     D -- Không --> D1[422 CONFIG_KEY_UNKNOWN]
@@ -3108,7 +3067,7 @@ flowchart TD
 
 ### 5. Dữ liệu chạy như thế nào
 
-- **Input**: `UpdateConfigRequest{configs: [{key, value}], reason}` → **FE**: form gửi mảng thay đổi cùng lúc (đổi nhiều khóa trong 1 request) → **BE validate**: chặn khóa `ai.*`/`trust.*` ngay từ đầu, sau đó với từng khóa: tồn tại? editable? đúng kiểu? trong khoảng min/max? → **Business logic**: `stringify(Object)` chuẩn hóa giá trị JSON body về chuỗi thô lưu DB (cột `config_value` là `TEXT`, luôn lưu dạng chuỗi bất kể `value_type`) → **DB**: `UPDATE system_configs` + `INSERT audit_logs` → **Response**: `UpdateConfigResponse{updated[], cacheInvalidated, auditLogIds[], note, updatedAt}` — mỗi `UpdatedItem` trả `oldValue`/`newValue` đã **ép kiểu đúng** (Integer/BigDecimal/Boolean/String) qua `SystemConfigMapper.coerce` để FE hiển thị đẹp thay vì luôn là chuỗi thô.
+- **Input**: `UpdateConfigRequest{configs: [{key, value}], reason}` → **FE**: form gửi mảng thay đổi cùng lúc (đổi nhiều khóa trong 1 request) → **BE validate**: chặn khóa `ai.*` ngay từ đầu, sau đó với từng khóa: tồn tại? editable? đúng kiểu? trong khoảng min/max? → **Business logic**: `stringify(Object)` chuẩn hóa giá trị JSON body về chuỗi thô lưu DB (cột `config_value` là `TEXT`, luôn lưu dạng chuỗi bất kể `value_type`) → **DB**: `UPDATE system_configs` + `INSERT audit_logs` → **Response**: `UpdateConfigResponse{updated[], cacheInvalidated, auditLogIds[], note, updatedAt}` — mỗi `UpdatedItem` trả `oldValue`/`newValue` đã **ép kiểu đúng** (Integer/BigDecimal/Boolean/String) qua `SystemConfigMapper.coerce` để FE hiển thị đẹp thay vì luôn là chuỗi thô.
 - **Đọc runtime (module khác dùng)**: mọi lời gọi `systemConfig.getInt/getBoolean/getDecimal/getString(ConfigKey.XXX)` đều đi qua `getString` (được `@Cacheable`) rồi ép kiểu tại chỗ — **không** cache riêng cho `getInt`/`getBoolean` (chúng gọi lại `getString` đã cache nên vẫn nhanh, nhưng nếu `getString` cache miss thì mọi `getX` khác cùng key đều phải chờ query DB).
 
 ### 6. Database liên quan
@@ -3120,7 +3079,7 @@ flowchart TD
 | `config_key` (unique, vd. `payment.order_expiry_minutes`) | |
 | `config_value` (TEXT, lưu dạng chuỗi thô bất kể kiểu), `default_value` | |
 | `value_type` (`STRING`/`INT`/`DECIMAL`/`BOOLEAN`/`JSON`) | |
-| `group_name` (`LISTING`/`MODERATION`/`INTERACTION`/`PROMOTION`/`SECURITY`/`SPAM`/`UPLOAD`/`TRUST`/`AI`), `label`, `description` | |
+| `group_name` (`LISTING`/`MODERATION`/`INTERACTION`/`PROMOTION`/`SECURITY`/`SPAM`/`UPLOAD`/`AI`), `label`, `description` | |
 | `min_value`, `max_value` (DECIMAL(15,4), áp dụng cho INT/DECIMAL) | |
 | `is_editable` (một số khóa chỉ đọc, không cho sửa qua UI), `display_order` | |
 
@@ -3132,7 +3091,7 @@ flowchart TD
 
 | Method | URL | Request | Response | Auth | Permission | Error chính |
 |---|---|---|---|---|---|---|
-| GET | `/api/admin/system-configs` | Query `group?` (null/ALL = tất cả, trừ `ai.*`/`trust.*`) | `SystemConfigResponse{groups[{group, label, configs[]}], note}` | JWT | `SYSTEM_CONFIG_MANAGE` | — |
+| GET | `/api/admin/system-configs` | Query `group?` (null/ALL = tất cả, trừ `ai.*`) | `SystemConfigResponse{groups[{group, label, configs[]}], note}` | JWT | `SYSTEM_CONFIG_MANAGE` | — |
 | PUT | `/api/admin/system-configs` | `UpdateConfigRequest{configs[{key,value}], reason}` | `UpdateConfigResponse` | JWT | `SYSTEM_CONFIG_MANAGE` | `CONFIG_KEY_UNKNOWN`, `CONFIG_VALUE_INVALID` |
 
 > Không có API xem/sửa **1 khóa đơn lẻ** — chỉ có "xem theo nhóm" và "sửa hàng loạt" (mảng `configs[]`, có thể gửi 1 phần tử để sửa 1 khóa).
@@ -3145,12 +3104,12 @@ flowchart TD
 ### 9. Các trường hợp cần kiểm tra
 
 - [ ] Xem cấu hình theo nhóm cụ thể (vd. `group=SPAM`) → chỉ trả đúng nhóm đó.
-- [ ] Xem toàn bộ (`group` rỗng/`ALL`) → trả tất cả nhóm **trừ** `AI`/`TRUST` (2 nhóm này không xuất hiện — kiểm tra kỹ vì `GROUP_LABELS` vẫn có định nghĩa nhãn "AI" nhưng thực tế bị lọc bỏ ở `getConfigs`, hơi mâu thuẫn — xem mục 10/11).
+- [ ] Xem toàn bộ (`group` rỗng/`ALL`) → trả tất cả nhóm **trừ** `AI` (nhóm này không xuất hiện — kiểm tra kỹ vì `GROUP_LABELS` vẫn có định nghĩa nhãn "AI" nhưng thực tế bị lọc bỏ ở `getConfigs`, hơi mâu thuẫn — xem mục 10/11).
 - [ ] Sửa 1 khóa hợp lệ trong khoảng min/max → cập nhật thành công, cache evict, đọc lại (module khác) thấy giá trị mới ngay (không cần restart app).
 - [ ] Sửa khóa với giá trị ngoài khoảng min/max → 422 `CONFIG_VALUE_INVALID`, giá trị DB không đổi.
 - [ ] Sửa khóa `is_editable=false` → bị chặn.
 - [ ] Sửa khóa không tồn tại (gõ sai tên) → 422 `CONFIG_KEY_UNKNOWN`.
-- [ ] Sửa khóa thuộc `ai.*`/`trust.*` qua endpoint này → 422, thông báo hướng đúng endpoint.
+- [ ] Sửa khóa thuộc `ai.*` qua endpoint này → 422, thông báo hướng đúng endpoint.
 - [ ] Sửa nhiều khóa cùng lúc, 1 khóa lỗi giữa chừng → xác nhận hành vi: dừng ngay (transaction rollback toàn bộ) hay đã áp các khóa trước đó? (code lặp tuần tự trong 1 `@Transactional`, nên **toàn bộ rollback** nếu 1 khóa lỗi — cần test xác nhận).
 - [ ] Kiểm tra `reason` (lý do đổi cấu hình) có bắt buộc không (đọc `UpdateConfigRequest` — > cần bổ sung theo source code, chưa đọc validation chi tiết của field này).
 - [ ] Đổi giá trị BOOLEAN với chuỗi khác `true`/`false` (vd. "yes") → lỗi validate.
@@ -3160,7 +3119,7 @@ flowchart TD
 
 ### 10. Các lỗi dễ gặp
 
-- **Nhầm lẫn nhóm AI vẫn "có nhãn" nhưng "không hiện dữ liệu"**: `AdminSystemConfigServiceImpl.GROUP_LABELS` vẫn map `"AI" → "Trí tuệ nhân tạo"` dù `getConfigs()` **luôn lọc bỏ** mọi khóa bắt đầu `ai.`/`trust.` trước khi build danh sách nhóm — nghĩa là nhãn "AI" trong `GROUP_LABELS` **không bao giờ** thực sự xuất hiện trong response (vì không còn config nào thuộc nhóm đó sau khi lọc theo tiền tố khóa, trừ khi có khóa nhóm `group_name='AI'` nhưng KHÔNG có tiền tố `ai.`/`trust.` trong `config_key` — trường hợp hiếm/không nhất quán dữ liệu). Dễ gây bối rối khi đọc code lần đầu.
+- **Nhầm lẫn nhóm AI vẫn "có nhãn" nhưng "không hiện dữ liệu"**: `AdminSystemConfigServiceImpl.GROUP_LABELS` vẫn map `"AI" → "Trí tuệ nhân tạo"` dù `getConfigs()` **luôn lọc bỏ** mọi khóa bắt đầu `ai.` trước khi build danh sách nhóm — nghĩa là nhãn "AI" trong `GROUP_LABELS` **không bao giờ** thực sự xuất hiện trong response (vì không còn config nào thuộc nhóm đó sau khi lọc theo tiền tố khóa, trừ khi có khóa nhóm `group_name='AI'` nhưng KHÔNG có tiền tố `ai.` trong `config_key` — trường hợp hiếm/không nhất quán dữ liệu). Dễ gây bối rối khi đọc code lần đầu.
 - Quên rằng `config_value` luôn là **chuỗi** trong DB — nếu debug trực tiếp bằng SQL thấy `"true"`/`"15"` là bình thường, không phải lỗi kiểu dữ liệu.
 - Đổi cấu hình rồi thắc mắc "sao dữ liệu cũ không đổi theo" — tài liệu ghi rõ **"không hồi tố"** (`UpdateConfigResponse.note`), chỉ áp dụng cho thao tác **sau** thời điểm đổi (vd. đổi `payment.order_expiry_minutes` không rút ngắn hạn các đơn `PENDING` đã tạo trước đó).
 - `evictCache(key)` thực chất luôn evict **toàn bộ** cache (`allEntries=true`) bất kể tham số `key` truyền vào — tên hàm gây hiểu nhầm là chỉ xóa 1 key.
@@ -3228,7 +3187,7 @@ flowchart TD
 | Người | Cụm module | FE | BE | DB | API | Độ khó | Ưu tiên |
 |---|---|:---:|:---:|:---:|:---:|:---:|:---:|
 | **Người 1** | Auth · Security/RBAC · User/Follow · Notification · Moderation người dùng · Admin console người dùng (Dashboard/Users/Landlords/Statistics/Audit/BannedKeyword) | ✔ | ✔ | ✔ | ✔ | 🔴 Cao (bảo mật, token, phân quyền) | 🔥 P0 (nền tảng) |
-| **Người 2** | Listing lifecycle · Search/Filter · Catalog · AI Recommend/Price/TrustScore · Admin Listing/Moderation Queue · Landlord Dashboard | ✔ | ✔ | ✔ | ✔ | 🔴 Cao (state machine, tìm kiếm, AI giá) | 🔥 P0 (lõi sản phẩm) |
+| **Người 2** | Listing lifecycle · Search/Filter · Catalog · AI Recommend/Price · Admin Listing/Moderation Queue · Landlord Dashboard | ✔ | ✔ | ✔ | ✔ | 🔴 Cao (state machine, tìm kiếm, AI giá) | 🔥 P0 (lõi sản phẩm) |
 | **Người 3** | Favorite/History · Contact/Chat · Comment/Review · Payment/Promotion · AI Sentiment/Chatbot/Log/Config · System Config | ✔ | ✔ | ✔ | ✔ | 🟠 Trung bình–Cao (thanh toán, đồng thời, AI) | 🟡 P1 (tương tác & doanh thu) |
 
 > **Độ khó** phản ánh rủi ro kỹ thuật (bảo mật, đồng thời, máy trạng thái, giao dịch tiền). **Ưu tiên** phản ánh thứ tự nên review trước để mở khóa phần còn lại.
@@ -3251,7 +3210,7 @@ flowchart TD
         CAT[Catalog / Địa giới]
         LIST[Listing lifecycle]
         SRCH[Search / Filter]
-        AIL[AI Recommend / Price / Trust]
+        AIL[AI Recommend / Price]
     end
     subgraph P3["Người 3 — Tương tác & Doanh thu"]
         INTER[Favorite / Contact / Chat / Comment / Review]

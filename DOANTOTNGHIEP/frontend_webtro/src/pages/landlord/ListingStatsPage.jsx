@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
-  Box, Grid, Card, CardContent, Stack, Typography, Button, Chip, Alert, Divider,
+  Box, Grid, Card, CardContent, Stack, Typography, Button, Chip, Divider,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import VisibilityIcon from '@mui/icons-material/Visibility';
@@ -49,7 +49,6 @@ const ListingStatsPage = () => {
   }
 
   const s = data.summary || {};
-  const sent = data.sentimentSummary || {};
   const perf = data.comparison?.performanceLabel ? PERF_LABEL[data.comparison.performanceLabel] : null;
 
   const seriesData = data.timeSeries ? {
@@ -60,11 +59,6 @@ const ListingStatsPage = () => {
       { label: 'Lượt liên hệ', data: data.timeSeries.map((p) => p.contacts) },
     ],
   } : null;
-
-  const sentimentData = {
-    labels: ['Tích cực', 'Trung lập', 'Tiêu cực', 'Lẫn lộn'],
-    datasets: [{ data: [sent.positive || 0, sent.neutral || 0, sent.negative || 0, sent.mixed || 0] }],
-  };
 
   return (
     <Box>
@@ -80,12 +74,6 @@ const ListingStatsPage = () => {
         {s.daysRemaining != null && <Chip variant="outlined" label={`Còn ${s.daysRemaining} ngày hiển thị`} />}
       </Stack>
 
-      {sent.flagged && (
-        <Alert severity="warning" sx={{ mb: 3 }}>
-          Tin đang có tỷ lệ bình luận tiêu cực cao ({Math.round((sent.negativeRatio || 0) * 100)}%). Hãy kiểm tra và phản hồi người thuê.
-        </Alert>
-      )}
-
       <Grid container spacing={2} sx={{ mb: 3 }}>
         <Grid item xs={6} md={3}><StatCard label="Lượt xem" value={s.viewCount ?? 0} icon={<VisibilityIcon />} color="info" hint={`${s.uniqueViewerCount ?? 0} người xem`} /></Grid>
         <Grid item xs={6} md={3}><StatCard label="Lượt lưu" value={s.favoriteCount ?? 0} icon={<BookmarkIcon />} color="secondary" /></Grid>
@@ -94,17 +82,8 @@ const ListingStatsPage = () => {
       </Grid>
 
       <Grid container spacing={3}>
-        <Grid item xs={12} lg={8}>
+        <Grid item xs={12}>
           <ChartCard title="Diễn biến theo thời gian" type="line" data={seriesData} height={320} />
-        </Grid>
-        <Grid item xs={12} lg={4}>
-          <ChartCard
-            title="Cảm xúc bình luận"
-            type="doughnut"
-            data={sentimentData}
-            height={320}
-            emptyState={<Typography variant="body2" color="text.secondary" sx={{ p: 2 }}>Chưa có bình luận nào.</Typography>}
-          />
         </Grid>
 
         {data.comparison && (

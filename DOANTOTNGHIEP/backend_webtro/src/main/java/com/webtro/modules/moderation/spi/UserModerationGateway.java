@@ -19,11 +19,9 @@ public interface UserModerationGateway {
      * @param fullName    họ tên hiển thị
      * @param email       email
      * @param memberSince thời điểm tạo tài khoản (dùng suy ra tuổi tài khoản)
-     * @param trustScore  điểm uy tín chủ trọ (0..100); 100 nếu chưa phải chủ trọ
      * @param isAdmin     có phải quản trị viên không (không được cảnh báo/khóa Admin khác)
      */
-    record UserRef(Long id, String fullName, String email, Instant memberSince,
-                   int trustScore, boolean isAdmin) {
+    record UserRef(Long id, String fullName, String email, Instant memberSince, boolean isAdmin) {
     }
 
     /** Lấy thông tin người dùng còn sống; ném {@code ResourceNotFoundException(USER_NOT_FOUND)} nếu không có. */

@@ -33,7 +33,6 @@ public class AdminListingMapper {
                 .ownerId(l.getOwnerId())
                 .status(l.getStatus() != null ? l.getStatus().name() : null)
                 .statusLabel(l.getStatus() != null ? l.getStatus().getLabel() : null)
-                .trustScore(toInt(l.getTrustScore()))
                 .reportCount(reportCount)
                 .priceDeviationFlagged(l.getPriceDeviationFlag())
                 .provinceId(location.province() == null ? null : location.province().getId())

@@ -103,7 +103,7 @@ public class UserController {
 
     @GetMapping("/me/landlord-profile")
     @PreAuthorize("hasAnyRole('LANDLORD','ADMIN')")
-    @Operation(summary = "Xem hồ sơ chủ trọ của tôi", description = "Thông tin liên hệ, uy tín, trạng thái xác minh của chủ trọ")
+    @Operation(summary = "Xem hồ sơ chủ trọ của tôi", description = "Thông tin liên hệ, trạng thái xác minh của chủ trọ")
     public ResponseEntity<ApiResponse<MyLandlordProfileResponse>> getMyLandlordProfile(
             @AuthenticationPrincipal CustomUserDetails currentUser) {
         MyLandlordProfileResponse data = userService.getMyLandlordProfile(currentUser.getId());
@@ -147,8 +147,10 @@ public class UserController {
             description = "Danh sách tin công khai (ACTIVE, còn hạn) của chủ trọ cho trang hồ sơ công khai; phân trang.")
     public ResponseEntity<ApiResponse<PageResponse<ListingSummaryResponse>>> getPublicListings(
             @PathVariable Long id,
-            @PageableDefault(size = 12, sort = "publishedAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        PageResponse<ListingSummaryResponse> data = listingSearchService.listByOwner(id, pageable);
+            @PageableDefault(size = 12, sort = "publishedAt", direction = Sort.Direction.DESC) Pageable pageable,
+            @AuthenticationPrincipal CustomUserDetails currentUser) {
+        Long currentUserId = currentUser != null ? currentUser.getId() : null;
+        PageResponse<ListingSummaryResponse> data = listingSearchService.listByOwner(id, pageable, currentUserId);
         return ResponseEntity.ok(ApiResponse.success(data, "Lấy danh sách tin của chủ trọ thành công"));
     }
 }

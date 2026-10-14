@@ -31,7 +31,6 @@ public class AdminReportItemResponse {
     private String targetTitle;
     private Long targetOwnerId;
     private String targetOwnerName;
-    private Integer targetOwnerTrustScore;
     private ReportReason reason;
     private String reasonLabel;
     private String description;

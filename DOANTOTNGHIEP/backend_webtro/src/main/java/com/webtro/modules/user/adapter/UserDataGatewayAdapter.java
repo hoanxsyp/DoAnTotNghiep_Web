@@ -1,38 +1,24 @@
 package com.webtro.modules.user.adapter;
 
 import com.webtro.modules.ai.spi.UserDataGateway;
-import com.webtro.modules.user.entity.User;
 import com.webtro.modules.user.entity.UserProfile;
 import com.webtro.modules.user.repository.UserProfileRepository;
-import com.webtro.modules.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
 import java.util.Optional;
 
 /**
  * Adapter (module {@code user}) hiện thực {@link UserDataGateway} mà module {@code ai} cần —
- * canonical luật 4. Bọc {@link UserRepository} + {@link UserProfileRepository}, chỉ đọc, ánh xạ
- * dữ liệu thô sang record của SPI.
+ * canonical luật 4. Bọc {@link UserProfileRepository}, chỉ đọc, ánh xạ dữ liệu thô sang record của
+ * SPI.
  */
 @Component
 @RequiredArgsConstructor
 public class UserDataGatewayAdapter implements UserDataGateway {
 
-    private final UserRepository userRepository;
     private final UserProfileRepository userProfileRepository;
-
-    /** Thời điểm tạo tài khoản còn sống; rỗng nếu không tồn tại. */
-    @Override
-    @Transactional(readOnly = true)
-    public Optional<Instant> accountCreatedAt(Long userId) {
-        if (userId == null) {
-            return Optional.empty();
-        }
-        return userRepository.findByIdAndDeletedAtIsNull(userId).map(User::getCreatedAt);
-    }
 
     /**
      * Sở thích khai báo tại {@code user_profiles}. Schema {@code user_profiles} chỉ có

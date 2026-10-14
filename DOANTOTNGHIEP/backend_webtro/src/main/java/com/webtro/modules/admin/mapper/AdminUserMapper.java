@@ -11,7 +11,7 @@ import java.util.List;
 
 /**
  * Mapper thủ công {@link User} → {@link AdminUserResponse} (Builder, không MapStruct).
- * Nhận thêm danh sách vai trò và hồ sơ chủ trọ (có thể null) để phủ các chỉ số uy tín/vi phạm.
+ * Nhận thêm danh sách vai trò và hồ sơ chủ trọ (có thể null) để phủ các chỉ số vi phạm.
  */
 @Component
 public class AdminUserMapper {
@@ -41,7 +41,6 @@ public class AdminUserMapper {
 
         if (profile != null) {
             b.landlordVerified(profile.getVerificationStatus() == VerificationStatus.VERIFIED)
-                    .trustScore(toInt(profile.getTrustScore()))
                     .listingCount(profile.getTotalListings())
                     .activeListingCount(profile.getTotalActiveListings())
                     .validReportCount(profile.getValidReportCount())

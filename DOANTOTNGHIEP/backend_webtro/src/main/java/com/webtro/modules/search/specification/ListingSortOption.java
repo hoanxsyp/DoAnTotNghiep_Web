@@ -21,7 +21,6 @@ public enum ListingSortOption {
     AREA_ASC("area,asc"),
     AREA_DESC("area,desc"),
     VIEW_DESC("viewCount,desc"),
-    TRUST_DESC("trustScore,desc"),
     DISTANCE_ASC("distance,asc");
 
     private final String param;

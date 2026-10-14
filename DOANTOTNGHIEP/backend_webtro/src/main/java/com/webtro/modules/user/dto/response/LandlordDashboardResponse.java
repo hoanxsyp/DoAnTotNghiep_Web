@@ -46,8 +46,6 @@ public class LandlordDashboardResponse {
     private long totalViews;
     private long totalFavorites;
     private long totalContacts;
-    private Integer trustScore;
-    private String trustLabel;
     private Integer responseRatePercent;
     private BigDecimal averageRating;
     private Integer reviewCount;

@@ -39,7 +39,6 @@ public final class NotificationDefaults {
             NotificationType.PAYMENT_SUCCESS,
             NotificationType.PAYMENT_FAILED,
             NotificationType.REPORT_THRESHOLD,
-            NotificationType.AI_NEGATIVE_ALERT,
             NotificationType.ACCOUNT_LOCKED,
             NotificationType.VIOLATION_WARNING,
             NotificationType.FOLLOWED_LANDLORD_NEW_LISTING);
@@ -58,7 +57,6 @@ public final class NotificationDefaults {
             NotificationType.ACCOUNT_LOCKED,
             NotificationType.VIOLATION_WARNING,
             NotificationType.REPORT_THRESHOLD,
-            NotificationType.AI_NEGATIVE_ALERT,
             NotificationType.ACCOUNT_VERIFICATION);
 
     /**
@@ -78,7 +76,6 @@ public final class NotificationDefaults {
             NotificationType.ACCOUNT_LOCKED,
             NotificationType.VIOLATION_WARNING,
             NotificationType.REPORT_THRESHOLD,
-            NotificationType.AI_NEGATIVE_ALERT,
             NotificationType.ACCOUNT_VERIFICATION);
 
     private NotificationDefaults() {

@@ -55,9 +55,6 @@ public class MyLandlordProfileResponse {
     @Schema(description = "Thời điểm xác minh")
     private Instant verifiedAt;
 
-    @Schema(description = "Điểm uy tín (0-100)", example = "87")
-    private Integer trustScore;
-
     @Schema(description = "Tổng số tin đã đăng", example = "6")
     private Integer totalListings;
 

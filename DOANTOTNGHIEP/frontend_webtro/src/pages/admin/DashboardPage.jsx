@@ -71,7 +71,7 @@ const DashboardPage = () => {
     { label: 'Doanh thu tháng', value: formatCurrency(rev.thisMonth), sub: `${rev.growthPercent >= 0 ? '+' : ''}${rev.growthPercent ?? 0}% so tháng trước`, icon: <PaidIcon />, color: 'primary' },
     { label: 'Doanh thu hôm nay', value: formatCurrency(rev.today), sub: `Tổng: ${formatCurrency(rev.allTime)}`, icon: <TrendingUpIcon />, color: 'success' },
     { label: 'Tỷ lệ thanh toán', value: `${pay.successRatePercent ?? 0}%`, sub: `${pay.successCount ?? 0} thành công / ${pay.failedCount ?? 0} thất bại`, icon: <CheckCircleIcon />, color: 'info' },
-    { label: 'Cảnh báo AI', value: compactNumber((ai.listingsFlaggedBySentiment ?? 0) + (ai.listingsWithPriceDeviation ?? 0)), sub: `${ai.listingsFlaggedBySentiment ?? 0} sentiment · ${ai.listingsWithPriceDeviation ?? 0} lệch giá`, icon: <PsychologyIcon />, color: 'warning', onClick: () => navigate('/admin/ai/log') },
+    { label: 'Cảnh báo AI', value: compactNumber(ai.listingsWithPriceDeviation ?? 0), sub: 'Tin lệch giá', icon: <PsychologyIcon />, color: 'warning', onClick: () => navigate('/admin/ai/log') },
   ];
 
   const provinceChart = {

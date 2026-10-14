@@ -16,7 +16,7 @@ import EmptyState from '@/components/common/EmptyState';
 import notify from '@/utils/toast';
 import { fromNow, formatDateTime } from '@/utils/format';
 import { selectCurrentUser } from '@/redux/authSlice';
-import { subscribeToConversationMessages } from '@/services/chatSocketService';
+import chatSocket from '@/services/chatSocketService';
 
 const MessagesPage = () => {
   const theme = useTheme();
@@ -27,6 +27,8 @@ const MessagesPage = () => {
   const [conversations, setConversations] = useState([]);
   const [loadingList, setLoadingList] = useState(true);
   const [activeId, setActiveId] = useState(null);
+  const activeIdRef = useRef(null);
+  activeIdRef.current = activeId;
   const [messages, setMessages] = useState([]);
   const [loadingMsg, setLoadingMsg] = useState(false);
   const [input, setInput] = useState('');
@@ -87,7 +89,7 @@ const MessagesPage = () => {
     if (!id) return;
     setLoadingMsg(true);
     try {
-      const data = await contactApi.getMessages(id, { page: 0, size: 50, sort: 'sentAt,desc' });
+      const data = await contactApi.getMessages(id, { page: 0, size: 50, sort: 'createdAt,desc' });
       // API trả mới -> cũ; đảo lại để render từ cũ -> mới.
       setMessages([...(data?.items || [])].reverse());
       // Đánh dấu đã đọc.
@@ -113,24 +115,47 @@ const MessagesPage = () => {
     // eslint-disable-next-line
   }, [activeId]);
 
+  // Tin mới của hội thoại đang mở (MESSAGE_CREATED).
   useEffect(() => {
     if (!activeId || !currentUser?.id) return undefined;
-    return subscribeToConversationMessages({
-      conversationId: activeId,
-      currentUserId: currentUser.id,
-      onMessage: (message) => {
-        upsertMessage(message);
-        if (!message.sentByMe) {
-          contactApi.markRead(activeId).then(() => {
-            setConversations((prev) => prev.map((c) => (
-              c.id === activeId ? { ...c, unreadCount: 0 } : c
-            )));
-          }).catch(() => {});
-        }
-      },
-      onError: () => {},
+    return chatSocket.subscribeConversation(activeId, (message) => {
+      upsertMessage(message);
+      if (!message.sentByMe) {
+        contactApi.markRead(activeId).then(() => {
+          setConversations((prev) => prev.map((c) => (
+            c.id === activeId ? { ...c, unreadCount: 0 } : c
+          )));
+        }).catch(() => {});
+      }
     });
   }, [activeId, currentUser?.id, upsertMessage]);
+
+  // Hội thoại mới / tin mới ở hội thoại khác / số chưa đọc (CONVERSATION_UPDATED): cập nhật hoặc thêm
+  // vào danh sách rồi đưa lên đầu. Hội thoại đang mở luôn coi như đã đọc.
+  useEffect(() => chatSocket.onConversationUpdate((updated) => {
+    setConversations((prev) => {
+      const old = prev.find((c) => c.id === updated.id);
+      const sameLast = old?.lastMessage && old.lastMessage.sentAt === updated.lastMessage?.sentAt;
+      const merged = {
+        ...old,
+        ...updated,
+        // Server không biết ai gửi tin cuối -> giữ cờ "Bạn: " đã có cho cùng tin đó.
+        lastMessage: updated.lastMessage && {
+          ...updated.lastMessage,
+          sentByMe: updated.lastMessage.sentByMe ?? (sameLast ? old.lastMessage.sentByMe : undefined),
+        },
+        unreadCount: updated.id === activeIdRef.current ? 0 : updated.unreadCount,
+      };
+      return [merged, ...prev.filter((c) => c.id !== updated.id)]
+        .sort((a, b) => new Date(b.lastMessageAt || 0) - new Date(a.lastMessageAt || 0));
+    });
+  }), []);
+
+  // Kết nối lại sau khi rớt mạng: tải lại danh sách + tin của hội thoại đang mở (bù sự kiện bị lỡ).
+  useEffect(() => chatSocket.onReconnect(() => {
+    loadConversations();
+    if (activeIdRef.current) loadMessages(activeIdRef.current);
+  }), [loadConversations, loadMessages]);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 

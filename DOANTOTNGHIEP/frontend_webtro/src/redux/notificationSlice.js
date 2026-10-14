@@ -14,10 +14,11 @@ export const fetchRecent = createAsyncThunk('notification/recent', async () => {
   return notificationApi.getRecent();
 });
 
+// Chuông CHỈ đếm thông báo hệ thống; tin nhắn chưa đọc có badge riêng (chatSlice / MessagesButton).
 const normalizeUnreadCount = (payload) => {
   if (typeof payload === 'number') return payload;
   if (!payload || typeof payload !== 'object') return 0;
-  return Number(payload.unreadCount || 0) + Number(payload.unreadMessageCount || 0);
+  return Number(payload.unreadCount || 0);
 };
 
 const notificationSlice = createSlice({

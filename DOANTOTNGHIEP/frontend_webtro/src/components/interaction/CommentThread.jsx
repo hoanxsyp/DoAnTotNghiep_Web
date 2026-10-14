@@ -16,7 +16,6 @@ import {
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import ReplyIcon from '@mui/icons-material/Reply';
 import RichTextViewer from '@/components/common/RichTextViewer';
-import SentimentChip from '@/components/common/SentimentChip';
 import EmptyState from '@/components/common/EmptyState';
 import LoadingSkeleton from '@/components/common/LoadingSkeleton';
 import { fromNow } from '@/utils/format';
@@ -34,7 +33,7 @@ import { fromNow } from '@/utils/format';
  *        onEdit(id, content), onDelete(id), onReport(comment), loading, hasMore, onLoadMore
  *
  * Mỗi comment: { id, userId, userName, userAvatar, content, createdAt, editedAt,
- *   canEdit, canDelete, parentId, replies[], sentimentLabel, sentimentScore, sentimentConfidence }
+ *   canEdit, canDelete, parentId, replies[] }
  */
 
 function ReplyBox({ placeholder = 'Viết bình luận…', onSubmit, onCancel, submitting }) {
@@ -117,13 +116,6 @@ function CommentItem({
               {fromNow(comment.createdAt)}
               {comment.editedAt ? ' · đã sửa' : ''}
             </Typography>
-            {comment.sentimentLabel && (
-              <SentimentChip
-                label={comment.sentimentLabel}
-                score={comment.sentimentScore}
-                confidence={comment.sentimentConfidence}
-              />
-            )}
           </Stack>
 
           {editing ? (

@@ -9,7 +9,6 @@ import PersonAddAltIcon from '@mui/icons-material/PersonAddAlt';
 import HowToRegIcon from '@mui/icons-material/HowToReg';
 import userApi from '@/api/userApi';
 import ListingGrid from '@/components/listing/ListingGrid';
-import TrustScoreBadge from '@/components/listing/TrustScoreBadge';
 import RatingStars from '@/components/interaction/RatingStars';
 import EmptyState from '@/components/common/EmptyState';
 import useAuth from '@/hooks/useAuth';
@@ -18,13 +17,6 @@ import { formatDate, compactNumber } from '@/utils/format';
 
 const toItems = (d) => (Array.isArray(d) ? d : d?.items ?? []);
 const PAGE = 12;
-
-// trustLabel công khai -> level cho TrustScoreBadge.
-const labelToLevel = (label) => {
-  if (label === 'RUI_RO') return 'RISKY';
-  if (label === 'CAN_KIEM_DUYET') return 'NEED_REVIEW';
-  return 'NORMAL';
-};
 
 const LandlordProfilePage = () => {
   const { id } = useParams();
@@ -122,8 +114,6 @@ const LandlordProfilePage = () => {
     );
   }
 
-  const level = labelToLevel(profile?.trustLabel);
-
   return (
     <Container maxWidth="lg" sx={{ py: { xs: 2, md: 3 } }}>
       <Grid container spacing={3}>
@@ -150,8 +140,6 @@ const LandlordProfilePage = () => {
                     </Tooltip>
                   )}
                 </Stack>
-
-                <TrustScoreBadge score={profile?.trustScore} level={level} variant="badge" />
 
                 {profile?.averageRating != null && profile?.totalReviews > 0 && (
                   <RatingStars value={profile.averageRating} readOnly count={profile.totalReviews} />

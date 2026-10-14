@@ -33,9 +33,11 @@ public class ListingSummaryResponse {
     private BigDecimal area;
     private String shortAddress;
     private String thumbnailUrl;
-    private Integer trustScore;
     private BigDecimal averageRating;
     private Boolean promoted;
+
+    /** Người xem đã lưu tin này chưa — chỉ có ở kết quả tìm kiếm khi đã đăng nhập, ngược lại null. */
+    private Boolean favoritedByMe;
 
     // ----- Mở rộng cho màn "tin của tôi" -----
     private String status;

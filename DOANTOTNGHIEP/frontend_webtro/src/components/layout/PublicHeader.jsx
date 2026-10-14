@@ -15,6 +15,7 @@ import { logout } from '@/redux/authSlice';
 import { ROLES } from '@/constants';
 import ThemeToggle from '@/components/common/ThemeToggle';
 import NotificationBell from '@/components/common/NotificationBell';
+import MessagesButton from '@/components/common/MessagesButton';
 
 /** Header công khai: logo, tìm kiếm nhanh, hành động theo trạng thái đăng nhập. */
 const PublicHeader = () => {
@@ -70,6 +71,7 @@ const PublicHeader = () => {
 
           {isAuthenticated ? (
             <>
+              <MessagesButton />
               <NotificationBell />
               <IconButton onClick={(e) => setAnchorEl(e.currentTarget)}>
                 <Avatar src={user?.avatarUrl} sx={{ width: 34, height: 34 }}>

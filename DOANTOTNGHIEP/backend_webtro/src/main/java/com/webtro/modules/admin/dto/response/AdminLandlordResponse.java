@@ -1,7 +1,6 @@
 package com.webtro.modules.admin.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.webtro.common.enums.TrustLabel;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -13,7 +12,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 
 /**
- * Một chủ trọ trong màn quản lý chủ trọ (canonical 4.13.6). Chỉ số uy tín/vi phạm/tin lấy từ hồ sơ
+ * Một chủ trọ trong màn quản lý chủ trọ (canonical 4.13.6). Chỉ số vi phạm/tin lấy từ hồ sơ
  * chủ trọ ({@code landlord_profiles}, các cột đếm sẵn §5.8).
  */
 @Getter
@@ -48,12 +47,6 @@ public class AdminLandlordResponse {
     private Instant verifiedAt;
     private Long verifiedById;
     private String verifiedByName;
-
-    @Schema(description = "Điểm uy tín (0-100)", example = "87")
-    private Integer trustScore;
-
-    @Schema(description = "Nhãn uy tín suy ra từ điểm")
-    private TrustLabel trustLabel;
 
     @Schema(description = "Tổng số tin đã đăng", example = "6")
     private Integer listingCount;

@@ -100,10 +100,6 @@ public class RecommendationLog {
     @Column(name = "amenity_score", precision = 5, scale = 4)
     private BigDecimal amenityScore;
 
-    /** Điểm thành phần: điểm uy tín đã chuẩn hóa. */
-    @Column(name = "trust_score_norm", precision = 5, scale = 4)
-    private BigDecimal trustScoreNorm;
-
     /** Điểm thành phần: độ mới của tin. */
     @Column(name = "freshness_score", precision = 5, scale = 4)
     private BigDecimal freshnessScore;

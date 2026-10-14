@@ -74,9 +74,6 @@ public class ListingDetailResponse {
 
     private String status;
     private String statusLabel;
-    private Integer trustScore;
-    private String trustLabel;
-    private Boolean lowTrustWarning;
     private BigDecimal averageRating;
     private Integer reviewCount;
     private Integer commentCount;

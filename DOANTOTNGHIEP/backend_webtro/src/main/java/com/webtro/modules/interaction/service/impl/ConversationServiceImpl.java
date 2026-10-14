@@ -49,6 +49,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Stream;
 
 /**
  * Hiện thực nghiệp vụ hội thoại/tin nhắn (CONT-03) — canonical 4.6.4–4.6.9, {@code [§3.10]}.
@@ -213,8 +214,9 @@ public class ConversationServiceImpl implements ConversationService {
     @Transactional(readOnly = true)
     public PageResponse<MessageResponse> listMessages(Long conversationId, Long userId, Pageable pageable) {
         requireMember(conversationId, userId);
-        Page<Message> page = messageRepository
-                .findByConversation_IdAndDeletedAtIsNullOrderByCreatedAtAsc(conversationId, pageable);
+        // Sort lấy từ pageable (mặc định createdAt ASC ở controller); client lấy trang mới nhất bằng
+        // sort=createdAt,desc rồi tự đảo lại để hiển thị.
+        Page<Message> page = messageRepository.findByConversation_IdAndDeletedAtIsNull(conversationId, pageable);
         List<Long> senderIds = page.getContent().stream().map(Message::getSenderId).distinct().toList();
         Map<Long, UserGateway.UserBrief> senders = userGateway.getBriefs(senderIds);
         return PageResponse.from(page, m ->
@@ -258,6 +260,8 @@ public class ConversationServiceImpl implements ConversationService {
             c.setLandlordUnreadCount(0);
         }
         conversationRepository.save(c);
+        // Đồng bộ số chưa đọc sang các tab/thiết bị khác của cùng người dùng.
+        publishConversationUpdatesAfterCommit(c);
     }
 
     @Override
@@ -333,19 +337,44 @@ public class ConversationServiceImpl implements ConversationService {
         conversationRepository.save(c);
         UserGateway.UserBrief sender = userGateway.findBrief(senderId).orElse(null);
         MessageResponse realtimeMessage = conversationMapper.toMessageResponse(message, senderId, sender);
-        publishAfterCommit(c.getId(), realtimeMessage);
+        Long conversationId = c.getId();
+        runAfterCommit(() -> chatRealtimePublisher.publishMessage(conversationId, realtimeMessage));
+        publishConversationUpdatesAfterCommit(c);
         return message;
     }
 
-    private void publishAfterCommit(Long conversationId, MessageResponse message) {
+    /**
+     * {@code CONVERSATION_UPDATED} cho cả người thuê và chủ trọ. Dữ liệu (hội thoại theo góc nhìn từng
+     * người + tổng chưa đọc) dựng NGAY trong transaction để thấy bộ đếm vừa cập nhật; chỉ GỬI sau commit
+     * để không phát sự kiện cho dữ liệu bị rollback.
+     */
+    private void publishConversationUpdatesAfterCommit(Conversation c) {
+        ListingGateway.ListingBrief listing = listingGateway.findBrief(c.getListingId()).orElse(null);
+        Long landlordId = landlordIdOf(c, listing);
+        List<Long> members = Stream.of(c.getTenantId(), landlordId)
+                .filter(Objects::nonNull).distinct().toList();
+        Map<Long, UserGateway.UserBrief> briefs = userGateway.getBriefs(members);
+
+        List<Runnable> sends = new ArrayList<>();
+        for (Long userId : members) {
+            Long partnerId = c.getTenantId().equals(userId) ? landlordId : c.getTenantId();
+            ConversationResponse view = conversationMapper.toResponse(
+                    c, userId, landlordId, listing, partnerId == null ? null : briefs.get(partnerId));
+            long totalUnread = countUnreadMessages(userId);
+            sends.add(() -> chatRealtimePublisher.publishConversationUpdate(userId, view, totalUnread));
+        }
+        runAfterCommit(() -> sends.forEach(Runnable::run));
+    }
+
+    private void runAfterCommit(Runnable action) {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            chatRealtimePublisher.publishMessage(conversationId, message);
+            action.run();
             return;
         }
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                chatRealtimePublisher.publishMessage(conversationId, message);
+                action.run();
             }
         });
     }

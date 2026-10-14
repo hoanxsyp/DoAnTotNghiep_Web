@@ -4,6 +4,10 @@
 > **Cập nhật 2026-08-09:** phân quyền hiện hành là **role-only**. Hệ thống không còn entity/repository/bảng nghiệp vụ `permissions` hay `role_permissions`; Flyway `V15__drop_permission_tables.sql` drop hai bảng này sau các migration lịch sử. Backend kiểm tra bằng `@PreAuthorize("hasRole/hasAnyRole")` và `SecurityUtils.hasRole/hasAnyRole`; JWT chỉ chứa `role`. Tenant được phép tạo tin nhưng service chỉ chấp nhận `categoryCode = ROOMMATE`; Landlord/Admin tạo được mọi loại tin. Access token 15 phút, refresh token 1 ngày, cả hai lưu `localStorage`; khi refresh token còn dưới 15 phút và access token vẫn còn hạn, frontend chủ động gọi `/api/auth/refresh` để xoay refresh token.
 <!-- WEBTRO_ROLE_ONLY_UPDATE_END -->
 
+> **Cập nhật 2026-10-14:** hệ thống **không còn điểm uy tín** (trust score) cho tin đăng và chủ trọ
+> — đã bỏ công thức, job tính lại, nhãn uy tín, cấu hình `trust.*` và các cột `trust_score`
+> (Flyway `V22__drop_trust_score.sql`). Chi tiết ở mục 18.
+
 > **Đây là hợp đồng kỹ thuật của toàn dự án.**
 > Mọi tài liệu thiết kế (01→04) và mọi dòng source code trong `backend_webtro/` và
 > `frontend_webtro/` **bắt buộc** tuân theo file này. Khi có mâu thuẫn giữa các tài
@@ -32,6 +36,7 @@
 >    mà `[§9.2]` liệt kê (diện tích quan tâm, số người ở, giới tính ở ghép).
 > 2. Công thức uy tín chủ trọ của v1 **không có số hạng nào** cho `[§5.7]` *"Chủ trọ phản hồi
 >    người thuê nhanh và đầy đủ"* → một trong 5 sự kiện cập nhật điểm uy tín không có chỗ thực thi.
+>    *(Về sau toàn bộ điểm uy tín đã bị bỏ — mục 18.)*
 > 3. v1 **bỏ sót** khả năng tự động ẩn tin theo sentiment mà `[§5.3]` yêu cầu (state machine v1
 >    chỉ có `HIDE_BY_OWNER` do LANDLORD thực hiện).
 > 4. v1 **không có bảng** `notification_preferences` mà `[§11.12]` yêu cầu (*"có thể tắt một số
@@ -104,7 +109,7 @@ không bao giờ bằng IP hay `localhost`.
 | Đối tượng | Quy ước | Ví dụ |
 |---|---|---|
 | Bảng DB | `snake_case`, **số nhiều** | `listings`, `listing_amenities` |
-| Cột DB | `snake_case` | `expired_at`, `trust_score` |
+| Cột DB | `snake_case` | `expired_at`, `average_rating` |
 | Khóa chính | `id` — `BIGINT UNSIGNED AUTO_INCREMENT` | |
 | Khóa ngoại | `<bảng_số_ít>_id` | `listing_id`, `owner_id` |
 | Index | `idx_<bảng>_<cột>[_<cột>]` | `idx_listings_status_expired_at` |
@@ -117,7 +122,7 @@ không bao giờ bằng IP hay `localhost`.
 | Java class | `PascalCase` | `ListingServiceImpl` |
 | Enum value | `UPPER_SNAKE_CASE` | `NEED_REVIEW` |
 | REST path | `kebab-case`, danh từ số nhiều | `/api/promotion-packages` |
-| JSON field | `camelCase` | `trustScore` |
+| JSON field | `camelCase` | `averageRating` |
 | React component | `PascalCase.jsx` | `ListingCard.jsx` |
 | React hook | `useCamelCase.js` | `useAuth.js` |
 
@@ -369,7 +374,6 @@ Lý do từng cái (ngắn gọn):
 CloseReason            : RENTED_OUT, NO_LONGER_AVAILABLE, OTHER                  [§3.6]  (listings.close_reason)
 RejectReasonCode       : MISSING_INFO, WRONG_PRICE, FAKE_IMAGE, BANNED_CONTENT,
                          WRONG_AREA, DUPLICATE, OTHER                            [§3.3]  (listings.reject_reason_code)
-TrustLabel             : GOOD, NORMAL, RISKY, NEED_REVIEW                        [§5.8]  (nhãn suy ra từ trust_score, không lưu cột)
 PackagePurpose         : PUSH_TOP, HIGHLIGHT, BOTH                               [§2.9]  (promotion_packages.purpose)
 PriceTriggerReason     : CREATE, EDIT_AREA, EDIT_CATEGORY, EDIT_LOCATION,
                          EDIT_AMENITY, ADMIN_RECALC                             [§5.9]  (prediction_histories.trigger_reason)
@@ -380,8 +384,8 @@ ReportGroupBy          : LISTING, USER, REASON  — tham số truy vấn admin, 
 ```
 
 > Hai "enum" `ChatbotMessageRole` và `AiLogModule` do agent đề xuất **bị gộp** vào enum đã có
-> (`ChatbotSender`, `AiModule`) để tránh hai enum cùng nghĩa. `ReportGroupBy` và `TrustLabel`
-> **không** map cột DB — chúng là tham số truy vấn / nhãn suy ra tại runtime.
+> (`ChatbotSender`, `AiModule`) để tránh hai enum cùng nghĩa. `ReportGroupBy` **không** map cột
+> DB — nó là tham số truy vấn.
 
 ### 5.1. State machine tin đăng — bảng chuyển trạng thái hợp lệ `[§5.1]`
 
@@ -417,9 +421,7 @@ qua nó; không service nào được `setStatus()` trực tiếp.
   toàn bộ chế tài của `[§5.3]` — nên `UNHIDE_BY_OWNER` bị chặn khi `auto_hidden_at IS NOT NULL`,
   chỉ Moderator/Admin mới gỡ được.
 - **`AUTO_HIDE_BY_SYSTEM` không ghi `violation_warnings` và không ghi `audit_logs`.**
-  Cảnh báo vi phạm là chế tài **do người ban hành** `[§5.4]` và nó là một số hạng trong công thức
-  uy tín `[§5.8]` — nếu hệ thống tự ghi thì cùng một sự kiện sentiment bị phạt điểm **hai lần**
-  (một lần qua `NegativeCommentCount`, một lần qua `ViolationWarningCount`). Còn `audit_logs` ghi
+  Cảnh báo vi phạm là chế tài **do người ban hành** `[§5.4]`, nên hệ thống không tự ghi. Còn `audit_logs` ghi
   *ai* làm gì, mà ở đây không có actor người. Sự kiện này ghi vào `moderation_actions` với
   `actor_type = SYSTEM`.
 
@@ -681,16 +683,6 @@ Phân trang (`data` chứa):
 | `moderation.threshold.locked_listing_window_days` | 60 | `[§5.4]` |
 | `moderation.threshold.spam_comment_count` | 10 | `[§5.4]` |
 | `moderation.threshold.spam_comment_window_hours` | 1 | `[§5.4]` |
-| `trust.base_score` | 100 | `[§5.8]` |
-| `trust.weight.positive_comment` | 1 | `[§5.8]` |
-| `trust.weight.negative_comment` | 2 | `[§5.8]` |
-| `trust.weight.average_rating` | 5 | `[§5.8]` |
-| `trust.weight.valid_report` | 10 | `[§5.8]` |
-| `trust.weight.violation_warning` | 15 | `[§5.8]` |
-| `trust.min` | 0 | `[§5.8]` |
-| `trust.max` | 100 | `[§5.8]` |
-| `trust.threshold.risky` | 40 | `[§5.8]` |
-| `trust.threshold.need_review` | 25 | `[§5.8]` |
 | `ai.sentiment.enabled` | `true` | `[§10.10]` |
 | `ai.sentiment.min_comments_l1` | 5 | `[§9.1]` |
 | `ai.sentiment.negative_ratio_l1` | 0.40 | `[§9.1]` |
@@ -745,18 +737,6 @@ nhưng không cho con số:
 | `ai.chatbot.timeout_ms` | 3000 | `[§9.3]` |
 | `ai.price.timeout_ms` | 2000 | `[§9.4]` |
 | `upload.max_pixels` | 50000000 | `[§11.9]` (chặn decompression bomb) |
-
-**Bổ sung v2 — tỷ lệ phản hồi chủ trọ (5 key).** `[§5.7]` liệt kê *"Chủ trọ phản hồi người thuê
-nhanh và đầy đủ nếu có module chat"* là 1 trong 5 sự kiện cập nhật điểm uy tín chủ trọ, nhưng v1
-**không có số hạng nào** cho nó:
-
-| Key | Mặc định | Nguồn |
-|---|---|---|
-| `trust.weight.landlord_response_rate` | 10 | `[§5.7]` |
-| `trust.response_rate.window_days` | 30 | `[§5.7]` |
-| `trust.response_rate.sla_hours` | 24 | `[§5.7]` (định nghĩa "nhanh") |
-| `trust.response_rate.min_conversations` | 3 | `[§5.7]` (dưới ngưỡng → không đủ mẫu, term = 0) |
-| `trust.response_rate.neutral_percent` | 70 | `[§5.7]` (mốc trung tính) |
 
 **Bổ sung v2 — thông báo tin mới phù hợp (5 key).** `[§9.2]` *"Trong email/in-app notification
 nếu có tin mới phù hợp"*:
@@ -849,11 +829,11 @@ Thuật toán: chuẩn hóa (bỏ dấu tùy chọn, teencode) → tách token �
 Kết quả: `score ∈ [-1,1]`, `label`, `confidence ∈ [0,1]`.
 
 Xử lý ngoại lệ **bắt buộc** `[§9.1]`:
-- Độ dài < `ai.sentiment.min_length` → `NEUTRAL`, **không** tính vào điểm uy tín.
+- Độ dài < `ai.sentiment.min_length` → `NEUTRAL`, **không** tính vào thống kê cảm xúc.
 - Vừa khen vừa chê (có cả cụm dương và âm mạnh) → `MIXED`.
 - Confidence thấp (< 0.5) → không kích hoạt hành động nặng.
 - AI lỗi/timeout → bình luận **vẫn được lưu**, sentiment = `PENDING_ANALYSIS`, job retry.
-- Bình luận bị Moderator đánh dấu spam → **loại khỏi thống kê** điểm uy tín.
+- Bình luận bị Moderator đánh dấu spam → **loại khỏi thống kê** cảm xúc.
 - Bình luận từ tài khoản mới (<7 ngày) → trọng số 0.5.
 
 ### 10.2. Recommendation `[§9.2]`
@@ -877,12 +857,12 @@ Xây `UserPreferenceProfile` từ `ViewHistory` (w=1) + `SearchHistory` (w=2) + 
 > 3 chiều in đậm là thứ **v1 bỏ sót**. Hai mục còn lại của `[§9.2]` ("Lịch sử xem", "Lịch sử tìm
 > kiếm") là *nguồn* chứ không phải chiều; mục "Tin đang Active" là *tập ứng viên*.
 
-**Công thức 9 số hạng (Σ trọng số = 1.00):**
+**Công thức 8 số hạng (Σ trọng số = 0.94 — đã bỏ số hạng uy tín `0.06·trustScoreNorm`):**
 
 ```
-score = 0.22·locationMatch   + 0.12·areaSizeMatch + 0.20·priceMatch
-      + 0.12·categoryMatch   + 0.08·amenityMatch  + 0.08·occupantMatch
-      + 0.06·genderMatch     + 0.06·trustScoreNorm + 0.06·freshness
+score = ( 0.22·locationMatch + 0.12·areaSizeMatch + 0.20·priceMatch
+        + 0.12·categoryMatch + 0.08·amenityMatch  + 0.08·occupantMatch
+        + 0.06·genderMatch   + 0.06·freshness ) / W      // W = tổng trọng số áp dụng
 score = score × promotedBoost        // trần 1.15, không được phá tính liên quan [§9.2]
 ```
 
@@ -891,7 +871,7 @@ Mọi số hạng trả giá trị trong `[0,1]`.
 **Quy tắc chuẩn hóa lại trọng số (bắt buộc):** `genderMatch` chỉ có nghĩa với tin `ROOMMATE`.
 Với tin khác, **không** gán mặc định `1.0` — làm vậy thì mọi tin non-`ROOMMATE` được cộng không
 0.06 và bị thiên vị có hệ thống so với tin `ROOMMATE`. Thay vào đó bỏ số hạng đó ra và chia lại
-cho tổng trọng số thực áp dụng `W = 0.94`:
+cho tổng trọng số thực áp dụng (`W = 0.94` với tin `ROOMMATE`, `W = 0.88` với tin khác):
 
 ```
 score = (Σ áp dụng được) / W
@@ -932,63 +912,11 @@ Bước 6: `|giá nhập − giá đề xuất| / giá đề xuất > 0.35` → 
 
 ---
 
-### 10.5. Điểm uy tín (AI-02, AI-03) `[§5.7][§5.8]`
+### 10.5. Điểm uy tín (AI-02, AI-03) — đã loại bỏ
 
-**Điểm uy tín tin đăng** — giữ **đúng** công thức `[§5.8]`, không tự ý đổi:
-
-```
-ListingTrustScore = trust.base_score                              (100)
-  + PositiveCommentCount   × trust.weight.positive_comment        (1)
-  - NegativeCommentCount   × trust.weight.negative_comment        (2)
-  + AverageRating          × trust.weight.average_rating          (5)
-  - ValidReportCount       × trust.weight.valid_report            (10)
-  - ViolationWarningCount  × trust.weight.violation_warning       (15)
-kẹp vào [trust.min, trust.max] = [0, 100]
-```
-
-> **Ghi chú trung thực về công thức này.** Nó có mâu thuẫn nội tại: bắt đầu từ 100 và trần cũng là
-> 100, nên hai số hạng cộng (`PositiveCommentCount`, `AverageRating`) gần như **không có tác dụng
-> đẩy điểm lên** — chúng chỉ bù trừ được phần đã bị trừ. Tài liệu nghiệp vụ `[§5.8]` nói *"Không
-> bắt buộc dùng đúng công thức này"*, nhưng đây là đồ án và công thức là yêu cầu, nên **giữ nguyên**
-> và đưa toàn bộ hệ số vào config để Admin chỉnh `[§10.10]`. Không âm thầm "sửa cho hợp lý".
-
-Bình luận **không** được tính vào điểm khi: quá ngắn (`< ai.sentiment.min_length`), bị Moderator
-đánh dấu spam, hoặc `sentiment = PENDING_ANALYSIS` `[§9.1]`. Bình luận từ tài khoản mới
-(`< ai.sentiment.new_account_days`) nhân trọng số `ai.sentiment.new_account_weight` = 0.5.
-
-**Điểm uy tín chủ trọ** — `[§5.7]` liệt kê 5 sự kiện, mỗi sự kiện phải có chỗ thực thi:
-
-```
-LandlordTrustScore = AVG(trust_score của các tin còn hiệu lực)
-  - ViolationWarningCount × trust.weight.violation_warning
-  + ResponseTerm
-kẹp vào [0, 100]
-```
-
-`ResponseTerm` hiện thực hóa `[§5.7]` *"Chủ trọ phản hồi người thuê nhanh và đầy đủ nếu có module
-chat"* — v1 **không có** số hạng này:
-
-```
-responseRate = (số hội thoại có phản hồi trong SLA) / (tổng hội thoại trong cửa sổ)   [0..1]
-ResponseTerm = trust.weight.landlord_response_rate
-             × (responseRate×100 − trust.response_rate.neutral_percent) / 100
-```
-
-Ba quyết định trong đó, ghi rõ để không bị hiểu nhầm là tùy tiện:
-1. **Vế "nhanh" nằm trong định nghĩa tỷ lệ**, không tách thành số hạng riêng: một hội thoại chỉ
-   tính là "đạt" khi phản hồi trong `trust.response_rate.sla_hours` (24h). Vế "đầy đủ" = có phản
-   hồi (`first_response_at IS NOT NULL`).
-2. **Chuẩn hóa quanh mốc trung tính 70%**, không cộng thẳng. Nếu cộng thẳng, chủ trọ tắt chat —
-   quyền mà `[§3.10]` **cho phép** (*"Nếu chủ trọ tắt chat, hệ thống chỉ hiển thị số điện thoại"*)
-   — sẽ bị phạt điểm gián tiếp vì không bao giờ có phản hồi. Với mốc trung tính, phản hồi tốt
-   (>70%) được cộng, kém (<70%) bị trừ, và `allow_chat = FALSE` ⇒ `ResponseTerm = 0`, đúng mệnh
-   đề điều kiện *"nếu có module chat"*.
-3. **Dưới `trust.response_rate.min_conversations` (3) hội thoại ⇒ `ResponseTerm = 0`** — không đủ
-   mẫu thì không kết luận, tránh phạt oan chủ trọ mới.
-
-Đo được nhờ `conversations.first_response_at` (ghi idempotent:
-`UPDATE ... SET first_response_at = ? WHERE id = ? AND first_response_at IS NULL`), rollup vào
-`landlord_profiles.response_rate_percent` bởi `TrustScoreRecalcJob`.
+> Hệ thống **không tính điểm uy tín** cho tin đăng và chủ trọ (`V22`, mục 18). Mục này giữ số thứ
+> tự để tham chiếu không lệch. Người thuê đánh giá tin/chủ trọ qua **số sao trung bình** và trạng
+> thái **xác thực chủ trọ**; chế tài với chủ trọ đi qua **cảnh báo vi phạm** và khóa tài khoản.
 
 ---
 
@@ -998,7 +926,6 @@ Ba quyết định trong đó, ghi rõ để không bị hiểu nhầm là tùy 
 |---|---|---|
 | `ListingExpiryJob` | mỗi giờ | `ACTIVE/NEED_REVIEW` quá `expired_at` → `EXPIRED` `[§5.2]` |
 | `ListingExpiryReminderJob` | 08:00 hằng ngày | nhắc trước 3 ngày và 1 ngày `[§5.2]` |
-| `TrustScoreRecalcJob` | 02:00 hằng ngày | tính lại điểm uy tín tin + chủ trọ `[§5.7]` |
 | `SentimentRetryJob` | mỗi 10 phút | xử lý lại `PENDING_ANALYSIS` `[§9.1]` |
 | `RecommendationPrecomputeJob` | mỗi 6 giờ | tính trước gợi ý cho user hoạt động `[§5.5]` |
 | `PromotionExpiryJob` | mỗi giờ | `PromotionSubscription` hết hạn → `EXPIRED` |
@@ -1091,8 +1018,8 @@ Một phần được coi là xong khi:
 
 | Nhóm | Thay đổi | Mục canonical |
 |---|---|---|
-| **Sửa lỗi thực chất** | Recommendation 6 → **9 số hạng** + quy tắc chuẩn hóa lại trọng số | 10.2 |
-| | Thêm `ResponseTerm` vào công thức uy tín chủ trọ `[§5.7]` | 10.5 |
+| **Sửa lỗi thực chất** | Recommendation 6 → **9 số hạng** + quy tắc chuẩn hóa lại trọng số *(nay còn 8 — mục 18)* | 10.2 |
+| | Thêm `ResponseTerm` vào công thức uy tín chủ trọ `[§5.7]` *(đã bỏ cùng điểm uy tín — mục 18)* | 10.5 |
 | | Thêm `AUTO_HIDE_BY_SYSTEM` + `UNHIDE_BY_MODERATOR` `[§5.3]` | 5.1 |
 | | Thêm bảng thứ 46 `notification_preferences` `[§11.12]` | 6 |
 | | Xóa `NotificationDigestJob` (chưa từng đặc tả), thay bằng `NewMatchingListingNotifyJob` | 11 |
@@ -1189,3 +1116,22 @@ PUT /admin/users/{id}/role -> 200 · endpoint /roles cũ -> 404 · vai trò lạ
 ma trận quyền: TENANT/LANDLORD/MODERATOR/ADMIN chặn-cho đúng theo V2 seed
 frontend + reverse proxy /api: 200
 ```
+
+## 18. Loại bỏ điểm uy tín (2026-10-14)
+
+Hệ thống không còn tính, lưu hay hiển thị điểm uy tín của tin đăng và chủ trọ. Sau khi bỏ module
+phân tích cảm xúc (`V21`), số hạng duy nhất làm điểm tin giảm (bình luận tiêu cực) không còn, nên
+mọi tin đều đạt điểm tối đa và điểm không còn ý nghĩa.
+
+| Tầng | Thay đổi |
+|---|---|
+| DB | **V22**: xóa `listings.trust_score`, `landlord_profiles.trust_score`, `recommendation_logs.trust_score_norm` (kèm CHECK/INDEX) và mọi khóa `trust.*` trong `system_configs`. |
+| Backend | Xóa `TrustScoreService(Impl)`, `TrustScoreRecalcJob`, enum `TrustLabel`; đánh giá và kiểm duyệt không còn tính lại uy tín. Bỏ `trustScore`/`trustLabel`/`lowTrustWarning` khỏi mọi response. |
+| Tìm kiếm | Bỏ bộ lọc `minTrustScore` và sắp xếp `trustScore,desc`; tin liên quan sắp theo mới nhất. |
+| Quản trị | Danh sách chủ trọ bỏ lọc `minTrustScore`/`maxTrustScore`, mặc định sắp theo `createdAt` giảm dần; cấu hình AI bỏ nhóm "Trọng số điểm uy tín". |
+| Gợi ý tin | Bỏ số hạng `0.06·trustScoreNorm` → 8 số hạng, Σ = 0.94; điểm vẫn chuẩn hóa theo tổng trọng số áp dụng nên tỉ lệ giữa các số hạng còn lại không đổi (mục 10.2). |
+| Frontend | Xóa `TrustScoreBadge`; bỏ nhãn/điểm uy tín ở thẻ tin, chi tiết tin, hồ sơ chủ trọ, danh sách theo dõi, hồ sơ cá nhân và các màn quản trị. |
+
+**Giữ nguyên:** số sao đánh giá trung bình của tin và chủ trọ, xác thực chủ trọ, cảnh báo vi phạm
+(`warning_count`), hạn chế đăng tin, khóa tài khoản. Cột `landlord_profiles.response_rate_percent`
+vẫn còn nhưng không có tiến trình nào tính giá trị.

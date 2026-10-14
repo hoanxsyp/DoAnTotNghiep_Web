@@ -23,7 +23,7 @@ Nguyên tắc liệt kê: không tách các endpoint kỹ thuật nhỏ thành u
 | Dịch vụ AI | Tác nhân hỗ trợ xử lý thông minh | Hỗ trợ gợi ý tin, chatbot tư vấn, dự đoán giá phòng, phân tích cảm xúc bình luận/đánh giá và tạo cảnh báo. |
 | Cổng thanh toán VNPAY | Hệ thống bên ngoài xử lý giao dịch | Nhận yêu cầu tạo thanh toán, trả về callback, hỗ trợ kích hoạt gói/dịch vụ khi thanh toán thành công. |
 | Dịch vụ Email/Thông báo | Tác nhân hỗ trợ truyền thông báo | Gửi email xác thực, OTP, quên mật khẩu, thông báo trong hệ thống. |
-| Bộ lập lịch hệ thống | Tác nhân thời gian/nền | Kích hoạt các tác vụ tự động như hết hạn tin, nhắc gia hạn, hết hạn gói quảng bá, đối soát thanh toán, tính lại trust score. |
+| Bộ lập lịch hệ thống | Tác nhân thời gian/nền | Kích hoạt các tác vụ tự động như hết hạn tin, nhắc gia hạn, hết hạn gói quảng bá, đối soát thanh toán. |
 
 Quan hệ kế thừa actor:
 
@@ -685,7 +685,7 @@ Main ..> UC07 : <<include>>
 @enduml
 ```
 
-### UC-06. Tương tác cộng đồng, uy tín và báo cáo vi phạm
+### UC-06. Tương tác cộng đồng và báo cáo vi phạm
 
 | Thuộc tính | Mô tả |
 | --- | --- |
@@ -722,7 +722,7 @@ flowchart LR
   Mod["Kiểm duyệt viên"]
   AI["Dịch vụ AI"]
 
-  Main(("UC-06<br/>Tương tác cộng đồng,<br/>uy tín và báo cáo"))
+  Main(("UC-06<br/>Tương tác cộng đồng<br/>và báo cáo"))
   Favorite(("Lưu/bỏ lưu tin"))
   History(("Lịch sử xem<br/>và tìm kiếm"))
   Follow(("Theo dõi chủ trọ"))
@@ -763,7 +763,7 @@ actor "Người dùng\nđã xác thực" as Auth
 actor "Kiểm duyệt viên" as Mod
 actor "Dịch vụ AI" as AI
 
-rectangle "UC-06. Tương tác cộng đồng, uy tín và báo cáo vi phạm" {
+rectangle "UC-06. Tương tác cộng đồng và báo cáo vi phạm" {
   usecase "Tương tác cộng đồng" as Main
   usecase "Lưu/bỏ lưu tin" as Favorite
   usecase "Lịch sử xem\nvà tìm kiếm" as History
@@ -1140,10 +1140,9 @@ Hoạt động chính:
 2. Tự động hết hạn gói quảng bá khi quá thời gian hiệu lực.
 3. Đối soát các giao dịch thanh toán đang treo hoặc cần đồng bộ trạng thái.
 4. Thử lại các tác vụ AI thất bại, ví dụ phân tích cảm xúc.
-5. Tính lại điểm tin cậy/trust score theo dữ liệu mới.
-6. Tiền xử lý/gợi ý trước danh sách recommendation khi cần.
-7. Dọn dẹp token/dữ liệu cũ và thực hiện chính sách lưu trữ dữ liệu.
-8. Gửi thông báo khi có tin mới phù hợp với tiêu chí người dùng.
+5. Tiền xử lý/gợi ý trước danh sách recommendation khi cần.
+6. Dọn dẹp token/dữ liệu cũ và thực hiện chính sách lưu trữ dữ liệu.
+7. Gửi thông báo khi có tin mới phù hợp với tiêu chí người dùng.
 
 Quan hệ use case:
 
@@ -1167,7 +1166,6 @@ flowchart LR
   PromotionExpiry(("Hết hạn gói<br/>quảng bá"))
   Reconcile(("Đối soát<br/>thanh toán"))
   AIRetry(("Retry AI và<br/>tiền xử lý gợi ý"))
-  TrustScore(("Tính lại<br/>trust score"))
   Cleanup(("Dọn token,<br/>lưu trữ dữ liệu"))
   MatchingNotify(("Thông báo tin mới<br/>phù hợp tiêu chí"))
   UC02(("UC-02<br/>Tin đăng"))
@@ -1181,7 +1179,6 @@ flowchart LR
   Main -.->|include| PromotionExpiry
   Main -.->|include| Reconcile
   Main -.->|include| AIRetry
-  Main -.->|include| TrustScore
   Main -.->|include| Cleanup
   Main -.->|include| MatchingNotify
   PG --> Reconcile
@@ -1211,7 +1208,6 @@ rectangle "UC-10. Tác vụ nền tự động của hệ thống" {
   usecase "Hết hạn gói\nquảng bá" as PromotionExpiry
   usecase "Đối soát\nthanh toán" as Reconcile
   usecase "Retry AI và\ntiền xử lý gợi ý" as AIRetry
-  usecase "Tính lại\ntrust score" as TrustScore
   usecase "Dọn token,\nlưu trữ dữ liệu" as Cleanup
   usecase "Thông báo tin mới\nphù hợp tiêu chí" as MatchingNotify
   usecase "Tin đăng" as UC02
@@ -1226,7 +1222,6 @@ Main ..> ListingExpiry : <<include>>
 Main ..> PromotionExpiry : <<include>>
 Main ..> Reconcile : <<include>>
 Main ..> AIRetry : <<include>>
-Main ..> TrustScore : <<include>>
 Main ..> Cleanup : <<include>>
 Main ..> MatchingNotify : <<include>>
 PG --> Reconcile

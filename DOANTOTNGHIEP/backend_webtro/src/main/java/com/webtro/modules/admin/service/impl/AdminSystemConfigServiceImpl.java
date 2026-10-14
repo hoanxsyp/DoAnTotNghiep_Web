@@ -36,7 +36,6 @@ public class AdminSystemConfigServiceImpl implements AdminSystemConfigService {
 
     /** Nhóm cấu hình do {@code /api/admin/ai/config} quản lý — loại khỏi endpoint này. */
     private static final String AI_PREFIX = "ai.";
-    private static final String TRUST_PREFIX = "trust.";
 
     private static final Map<String, String> GROUP_LABELS = Map.ofEntries(
             Map.entry("LISTING", "Tin đăng"),
@@ -46,7 +45,6 @@ public class AdminSystemConfigServiceImpl implements AdminSystemConfigService {
             Map.entry("SECURITY", "Bảo mật"),
             Map.entry("SPAM", "Chống spam & Rate limit"),
             Map.entry("UPLOAD", "Tải lên"),
-            Map.entry("TRUST", "Điểm uy tín"),
             Map.entry("AI", "Trí tuệ nhân tạo"));
 
     private final SystemConfigRepository systemConfigRepository;
@@ -64,7 +62,7 @@ public class AdminSystemConfigServiceImpl implements AdminSystemConfigService {
         Map<String, List<ConfigItemResponse>> byGroup = new LinkedHashMap<>();
         for (SystemConfig c : configs) {
             String key = c.getConfigKey();
-            if (key.startsWith(AI_PREFIX) || key.startsWith(TRUST_PREFIX)) {
+            if (key.startsWith(AI_PREFIX)) {
                 continue; // thuộc /api/admin/ai/config
             }
             if (!all && !group.equalsIgnoreCase(c.getGroupName())) {
@@ -85,7 +83,7 @@ public class AdminSystemConfigServiceImpl implements AdminSystemConfigService {
 
         return SystemConfigResponse.builder()
                 .groups(groups)
-                .note("Nhóm TRUST và AI xem/sửa tại /api/admin/ai/config (quyền AI_CONFIG_MANAGE)")
+                .note("Nhóm AI xem/sửa tại /api/admin/ai/config (quyền AI_CONFIG_MANAGE)")
                 .build();
     }
 
@@ -98,7 +96,7 @@ public class AdminSystemConfigServiceImpl implements AdminSystemConfigService {
         for (UpdateConfigRequest.ConfigEntry entry : request.getConfigs()) {
             String key = entry.getKey().trim();
 
-            if (key.startsWith(AI_PREFIX) || key.startsWith(TRUST_PREFIX)) {
+            if (key.startsWith(AI_PREFIX)) {
                 throw new BusinessException(ErrorCode.CONFIG_KEY_UNKNOWN,
                         "Khóa '" + key + "' thuộc cấu hình AI — vui lòng dùng PUT /api/admin/ai/config");
             }

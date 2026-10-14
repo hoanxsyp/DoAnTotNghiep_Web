@@ -1,7 +1,6 @@
 package com.webtro.modules.user.service.impl;
 
 import com.webtro.common.enums.ListingStatus;
-import com.webtro.common.enums.TrustLabel;
 import com.webtro.constant.ErrorCode;
 import com.webtro.exception.BusinessException;
 import com.webtro.modules.interaction.repository.ContactLogRepository;
@@ -10,15 +9,12 @@ import com.webtro.modules.listing.dto.response.ListingSummaryResponse;
 import com.webtro.modules.listing.entity.Listing;
 import com.webtro.modules.listing.mapper.ListingMapper;
 import com.webtro.modules.listing.repository.ListingRepository;
-import com.webtro.modules.listing.service.TrustScoreService;
 import com.webtro.modules.moderation.repository.ReportRepository;
 import com.webtro.modules.user.dto.response.LandlordDashboardResponse;
 import com.webtro.modules.user.entity.LandlordProfile;
 import com.webtro.modules.user.repository.LandlordProfileRepository;
 import com.webtro.modules.user.service.LandlordDashboardService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -57,11 +53,6 @@ public class LandlordDashboardServiceImpl implements LandlordDashboardService {
     private final ContactLogRepository contactLogRepository;
     private final ReportRepository reportRepository;
     private final ListingMapper listingMapper;
-
-    /** {@code @Lazy} avoids user <-> listing dependency cycles. */
-    @Lazy
-    @Autowired
-    private TrustScoreService trustScoreService;
 
     @Override
     @Transactional(readOnly = true)
@@ -112,12 +103,8 @@ public class LandlordDashboardServiceImpl implements LandlordDashboardService {
 
         LandlordProfile lp = landlordProfileRepository.findByUser_IdAndDeletedAtIsNull(userId).orElse(null);
         if (lp != null) {
-            Integer trustScore = toInt(lp.getTrustScore());
-            TrustLabel trustLabel = trustScore != null ? trustScoreService.labelOf(trustScore) : null;
             builder.landlordVerificationStatus(lp.getVerificationStatus() == null
                             ? null : lp.getVerificationStatus().name())
-                    .trustScore(trustScore)
-                    .trustLabel(trustLabel != null ? trustLabel.getLabel() : null)
                     .responseRatePercent(lp.getResponseRatePercent())
                     .averageRating(lp.getAverageRating())
                     .reviewCount(lp.getReviewCount())
@@ -201,8 +188,8 @@ public class LandlordDashboardServiceImpl implements LandlordDashboardService {
                 item("REJECTED", "ERROR", rejected,
                         "%d tin bị từ chối, cần chỉnh sửa".formatted(rejected),
                         "/quan-ly/tin-dang?status=REJECTED"),
-                item("AI_NEGATIVE_ALERT", "WARNING", needReview,
-                        "%d tin cần kiểm tra do tín hiệu AI/bình luận".formatted(needReview),
+                item("NEED_REVIEW", "WARNING", needReview,
+                        "%d tin đang chờ kiểm duyệt lại".formatted(needReview),
                         "/quan-ly/tin-dang?status=NEED_REVIEW"),
                 item("REPORTED", "WARNING", reported,
                         "%d tin đang có báo cáo chờ xử lý".formatted(reported),

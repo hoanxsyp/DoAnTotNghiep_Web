@@ -14,13 +14,13 @@ import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
 
 /**
- * Hạ tầng dùng chung cho 4 module AI (canonical mục 10, §10.10): kiểm tra bật/tắt và chạy engine
+ * Hạ tầng dùng chung cho các module AI (canonical mục 10, §10.10): kiểm tra bật/tắt và chạy engine
  * có <b>timeout</b> trên {@code aiTaskExecutor}.
  *
  * <p>Bật/tắt: {@code ai.<module>.enabled = false} → ném {@link ErrorCode#AI_MODULE_DISABLED} (503).
  * Timeout: quá {@code ai.<module>.timeout_ms} → {@link ErrorCode#AI_SERVICE_UNAVAILABLE} (503).
  * AI hỏng KHÔNG được làm sập nghiệp vụ lõi (nguyên tắc vàng mục 7.0) — nơi gọi quyết định nuốt lỗi
- * (listener sentiment) hay trả 503 (endpoint chẩn đoán).
+ * hay trả 503.
  */
 @Slf4j
 @Component
