@@ -197,7 +197,6 @@ const ProfilePage = () => {
                         icon={landlord.verified ? <VerifiedIcon /> : undefined}
                         label={landlord.verified ? 'Đã xác thực' : 'Chưa xác thực'}
                       />
-                      <Chip size="small" variant="outlined" label={`Uy tín ${landlord.trustScore ?? '—'}`} />
                     </Stack>
                     <InfoRow label="Tin đang hiển thị" value={landlord.activeListings ?? 0} />
                     <InfoRow label="Điểm đánh giá" value={landlord.averageRating != null ? `${landlord.averageRating}/5` : 'Chưa có'} />

@@ -116,7 +116,6 @@ const UsersPage = () => {
         return <Chip size="small" label={m.label} color={m.color} variant="outlined" />;
       },
     },
-    { key: 'trustScore', label: 'Uy tín', align: 'center', render: (r) => r.trustScore ?? '—' },
     {
       key: 'status', label: 'Trạng thái', render: (r) => {
         const m = metaChip(USER_STATUS_META, r.status);

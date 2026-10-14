@@ -18,7 +18,6 @@ import SquareFootOutlinedIcon from '@mui/icons-material/SquareFootOutlined';
 import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment';
 import ImageNotSupportedOutlinedIcon from '@mui/icons-material/ImageNotSupportedOutlined';
 import StatusChip from '@/components/common/StatusChip';
-import TrustScoreBadge from '@/components/listing/TrustScoreBadge';
 import favoriteApi from '@/api/favoriteApi';
 import useAuth from '@/hooks/useAuth';
 import { notify } from '@/utils/toast';
@@ -31,7 +30,6 @@ import { formatPrice, formatArea, fromNow } from '@/utils/format';
  * - Tiêu đề, giá (formatPrice), diện tích, khu vực.
  * - Nhãn "Nổi bật" khi promoted (PROMO-02).
  * - StatusChip khi showStatus (tin của chủ trọ).
- * - TrustScoreBadge khi trust thấp (trustLevel != NORMAL hoặc lowTrustWarning).
  * - Nút tim: có onFavoriteToggle thì gọi nó, không có thì thẻ tự lưu/bỏ lưu qua favoriteApi.
  *   unavailable -> grayscale + overlay [§3.9].
  * - Click -> /tin/{slug}-{id}. Bọc <Link> thật để mở tab mới được.
@@ -68,10 +66,6 @@ export default function ListingCard({
     shortAddress,
     thumbnailUrl,
     primaryImageUrl,
-    trustScore,
-    trustLevel,
-    trustLabel,
-    lowTrustWarning,
     favoritedByMe,
     promoted,
     promotedLabel,
@@ -119,10 +113,6 @@ export default function ListingCard({
   const area_ = area != null ? formatArea(area) : null;
   const location = shortAddress || [districtName, provinceName].filter(Boolean).join(', ');
   const timeText = fromNow(publishedAt || createdAt);
-
-  // Trust: chỉ hiện badge khi rủi ro. trustLevel từ API là nguồn chuẩn; fallback theo cờ.
-  const level = trustLevel || (lowTrustWarning ? 'RISKY' : 'NORMAL');
-  const showTrust = level !== 'NORMAL' || lowTrustWarning === true;
 
   const isHorizontal = variant === 'horizontal';
   const isCompact = variant === 'compact';
@@ -277,10 +267,9 @@ export default function ListingCard({
         )}
       </Stack>
 
-      {(showStatus || showTrust) && (
+      {showStatus && status && (
         <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: 'wrap', gap: 0.5 }}>
-          {showStatus && status && <StatusChip status={status} type="listing" />}
-          {showTrust && <TrustScoreBadge score={trustScore} level={level} variant="inline" />}
+          <StatusChip status={status} type="listing" />
         </Stack>
       )}
 

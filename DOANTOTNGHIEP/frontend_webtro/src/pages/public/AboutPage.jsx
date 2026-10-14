@@ -23,8 +23,8 @@ const SECTIONS = [
     heading: '2. Sứ mệnh',
     body:
       'Chúng tôi mong muốn mọi tin đăng đều được kiểm duyệt, thông tin rõ ràng và giá cả minh ' +
-      'bạch. Hệ thống đánh giá uy tín chủ trọ và phân tích bình luận bằng AI giúp người thuê ' +
-      'đưa ra quyết định tốt hơn.',
+      'bạch. Đánh giá công khai của người thuê và trợ lý AI giúp người thuê đưa ra quyết định ' +
+      'tốt hơn.',
   },
   {
     id: 'tinh-nang',
@@ -33,7 +33,6 @@ const SECTIONS = [
       '- Tìm kiếm và lọc nâng cao theo khu vực, giá, diện tích, tiện ích.\n' +
       '- Gợi ý tin phù hợp bằng AI.\n' +
       '- Đánh giá và bình luận công khai cho từng tin.\n' +
-      '- Điểm uy tín chủ trọ và cảnh báo tin rủi ro.\n' +
       '- Trợ lý ảo hỗ trợ tìm phòng 24/7.',
   },
   {

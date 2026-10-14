@@ -21,7 +21,6 @@ import contactApi from '@/api/contactApi';
 import reportApi from '@/api/reportApi';
 import CommentThread from '@/components/interaction/CommentThread';
 import RatingStars from '@/components/interaction/RatingStars';
-import TrustScoreBadge from '@/components/listing/TrustScoreBadge';
 import RichTextViewer from '@/components/common/RichTextViewer';
 import LoadingSkeleton from '@/components/common/LoadingSkeleton';
 import EmptyState from '@/components/common/EmptyState';
@@ -352,7 +351,7 @@ const ListingDetailPage = () => {
   const {
     title, price, depositAmount, area, description, fullAddress, shortAddress,
     provinceName, districtName, wardName, addressDetail, images = [], amenities = [],
-    landlord, contactName, contactPhone, trustScore, trustLevel,
+    landlord, contactName, contactPhone,
     viewCount, favoriteCount, commentCount, latitude, longitude, electricityPrice, waterPrice,
     roomCount, toiletCount, currentOccupants, maxOccupants, availableFrom, furnitureStatus,
     curfewType, toiletType, petAllowed, parkingAvailable, genderRequirement, categoryCode,
@@ -440,13 +439,6 @@ const ListingDetailPage = () => {
                 />
               ))}
             </Stack>
-          )}
-
-          {/* Cảnh báo uy tín thấp */}
-          {trustLevel && trustLevel !== 'NORMAL' && (
-            <Box sx={{ mt: 2 }}>
-              <TrustScoreBadge score={trustScore} level={trustLevel} variant="alert" />
-            </Box>
           )}
 
           <Typography variant="h5" component="h1" sx={{ fontWeight: 800, mt: 2 }}>
@@ -685,11 +677,6 @@ const ListingDetailPage = () => {
                   )}
                 </Box>
               </Stack>
-              {landlord?.trustLevel && landlord.trustLevel !== 'NORMAL' && (
-                <Box sx={{ mt: 1 }}>
-                  <TrustScoreBadge score={landlord.trustScore} level={landlord.trustLevel} variant="inline" />
-                </Box>
-              )}
 
               <Divider sx={{ my: 2 }} />
 
