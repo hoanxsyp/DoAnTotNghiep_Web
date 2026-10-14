@@ -203,13 +203,6 @@ public final class ListingSpecifications {
                 : (root, query, cb) -> cb.lessThanOrEqualTo(root.get("availableFrom"), availableFrom);
     }
 
-    /** Điểm uy tín tối thiểu: {@code trust_score >= value} ({@code [§5.8]}). */
-    public static Specification<Listing> minTrustScore(Integer value) {
-        return value == null ? null
-                : (root, query, cb) -> cb.greaterThanOrEqualTo(
-                        root.get("trustScore"), new BigDecimal(value));
-    }
-
     public static Specification<Listing> idNot(Long id) {
         return id == null ? null
                 : (root, query, cb) -> cb.notEqual(root.get("id"), id);
@@ -348,7 +341,6 @@ public final class ListingSpecifications {
             case AREA_ASC -> orders.add(cb.asc(root.get("area")));
             case AREA_DESC -> orders.add(cb.desc(root.get("area")));
             case VIEW_DESC -> orders.add(cb.desc(root.get("viewCount")));
-            case TRUST_DESC -> orders.add(cb.desc(root.get("trustScore")));
             // DISTANCE_ASC không sắp xếp chính xác được bằng Criteria thuần (BigDecimal + hàm
             // lượng giác); rơi về "mới nhất" cùng với bounding box đã lọc. Xem ghi chú service.
             case DISTANCE_ASC, RELEVANCE -> orders.add(cb.desc(root.get("publishedAt")));

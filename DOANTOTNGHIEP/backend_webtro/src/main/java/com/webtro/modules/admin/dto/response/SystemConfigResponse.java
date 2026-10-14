@@ -10,8 +10,8 @@ import lombok.Setter;
 import java.util.List;
 
 /**
- * Cấu hình hệ thống gom nhóm (canonical 4.20.1). Nhóm {@code TRUST}/{@code AI} không nằm ở đây —
- * chúng xem/sửa tại {@code /api/admin/ai/config} (ranh giới quyền {@code AI_CONFIG_MANAGE}).
+ * Cấu hình hệ thống gom nhóm (canonical 4.20.1). Nhóm {@code AI} không nằm ở đây —
+ * xem/sửa tại {@code /api/admin/ai/config} (ranh giới quyền {@code AI_CONFIG_MANAGE}).
  */
 @Getter
 @Setter

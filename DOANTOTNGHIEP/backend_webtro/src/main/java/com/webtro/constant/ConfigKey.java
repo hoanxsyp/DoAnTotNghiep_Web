@@ -34,20 +34,6 @@ public final class ConfigKey {
     public static final String MOD_THRESHOLD_SPAM_COMMENT_COUNT = "moderation.threshold.spam_comment_count";
     public static final String MOD_THRESHOLD_SPAM_COMMENT_WINDOW_HOURS = "moderation.threshold.spam_comment_window_hours";
 
-    // ============================= Trust ============================
-    public static final String TRUST_BASE_SCORE = "trust.base_score";
-    public static final String TRUST_WEIGHT_AVERAGE_RATING = "trust.weight.average_rating";
-    public static final String TRUST_WEIGHT_VALID_REPORT = "trust.weight.valid_report";
-    public static final String TRUST_WEIGHT_VIOLATION_WARNING = "trust.weight.violation_warning";
-    public static final String TRUST_WEIGHT_LANDLORD_RESPONSE_RATE = "trust.weight.landlord_response_rate";
-    public static final String TRUST_MIN = "trust.min";
-    public static final String TRUST_MAX = "trust.max";
-    public static final String TRUST_THRESHOLD_RISKY = "trust.threshold.risky";
-    public static final String TRUST_THRESHOLD_NEED_REVIEW = "trust.threshold.need_review";
-    public static final String TRUST_RESPONSE_RATE_WINDOW_DAYS = "trust.response_rate.window_days";
-    public static final String TRUST_RESPONSE_RATE_SLA_HOURS = "trust.response_rate.sla_hours";
-    public static final String TRUST_RESPONSE_RATE_MIN_CONVERSATIONS = "trust.response_rate.min_conversations";
-    public static final String TRUST_RESPONSE_RATE_NEUTRAL_PERCENT = "trust.response_rate.neutral_percent";
 
     // ==================== AI - Recommendation =======================
     public static final String AI_RECOMMENDATION_ENABLED = "ai.recommendation.enabled";

@@ -31,7 +31,6 @@ import com.webtro.modules.interaction.specification.ReviewSpecifications;
 import com.webtro.modules.interaction.spi.BannedKeywordGateway;
 import com.webtro.modules.interaction.spi.ListingGateway;
 import com.webtro.modules.interaction.spi.UserGateway;
-import com.webtro.modules.listing.service.TrustScoreService;
 import com.webtro.modules.notification.service.NotificationService;
 import com.webtro.security.RateLimitService;
 import com.webtro.security.SecurityUtils;
@@ -57,8 +56,8 @@ import java.util.Map;
  * Hiện thực nghiệp vụ đánh giá (REV) — canonical 4.7.6–4.7.12, {@code [§3.12]}.
  *
  * <p>Điểm trung bình của tin/chủ trọ được cập nhật <i>tăng dần</i> ngay trong transaction (dùng
- * số liệu denormalized đọc qua gateway); {@code TrustScoreRecalcJob} 02:00 và nightly reconcile
- * bù sai số làm tròn (canonical 4.7.8 quy tắc 5, 6).
+ * số liệu denormalized đọc qua gateway); nightly reconcile bù sai số làm tròn (canonical 4.7.8
+ * quy tắc 5, 6).
  */
 @Slf4j
 @Service
@@ -76,7 +75,6 @@ public class ReviewServiceImpl implements ReviewService {
     private final BannedKeywordGateway bannedKeywordGateway;
     private final ReviewMapper reviewMapper;
     private final NotificationService notificationService;
-    private final TrustScoreService trustScoreService;
     private final RateLimitService rateLimitService;
     private final SystemConfigService systemConfig;
     private final AuditLogService auditLogService;
@@ -188,7 +186,6 @@ public class ReviewServiceImpl implements ReviewService {
         int listingCount = (int) reviewRepository
                 .countByListingIdAndStatusAndDeletedAtIsNull(listingId, ReviewStatus.VISIBLE);
 
-        recalcTrust(listingId, listing.ownerId());
 
         if (!userId.equals(listing.ownerId())) {
             notificationService.notifyUser(listing.ownerId(), NotificationType.NEW_REVIEW,
@@ -230,7 +227,6 @@ public class ReviewServiceImpl implements ReviewService {
         int listingCount = (int) reviewRepository
                 .countByListingIdAndStatusAndDeletedAtIsNull(r.getListingId(), ReviewStatus.VISIBLE);
 
-        recalcTrust(r.getListingId(), listing.ownerId());
 
         UserGateway.UserBrief author = userGateway.findBrief(userId).orElse(null);
         ReviewResponse resp = single(r, author, userId);
@@ -275,7 +271,6 @@ public class ReviewServiceImpl implements ReviewService {
         ListingGateway.ListingBrief listing = listingGateway.getBrief(r.getListingId());
         applyListingAggregateOnRemove(listing, r.getRating());
         applyLandlordAggregateOnRemove(listing.ownerId(), r.getRating());
-        recalcTrust(r.getListingId(), listing.ownerId());
     }
 
     @Override
@@ -307,7 +302,6 @@ public class ReviewServiceImpl implements ReviewService {
             ListingGateway.ListingBrief listing = listingGateway.getBrief(r.getListingId());
             applyListingAggregateOnRemove(listing, r.getRating());
             applyLandlordAggregateOnRemove(listing.ownerId(), r.getRating());
-            recalcTrust(r.getListingId(), listing.ownerId());
         }
     }
 
@@ -353,7 +347,7 @@ public class ReviewServiceImpl implements ReviewService {
         if (r.getStatus() == ReviewStatus.HIDDEN) {
             throw new ConflictException(ErrorCode.REVIEW_ALREADY_HIDDEN);
         }
-        // Tái dùng nghiệp vụ ẩn chuẩn (ghi hidden_* + tính lại trung bình/uy tín khi rời tập VISIBLE).
+        // Tái dùng nghiệp vụ ẩn chuẩn (ghi hidden_* + tính lại trung bình sao khi rời tập VISIBLE).
         hideByModeration(reviewId, moderatorId, reason);
 
         auditLogService.record(AuditAction.REVIEW_HIDE, AuditActorType.USER, moderatorId,
@@ -374,11 +368,10 @@ public class ReviewServiceImpl implements ReviewService {
         r.setHiddenAt(null);
         reviewRepository.save(r);
 
-        // Đánh giá quay lại tập VISIBLE → cộng lại vào trung bình sao của tin/chủ trọ + uy tín.
+        // Đánh giá quay lại tập VISIBLE → cộng lại vào trung bình sao của tin/chủ trọ.
         ListingGateway.ListingBrief listing = listingGateway.getBrief(r.getListingId());
         applyListingAggregateOnAdd(listing, r.getRating());
         applyLandlordAggregateOnAdd(listing.ownerId(), r.getRating());
-        recalcTrust(r.getListingId(), listing.ownerId());
 
         auditLogService.record(AuditAction.REVIEW_UNHIDE, AuditActorType.USER, moderatorId,
                 "REVIEW", reviewId, "Khôi phục đánh giá bị ẩn");
@@ -423,11 +416,6 @@ public class ReviewServiceImpl implements ReviewService {
     private Instant reviewEditableUntil(Review r) {
         int hours = systemConfig.getInt(ConfigKey.REVIEW_EDIT_WINDOW_HOURS);
         return r.getCreatedAt().plus(Duration.ofHours(hours));
-    }
-
-    private void recalcTrust(Long listingId, Long landlordId) {
-        trustScoreService.recalculateAndSaveListing(listingId);
-        trustScoreService.recalculateLandlord(landlordId);
     }
 
     // ----- Cập nhật trung bình tăng dần -----

@@ -360,7 +360,6 @@ public class ChatbotServiceImpl implements ChatbotService {
                 .area(s.getArea())
                 .shortAddress(s.getShortAddress())
                 .thumbnailUrl(s.getThumbnailUrl())
-                .trustScore(s.getTrustScore())
                 .averageRating(s.getAverageRating())
                 .promoted(s.getPromoted())
                 .build();

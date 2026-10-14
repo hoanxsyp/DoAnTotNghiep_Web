@@ -16,7 +16,7 @@ import java.util.Optional;
  * Repository cho {@link LandlordProfile} (hồ sơ chủ trọ, 1-1 với user).
  *
  * <p>Kèm {@link JpaSpecificationExecutor} vì màn quản lý chủ trọ (canonical 4.13.6) cần lọc động
- * (từ khóa, trạng thái xác thực, khoảng điểm uy tín, trạng thái hạn chế đăng tin).
+ * (từ khóa, trạng thái xác thực, trạng thái hạn chế đăng tin).
  */
 @Repository
 public interface LandlordProfileRepository

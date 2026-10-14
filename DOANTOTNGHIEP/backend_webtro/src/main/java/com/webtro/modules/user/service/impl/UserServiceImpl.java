@@ -1,6 +1,5 @@
 package com.webtro.modules.user.service.impl;
 
-import com.webtro.common.enums.TrustLabel;
 import com.webtro.common.enums.UserStatus;
 import com.webtro.common.enums.VerificationStatus;
 import com.webtro.common.enums.VerificationType;
@@ -11,7 +10,6 @@ import com.webtro.exception.BusinessException;
 import com.webtro.exception.ConflictException;
 import com.webtro.exception.ResourceNotFoundException;
 import com.webtro.modules.admin.service.SystemConfigService;
-import com.webtro.modules.listing.service.TrustScoreService;
 import com.webtro.modules.user.dto.request.LandlordVerificationRequest;
 import com.webtro.modules.user.dto.request.UpdateContactRequest;
 import com.webtro.modules.user.dto.request.UpdateLandlordProfileRequest;
@@ -53,9 +51,6 @@ import java.util.List;
 
 /**
  * Hiện thực nghiệp vụ người dùng (USER-01..06).
- *
- * <p>Điểm uy tín/nhãn uy tín lấy qua {@link TrustScoreService} (module listing) — không tự tính
- * lại để giữ đúng công thức §5.8 ở một nơi duy nhất.
  */
 @Slf4j
 @Service
@@ -77,14 +72,6 @@ public class UserServiceImpl implements UserService {
 
     private final SystemConfigService systemConfigService;
     private final com.webtro.storage.FileStorage fileStorage;
-
-    /**
-     * Tiêm {@code @Lazy} để phá vòng phụ thuộc tiềm ẩn user ↔ listing (nếu
-     * {@code TrustScoreService} của module listing lại cần dữ liệu chủ trọ qua module user).
-     */
-    @org.springframework.context.annotation.Lazy
-    @org.springframework.beans.factory.annotation.Autowired
-    private TrustScoreService trustScoreService;
 
     // ============================ Hồ sơ của tôi ============================
 
@@ -309,13 +296,8 @@ public class UserServiceImpl implements UserService {
                 && followRepository.existsByFollower_IdAndLandlord_IdAndDeletedAtIsNull(currentUserId, targetUserId);
         boolean viewerAuthenticated = currentUserId != null;
 
-        TrustLabel trustLabel = null;
-        if (lp != null && lp.getTrustScore() != null) {
-            trustLabel = trustScoreService.labelOf(toInt(lp.getTrustScore()));
-        }
-
         return landlordProfileMapper.toPublicResponse(user, lp, isLandlord, followerCount,
-                followedByMe, viewerAuthenticated, trustLabel);
+                followedByMe, viewerAuthenticated);
     }
 
     @Override

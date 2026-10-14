@@ -32,7 +32,6 @@ public class AdminListingResponse {
     private Long ownerId;
     private String status;
     private String statusLabel;
-    private Integer trustScore;
     private Long reportCount;
     private Boolean priceDeviationFlagged;
     private Long provinceId;

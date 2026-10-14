@@ -57,8 +57,7 @@ public interface CommentService {
     AdminCommentResponse unhideByModeration(Long commentId, Long moderatorId);
 
     /**
-     * Đánh dấu bình luận là spam ({@code is_spam = true}, trọng số uy tín = 0 để loại khỏi công thức
-     * tính điểm uy tín) và ghi AuditLog {@code COMMENT_SPAM}. Trả bản ghi sau khi cập nhật.
+     * Đánh dấu bình luận là spam ({@code is_spam = true}) và ghi AuditLog {@code COMMENT_SPAM}. Trả bản ghi sau khi cập nhật.
      */
     AdminCommentResponse markSpam(Long commentId, Long moderatorId);
 }

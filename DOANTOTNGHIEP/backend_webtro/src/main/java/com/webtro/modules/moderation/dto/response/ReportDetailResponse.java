@@ -73,7 +73,6 @@ public class ReportDetailResponse {
         private String excerpt;
         private Long ownerId;
         private String ownerName;
-        private Integer ownerTrustScore;
         private Long ownerWarningCountLast30Days;
         private Long ownerLockedListingCountLast60Days;
     }

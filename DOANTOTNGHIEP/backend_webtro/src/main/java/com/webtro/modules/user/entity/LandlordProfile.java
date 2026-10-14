@@ -29,15 +29,14 @@ import java.time.LocalDate;
  *
  * <p>{@code user_id} cùng module + UNIQUE → {@code @OneToOne(LAZY)}.
  * {@code verified_by} là actor (moderator/admin duyệt) nên giữ {@link Long}.
- * Nhiều cột đếm sẵn (denormalized counters) phục vụ công thức uy tín {@code [§5.8]}.
+ * Nhiều cột đếm sẵn (denormalized counters) phục vụ thống kê chủ trọ.
  */
 @Entity
 @Table(
         name = "landlord_profiles",
         uniqueConstraints = @UniqueConstraint(name = "uk_landlord_profiles_user_id", columnNames = "user_id"),
         indexes = {
-                @Index(name = "idx_landlord_profiles_verification_status", columnList = "verification_status"),
-                @Index(name = "idx_landlord_profiles_trust_score", columnList = "trust_score")
+                @Index(name = "idx_landlord_profiles_verification_status", columnList = "verification_status")
         }
 )
 @Getter
@@ -98,11 +97,6 @@ public class LandlordProfile extends AuditableEntity {
     /** Ghi chú xác minh. */
     @Column(name = "verification_note", length = 500)
     private String verificationNote;
-
-    /** Điểm uy tín (0-100). */
-    @Builder.Default
-    @Column(name = "trust_score", nullable = false, precision = 5, scale = 2)
-    private BigDecimal trustScore = BigDecimal.valueOf(100.00);
 
     /** Tỷ lệ phản hồi (%) — null nếu chưa có dữ liệu. */
     @Column(name = "response_rate_percent")

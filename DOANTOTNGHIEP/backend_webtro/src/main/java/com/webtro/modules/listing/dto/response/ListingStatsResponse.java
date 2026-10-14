@@ -43,7 +43,6 @@ public class ListingStatsResponse {
         private Integer commentCount;
         private Integer reviewCount;
         private BigDecimal averageRating;
-        private Integer trustScore;
         private BigDecimal conversionRatePercent;
         private Long daysActive;
         private Long daysRemaining;

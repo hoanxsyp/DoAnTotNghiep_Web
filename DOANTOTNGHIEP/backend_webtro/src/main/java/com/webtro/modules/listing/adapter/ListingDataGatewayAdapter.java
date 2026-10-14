@@ -229,7 +229,6 @@ public class ListingDataGatewayAdapter implements ListingDataGateway {
                 l.getCurfewType(),
                 Boolean.TRUE.equals(l.getParkingAvailable()),
                 amenityLinkRepository.findAmenityIdsByListingIdAlive(l.getId()),
-                intOf(l.getTrustScore()),
                 l.getAverageRating(),
                 l.getPublishedAt(),
                 Boolean.TRUE.equals(l.getIsPromoted()),

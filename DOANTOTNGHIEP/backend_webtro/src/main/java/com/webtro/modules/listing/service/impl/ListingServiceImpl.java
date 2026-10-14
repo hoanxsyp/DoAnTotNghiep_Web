@@ -47,7 +47,6 @@ import com.webtro.modules.listing.service.ListingCategoryCountPublisher;
 import com.webtro.modules.listing.service.ListingOwnerStatsPublisher;
 import com.webtro.modules.listing.service.ListingService;
 import com.webtro.modules.listing.service.ListingVisibilityService;
-import com.webtro.modules.listing.service.TrustScoreService;
 import com.webtro.modules.listing.spi.FavoriteStatusGateway;
 import com.webtro.modules.listing.statemachine.ListingEvent;
 import com.webtro.modules.listing.statemachine.ListingStateMachine;
@@ -106,7 +105,6 @@ public class ListingServiceImpl implements ListingService {
     private final ListingVisibilityService visibilityService;
     private final ListingCategoryCountPublisher categoryCountPublisher;
     private final ListingOwnerStatsPublisher ownerStatsPublisher;
-    private final TrustScoreService trustScoreService;
     private final ListingMapper mapper;
 
     private final SystemConfigService config;
@@ -620,7 +618,6 @@ public class ListingServiceImpl implements ListingService {
                 .commentCount(nz(listing.getCommentCount()))
                 .reviewCount(nz(listing.getReviewCount()))
                 .averageRating(listing.getAverageRating())
-                .trustScore(intOf(listing.getTrustScore()))
                 .conversionRatePercent(conversion)
                 .daysActive(daysBetween(listing.getPublishedAt(), Instant.now()))
                 .daysRemaining(remainingDays(listing.getExpiredAt()))

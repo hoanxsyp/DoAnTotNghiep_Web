@@ -47,17 +47,15 @@ public class AdminLandlordController {
     @GetMapping
     @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Quản lý chủ trọ",
-            description = "Danh sách chủ trọ kèm điểm uy tín, số tin, số report; lọc theo trạng thái xác thực, khoảng uy tín, trạng thái hạn chế đăng tin.")
+            description = "Danh sách chủ trọ kèm số tin, số report; lọc theo trạng thái xác thực, trạng thái hạn chế đăng tin.")
     public ResponseEntity<ApiResponse<PageResponse<AdminLandlordResponse>>> listLandlords(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) List<VerificationStatus> verificationStatus,
-            @RequestParam(required = false) Integer minTrustScore,
-            @RequestParam(required = false) Integer maxTrustScore,
             @RequestParam(required = false) Boolean postingSuspended,
-            @PageableDefault(size = 20, sort = "trustScore", direction = Sort.Direction.ASC) Pageable pageable) {
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
 
         PageResponse<AdminLandlordResponse> data = adminUserService.listLandlords(
-                keyword, verificationStatus, minTrustScore, maxTrustScore, postingSuspended, pageable);
+                keyword, verificationStatus, postingSuspended, pageable);
         return ResponseEntity.ok(ApiResponse.success(data, "Lấy danh sách chủ trọ thành công"));
     }
 

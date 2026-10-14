@@ -19,21 +19,23 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Gợi ý dựa trên nội dung với công thức 9 số hạng (canonical mục 10.2, §9.2).
+ * Gợi ý dựa trên nội dung với công thức 8 số hạng (canonical mục 10.2, §9.2 — đã bỏ số hạng điểm
+ * uy tín vì hệ thống không còn tính điểm uy tín).
  *
  * <pre>
- * score = 0.22·location + 0.12·area + 0.20·price + 0.12·category + 0.08·amenity
- *       + 0.08·occupant + 0.06·gender + 0.06·trustNorm + 0.06·freshness
+ * score = (0.22·location + 0.12·area + 0.20·price + 0.12·category + 0.08·amenity
+ *        + 0.08·occupant + 0.06·gender + 0.06·freshness) / W
  * score = score × promotedBoost            (trần 1.15)
  * </pre>
  *
- * <p>{@code genderMatch} chỉ áp dụng cho tin {@code ROOMMATE}; với tin khác, bỏ số hạng đó ra và
- * chia lại cho tổng trọng số thực áp dụng (W = 0.94) — không gán mặc định 1.0 để tránh thiên vị.
+ * <p>W = tổng trọng số thực áp dụng (0.94). {@code genderMatch} chỉ áp dụng cho tin
+ * {@code ROOMMATE}; với tin khác, bỏ số hạng đó ra (W = 0.88) — không gán mặc định 1.0 để tránh
+ * thiên vị.
  */
 @Component
 public class ContentBasedRecommendationEngine implements RecommendationEngine {
 
-    // Trọng số 9 số hạng (Σ = 1.00).
+    // Trọng số 8 số hạng (Σ = 0.94; điểm được chuẩn hóa theo tổng trọng số áp dụng).
     private static final BigDecimal W_LOCATION = new BigDecimal("0.22");
     private static final BigDecimal W_AREA = new BigDecimal("0.12");
     private static final BigDecimal W_PRICE = new BigDecimal("0.20");
@@ -41,7 +43,6 @@ public class ContentBasedRecommendationEngine implements RecommendationEngine {
     private static final BigDecimal W_AMENITY = new BigDecimal("0.08");
     private static final BigDecimal W_OCCUPANT = new BigDecimal("0.08");
     private static final BigDecimal W_GENDER = new BigDecimal("0.06");
-    private static final BigDecimal W_TRUST = new BigDecimal("0.06");
     private static final BigDecimal W_FRESHNESS = new BigDecimal("0.06");
 
     private static final BigDecimal NEUTRAL = new BigDecimal("0.50");
@@ -167,7 +168,6 @@ public class ContentBasedRecommendationEngine implements RecommendationEngine {
         BigDecimal occupant = occupantScore(p, c);
         boolean genderApplies = c.categoryCode() == CategoryCode.ROOMMATE;
         BigDecimal gender = genderApplies ? genderScore(p, c) : null;
-        BigDecimal trust = BigDecimal.valueOf(c.trustScore()).divide(new BigDecimal("100"), 4, RoundingMode.HALF_UP);
         BigDecimal freshness = freshnessScore(c.publishedAt());
 
         BigDecimal weighted = W_LOCATION.multiply(location)
@@ -176,18 +176,17 @@ public class ContentBasedRecommendationEngine implements RecommendationEngine {
                 .add(W_CATEGORY.multiply(category))
                 .add(W_AMENITY.multiply(amenity))
                 .add(W_OCCUPANT.multiply(occupant))
-                .add(W_TRUST.multiply(trust))
                 .add(W_FRESHNESS.multiply(freshness));
 
         BigDecimal appliedWeightSum = W_LOCATION.add(W_AREA).add(W_PRICE).add(W_CATEGORY)
-                .add(W_AMENITY).add(W_OCCUPANT).add(W_TRUST).add(W_FRESHNESS);
+                .add(W_AMENITY).add(W_OCCUPANT).add(W_FRESHNESS);
 
         if (genderApplies) {
             weighted = weighted.add(W_GENDER.multiply(gender));
             appliedWeightSum = appliedWeightSum.add(W_GENDER);
         }
 
-        // Chuẩn hóa lại theo tổng trọng số thực áp dụng (W = 0.94 khi bỏ gender).
+        // Chuẩn hóa lại theo tổng trọng số thực áp dụng (W = 0.88 khi bỏ gender, 0.94 khi có).
         BigDecimal base = weighted.divide(appliedWeightSum, 6, RoundingMode.HALF_UP);
 
         BigDecimal boost = c.promoted() ? boostCap : BigDecimal.ONE;
@@ -200,7 +199,7 @@ public class ContentBasedRecommendationEngine implements RecommendationEngine {
 
         ScoreBreakdown breakdown = new ScoreBreakdown(
                 scale4(location), scale4(area), scale4(price), scale4(category), scale4(amenity),
-                scale4(occupant), gender == null ? null : scale4(gender), scale4(trust),
+                scale4(occupant), gender == null ? null : scale4(gender),
                 scale4(freshness), boost.setScale(3, RoundingMode.HALF_UP),
                 appliedWeightSum.setScale(2, RoundingMode.HALF_UP), finalScore, reasons);
         return new ScoredListing(c, breakdown);

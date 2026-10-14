@@ -168,10 +168,6 @@ public class Listing extends AuditableEntity {
 
     // ----- Điểm số & bộ đếm (denormalized, job/transaction cập nhật) -----
 
-    @Column(name = "trust_score", nullable = false, precision = 5, scale = 2)
-    @lombok.Builder.Default
-    private BigDecimal trustScore = new BigDecimal("100.00");
-
     @Column(name = "average_rating", nullable = false, precision = 3, scale = 2)
     @lombok.Builder.Default
     private BigDecimal averageRating = new BigDecimal("0.00");

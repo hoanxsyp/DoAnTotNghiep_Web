@@ -110,7 +110,6 @@ public class ModerationServiceImpl implements ModerationService {
     private final com.webtro.modules.admin.service.SystemConfigService systemConfig;
     private final RateLimitService rateLimitService;
     private final com.webtro.modules.notification.service.NotificationService notificationService;
-    private final com.webtro.modules.listing.service.TrustScoreService trustScoreService;
     private final ListingModerationGateway listingGateway;
     private final UserModerationGateway userGateway;
     private final ContentModerationGateway contentGateway;
@@ -324,7 +323,7 @@ public class ModerationServiceImpl implements ModerationService {
             ModerationResult result = action == null ? null : action.getResult();
             String note = action == null ? null : action.getNote();
             return reportMapper.toAdminItem(r, view.title(), view.ownerId(), view.ownerName(),
-                    view.ownerTrustScore(), reporter, related, result, note);
+                    reporter, related, result, note);
         });
 
         Map<String, Long> statusCounts = new LinkedHashMap<>();
@@ -424,7 +423,6 @@ public class ModerationServiceImpl implements ModerationService {
                 .targetStatus(view.status())
                 .targetOwnerId(view.ownerId())
                 .targetOwnerName(view.ownerName())
-                .targetOwnerTrustScore(view.ownerTrustScore())
                 .reportCount(group.size())
                 .distinctReporterCount(distinct)
                 .maxSeverity(maxSeverity)
@@ -480,7 +478,6 @@ public class ModerationServiceImpl implements ModerationService {
                 .excerpt(view.excerpt())
                 .ownerId(view.ownerId())
                 .ownerName(view.ownerName())
-                .ownerTrustScore(view.ownerTrustScore())
                 .ownerWarningCountLast30Days(view.ownerId() == null ? null : countActiveWarnings(view.ownerId()))
                 .ownerLockedListingCountLast60Days(view.ownerId() == null ? null : countRecentLockedListings(view.ownerId()))
                 .build();
@@ -649,7 +646,6 @@ public class ModerationServiceImpl implements ModerationService {
             }
         }
 
-        recalcTrust(target);
 
         Long ownerWarn30 = target.ownerId() == null ? null : countActiveWarnings(target.ownerId());
         Long ownerLocked60 = target.ownerId() == null ? null : countRecentLockedListings(target.ownerId());
@@ -786,7 +782,7 @@ public class ModerationServiceImpl implements ModerationService {
     private ReportTargetGroupResponse.TargetSnapshot targetSnapshot(TargetView view, ReportTargetType type, Long id) {
         return ReportTargetGroupResponse.TargetSnapshot.builder()
                 .type(type.name()).id(id).title(view.title()).status(view.status()).excerpt(view.excerpt())
-                .ownerId(view.ownerId()).ownerName(view.ownerName()).ownerTrustScore(view.ownerTrustScore())
+                .ownerId(view.ownerId()).ownerName(view.ownerName())
                 .ownerWarningCountLast30Days(view.ownerId() == null ? null : countActiveWarnings(view.ownerId()))
                 .build();
     }
@@ -840,7 +836,6 @@ public class ModerationServiceImpl implements ModerationService {
                         .build())
                 .toList();
 
-        recalcTrust(target);
 
         int reportersNotified = (int) toClose.stream().map(Report::getReporterId).distinct().count();
         Long auditId = writeLockAuditIfNeeded(result, request.getTargetType(), request.getTargetId(),
@@ -1130,19 +1125,6 @@ public class ModerationServiceImpl implements ModerationService {
         reportRepository.save(report);
     }
 
-    private void recalcTrust(TargetInfo target) {
-        try {
-            if (target.listingId() != null) {
-                trustScoreService.recalculateAndSaveListing(target.listingId());
-            }
-            if (target.ownerId() != null) {
-                trustScoreService.recalculateLandlord(target.ownerId());
-            }
-        } catch (RuntimeException e) {
-            log.warn("Không tính lại được điểm uy tín (bỏ qua để không chặn kiểm duyệt): {}", e.getMessage());
-        }
-    }
-
     private boolean maybeSuspendPosting(Long ownerId, boolean warningIssued, Long ownerWarn30) {
         if (ownerId == null || !warningIssued || ownerWarn30 == null) {
             return false;
@@ -1268,9 +1250,9 @@ public class ModerationServiceImpl implements ModerationService {
     private record TargetInfo(Long ownerId, Long listingId, String title, String status) {
     }
 
-    /** Thông tin đầy đủ để hiển thị (thêm chủ sở hữu, điểm uy tín, trích nội dung). */
+    /** Thông tin đầy đủ để hiển thị (thêm chủ sở hữu, trích nội dung). */
     private record TargetView(String title, String status, String excerpt, String url,
-                              Long ownerId, String ownerName, Integer ownerTrustScore) {
+                              Long ownerId, String ownerName) {
     }
 
     private TargetInfo resolveTarget(ReportTargetType type, Long targetId) {
@@ -1312,7 +1294,7 @@ public class ModerationServiceImpl implements ModerationService {
         try {
             return describeTargetOrThrow(type, targetId);
         } catch (RuntimeException e) {
-            return new TargetView(null, null, null, null, null, null, null);
+            return new TargetView(null, null, null, null, null, null);
         }
     }
 
@@ -1325,8 +1307,7 @@ public class ModerationServiceImpl implements ModerationService {
                 String url = ref.slug() == null ? null : "/tin/" + ref.slug() + "-" + ref.id();
                 return new TargetView(ref.title(), ref.status() == null ? null : ref.status().name(),
                         null, url, ref.ownerId(),
-                        owner == null ? null : owner.fullName(),
-                        owner == null ? null : owner.trustScore());
+                        owner == null ? null : owner.fullName());
             }
             case COMMENT -> {
                 ContentModerationGateway.ContentRef c = contentGateway.findComment(targetId)
@@ -1334,8 +1315,7 @@ public class ModerationServiceImpl implements ModerationService {
                 UserModerationGateway.UserRef author = c.authorId() == null ? null
                         : userGateway.findRef(c.authorId()).orElse(null);
                 return new TargetView("Bình luận #" + targetId, null, c.excerpt(), null, c.authorId(),
-                        author == null ? null : author.fullName(),
-                        author == null ? null : author.trustScore());
+                        author == null ? null : author.fullName());
             }
             case REVIEW -> {
                 ContentModerationGateway.ContentRef r = contentGateway.findReview(targetId)
@@ -1343,14 +1323,13 @@ public class ModerationServiceImpl implements ModerationService {
                 UserModerationGateway.UserRef author = r.authorId() == null ? null
                         : userGateway.findRef(r.authorId()).orElse(null);
                 return new TargetView("Đánh giá #" + targetId, null, r.excerpt(), null, r.authorId(),
-                        author == null ? null : author.fullName(),
-                        author == null ? null : author.trustScore());
+                        author == null ? null : author.fullName());
             }
             default -> {
                 UserModerationGateway.UserRef u = userGateway.findRef(targetId)
                         .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.REPORT_TARGET_NOT_FOUND));
                 return new TargetView(u.fullName(), null, null, "/nguoi-dung/" + targetId, u.id(),
-                        u.fullName(), u.trustScore());
+                        u.fullName());
             }
         }
     }

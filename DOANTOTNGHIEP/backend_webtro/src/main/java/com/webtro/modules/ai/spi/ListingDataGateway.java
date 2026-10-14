@@ -48,7 +48,6 @@ public interface ListingDataGateway {
             CurfewType curfewType,
             boolean parkingAvailable,
             List<Long> amenityIds,
-            int trustScore,
             BigDecimal averageRating,
             Instant publishedAt,
             boolean promoted,

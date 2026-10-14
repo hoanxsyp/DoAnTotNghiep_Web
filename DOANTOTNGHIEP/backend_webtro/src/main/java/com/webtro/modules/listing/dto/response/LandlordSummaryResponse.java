@@ -23,8 +23,6 @@ public class LandlordSummaryResponse {
     private String fullName;
     private String avatarUrl;
     private Boolean verified;
-    private Integer trustScore;
-    private String trustLabel;
     private BigDecimal averageRating;
     private Integer totalActiveListings;
     private Boolean chatEnabled;

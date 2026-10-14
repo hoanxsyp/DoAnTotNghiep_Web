@@ -1,6 +1,5 @@
 package com.webtro.modules.user.mapper;
 
-import com.webtro.common.enums.TrustLabel;
 import com.webtro.modules.user.dto.response.LandlordPublicResponse;
 import com.webtro.modules.user.dto.response.MyLandlordProfileResponse;
 import com.webtro.modules.user.entity.LandlordProfile;
@@ -28,11 +27,10 @@ public class LandlordProfileMapper {
      * @param followerCount       số người theo dõi
      * @param followedByMe        người xem có đang theo dõi không
      * @param viewerAuthenticated người xem đã đăng nhập chưa (quyết định che số điện thoại)
-     * @param trustLabel          nhãn uy tín đã tính sẵn (null nếu không phải chủ trọ)
      */
     public LandlordPublicResponse toPublicResponse(User user, LandlordProfile lp, boolean isLandlord,
                                                    long followerCount, boolean followedByMe,
-                                                   boolean viewerAuthenticated, TrustLabel trustLabel) {
+                                                   boolean viewerAuthenticated) {
         LandlordPublicResponse.LandlordPublicResponseBuilder builder = LandlordPublicResponse.builder()
                 .id(user.getId())
                 .fullName(user.getFullName())
@@ -45,8 +43,6 @@ public class LandlordProfileMapper {
         if (lp != null) {
             String rawPhone = lp.getContactPhone() != null ? lp.getContactPhone() : user.getPhone();
             builder.verified(lp.getVerifiedAt() != null)
-                    .trustScore(toInt(lp.getTrustScore()))
-                    .trustLabel(trustLabel)
                     .averageRating(lp.getAverageRating())
                     .totalReviews(lp.getReviewCount())
                     .totalActiveListings(lp.getTotalActiveListings())
@@ -59,7 +55,6 @@ public class LandlordProfileMapper {
         } else {
             // Người dùng thường (không phải chủ trọ): chỉ trả thông tin công khai tối thiểu.
             builder.verified(false)
-                    .trustScore(null)
                     .averageRating(null)
                     .totalReviews(0)
                     .totalActiveListings(0)
@@ -83,7 +78,6 @@ public class LandlordProfileMapper {
                 .chatEnabled(Boolean.TRUE.equals(lp.getAllowChat()))
                 .verificationStatus(lp.getVerificationStatus())
                 .verifiedAt(lp.getVerifiedAt())
-                .trustScore(toInt(lp.getTrustScore()))
                 .totalListings(lp.getTotalListings())
                 .activeListings(lp.getTotalActiveListings())
                 .postingSuspended(postingSuspended)

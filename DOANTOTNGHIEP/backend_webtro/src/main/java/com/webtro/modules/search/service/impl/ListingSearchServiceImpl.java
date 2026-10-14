@@ -199,7 +199,6 @@ public class ListingSearchServiceImpl implements ListingSearchService {
         addIfPresent(specs, ListingSpecifications.petAllowed(r.getPetAllowed()));
         addIfPresent(specs, ListingSpecifications.parkingAvailable(r.getParkingAvailable()));
         addIfPresent(specs, ListingSpecifications.availableFromBefore(r.getAvailableFrom()));
-        addIfPresent(specs, ListingSpecifications.minTrustScore(r.getMinTrustScore()));
         addIfPresent(specs, ListingSpecifications.hasAllAmenityIds(r.getAmenityIds()));
         addIfPresent(specs, ListingSpecifications.hasAmenityCode("BALCONY", r.getHasBalcony()));
         addIfPresent(specs, ListingSpecifications.hasAmenityCode("AIR_CONDITIONER", r.getHasAirConditioner()));
@@ -296,7 +295,7 @@ public class ListingSearchServiceImpl implements ListingSearchService {
         addIfPresent(specs, ListingSpecifications.provinceId(baseLocation.provinceId()));
         addIfPresent(specs, ListingSpecifications.priceFrom(priceLow));
         addIfPresent(specs, ListingSpecifications.priceTo(priceHigh));
-        specs.add(ListingSpecifications.orderBy(ListingSortOption.TRUST_DESC, now));
+        specs.add(ListingSpecifications.orderBy(ListingSortOption.NEWEST, now));
 
         int candidateLimit = Math.min(resolvedSize * 5, RELATED_CANDIDATE_CAP);
         Page<Listing> candidates = listingRepository.findAll(

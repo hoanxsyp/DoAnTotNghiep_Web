@@ -8,7 +8,6 @@ import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.jpa.domain.Specification;
 
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -26,7 +25,6 @@ public final class AdminLandlordSpecifications {
 
     public static Specification<LandlordProfile> filter(String keyword,
                                                         List<VerificationStatus> statuses,
-                                                        Integer minTrustScore, Integer maxTrustScore,
                                                         Boolean postingSuspended, Instant now) {
         return (root, query, cb) -> {
             List<Predicate> ps = new ArrayList<>();
@@ -49,13 +47,6 @@ public final class AdminLandlordSpecifications {
 
             if (statuses != null && !statuses.isEmpty()) {
                 ps.add(root.get("verificationStatus").in(statuses));
-            }
-
-            if (minTrustScore != null) {
-                ps.add(cb.greaterThanOrEqualTo(root.get("trustScore"), new BigDecimal(minTrustScore)));
-            }
-            if (maxTrustScore != null) {
-                ps.add(cb.lessThanOrEqualTo(root.get("trustScore"), new BigDecimal(maxTrustScore)));
             }
 
             if (postingSuspended != null) {

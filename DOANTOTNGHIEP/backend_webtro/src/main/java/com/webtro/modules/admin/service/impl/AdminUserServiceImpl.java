@@ -35,7 +35,6 @@ import com.webtro.modules.listing.entity.Listing;
 import com.webtro.modules.listing.repository.ListingRepository;
 import com.webtro.modules.listing.service.ListingCategoryCountPublisher;
 import com.webtro.modules.listing.service.ListingOwnerStatsPublisher;
-import com.webtro.modules.listing.service.TrustScoreService;
 import com.webtro.modules.listing.statemachine.ListingEvent;
 import com.webtro.modules.listing.statemachine.ListingStateMachine;
 import com.webtro.modules.notification.service.NotificationService;
@@ -90,7 +89,6 @@ public class AdminUserServiceImpl implements AdminUserService {
 
     /** Các trường sort hợp lệ cho màn quản lý chủ trọ (canonical 4.13.6) → cột entity tương ứng. */
     private static final Map<String, String> LANDLORD_SORT_FIELDS = Map.of(
-            "trustScore", "trustScore",
             "listingCount", "totalListings",
             "createdAt", "createdAt",
             "validReportCount", "validReportCount");
@@ -107,7 +105,6 @@ public class AdminUserServiceImpl implements AdminUserService {
     private final ListingStateMachine listingStateMachine;
     private final ListingCategoryCountPublisher categoryCountPublisher;
     private final ListingOwnerStatsPublisher ownerStatsPublisher;
-    private final TrustScoreService trustScoreService;
     private final AdminUserMapper adminUserMapper;
     private final AuditLogService auditLogService;
     private final NotificationService notificationService;
@@ -350,7 +347,6 @@ public class AdminUserServiceImpl implements AdminUserService {
                     .verifiedAt(landlord.getVerifiedAt())
                     .verifiedById(landlord.getVerifiedBy())
                     .verificationNote(landlord.getVerificationNote())
-                    .trustScore(toInt(landlord.getTrustScore()))
                     .averageRating(landlord.getAverageRating())
                     .reviewCount(landlord.getReviewCount())
                     .responseRatePercent(landlord.getResponseRatePercent())
@@ -374,12 +370,11 @@ public class AdminUserServiceImpl implements AdminUserService {
     @Transactional(readOnly = true)
     public PageResponse<AdminLandlordResponse> listLandlords(String keyword,
                                                              List<VerificationStatus> verificationStatuses,
-                                                             Integer minTrustScore, Integer maxTrustScore,
                                                              Boolean postingSuspended, Pageable pageable) {
         Instant now = Instant.now();
         Pageable effective = sanitizeLandlordPageable(pageable);
         Specification<LandlordProfile> spec = AdminLandlordSpecifications.filter(
-                keyword, verificationStatuses, minTrustScore, maxTrustScore, postingSuspended, now);
+                keyword, verificationStatuses, postingSuspended, now);
         Page<LandlordProfile> page = landlordProfileRepository.findAll(spec, effective);
 
         // Nạp trước tên người xác thực để tránh N+1 (kích thước trang tối đa 100).
@@ -407,7 +402,6 @@ public class AdminUserServiceImpl implements AdminUserService {
     private AdminLandlordResponse toLandlordResponse(LandlordProfile lp, Map<Long, String> verifierNames,
                                                      Instant now) {
         User user = lp.getUser();
-        Integer trustScore = toInt(lp.getTrustScore());
         boolean suspended = isPostingSuspended(lp, now);
         return AdminLandlordResponse.builder()
                 .userId(user.getId())
@@ -424,8 +418,6 @@ public class AdminUserServiceImpl implements AdminUserService {
                 .verifiedAt(lp.getVerifiedAt())
                 .verifiedById(lp.getVerifiedBy())
                 .verifiedByName(lp.getVerifiedBy() != null ? verifierNames.get(lp.getVerifiedBy()) : null)
-                .trustScore(trustScore)
-                .trustLabel(trustScore != null ? trustScoreService.labelOf(trustScore) : null)
                 .listingCount(lp.getTotalListings())
                 .activeListingCount(lp.getTotalActiveListings())
                 .lockedListingCount(lp.getLockedListingCount())
@@ -696,7 +688,7 @@ public class AdminUserServiceImpl implements AdminUserService {
             }
             orders.add(new Sort.Order(o.getDirection(), mapped));
         }
-        Sort sort = orders.isEmpty() ? Sort.by(Sort.Direction.ASC, "trustScore") : Sort.by(orders);
+        Sort sort = orders.isEmpty() ? Sort.by(Sort.Direction.DESC, "createdAt") : Sort.by(orders);
         return PageRequest.of(page, size, sort);
     }
 

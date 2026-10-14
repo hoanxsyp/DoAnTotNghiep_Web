@@ -41,10 +41,9 @@ import java.util.List;
 /**
  * Cài đặt {@link AdminAiService}.
  *
- * <p>Cấu hình AI được lưu trong {@code system_configs} dưới các khóa {@code ai.*}/{@code trust.*};
- * endpoint chỉ trình bày lại theo phân hệ. Cập nhật ủy quyền {@link SystemConfigService#updateValue}
- * (validate + evict cache), ghi audit và — khi đổi trọng số uy tín — đánh dấu cần
- * tính lại điểm uy tín ({@code [§9.1]}).
+ * <p>Cấu hình AI được lưu trong {@code system_configs} dưới các khóa {@code ai.*}; endpoint chỉ
+ * trình bày lại theo phân hệ. Cập nhật ủy quyền {@link SystemConfigService#updateValue}
+ * (validate + evict cache) và ghi audit.
  *
  * <p>Log AI đọc chỉ-đọc từ repository của module {@code ai} (canonical: chỉ đọc, không ghi).
  */
@@ -55,7 +54,6 @@ public class AdminAiServiceImpl implements AdminAiService {
 
     private static final Duration MAX_LOG_RANGE = Duration.ofDays(90);
     private static final String AI_PREFIX = "ai.";
-    private static final String TRUST_PREFIX = "trust.";
 
     private final SystemConfigRepository systemConfigRepository;
     private final SystemConfigService systemConfigService;
@@ -76,14 +74,11 @@ public class AdminAiServiceImpl implements AdminAiService {
         List<ConfigItemResponse> recommendation = new ArrayList<>();
         List<ConfigItemResponse> price = new ArrayList<>();
         List<ConfigItemResponse> chatbot = new ArrayList<>();
-        List<ConfigItemResponse> trustWeights = new ArrayList<>();
 
         for (SystemConfig c : systemConfigRepository.findByDeletedAtIsNullOrderByGroupNameAscDisplayOrderAsc()) {
             String key = c.getConfigKey();
             ConfigItemResponse item = systemConfigMapper.toResponse(c);
-            if (key.startsWith(TRUST_PREFIX)) {
-                trustWeights.add(item);
-            } else if (key.startsWith(AI_PREFIX)) {
+            if (key.startsWith(AI_PREFIX)) {
                 if (key.endsWith(".enabled")) {
                     modules.add(item);
                 } else if (key.startsWith("ai.recommendation.")) {
@@ -101,7 +96,6 @@ public class AdminAiServiceImpl implements AdminAiService {
                 .recommendation(recommendation)
                 .price(price)
                 .chatbot(chatbot)
-                .trustWeights(trustWeights)
                 .build();
     }
 
@@ -110,12 +104,11 @@ public class AdminAiServiceImpl implements AdminAiService {
     public UpdateConfigResponse updateConfig(UpdateConfigRequest request, Long actorId) {
         List<UpdateConfigResponse.UpdatedItem> updated = new ArrayList<>();
         List<Long> auditIds = new ArrayList<>();
-        boolean recalcNeeded = false;
 
         for (UpdateConfigRequest.ConfigEntry entry : request.getConfigs()) {
             String key = entry.getKey().trim();
 
-            if (!key.startsWith(AI_PREFIX) && !key.startsWith(TRUST_PREFIX)) {
+            if (!key.startsWith(AI_PREFIX)) {
                 throw new BusinessException(ErrorCode.AI_CONFIG_KEY_UNKNOWN,
                         "Khóa cấu hình AI không hợp lệ: " + key);
             }
@@ -137,10 +130,6 @@ public class AdminAiServiceImpl implements AdminAiService {
                 throw ex;
             }
 
-            if (key.startsWith(TRUST_PREFIX)) {
-                recalcNeeded = true;
-            }
-
             Object newTyped = systemConfigMapper.coerce(newRaw, config.getValueType());
             Long auditId = auditLogService.recordChange(AuditAction.AI_CONFIG_CHANGE, actorId,
                     "CONFIG", null, key,
@@ -153,10 +142,6 @@ public class AdminAiServiceImpl implements AdminAiService {
         return UpdateConfigResponse.builder()
                 .updated(updated)
                 .cacheInvalidated(true)
-                .recalcJobQueued(recalcNeeded)
-                .note(recalcNeeded
-                        ? "Thay đổi trọng số/ngưỡng — điểm uy tín sẽ được tính lại ở lần chạy job kế tiếp [§9.1]"
-                        : null)
                 .auditLogIds(auditIds)
                 .updatedAt(Instant.now())
                 .build();

@@ -50,7 +50,6 @@ public class RecommendationResponse {
         private BigDecimal area;
         private String shortAddress;
         private String thumbnailUrl;
-        private Integer trustScore;
         private BigDecimal averageRating;
         private Boolean promoted;
         /** Người xem đã lưu tin này chưa — chỉ có khi đã đăng nhập, ngược lại null. */
@@ -74,7 +73,6 @@ public class RecommendationResponse {
         private BigDecimal amenityMatch;
         private BigDecimal occupantMatch;
         private BigDecimal genderMatch;
-        private BigDecimal trustScoreNorm;
         private BigDecimal freshness;
         private BigDecimal promotedBoost;
         private BigDecimal appliedWeightSum;

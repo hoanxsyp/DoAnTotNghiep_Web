@@ -13,14 +13,14 @@ import java.time.Instant;
 
 /**
  * Quản trị AI (canonical 4.19): xem/sửa cấu hình AI ({@code AI_CONFIG_MANAGE}) và xem log AI
- * ({@code AI_LOG_VIEW}). Cấu hình AI là tập khóa {@code ai.*}/{@code trust.*} trong {@code system_configs}.
+ * ({@code AI_LOG_VIEW}). Cấu hình AI là tập khóa {@code ai.*} trong {@code system_configs}.
  */
 public interface AdminAiService {
 
     /** Xem cấu hình AI gom theo phân hệ (canonical 4.19.5). */
     AiConfigResponse getConfig();
 
-    /** Cập nhật cấu hình AI; audit {@code AI_CONFIG_CHANGE}; queue recalc điểm uy tín nếu đổi trọng số. */
+    /** Cập nhật cấu hình AI; audit {@code AI_CONFIG_CHANGE}. */
     UpdateConfigResponse updateConfig(UpdateConfigRequest request, Long actorId);
 
     /** Xem log AI của một module (canonical 4.19.1); khoảng {@code from..to} tối đa 90 ngày. */

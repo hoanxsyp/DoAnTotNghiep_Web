@@ -9,7 +9,7 @@ import java.time.Instant;
  * (gọi module khác qua interface, không đụng repository của nó).
  *
  * <p><b>Quyết định kiến trúc:</b> tại thời điểm viết module payment, module listing mới chỉ có
- * entity + repository + {@code ListingStateMachine} + {@code TrustScoreService} +
+ * entity + repository + {@code ListingStateMachine} +
  * {@code ListingVisibilityService}, chưa có service ghi. Theo đúng quy ước đã áp dụng ở
  * {@code interaction.spi.ListingGateway} và {@code moderation.spi.ListingModerationGateway}, hợp
  * đồng cross-module được khai báo dạng SPI <i>do bên tiêu dùng sở hữu</i> (đặt tại

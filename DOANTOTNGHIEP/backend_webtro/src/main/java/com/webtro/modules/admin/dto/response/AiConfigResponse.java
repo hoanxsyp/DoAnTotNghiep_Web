@@ -10,7 +10,7 @@ import lombok.Setter;
 import java.util.List;
 
 /**
- * Cấu hình AI gom theo phân hệ (canonical 4.19.5). Tất cả các khóa là {@code ai.*}/{@code trust.*}
+ * Cấu hình AI gom theo phân hệ (canonical 4.19.5). Tất cả các khóa là {@code ai.*}
  * trong {@code system_configs}; endpoint này chỉ trình bày lại theo nhóm cho Admin.
  */
 @Getter
@@ -32,7 +32,4 @@ public class AiConfigResponse {
 
     @Schema(description = "Cấu hình chatbot (ai.chatbot.*)")
     private List<ConfigItemResponse> chatbot;
-
-    @Schema(description = "Trọng số điểm uy tín (trust.*)")
-    private List<ConfigItemResponse> trustWeights;
 }

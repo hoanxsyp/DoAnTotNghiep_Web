@@ -17,7 +17,7 @@ import java.util.Optional;
  *
  * <p>Đọc tóm tắt nội dung bị báo cáo qua {@link CommentRepository}/{@link ReviewRepository}; việc ẩn
  * đi qua {@link CommentService}/{@link ReviewService} để giữ đúng ràng buộc
- * {@code hidden_reason}/{@code hidden_by}/{@code hidden_at} và đồng bộ lại số đếm/điểm uy tín.
+ * {@code hidden_reason}/{@code hidden_by}/{@code hidden_at} và đồng bộ lại số đếm/điểm đánh giá.
  */
 @Component
 @RequiredArgsConstructor
@@ -55,7 +55,7 @@ public class ContentModerationGatewayAdapter implements ContentModerationGateway
         commentService.hideByModeration(commentId, moderatorId, reason);
     }
 
-    /** Ẩn một đánh giá do kiểm duyệt — bắc cầu sang service (kèm tính lại trung bình + uy tín). */
+    /** Ẩn một đánh giá do kiểm duyệt — bắc cầu sang service (kèm tính lại trung bình sao). */
     @Override
     @Transactional
     public void hideReview(Long reviewId, Long moderatorId, String reason) {

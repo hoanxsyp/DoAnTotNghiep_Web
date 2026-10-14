@@ -27,10 +27,7 @@ public class UpdateConfigResponse {
     @Schema(description = "Đã invalidate cache SystemConfigService chưa", example = "true")
     private boolean cacheInvalidated;
 
-    @Schema(description = "Đã đưa job tính lại điểm uy tín vào hàng đợi chưa (chỉ khi đổi trọng số trust.*)")
-    private Boolean recalcJobQueued;
-
-    @Schema(description = "Ghi chú (ví dụ: thay đổi không hồi tố, hoặc job recalc)")
+    @Schema(description = "Ghi chú (ví dụ: thay đổi không hồi tố)")
     private String note;
 
     @Schema(description = "Id các bản ghi audit tương ứng")

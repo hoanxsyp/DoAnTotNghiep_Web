@@ -12,7 +12,7 @@ import org.springframework.stereotype.Component;
  * Chuyển đổi {@link Report} (entity) sang các DTO phản hồi — nơi DUY NHẤT thực hiện việc này
  * (canonical luật 3). Viết thủ công bằng Builder (không MapStruct).
  *
- * <p>Các trường phái sinh từ module khác (tiêu đề tin, tên/điểm uy tín chủ tin, số liệu người báo
+ * <p>Các trường phái sinh từ module khác (tiêu đề tin, tên chủ tin, số liệu người báo
  * cáo) và {@code result} (lưu ở {@code moderation_actions}, không ở {@code reports}) được service
  * truyền vào dưới dạng tham số — mapper không tự gọi module khác.
  */
@@ -61,7 +61,7 @@ public class ReportMapper {
 
     /** Một dòng báo cáo trong danh sách quản trị (groupBy=NONE). */
     public AdminReportItemResponse toAdminItem(Report r, String targetTitle, Long targetOwnerId,
-                                               String targetOwnerName, Integer targetOwnerTrustScore,
+                                               String targetOwnerName,
                                                ReporterInfo reporter, long relatedReportCount,
                                                ModerationResult result, String internalNote) {
         return AdminReportItemResponse.builder()
@@ -71,7 +71,6 @@ public class ReportMapper {
                 .targetTitle(targetTitle)
                 .targetOwnerId(targetOwnerId)
                 .targetOwnerName(targetOwnerName)
-                .targetOwnerTrustScore(targetOwnerTrustScore)
                 .reason(r.getReason())
                 .reasonLabel(r.getReason().getLabel())
                 .description(r.getDescription())

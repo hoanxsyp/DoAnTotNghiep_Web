@@ -250,7 +250,6 @@ public class DemoDataInitializer implements ApplicationRunner {
                     .verifiedAt(verified ? now.minus(Duration.ofDays(20L + i)) : null)
                     .verifiedBy(verified ? moderator.getId() : null)
                     .verificationNote(verified ? "Đã đối chiếu CCCD và giấy tờ nhà hợp lệ." : null)
-                    .trustScore(new BigDecimal(verified ? "95.00" : "80.00"))
                     .build();
             landlordProfileRepository.save(profile);
             landlords.add(u);
@@ -823,7 +822,7 @@ public class DemoDataInitializer implements ApplicationRunner {
         };
         String[] contents = {
                 "Tin đăng của bạn đã được kiểm duyệt và đang hiển thị công khai.",
-                "Một người dùng vừa để lại bình luận, hãy phản hồi để tăng uy tín.",
+                "Một người dùng vừa để lại bình luận, hãy phản hồi người thuê nhé.",
                 "Người thuê vừa đánh giá tin của bạn, xem chi tiết ngay.",
                 "Tin của bạn sẽ hết hạn trong 3 ngày tới, gia hạn để tiếp tục hiển thị.",
                 "Giao dịch đẩy tin của bạn đã hoàn tất thành công.",

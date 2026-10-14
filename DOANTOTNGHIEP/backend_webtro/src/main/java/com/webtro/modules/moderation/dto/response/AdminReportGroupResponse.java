@@ -29,7 +29,6 @@ public class AdminReportGroupResponse {
     private String targetStatus;
     private Long targetOwnerId;
     private String targetOwnerName;
-    private Integer targetOwnerTrustScore;
     private long reportCount;
     private long distinctReporterCount;
     private ReportSeverity maxSeverity;

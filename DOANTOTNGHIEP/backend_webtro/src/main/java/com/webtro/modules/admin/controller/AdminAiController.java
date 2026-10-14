@@ -45,7 +45,7 @@ public class AdminAiController {
 
     @GetMapping("/config")
     @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Xem cấu hình AI", description = "Cấu hình các module AI + trọng số điểm uy tín.")
+    @Operation(summary = "Xem cấu hình AI", description = "Cấu hình các module AI.")
     public ResponseEntity<ApiResponse<AiConfigResponse>> getConfig() {
         return ResponseEntity.ok(ApiResponse.success(adminAiService.getConfig(), "Lấy cấu hình AI thành công"));
     }

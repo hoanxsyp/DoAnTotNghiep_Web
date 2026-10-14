@@ -129,15 +129,6 @@ public interface ListingRepository
                                                @Param("maxThreshold") Instant maxThreshold,
                                                @Param("dayStart") Instant dayStart, Pageable pageable);
 
-    /** Id các tin ở {@code statuses} (đang hiển thị) — {@code TrustScoreRecalcJob} tính lại điểm. */
-    @Query("SELECT l.id FROM Listing l WHERE l.status IN :statuses AND l.deletedAt IS NULL "
-            + "ORDER BY l.id ASC")
-    List<Long> findIdsByStatusIn(@Param("statuses") Collection<ListingStatus> statuses, Pageable pageable);
-
-    /** Id chủ trọ (distinct) có tin ở {@code statuses} — {@code TrustScoreRecalcJob} tính lại điểm chủ trọ. */
-    @Query("SELECT DISTINCT l.ownerId FROM Listing l WHERE l.status IN :statuses AND l.deletedAt IS NULL")
-    List<Long> findDistinctOwnerIdsByStatusIn(@Param("statuses") Collection<ListingStatus> statuses);
-
     /**
      * Tin còn cờ đẩy ({@code is_promoted = true}) nhưng đã quá {@code promoted_until} — dùng cho
      * {@code PromotionExpiryJob} gỡ cờ (phòng trường hợp lượt đẩy không còn khớp bản ghi subscription).

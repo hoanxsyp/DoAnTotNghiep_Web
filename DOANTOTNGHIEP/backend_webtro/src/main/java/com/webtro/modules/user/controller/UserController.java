@@ -103,7 +103,7 @@ public class UserController {
 
     @GetMapping("/me/landlord-profile")
     @PreAuthorize("hasAnyRole('LANDLORD','ADMIN')")
-    @Operation(summary = "Xem hồ sơ chủ trọ của tôi", description = "Thông tin liên hệ, uy tín, trạng thái xác minh của chủ trọ")
+    @Operation(summary = "Xem hồ sơ chủ trọ của tôi", description = "Thông tin liên hệ, trạng thái xác minh của chủ trọ")
     public ResponseEntity<ApiResponse<MyLandlordProfileResponse>> getMyLandlordProfile(
             @AuthenticationPrincipal CustomUserDetails currentUser) {
         MyLandlordProfileResponse data = userService.getMyLandlordProfile(currentUser.getId());

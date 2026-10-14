@@ -80,7 +80,7 @@ public class AdminCommentController {
         return ResponseEntity.ok(ApiResponse.success(data, "Đã khôi phục bình luận"));
     }
 
-    /** Đánh dấu bình luận là spam (loại khỏi công thức tính điểm uy tín). */
+    /** Đánh dấu bình luận là spam. */
     @PutMapping("/{id}/spam")
     @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Đánh dấu bình luận spam")
