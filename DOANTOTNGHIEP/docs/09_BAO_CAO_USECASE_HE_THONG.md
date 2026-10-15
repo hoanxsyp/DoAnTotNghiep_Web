@@ -45,7 +45,7 @@ flowchart LR
   AI["Dịch vụ AI"]
   PG["Cổng thanh toán VNPAY"]
   Notify["Email/Thông báo"]
-  Scheduler["Bộ lập lịch"]
+  Scheduler["Bộ lập lịch"]V
 
   UC01(("UC-01<br/>Tìm kiếm và xem tin"))
   UC02(("UC-02<br/>Đăng và quản lý tin"))
@@ -187,7 +187,7 @@ UC10 ..> UC03 : <<include>>\nhết hạn gói/đối soát
 
 ## 4. Danh sách use case theo mức độ trọng tâm chức năng
 
-### UC-01. Tìm kiếm, khám phá và xem chi tiết phòng trọ
+### UC-01. Tìm kiếm, khám phá và xem chi tiết phòng trọ (Cường)
 
 | Thuộc tính | Mô tả |
 | --- | --- |
@@ -267,7 +267,7 @@ AI --> Reco
 @enduml
 ```
 
-### UC-02. Đăng và quản lý tin đăng phòng trọ
+### UC-02. Đăng và quản lý tin đăng phòng trọ (Hòa)
 
 | Thuộc tính | Mô tả |
 | --- | --- |
@@ -379,7 +379,7 @@ Scheduler --> Expiry
 @enduml
 ```
 
-### UC-03. Quảng bá tin đăng và thanh toán gói dịch vụ
+### UC-03. Quảng bá tin đăng và thanh toán gói dịch vụ (Hòa)
 
 | Thuộc tính | Mô tả |
 | --- | --- |
@@ -476,7 +476,7 @@ Scheduler --> Reconcile
 @enduml
 ```
 
-### UC-04. AI hỗ trợ tìm phòng, tư vấn, định giá và kiểm soát nội dung
+### UC-04. AI hỗ trợ tìm phòng, tư vấn, định giá và kiểm soát nội dung (Cả 3)
 
 | Thuộc tính | Mô tả |
 | --- | --- |
@@ -587,7 +587,7 @@ Config ..> UC09 : <<include>>
 @enduml
 ```
 
-### UC-05. Liên hệ, tạo lead và nhắn tin giữa người tìm phòng với chủ trọ
+### UC-05. Liên hệ, tạo lead và nhắn tin giữa người tìm phòng với chủ trọ (Cường)
 
 | Thuộc tính | Mô tả |
 | --- | --- |
@@ -685,7 +685,7 @@ Main ..> UC07 : <<include>>
 @enduml
 ```
 
-### UC-06. Tương tác cộng đồng và báo cáo vi phạm
+### UC-06. Tương tác cộng đồng, uy tín và báo cáo vi phạm (Cường)
 
 | Thuộc tính | Mô tả |
 | --- | --- |
@@ -796,7 +796,7 @@ Mod --> UC08
 @enduml
 ```
 
-### UC-07. Quản lý tài khoản, hồ sơ và thông báo cá nhân
+### UC-07. Quản lý tài khoản, hồ sơ và thông báo cá nhân (Cường)
 
 | Thuộc tính | Mô tả |
 | --- | --- |
@@ -910,7 +910,7 @@ Admin --> UC08
 @enduml
 ```
 
-### UC-08. Kiểm duyệt nội dung và xử lý vi phạm
+### UC-08. Kiểm duyệt nội dung và xử lý vi phạm (Phát)
 
 | Thuộc tính | Mô tả |
 | --- | --- |
@@ -1017,7 +1017,7 @@ Main ..> UC09 : <<extend>>
 @enduml
 ```
 
-### UC-09. Quản trị vận hành hệ thống
+### UC-09. Quản trị vận hành hệ thống (Phát)
 
 | Thuộc tính | Mô tả |
 | --- | --- |
@@ -1124,7 +1124,7 @@ AI --> AIAdmin
 @enduml
 ```
 
-### UC-10. Tác vụ nền tự động của hệ thống
+### UC-10. Tác vụ nền tự động của hệ thống (Phát)
 
 | Thuộc tính | Mô tả |
 | --- | --- |
@@ -1240,7 +1240,7 @@ Main ..> UC09 : <<include>>
 
 | Use case nguồn | Quan hệ | Use case đích | Ý nghĩa |
 | --- | --- | --- | --- |
-| UC-01 Tìm kiếm/xem tin | `extend` | UC-04 AI hỗ trợ | Gợi ý AI, tin liên quan và chatbot làm mở rộng trải nghiệm tìm phòng. |
+| UC-01 Tìm kiếm/xem tin | `extend` | UC-04 AI hỗ trợ | Gợi ý AI, tin liên quan và chatbot làm mở rộng trải nghiệm tìm phòng. | 
 | UC-01 Tìm kiếm/xem tin | `extend` | UC-05 Liên hệ/nhắn tin | Sau khi xem tin, người dùng có thể liên hệ chủ trọ. |
 | UC-01 Tìm kiếm/xem tin | `extend` | UC-06 Tương tác cộng đồng | Sau khi xem tin, người dùng có thể lưu, theo dõi, bình luận, đánh giá, báo cáo. |
 | UC-02 Đăng/quản lý tin | `include` | UC-08 Kiểm duyệt | Tin đăng gửi công khai phải qua kiểm duyệt trước khi hiển thị. |
