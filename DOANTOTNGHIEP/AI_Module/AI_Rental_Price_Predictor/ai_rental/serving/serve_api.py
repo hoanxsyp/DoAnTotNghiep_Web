@@ -107,14 +107,17 @@ def predict(req: PredictRequest):
     locations = _valid_locations()
     if req.district not in locations:
         raise HTTPException(status_code=422, detail="district is not supported by this model")
+    ward = req.ward
     if req.ward != "unknown" and req.ward not in locations[req.district]:
-        raise HTTPException(status_code=422, detail="ward does not belong to the selected district")
+        # Website catalog có thể có phường chưa xuất hiện trong tập train.
+        # Model vẫn dự đoán được bằng feature cấp quận và market fallback.
+        ward = "unknown"
     if req.room_type not in core.ROOM_TYPES:
         raise HTTPException(status_code=422, detail="room_type is not supported by this model")
     invalid_amenities = sorted(set(req.amenities) - set(core.KEY2COL))
     if invalid_amenities:
         raise HTTPException(status_code=422, detail=f"unsupported amenities: {invalid_amenities}")
-    r = core.predict(req.district, req.ward, req.area_m2, req.room_type,
+    r = core.predict(req.district, ward, req.area_m2, req.room_type,
                      req.amenities, req.floor, req.latitude, req.longitude)
     return PredictResponse(
         predicted_price_million=r["predicted_price_million"],

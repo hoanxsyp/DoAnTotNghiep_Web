@@ -106,6 +106,35 @@ def render():
         k2.metric("Số tiện ích", len(chosen))
         k3.metric("Đơn giá", f"{price/area:.2f} tr/m²")
 
+        market_unit = r.get("market_unit_price_million_m2")
+        market_price = r.get("market_price_million")
+        pop_density = r.get("population_density_km2")
+        if market_unit is not None or pop_density is not None:
+            st.divider()
+            st.write("**Tín hiệu khu vực model đang dùng**")
+            m1, m2, m3, m4 = st.columns(4)
+            if pop_density is not None:
+                m1.metric("Mật độ dân số", f"{pop_density:,.0f} người/km²")
+            if market_unit is not None:
+                m2.metric("Giá thị trường/m²", f"{market_unit:.3f} tr/m²")
+            if market_price is not None:
+                m3.metric("Giá thị trường", f"{market_price:.2f} triệu")
+            if r.get("market_sample_count") is not None:
+                m4.metric("Mẫu thị trường", int(r["market_sample_count"]))
+
+            scope_label = {
+                4: "quận + phường + loại phòng",
+                3: "quận + phường",
+                2: "quận + loại phòng",
+                1: "quận",
+                0: "toàn bộ dữ liệu",
+            }.get(int(r.get("market_scope_level", 0)), "fallback")
+            st.caption(
+                f"Benchmark thị trường khớp theo **{scope_label}** · "
+                f"độ mới {r.get('market_freshness_days', 365):.0f} ngày · "
+                f"frecency score {r.get('market_frecency_score', 0):.2f}."
+            )
+
         stt = meta["district_stats"].get(district)
         if stt:
             avg = stt["mean"]

@@ -154,6 +154,11 @@ services:
       PAYMENT_RETURN_URL:      ${PAYMENT_RETURN_URL:-http://localhost/quan-ly/thanh-toan/ket-qua}
       PAYMENT_CALLBACK_SECRET: ${PAYMENT_CALLBACK_SECRET:?Thieu PAYMENT_CALLBACK_SECRET trong .env}
 
+      # --- AI rental price (Spring backend -> FastAPI rental-api) ---
+      RENTAL_API_BASE_URL:        ${RENTAL_API_BASE_URL:-http://rental-api:8000}
+      RENTAL_API_CONNECT_TIMEOUT: ${RENTAL_API_CONNECT_TIMEOUT:-PT2S}
+      RENTAL_API_REQUEST_TIMEOUT: ${RENTAL_API_REQUEST_TIMEOUT:-PT3S}
+
       # --- Tai khoan quan tri khoi tao ---
       ADMIN_SEED_ENABLED: ${ADMIN_SEED_ENABLED:-true}
       ADMIN_EMAIL:        ${ADMIN_EMAIL:-admin@webtro.local}
@@ -200,6 +205,8 @@ services:
     environment:
       PYTHONUNBUFFERED: "1"
       TF_CPP_MIN_LOG_LEVEL: "2"
+      # sklearn = model.joblib, LightGBM tốt nhất từ train_compare.py.
+      RENTAL_BACKEND: ${RENTAL_BACKEND:-sklearn}
       TZ: UTC
     ports:
       - "${RENTAL_API_EXPOSED_PORT:-8002}:8000"

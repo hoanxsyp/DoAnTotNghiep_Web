@@ -2,9 +2,8 @@
 """
 Lõi dự đoán dùng chung cho API (serve_api.py) và giao diện (app_demo.py).
 Tự chọn backend:
-  - Nếu có models/hanoi_all/model.keras  -> dùng MẠNG NƠ-RON KERAS (.keras)
-  - Ngược lại                            -> dùng model cây (model.joblib, CatBoost...)
-Đặt biến môi trường RENTAL_BACKEND=sklearn để ép dùng model cây kể cả khi có .keras.
+  - Mặc định dùng model thắng từ train_compare.py (model.joblib, LightGBM tốt nhất)
+  - Có thể ép backend bằng biến RENTAL_BACKEND = sklearn | monotonic | keras.
 """
 import json
 import os
@@ -106,8 +105,8 @@ def _market_features(district: str, ward: str, room_type: str, area_m2: float, m
 def _backend():
     """Trả về (kind, model, bundle, meta, wards). Nạp 1 lần, cache lại.
 
-    Ưu tiên mặc định: monotonic (hợp lý nhất — tiện ích/diện tích không bao giờ làm giảm giá)
-    > keras > sklearn. Ép bằng biến RENTAL_BACKEND = monotonic | keras | sklearn.
+    Ưu tiên mặc định: sklearn (model.joblib — LightGBM tốt nhất theo holdout/CV).
+    Ép bằng biến RENTAL_BACKEND = sklearn | monotonic | keras.
     """
     wc = PROCESSED_DIR / "ward_centroids.json"
     wards = json.load(wc.open(encoding="utf-8")) if wc.exists() else {}
@@ -122,7 +121,7 @@ def _backend():
                  and (MODEL_DIR / "keras_bundle.joblib").exists())
     # model.joblib is the winner selected by train_compare.py. The monotonic
     # backend remains available when interpretability is preferred.
-    choice = os.environ.get("RENTAL_BACKEND") or "monotonic"
+    choice = os.environ.get("RENTAL_BACKEND") or "sklearn"
 
     if choice == "monotonic" and has_mono:
         bundle = joblib.load(MODEL_DIR / "monotonic_bundle.joblib")   # {preprocessor, model(LGBM)}

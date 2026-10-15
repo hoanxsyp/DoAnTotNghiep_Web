@@ -1,4 +1,4 @@
-# ui — Giao diện chung (portal) cho 2 module. Nhẹ: chỉ streamlit + requests, gọi API qua HTTP.
+# ui — Giao diện module AI dự đoán giá thuê. Nhẹ: chỉ streamlit + requests, gọi rental-api qua HTTP.
 FROM python:3.12-slim
 
 WORKDIR /app

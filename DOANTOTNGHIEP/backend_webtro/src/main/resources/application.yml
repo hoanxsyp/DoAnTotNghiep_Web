@@ -299,6 +299,15 @@ app:
   seed:
     demo-enabled: ${SEED_DEMO_ENABLED:true}
 
+  # ------------------------------ AI services --------------------------
+  ai:
+    rental-price:
+      # Local chạy backend bằng JVM: http://localhost:8002
+      # Docker Compose override sang http://rental-api:8000
+      base-url: ${RENTAL_API_BASE_URL:http://localhost:8002}
+      connect-timeout: ${RENTAL_API_CONNECT_TIMEOUT:PT2S}
+      request-timeout: ${RENTAL_API_REQUEST_TIMEOUT:PT3S}
+
   # --------------------------------- Admin ----------------------------
   # Tai khoan quan tri khoi tao. Neu `password` rong, AdminAccountInitializer
   # se BO QUA viec tao tai khoan (khong bao gio tao tai khoan mat khau rong).

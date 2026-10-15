@@ -95,6 +95,7 @@ public class PriceEstimationServiceImpl implements PriceEstimationService {
                 Boolean.TRUE.equals(request.getIsStreetFront()),
                 hasElevator, hasParking,
                 request.getCurfewType() == null ? CurfewType.UNKNOWN : request.getCurfewType(),
+                request.getLatitude(), request.getLongitude(),
                 request.getInputPrice());
 
         int minSamples = config.getInt(ConfigKey.AI_PRICE_MIN_SAMPLES);
@@ -103,36 +104,45 @@ public class PriceEstimationServiceImpl implements PriceEstimationService {
         BigDecimal deviationFlagRatio = config.getDecimal(ConfigKey.AI_PRICE_DEVIATION_FLAG_RATIO);
         HedonicWeights weights = readHedonicWeights();
 
-        BigDecimal areaMin = request.getArea().multiply(BigDecimal.ONE.subtract(tolerance));
-        BigDecimal areaMax = request.getArea().multiply(BigDecimal.ONE.add(tolerance));
-        Instant since = Instant.now().minus(comparableDays, ChronoUnit.DAYS);
+        PriceEstimate estimate;
+        boolean scopeExpanded;
+        if (estimator.usesComparables()) {
+            BigDecimal areaMin = request.getArea().multiply(BigDecimal.ONE.subtract(tolerance));
+            BigDecimal areaMax = request.getArea().multiply(BigDecimal.ONE.add(tolerance));
+            Instant since = Instant.now().minus(comparableDays, ChronoUnit.DAYS);
 
-        // Nới dần phạm vi WARD → DISTRICT → PROVINCE cho tới khi đủ mẫu.
-        AdministrativeUnitType scopeUsed = AdministrativeUnitType.WARD;
-        List<ComparableListing> comparables = fetchComparables(request, AdministrativeUnitType.WARD,
-                areaMin, areaMax, since);
-        if (comparables.size() < minSamples) {
-            List<ComparableListing> byDistrict = fetchComparables(request, AdministrativeUnitType.DISTRICT,
+            // Nới dần phạm vi WARD → DISTRICT → PROVINCE cho tới khi đủ mẫu.
+            AdministrativeUnitType scopeUsed = AdministrativeUnitType.WARD;
+            List<ComparableListing> comparables = fetchComparables(request, AdministrativeUnitType.WARD,
                     areaMin, areaMax, since);
-            if (byDistrict.size() >= comparables.size()) {
-                comparables = byDistrict;
-                scopeUsed = AdministrativeUnitType.DISTRICT;
+            if (comparables.size() < minSamples) {
+                List<ComparableListing> byDistrict = fetchComparables(request, AdministrativeUnitType.DISTRICT,
+                        areaMin, areaMax, since);
+                if (byDistrict.size() >= comparables.size()) {
+                    comparables = byDistrict;
+                    scopeUsed = AdministrativeUnitType.DISTRICT;
+                }
             }
-        }
-        if (comparables.size() < minSamples) {
-            List<ComparableListing> byProvince = fetchComparables(request, AdministrativeUnitType.PROVINCE,
-                    areaMin, areaMax, since);
-            if (byProvince.size() >= comparables.size()) {
-                comparables = byProvince;
-                scopeUsed = AdministrativeUnitType.PROVINCE;
+            if (comparables.size() < minSamples) {
+                List<ComparableListing> byProvince = fetchComparables(request, AdministrativeUnitType.PROVINCE,
+                        areaMin, areaMax, since);
+                if (byProvince.size() >= comparables.size()) {
+                    comparables = byProvince;
+                    scopeUsed = AdministrativeUnitType.PROVINCE;
+                }
             }
-        }
-        boolean scopeExpanded = scopeUsed != AdministrativeUnitType.WARD;
 
-        final List<ComparableListing> comps = comparables;
-        final AdministrativeUnitType scope = scopeUsed;
-        PriceEstimate estimate = support.runWithTimeout("price", ConfigKey.AI_PRICE_TIMEOUT_MS,
-                () -> estimator.estimate(input, comps, scope, minSamples, weights, deviationFlagRatio));
+            final List<ComparableListing> comps = comparables;
+            final AdministrativeUnitType scope = scopeUsed;
+            estimate = support.runWithTimeout("price", ConfigKey.AI_PRICE_TIMEOUT_MS,
+                    () -> estimator.estimate(input, comps, scope, minSamples, weights, deviationFlagRatio));
+            scopeExpanded = scopeUsed != AdministrativeUnitType.WARD;
+        } else {
+            estimate = support.runWithTimeout("price", ConfigKey.AI_PRICE_TIMEOUT_MS,
+                    () -> estimator.estimate(input, List.of(), AdministrativeUnitType.WARD,
+                            minSamples, weights, deviationFlagRatio));
+            scopeExpanded = estimate.scopeUsed() != AdministrativeUnitType.WARD;
+        }
 
         // Lưu PredictionHistory MỌI lần (kể cả INSUFFICIENT_DATA).
         PredictionHistory saved = predictionHistoryRepository.save(

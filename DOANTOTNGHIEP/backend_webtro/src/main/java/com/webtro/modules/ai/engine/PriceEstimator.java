@@ -13,12 +13,20 @@ import java.util.List;
 /**
  * Bộ ước lượng giá thuê (canonical mục 10.4, §9.4). Đặt sau interface để thay implementation.
  *
- * <p>Hiện thực chốt: {@link ComparableHedonicPriceEstimator} — so sánh tin tương đương + điều chỉnh
- * hedonic theo tiện nghi. Toàn bộ hệ số/ngưỡng đọc từ {@code system_configs} (không hardcode).
+ * <p>Production hiện dùng {@link RentalApiLightgbmPriceEstimator} để gọi model LightGBM bên
+ * FastAPI. {@link ComparableHedonicPriceEstimator} được giữ như engine nội bộ/fallback kỹ thuật.
  */
 public interface PriceEstimator {
 
     String version();
+
+    /**
+     * Engine nội bộ hedonic cần tập tin so sánh từ DB; engine gọi model ngoài tự build feature và
+     * không cần truy vấn comparable trước.
+     */
+    default boolean usesComparables() {
+        return true;
+    }
 
     /** Tham số đầu vào ước lượng (đã chuẩn hóa từ request). */
     record PriceInput(
@@ -36,6 +44,8 @@ public interface PriceEstimator {
             boolean hasElevator,
             boolean hasParking,
             CurfewType curfewType,
+            Double latitude,
+            Double longitude,
             BigDecimal inputPrice) {
     }
 

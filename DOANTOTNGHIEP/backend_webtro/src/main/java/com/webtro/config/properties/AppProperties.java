@@ -7,7 +7,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import java.time.Duration;
 
 /**
- * Cấu hình cấp ứng dụng gộp: frontend, mail, payment, rate-limit toggle, admin seed, scheduler.
+ * Cấu hình cấp ứng dụng gộp: frontend, mail, payment, rate-limit toggle, admin seed, scheduler, AI.
  * Bind từ {@code app.*}. Đây là cấu hình HẠ TẦNG/KỸ THUẬT — ngưỡng nghiệp vụ nằm ở
  * {@code system_configs}.
  */
@@ -23,6 +23,7 @@ public class AppProperties {
     private Admin admin = new Admin();
     private Scheduler scheduler = new Scheduler();
     private Seed seed = new Seed();
+    private Ai ai = new Ai();
 
     @Getter
     @Setter
@@ -81,5 +82,20 @@ public class AppProperties {
          * thanh toán...). Idempotent: chỉ chạy khi DB chưa có dữ liệu mẫu. Tắt ở môi trường thật.
          */
         private boolean demoEnabled = true;
+    }
+
+    @Getter
+    @Setter
+    public static class Ai {
+        private RentalPrice rentalPrice = new RentalPrice();
+    }
+
+    @Getter
+    @Setter
+    public static class RentalPrice {
+        /** FastAPI rental-api. Local JVM dùng cổng expose; Docker override sang service name. */
+        private String baseUrl = "http://localhost:8002";
+        private Duration connectTimeout = Duration.ofSeconds(2);
+        private Duration requestTimeout = Duration.ofSeconds(3);
     }
 }

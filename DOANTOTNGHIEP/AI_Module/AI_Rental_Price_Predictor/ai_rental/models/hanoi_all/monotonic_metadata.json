@@ -10,7 +10,14 @@
       "posted_month",
       "listing_age_days",
       "latitude",
-      "longitude"
+      "longitude",
+      "population_density_km2",
+      "market_unit_price_million_m2",
+      "market_price_million",
+      "market_sample_count",
+      "market_frecency_score",
+      "market_freshness_days",
+      "market_scope_level"
     ],
     "categorical": [
       "district",
@@ -34,29 +41,48 @@
   "target": "price_million",
   "monotone": "area + number_of_amenities + tất cả has_* -> tăng",
   "metrics_holdout": {
-    "MAE": 0.5421,
-    "RMSE": 0.7584,
-    "R2": 0.6721,
-    "MAPE": 18.948
+    "MAE": 0.5703,
+    "RMSE": 0.7899,
+    "R2": 0.6443,
+    "MAPE": 19.9372
   },
   "mae_by_district": {
-    "Ba Đình": 0.5449,
-    "Bắc Từ Liêm": 0.4769,
-    "Cầu Giấy": 0.5726,
-    "Hai Bà Trưng": 0.46,
-    "Hoàn Kiếm": 0.7256,
-    "Hoàng Mai": 0.5174,
-    "Hà Đông": 0.5169,
-    "Long Biên": 0.471,
-    "Nam Từ Liêm": 0.6456,
-    "Thanh Xuân": 0.5801,
-    "Tây Hồ": 0.5744,
-    "Đống Đa": 0.5572
+    "Ba Đình": 0.6097,
+    "Bắc Từ Liêm": 0.5135,
+    "Cầu Giấy": 0.5943,
+    "Hai Bà Trưng": 0.4817,
+    "Hoàn Kiếm": 0.7911,
+    "Hoàng Mai": 0.5339,
+    "Hà Đông": 0.6107,
+    "Long Biên": 0.5137,
+    "Nam Từ Liêm": 0.6419,
+    "Thanh Xuân": 0.6134,
+    "Tây Hồ": 0.5978,
+    "Đống Đa": 0.5388
   },
   "validation": {
     "strategy": "GroupShuffleSplit by phone",
     "n_groups": 3582
   },
+  "recency": {
+    "half_life_days": 365,
+    "minimum_weight": 0.05,
+    "frecency_half_life_days": 180,
+    "sample_weight_column": "sample_weight",
+    "reference_date": "2026-07-05"
+  },
+  "external_features": {
+    "population_density": "data/reference/hanoi_population_density_2024.csv",
+    "market_stats": "data/processed/market_stats.json",
+    "market_features": [
+      "market_unit_price_million_m2",
+      "market_price_million",
+      "market_sample_count",
+      "market_frecency_score",
+      "market_freshness_days",
+      "market_scope_level"
+    ]
+  },
   "n_samples": 5175,
-  "trained_at": "2026-07-21"
+  "trained_at": "2026-10-12"
 }

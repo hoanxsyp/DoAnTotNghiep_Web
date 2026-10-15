@@ -15,7 +15,7 @@ ai_rental/
 │   └── preprocess_all.py      # gộp mọi nguồn → dataset sạch + distance + ward_centroids
 ├── training/        # huấn luyện
 │   ├── train_compare.py       # so sánh 4 model (Ridge/RF/LightGBM/CatBoost) + tune
-│   ├── train_monotonic.py     # LightGBM có RÀNG BUỘC ĐƠN ĐIỆU (model PHỤC VỤ mặc định)
+│   ├── train_monotonic.py     # LightGBM có RÀNG BUỘC ĐƠN ĐIỆU (model tùy chọn)
 │   └── train_keras.py         # mạng nơ-ron Keras MLP → file .keras
 ├── serving/         # phục vụ
 │   ├── predict_core.py        # lõi dự đoán (tự chọn backend keras/sklearn)
@@ -48,13 +48,13 @@ python preprocessing/preprocess_all.py      # -> data/processed/hanoi_all_clean.
 # 3) Train 4 model (cây) + so sánh + tune
 python training/train_compare.py            # -> models/hanoi_all/model.joblib + metadata.json
 
-# 3b) Train LightGBM MONOTONIC — model PHỤC VỤ mặc định (hành vi hợp lý: tiện ích/diện tích
-#     không bao giờ làm GIẢM giá). Xem "Lưu ý hành vi model" bên dưới.
+# 3b) Train LightGBM MONOTONIC — model tùy chọn để kiểm tra hành vi hợp lý:
+#     tiện ích/diện tích không bao giờ làm GIẢM giá.
 python training/train_monotonic.py          # -> models/hanoi_all/monotonic_bundle.joblib
 
 # 3c) (Tùy chọn) Train mạng nơ-ron Keras -> file .keras (deliverable học sâu)
 python training/train_keras.py              # -> models/hanoi_all/model.keras
-#     Chọn backend: RENTAL_BACKEND = monotonic (mặc định) | keras | sklearn
+#     Chọn backend: RENTAL_BACKEND = sklearn (mặc định, LightGBM tốt nhất) | monotonic | keras
 
 # 4) API dự đoán (serve_api ở serving/ -> dùng --app-dir)
 uvicorn serve_api:app --app-dir serving --host 0.0.0.0 --port 8000

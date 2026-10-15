@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 # =====================================================================
 #  Backend - Spring Boot 3.3.5 / Java 21
 #  Multi-stage build: khong can cai Java/Maven tren may host.
@@ -11,10 +12,15 @@ WORKDIR /build
 # Copy rieng pom.xml truoc de Docker cache lop dependency. Chi khi pom.xml
 # doi thi lop nay moi phai chay lai, doi source thi khong.
 COPY pom.xml ./
-RUN mvn -B -ntp dependency:go-offline
+RUN --mount=type=cache,target=/root/.m2 \
+    mvn -B -ntp dependency:go-offline || ( \
+      rm -rf /root/.m2/repository/com/github/luben/zstd-jni && \
+      mvn -B -ntp -U dependency:go-offline \
+    )
 
 COPY src ./src
-RUN mvn -B -ntp clean package -DskipTests \
+RUN --mount=type=cache,target=/root/.m2 \
+    mvn -B -ntp clean package -DskipTests \
     && java -Djarmode=layertools -jar target/backend-webtro.jar extract --destination target/extracted
 
 # ----------------------------- Stage 2: runtime ----------------------

@@ -7,7 +7,7 @@ Module AI được cập nhật định kỳ sau mỗi 7 ngày để mô hình k
 1. Crawl thêm dữ liệu mới từ các nguồn đã dùng: `phongtro123.com`, `mogi.vn`.
 2. Enrich chi tiết tin đăng: mô tả đầy đủ, ngày đăng, tầng.
 3. Gộp và làm sạch dữ liệu thành `data/processed/hanoi_all_clean.csv`.
-4. Train lại mô hình so sánh và mô hình phục vụ mặc định `LightGBM monotonic`.
+4. Train lại mô hình so sánh, mô hình `LightGBM` tốt nhất phục vụ website và mô hình tùy chọn `LightGBM monotonic`.
 5. Ghi log và metadata để kiểm chứng lần train.
 
 ## Các file đã bổ sung

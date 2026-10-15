@@ -2,9 +2,9 @@
   "name": "hanoi_all",
   "model_type": "LightGBM",
   "params": {
-    "learning_rate": 0.03,
+    "learning_rate": 0.05,
     "max_depth": 7,
-    "n_estimators": 400,
+    "n_estimators": 1000,
     "num_leaves": 31
   },
   "features": {
@@ -16,7 +16,14 @@
       "posted_month",
       "listing_age_days",
       "latitude",
-      "longitude"
+      "longitude",
+      "population_density_km2",
+      "market_unit_price_million_m2",
+      "market_price_million",
+      "market_sample_count",
+      "market_frecency_score",
+      "market_freshness_days",
+      "market_scope_level"
     ],
     "categorical": [
       "district",
@@ -39,31 +46,31 @@
   },
   "target": "price_million",
   "metrics_holdout": {
-    "MAE": 0.5284,
-    "RMSE": 0.7441,
-    "R2": 0.6843,
-    "MAPE": 18.3807
+    "MAE": 0.4488,
+    "RMSE": 0.6639,
+    "R2": 0.7487,
+    "MAPE": 15.2267
   },
   "metrics_temporal": {
-    "MAE": 0.7201,
-    "RMSE": 0.9747,
-    "R2": 0.451,
-    "MAPE": 18.9241
+    "MAE": 0.5992,
+    "RMSE": 0.8313,
+    "R2": 0.6006,
+    "MAPE": 15.9808
   },
   "temporal_cutoff": "2025-06-17",
   "mae_by_district": {
-    "Ba Đình": 0.5068,
-    "Bắc Từ Liêm": 0.4413,
-    "Cầu Giấy": 0.5931,
-    "Hai Bà Trưng": 0.4194,
-    "Hoàn Kiếm": 0.6918,
-    "Hoàng Mai": 0.5287,
-    "Hà Đông": 0.4583,
-    "Long Biên": 0.4362,
-    "Nam Từ Liêm": 0.7287,
-    "Thanh Xuân": 0.5471,
-    "Tây Hồ": 0.6053,
-    "Đống Đa": 0.5467
+    "Ba Đình": 0.5065,
+    "Bắc Từ Liêm": 0.3995,
+    "Cầu Giấy": 0.4608,
+    "Hai Bà Trưng": 0.3432,
+    "Hoàn Kiếm": 0.7054,
+    "Hoàng Mai": 0.4836,
+    "Hà Đông": 0.4311,
+    "Long Biên": 0.4437,
+    "Nam Từ Liêm": 0.6727,
+    "Thanh Xuân": 0.4086,
+    "Tây Hồ": 0.4353,
+    "Đống Đa": 0.4617
   },
   "validation": {
     "strategy": "GroupKFold / GroupShuffleSplit by building group",
@@ -72,37 +79,51 @@
   "recency": {
     "half_life_days": 365,
     "minimum_weight": 0.05,
+    "frecency_half_life_days": 180,
+    "sample_weight_column": "sample_weight",
     "reference_date": "2026-07-05"
+  },
+  "external_features": {
+    "population_density": "data/reference/hanoi_population_density_2024.csv",
+    "market_stats": "data/processed/market_stats.json",
+    "market_features": [
+      "market_unit_price_million_m2",
+      "market_price_million",
+      "market_sample_count",
+      "market_frecency_score",
+      "market_freshness_days",
+      "market_scope_level"
+    ]
   },
   "cv_table": [
     {
       "Model": "LightGBM",
-      "MAE": 0.5449,
-      "RMSE": 0.752,
-      "R2": 0.6562,
-      "MAPE%": 18.9652,
-      "MAE_train": 0.3883,
-      "R2_std": 0.0116
+      "MAE": 0.4751,
+      "RMSE": 0.686,
+      "R2": 0.7142,
+      "MAPE%": 16.221,
+      "MAE_train": 0.289,
+      "R2_std": 0.0086
     },
     {
       "Model": "RandomForest",
-      "MAE": 0.5514,
-      "RMSE": 0.7582,
-      "R2": 0.6505,
-      "MAPE%": 19.384,
-      "MAE_train": 0.3524,
-      "R2_std": 0.0119
+      "MAE": 0.574,
+      "RMSE": 0.789,
+      "R2": 0.6217,
+      "MAPE%": 20.6212,
+      "MAE_train": 0.4034,
+      "R2_std": 0.0223
     },
     {
       "Model": "Ridge",
-      "MAE": 0.5964,
-      "RMSE": 0.7956,
-      "R2": 0.6149,
-      "MAPE%": 21.2388,
-      "MAE_train": 0.5823,
-      "R2_std": 0.0169
+      "MAE": 0.6097,
+      "RMSE": 0.8111,
+      "R2": 0.5998,
+      "MAPE%": 21.8173,
+      "MAE_train": 0.5936,
+      "R2_std": 0.0216
     }
   ],
   "n_samples": 5175,
-  "trained_at": "2026-07-21"
+  "trained_at": "2026-10-12"
 }
