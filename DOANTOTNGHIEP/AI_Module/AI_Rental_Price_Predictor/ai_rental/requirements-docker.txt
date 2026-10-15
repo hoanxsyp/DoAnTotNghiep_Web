@@ -1,4 +1,4 @@
-# Chỉ thư viện cần để PHỤC VỤ LightGBM (sklearn mặc định hoặc monotonic) — nhẹ, KHÔNG TF/keras.
+# Chỉ thư viện cần để PHỤC VỤ model LightGBM tốt nhất — nhẹ, KHÔNG TF/keras.
 # (Backend keras chỉ dùng ở local; xem predict_core.py / RENTAL_BACKEND.)
 # Pin đúng version đã tạo artifacts để đảm bảo unpickle preprocessor + model.
 fastapi>=0.110

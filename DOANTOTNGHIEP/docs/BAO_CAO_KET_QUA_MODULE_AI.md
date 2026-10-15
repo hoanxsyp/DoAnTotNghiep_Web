@@ -10,7 +10,6 @@ cd "C:\Users\nguye\OneDrive\Máy tính\DoAnTotNghiep_Web\DOANTOTNGHIEP\AI_Module
 
 python preprocessing\preprocess_all.py
 python training\train_compare.py
-python training\train_monotonic.py
 ```
 
 ## Dữ liệu train
@@ -50,7 +49,7 @@ Nhóm feature mới đã bổ sung:
 
 ## So sánh model trong `train_compare.py`
 
-| Model | CV MAE | CV RMSE | CV R2 | CV MAPE | Train MAE | R2 std |
+| Model | MAE | RMSE | R2 | MAPE | Train MAE | R2 std |
 |---|---:|---:|---:|---:|---:|---:|
 | LightGBM | 0.4751 | 0.6860 | 0.7142 | 16.2210% | 0.2890 | 0.0086 |
 | RandomForest | 0.5740 | 0.7890 | 0.6217 | 20.6212% | 0.4034 | 0.0223 |
@@ -116,31 +115,6 @@ MAE theo quận trên holdout:
 | Ba Đình | 0.5065 |
 | Nam Từ Liêm | 0.6727 |
 | Hoàn Kiếm | 0.7054 |
-
-## Kết quả model tùy chọn: LightGBM monotonic
-
-Artifact:
-
-- `ai_rental/models/hanoi_all/monotonic_bundle.joblib`
-- `ai_rental/models/hanoi_all/monotonic_metadata.json`
-
-Đây là model tùy chọn khi cần demo ràng buộc hành vi:
-
-- `area_m2` tăng thì giá không được giảm.
-- `number_of_amenities` tăng thì giá không được giảm.
-- Các tiện ích `has_*` không được làm giá giảm.
-- `market_unit_price_million_m2` và `market_price_million` tăng thì giá không được giảm.
-
-Holdout test:
-
-| Metric | Giá trị |
-|---|---:|
-| MAE | 0.5703 triệu |
-| RMSE | 0.7899 triệu |
-| R2 | 0.6443 |
-| MAPE | 19.9372% |
-
-Nhận xét: model LightGBM thường có metric tốt hơn, nên được chọn để phục vụ website chính. Model monotonic vẫn được giữ lại để so sánh hoặc demo trường hợp cần ràng buộc nghiệp vụ chặt hơn.
 
 ## Tích hợp website chính
 

@@ -15,9 +15,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY serving/ serving/
 COPY preprocessing/normalizers.py preprocessing/normalizers.py
 
-# artifacts: model cây LightGBM tốt nhất (mặc định) + model monotonic tùy chọn + dữ liệu cho /meta
-COPY models/hanoi_all/monotonic_bundle.joblib   models/hanoi_all/monotonic_bundle.joblib
-COPY models/hanoi_all/monotonic_metadata.json   models/hanoi_all/monotonic_metadata.json
+# artifacts: model LightGBM tốt nhất + dữ liệu cho /meta
 COPY models/hanoi_all/model.joblib              models/hanoi_all/model.joblib
 COPY models/hanoi_all/metadata.json             models/hanoi_all/metadata.json
 COPY data/processed/                           data/processed/

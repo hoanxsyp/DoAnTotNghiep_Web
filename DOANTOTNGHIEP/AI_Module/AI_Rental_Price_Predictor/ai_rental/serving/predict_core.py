@@ -3,7 +3,7 @@
 Lõi dự đoán dùng chung cho API (serve_api.py) và giao diện (app_demo.py).
 Tự chọn backend:
   - Mặc định dùng model thắng từ train_compare.py (model.joblib, LightGBM tốt nhất)
-  - Có thể ép backend bằng biến RENTAL_BACKEND = sklearn | monotonic | keras.
+  - Có thể ép backend bằng biến RENTAL_BACKEND = sklearn | keras.
 """
 import json
 import os
@@ -106,7 +106,7 @@ def _backend():
     """Trả về (kind, model, bundle, meta, wards). Nạp 1 lần, cache lại.
 
     Ưu tiên mặc định: sklearn (model.joblib — LightGBM tốt nhất theo holdout/CV).
-    Ép bằng biến RENTAL_BACKEND = sklearn | monotonic | keras.
+    Ép bằng biến RENTAL_BACKEND = sklearn | keras.
     """
     wc = PROCESSED_DIR / "ward_centroids.json"
     wards = json.load(wc.open(encoding="utf-8")) if wc.exists() else {}
@@ -116,17 +116,10 @@ def _backend():
         "market_stats": _load_market_stats(),
     }
 
-    has_mono = (MODEL_DIR / "monotonic_bundle.joblib").exists()
     has_keras = ((MODEL_DIR / "model.keras").exists()
                  and (MODEL_DIR / "keras_bundle.joblib").exists())
-    # model.joblib is the winner selected by train_compare.py. The monotonic
-    # backend remains available when interpretability is preferred.
+    # model.joblib là model thắng được train_compare.py chọn để phục vụ website.
     choice = os.environ.get("RENTAL_BACKEND") or "sklearn"
-
-    if choice == "monotonic" and has_mono:
-        bundle = joblib.load(MODEL_DIR / "monotonic_bundle.joblib")   # {preprocessor, model(LGBM)}
-        meta = json.load((MODEL_DIR / "monotonic_metadata.json").open(encoding="utf-8"))
-        return "monotonic", bundle["model"], bundle, meta, context
 
     if choice == "keras" and has_keras:
         import tensorflow as tf   # lazy import (chỉ nạp TF khi thực sự dùng Keras)
@@ -183,9 +176,6 @@ def predict(district, ward="unknown", area_m2=20.0, room_type="phong_tro",
             X = X.toarray()
         pred_s = model.predict(X, verbose=0)
         price = float(bundle["target_scaler"].inverse_transform(pred_s)[0][0])
-    elif kind == "monotonic":
-        X = bundle["preprocessor"].transform(df)      # LightGBM nhận thẳng ma trận (kể cả sparse)
-        price = float(model.predict(X)[0])
     else:
         price = float(model.predict(df)[0])
 

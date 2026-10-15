@@ -8,8 +8,7 @@ Không import model trực tiếp - chỉ **gọi API** dự đoán giá thuê q
 | Dự đoán giá thuê | `POST /predict`, `GET /meta` | `RENTAL_API_URL=http://localhost:8000` |
 
 `rental-api` mặc định dùng `RENTAL_BACKEND=sklearn`, tức model `LightGBM` tốt nhất từ
-`training/train_compare.py`. Nếu cần demo model có ràng buộc nghiệp vụ, đổi sang
-`RENTAL_BACKEND=monotonic`.
+`training/train_compare.py`.
 
 ## Chạy
 

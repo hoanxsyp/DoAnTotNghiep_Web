@@ -15,7 +15,6 @@ ai_rental/
 │   └── preprocess_all.py      # gộp mọi nguồn → dataset sạch + distance + ward_centroids
 ├── training/        # huấn luyện
 │   ├── train_compare.py       # so sánh 4 model (Ridge/RF/LightGBM/CatBoost) + tune
-│   ├── train_monotonic.py     # LightGBM có RÀNG BUỘC ĐƠN ĐIỆU (model tùy chọn)
 │   └── train_keras.py         # mạng nơ-ron Keras MLP → file .keras
 ├── serving/         # phục vụ
 │   ├── predict_core.py        # lõi dự đoán (tự chọn backend keras/sklearn)
@@ -48,13 +47,9 @@ python preprocessing/preprocess_all.py      # -> data/processed/hanoi_all_clean.
 # 3) Train 4 model (cây) + so sánh + tune
 python training/train_compare.py            # -> models/hanoi_all/model.joblib + metadata.json
 
-# 3b) Train LightGBM MONOTONIC — model tùy chọn để kiểm tra hành vi hợp lý:
-#     tiện ích/diện tích không bao giờ làm GIẢM giá.
-python training/train_monotonic.py          # -> models/hanoi_all/monotonic_bundle.joblib
-
-# 3c) (Tùy chọn) Train mạng nơ-ron Keras -> file .keras (deliverable học sâu)
+# 3b) (Tùy chọn) Train mạng nơ-ron Keras -> file .keras (deliverable học sâu)
 python training/train_keras.py              # -> models/hanoi_all/model.keras
-#     Chọn backend: RENTAL_BACKEND = sklearn (mặc định, LightGBM tốt nhất) | monotonic | keras
+#     Chọn backend: RENTAL_BACKEND = sklearn (mặc định, LightGBM tốt nhất) | keras
 
 # 4) API dự đoán (serve_api ở serving/ -> dùng --app-dir)
 uvicorn serve_api:app --app-dir serving --host 0.0.0.0 --port 8000
@@ -77,19 +72,6 @@ uvicorn serve_api:app --app-dir serving --host 0.0.0.0 --port 8000
 | **Target** | `price_million` (triệu VND/tháng) |
 
 `market_*` được sinh ở bước preprocess từ các tin mới crawl theo `district/ward/room_type`, ưu tiên tin mới bằng half-life 90 ngày và lưu vào `data/processed/market_stats.json` để API dùng khi dự đoán. `population_density_km2` lấy từ `data/reference/hanoi_population_density_2024.csv`.
-
-## Lưu ý hành vi model (vì sao dùng MONOTONIC)
-Trong dữ liệu tin đăng, vài tiện ích **tương quan ÂM** với giá: `khép kín` (−0.11), `wifi`,
-`để xe` — vì chúng là **dấu hiệu phân khúc phòng trọ giá rẻ** (phòng rẻ quảng cáo tiện ích cơ
-bản; CCMN/căn hộ đắt tiền nhấn `thang máy`/`full nội thất` và thường bỏ qua). Model học **đúng
-dữ liệu** nhưng cho kết quả **phản trực giác** khi giữ nguyên các yếu tố khác (thêm khép kín →
-giá giảm). Đây là **confounding**, không phải quan hệ nhân quả.
-
-**Cách xử lý:** `train_monotonic.py` áp **ràng buộc đơn điệu** — buộc `area`, `number_of_amenities`
-và mọi `has_*` chỉ được làm giá **tăng hoặc giữ nguyên**. Kết quả: 0/10 tiện ích còn làm giảm giá;
-`thang máy +0.83`, `full đồ +0.61`, `AC +0.11`... vẫn dương; `khép kín/wifi/để xe` về `+0.00`
-(không thưởng giá trị không có trong dữ liệu, nhưng **không còn phạt**). Đánh đổi: R² 0.61→0.58
-(giảm ~3%) để lấy hành vi đúng thực tế — phù hợp cho công cụ gợi ý giá.
 
 ## Docker — chạy CẢ 2 module + giao diện bằng 1 lệnh
 File `docker-compose.yml` ở **thư mục gốc** (`Module_DoAnTotNghiep/`):
