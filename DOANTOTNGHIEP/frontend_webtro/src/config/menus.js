@@ -61,7 +61,7 @@ export const tenantMenu = [
       { label: 'Đăng tin ở ghép', path: '/quan-ly/tin-dang/tao', icon: icon(AddBoxIcon) },
       { label: 'Tin đã lưu', path: '/tai-khoan/tin-da-luu', icon: icon(BookmarkIcon) },
       { label: 'Lịch sử xem', path: '/tai-khoan/lich-su-xem', icon: icon(VisibilityIcon) },
-      { label: 'Tin nhắn', path: '/tai-khoan/tin-nhan', icon: icon(ChatIcon) },
+      { label: 'Tin nhắn', path: '/tai-khoan/tin-nhan', icon: icon(ChatIcon), badge: 'unreadMessages' },
       { label: 'Thông báo', path: '/tai-khoan/thong-bao', icon: icon(NotificationsIcon) },
       { label: 'Báo cáo của tôi', path: '/tai-khoan/bao-cao-cua-toi', icon: icon(FlagIcon) },
       { label: 'Đánh giá của tôi', path: '/tai-khoan/danh-gia-cua-toi', icon: icon(RateReviewIcon) },
@@ -87,7 +87,7 @@ export const landlordMenu = [
       { label: 'Tin đăng', path: '/quan-ly/tin-dang', icon: icon(ArticleIcon) },
       { label: 'Đăng tin mới', path: '/quan-ly/tin-dang/tao', icon: icon(AddBoxIcon) },
       { label: 'Người liên hệ', path: '/quan-ly/nguoi-lien-he', icon: icon(ContactPhoneIcon) },
-      { label: 'Tin nhắn', path: '/quan-ly/tin-nhan', icon: icon(ChatIcon) },
+      { label: 'Tin nhắn', path: '/quan-ly/tin-nhan', icon: icon(ChatIcon), badge: 'unreadMessages' },
     ],
   },
   {

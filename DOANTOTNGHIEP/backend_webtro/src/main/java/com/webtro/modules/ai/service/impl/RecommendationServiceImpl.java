@@ -70,6 +70,19 @@ public class RecommendationServiceImpl implements RecommendationService {
     @Transactional
     public RecommendationResponse recommend(RecommendationRequest request, CustomUserDetails principal,
                                             String sessionId) {
+        RecommendationResponse response = buildRecommendation(request, principal, sessionId);
+        // Gắn cờ favoritedByMe cho người đã đăng nhập (1 truy vấn IN cho cả danh sách) — mọi nhánh
+        // (cá nhân hóa / cold start) đều đi qua đây.
+        if (principal != null && response.getItems() != null && !response.getItems().isEmpty()) {
+            Set<Long> favorited = signalGateway.favoritedListingIds(principal.getId(),
+                    response.getItems().stream().map(RecommendationResponse.RecommendationItem::getId).toList());
+            response.getItems().forEach(item -> item.setFavoritedByMe(favorited.contains(item.getId())));
+        }
+        return response;
+    }
+
+    private RecommendationResponse buildRecommendation(RecommendationRequest request, CustomUserDetails principal,
+                                                       String sessionId) {
         support.ensureEnabled(ConfigKey.AI_RECOMMENDATION_ENABLED);
 
         RecommendationSource source = request.getSource();

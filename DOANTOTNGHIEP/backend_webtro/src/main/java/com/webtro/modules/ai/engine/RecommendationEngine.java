@@ -68,7 +68,6 @@ public interface RecommendationEngine {
             BigDecimal amenityScore,
             BigDecimal occupantScore,
             BigDecimal genderScore,
-            BigDecimal trustScoreNorm,
             BigDecimal freshnessScore,
             BigDecimal promotedBoost,
             BigDecimal appliedWeightSum,

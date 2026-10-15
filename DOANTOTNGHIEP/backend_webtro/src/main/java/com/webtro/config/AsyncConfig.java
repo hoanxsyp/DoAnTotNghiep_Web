@@ -21,7 +21,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 public class AsyncConfig implements AsyncConfigurer {
 
     /**
-     * Executor cho các tác vụ AI (phân tích cảm xúc, dự đoán giá, tính gợi ý).
+     * Executor cho các tác vụ AI (dự đoán giá, tính gợi ý, chatbot).
      * Đây là executor được {@code @Async("aiTaskExecutor")} tham chiếu (canonical mục 10.1).
      */
     @Bean("aiTaskExecutor")

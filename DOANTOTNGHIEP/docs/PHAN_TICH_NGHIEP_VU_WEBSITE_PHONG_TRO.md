@@ -128,7 +128,7 @@ Hệ thống cần đủ lớn để thể hiện năng lực phân tích, thi�
 - Quản lý chủ trọ, tin đăng, danh mục, khu vực, tiện ích.
 - Quản lý gói dịch vụ, thanh toán, khuyến mãi.
 - Quản lý báo cáo vi phạm, khiếu nại, bình luận, đánh giá.
-- Quản lý cấu hình AI: ngưỡng cảnh báo, trọng số điểm uy tín, log xử lý AI.
+- Quản lý cấu hình AI: ngưỡng cảnh báo, log xử lý AI.
 - Xem dashboard thống kê.
 - Khóa hoặc mở khóa tài khoản.
 - Khóa hoặc mở khóa tin đăng.
@@ -267,8 +267,6 @@ Hệ thống cần đủ lớn để thể hiện năng lực phân tích, thi�
 | Mã | Chức năng | Actor |
 |---|---|---|
 | AI-01 | Phân tích cảm xúc bình luận | Hệ thống AI |
-| AI-02 | Cập nhật điểm uy tín tin đăng | Hệ thống AI |
-| AI-03 | Cập nhật điểm uy tín chủ trọ | Hệ thống AI |
 | AI-04 | Gợi ý tin đăng cá nhân hóa | Hệ thống AI |
 | AI-05 | Chatbot tư vấn tìm trọ | Người dùng/Hệ thống AI |
 | AI-06 | Dự đoán giá thuê | Chủ trọ/Hệ thống AI |
@@ -400,7 +398,7 @@ Luồng phụ:
 
 - Chủ trọ chỉ lưu nháp, tin ở trạng thái Draft.
 - Tin bị từ chối, chủ trọ nhận lý do và chỉnh sửa lại.
-- Nếu chủ trọ đã được xác thực uy tín, hệ thống có thể tự động duyệt tin ít rủi ro.
+- Nếu chủ trọ đã được xác thực, hệ thống có thể tự động duyệt tin ít rủi ro.
 
 Điều kiện lỗi:
 
@@ -609,7 +607,6 @@ Quy tắc nghiệp vụ:
 
 - Không tính nhiều lượt xem liên tục từ cùng người dùng/IP trong thời gian ngắn.
 - Thông tin liên hệ có thể bị che một phần nếu người dùng chưa đăng nhập.
-- Tin có cảnh báo uy tín thấp có thể hiển thị nhãn cảnh báo nhẹ.
 
 ### 3.9. Lưu tin
 
@@ -683,7 +680,7 @@ Luồng chính:
 2. Hệ thống validate nội dung.
 3. Hệ thống lưu bình luận ở trạng thái Visible hoặc Pending tùy cấu hình.
 4. Hệ thống kích hoạt AI phân tích cảm xúc.
-5. Hệ thống cập nhật nhãn sentiment và điểm uy tín.
+5. Hệ thống cập nhật nhãn sentiment.
 6. Nếu bình luận tiêu cực vượt ngưỡng, hệ thống cảnh báo Admin.
 
 Luồng phụ:
@@ -1044,43 +1041,15 @@ Gợi ý ngưỡng cho đồ án:
 | AI phát hiện tiêu cực vượt ngưỡng | Admin/Moderator | Dashboard/In-app |
 | Tài khoản bị khóa | Người dùng | Email/In-app |
 
-### 5.7. Khi nào cập nhật điểm uy tín
+### 5.7. Điểm uy tín (đã loại bỏ)
 
-Điểm uy tín tin đăng cập nhật khi:
+> Hệ thống **không tính điểm uy tín** cho tin đăng và chủ trọ. Mục này giữ số thứ tự để các tài
+> liệu khác tham chiếu không bị lệch. Thông tin người thuê dùng để đánh giá tin/chủ trọ là **số sao
+> đánh giá trung bình** và trạng thái **xác thực chủ trọ**.
 
-- Có bình luận mới và AI đã phân tích cảm xúc.
-- Có đánh giá mới.
-- Có report được xác nhận đúng.
-- Tin bị khóa, ẩn hoặc cảnh báo.
-- Tin có lịch sử phản hồi tốt từ chủ trọ.
+### 5.8. Công thức điểm uy tín (đã loại bỏ)
 
-Điểm uy tín chủ trọ cập nhật khi:
-
-- Tin của chủ trọ nhận đánh giá.
-- Tin của chủ trọ có bình luận tích cực/tiêu cực.
-- Chủ trọ có report được xác nhận.
-- Chủ trọ phản hồi người thuê nhanh và đầy đủ nếu có module chat.
-- Chủ trọ có nhiều tin hết hạn/đóng thành công mà không vi phạm.
-
-### 5.8. Công thức điểm uy tín gợi ý
-
-Không bắt buộc dùng đúng công thức này, nhưng có thể dùng cho đồ án:
-
-```text
-ListingTrustScore = 100
-  + PositiveCommentCount * 1
-  - NegativeCommentCount * 2
-  + AverageRating * 5
-  - ValidReportCount * 10
-  - ViolationWarningCount * 15
-```
-
-Giới hạn:
-
-- Điểm tối thiểu: 0.
-- Điểm tối đa: 100.
-- Tin dưới 40 điểm: đánh dấu rủi ro.
-- Tin dưới 25 điểm: cần kiểm duyệt.
+> Không áp dụng — xem mục 5.7.
 
 ### 5.9. Khi nào tính lại giá dự đoán
 
@@ -1205,7 +1174,6 @@ AI dự đoán giá thuê được tính lại khi:
 - CurfewType.
 - FurnitureStatus.
 - Status.
-- TrustScore.
 - AverageRating.
 - ViewCount.
 - FavoriteCount.
@@ -1379,8 +1347,6 @@ Website -> Database: Lưu bình luận
 Website -> AI Sentiment Module: Gửi nội dung bình luận
 AI Sentiment Module -> Website: Trả về label và score
 Website -> Database: Lưu SentimentResult
-Website -> Website: Tính lại TrustScore của tin và chủ trọ
-Website -> Database: Cập nhật điểm uy tín
 alt Tiêu cực vượt ngưỡng
   Website -> Database: Đánh dấu tin NeedReview
   Website -> Admin/Moderator: Gửi cảnh báo
@@ -1454,8 +1420,6 @@ Website -> AuditLog: Ghi thao tác
 #### Mục tiêu
 
 - Phân loại bình luận thành tích cực, trung lập, tiêu cực.
-- Cập nhật điểm uy tín của tin đăng.
-- Cập nhật điểm uy tín của chủ trọ.
 - Phát hiện sớm tin có dấu hiệu lừa đảo, sai thông tin hoặc chất lượng thấp.
 
 #### Input
@@ -1484,9 +1448,8 @@ Website -> AuditLog: Ghi thao tác
 4. Module sentiment trả kết quả.
 5. Hệ thống lưu kết quả vào SentimentResult.
 6. Hệ thống cập nhật thống kê sentiment của tin.
-7. Hệ thống tính lại TrustScore của tin và chủ trọ.
-8. Nếu số bình luận tiêu cực vượt ngưỡng, hệ thống đánh dấu NeedReview.
-9. Hệ thống gửi cảnh báo cho Admin/Moderator.
+7. Nếu số bình luận tiêu cực vượt ngưỡng, hệ thống đánh dấu NeedReview.
+8. Hệ thống gửi cảnh báo cho Admin/Moderator.
 
 #### Điều kiện kích hoạt
 
@@ -1500,7 +1463,7 @@ Website -> AuditLog: Ghi thao tác
 - Một bình luận tiêu cực đơn lẻ không làm khóa tin.
 - Tỷ lệ tiêu cực cần xét theo số lượng bình luận tối thiểu.
 - Bình luận từ tài khoản mới tạo có thể có trọng số thấp hơn.
-- Bình luận đã bị Moderator xác định spam không dùng để tính điểm uy tín.
+- Bình luận đã bị Moderator xác định spam không được tính vào thống kê cảm xúc của tin.
 
 Gợi ý ngưỡng:
 
@@ -1555,7 +1518,6 @@ Gợi ý ngưỡng:
    - Khu vực gần với lịch sử tìm kiếm.
    - Giá trong khoảng thường xem.
    - Loại tin tương tự tin đã lưu.
-   - Điểm uy tín tốt.
    - Còn mới hoặc được đẩy hợp lệ.
 6. Hệ thống hiển thị danh sách gợi ý.
 
@@ -1739,7 +1701,6 @@ Chức năng:
 
 - Xem danh sách chủ trọ.
 - Xem số tin đã đăng.
-- Xem điểm uy tín.
 - Xem số report đã xác nhận.
 - Xác thực hoặc hủy xác thực chủ trọ.
 - Hạn chế đăng tin nếu vi phạm.
@@ -1855,7 +1816,6 @@ Chức năng:
 - Xem log phân tích sentiment.
 - Xem danh sách tin bị AI cảnh báo.
 - Cấu hình ngưỡng bình luận tiêu cực.
-- Cấu hình trọng số điểm uy tín.
 - Xem log gợi ý tin đăng.
 - Xem lịch sử dự đoán giá.
 - Bật/tắt từng module AI nếu cần bảo trì.
@@ -2122,7 +2082,7 @@ Audit:
 | Lịch sử xem/tìm kiếm | Cao | Dễ | Cao | Hỗ trợ AI |
 | Liên hệ chủ trọ | Cao | Dễ | Cao | Cốt lõi chuyển đổi |
 | Bình luận | Cao | Trung bình | Trung bình | Cần cho sentiment |
-| Đánh giá | Cao | Trung bình | Cao | Tăng uy tín |
+| Đánh giá | Cao | Trung bình | Cao | Giúp người thuê tham khảo |
 | Báo cáo vi phạm | Cao | Trung bình | Cao | Cần cho kiểm duyệt |
 | Admin dashboard | Cao | Trung bình | Cao | Thể hiện quản trị |
 | Thanh toán đẩy tin | Cao | Trung bình | Cao | Có giá trị thương mại |

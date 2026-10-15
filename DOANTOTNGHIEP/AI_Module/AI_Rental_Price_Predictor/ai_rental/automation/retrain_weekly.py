@@ -6,7 +6,7 @@ Flow:
 1. Crawl the configured rental sources.
 2. Enrich detail pages.
 3. Rebuild the cleaned dataset.
-4. Train the comparison model and the monotonic serving model.
+4. Train the comparison model and select the best model for serving.
 5. Save a run log and compact retrain history.
 
 Schedule this script every 7 days with Windows Task Scheduler or cron.
@@ -142,7 +142,6 @@ def main() -> int:
         "commands": [],
         "dataset_rows": None,
         "metadata": {},
-        "monotonic_metadata": {},
         "error": None,
     }
 
@@ -190,14 +189,6 @@ def main() -> int:
                 log_file,
                 status,
             )
-            run_step(
-                "train monotonic serving model",
-                [sys.executable, rel("training/train_monotonic.py"),
-                 "--data", "data/processed/hanoi_all_clean.csv", "--name", "hanoi_all"],
-                log_file,
-                status,
-            )
-
             if args.train_keras:
                 run_step(
                     "train keras model",
@@ -208,7 +199,6 @@ def main() -> int:
 
         status["dataset_rows"] = count_csv_rows(ROOT / "data" / "processed" / "hanoi_all_clean.csv")
         status["metadata"] = load_json(ROOT / "models" / "hanoi_all" / "metadata.json")
-        status["monotonic_metadata"] = load_json(ROOT / "models" / "hanoi_all" / "monotonic_metadata.json")
         status["status"] = "success"
         return 0
     except Exception as exc:

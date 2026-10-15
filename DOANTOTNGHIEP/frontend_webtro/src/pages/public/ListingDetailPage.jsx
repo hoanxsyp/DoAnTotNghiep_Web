@@ -19,10 +19,8 @@ import reviewApi from '@/api/reviewApi';
 import favoriteApi from '@/api/favoriteApi';
 import contactApi from '@/api/contactApi';
 import reportApi from '@/api/reportApi';
-import ListingGrid from '@/components/listing/ListingGrid';
 import CommentThread from '@/components/interaction/CommentThread';
 import RatingStars from '@/components/interaction/RatingStars';
-import TrustScoreBadge from '@/components/listing/TrustScoreBadge';
 import RichTextViewer from '@/components/common/RichTextViewer';
 import LoadingSkeleton from '@/components/common/LoadingSkeleton';
 import EmptyState from '@/components/common/EmptyState';
@@ -32,10 +30,14 @@ import {
   formatPrice, formatCurrency, formatArea, formatDate, fromNow, compactNumber,
 } from '@/utils/format';
 import {
-  REPORT_REASONS, GENDER_REQUIREMENT, FURNITURE_STATUS,
+  REPORT_REASONS, GENDER_REQUIREMENT, FURNITURE_STATUS, ROLES,
 } from '@/constants';
 
 const toItems = (d) => (Array.isArray(d) ? d : d?.items ?? []);
+
+const DEFAULT_FIRST_MESSAGE = 'Chào anh/chị, phòng này còn trống không ạ?';
+const FIRST_MESSAGE_MIN = 10;
+const FIRST_MESSAGE_MAX = 2000;
 
 const AMENITY_GROUP_LABEL = {
   FURNITURE: 'Nội thất',
@@ -58,8 +60,6 @@ const mapComment = (c) => ({
   canEdit: c.editable,
   canDelete: c.deletable,
   parentId: c.parentCommentId,
-  sentimentLabel: c.sentimentLabel,
-  sentimentScore: c.sentimentScore,
   replies: (c.replies || []).map(mapComment),
 });
 
@@ -82,7 +82,7 @@ const ListingDetailPage = () => {
   const id = useMemo(() => slugId?.split('-').pop(), [slugId]);
   const navigate = useNavigate();
   const location = useLocation();
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, role } = useAuth();
 
   const [listing, setListing] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -98,8 +98,6 @@ const ListingDetailPage = () => {
   const [reviews, setReviews] = useState({ items: [], summary: null });
   const [reviewsLoading, setReviewsLoading] = useState(true);
 
-  const [related, setRelated] = useState([]);
-
   const [loginPrompt, setLoginPrompt] = useState(null);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportReason, setReportReason] = useState('');
@@ -110,6 +108,10 @@ const ListingDetailPage = () => {
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewContent, setReviewContent] = useState('');
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
+
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMessage, setChatMessage] = useState('');
+  const [chatSubmitting, setChatSubmitting] = useState(false);
 
   const requireLogin = useCallback(
     (message) => {
@@ -168,11 +170,6 @@ const ListingDetailPage = () => {
       .then((data) => setReviews({ items: toItems(data), summary: data?.summary || null }))
       .catch(() => setReviews({ items: [], summary: null }))
       .finally(() => setReviewsLoading(false));
-
-    listingApi
-      .getRelated(id)
-      .then((data) => setRelated(toItems(data)))
-      .catch(() => setRelated([]));
   }, [id, notFound, loadComments]);
 
   const handleToggleFavorite = async () => {
@@ -187,8 +184,13 @@ const ListingDetailPage = () => {
       else await favoriteApi.add(id);
       notify.success(prev ? 'Đã bỏ lưu tin.' : 'Đã lưu tin vào danh sách của bạn.');
     } catch (err) {
-      setFavorited(prev);
-      notify.apiError(err);
+      // 409/404: server đã ở trạng thái đích -> chỉ đồng bộ lại UI.
+      if (err.errorCode === 'FAVORITE_ALREADY_EXISTS') setFavorited(true);
+      else if (err.errorCode === 'FAVORITE_NOT_FOUND') setFavorited(false);
+      else {
+        setFavorited(prev);
+        notify.apiError(err);
+      }
     }
   };
 
@@ -205,17 +207,32 @@ const ListingDetailPage = () => {
     }
   };
 
-  const handleMessage = async () => {
+  const handleMessage = () => {
     if (!isAuthenticated) {
       requireLogin('Đăng nhập để nhắn tin cho chủ trọ.');
       return;
     }
+    setChatMessage(DEFAULT_FIRST_MESSAGE);
+    setChatOpen(true);
+  };
+
+  // Backend bắt buộc tin nhắn đầu tiên (10-2000 ký tự). Hội thoại cho tin này đã có thì backend trả lại
+  // hội thoại cũ và gắn thêm tin nhắn vào đó.
+  const submitFirstMessage = async () => {
+    setChatSubmitting(true);
     try {
-      const data = await contactApi.createConversation({ listingId: Number(id) });
-      const convId = data?.id || data?.conversationId;
-      navigate(`/tai-khoan/tin-nhan${convId ? `/${convId}` : ''}`);
+      const data = await contactApi.createConversation({
+        listingId: Number(id),
+        initialMessage: chatMessage.trim(),
+      });
+      setChatOpen(false);
+      // Trang tin nhắn theo khu vực của vai trò: chủ trọ/admin ở /quan-ly, còn lại ở /tai-khoan.
+      const base = [ROLES.LANDLORD, ROLES.ADMIN].includes(role) ? '/quan-ly/tin-nhan' : '/tai-khoan/tin-nhan';
+      navigate(data?.id ? `${base}?conversationId=${data.id}` : base);
     } catch (err) {
       notify.apiError(err);
+    } finally {
+      setChatSubmitting(false);
     }
   };
 
@@ -334,7 +351,7 @@ const ListingDetailPage = () => {
   const {
     title, price, depositAmount, area, description, fullAddress, shortAddress,
     provinceName, districtName, wardName, addressDetail, images = [], amenities = [],
-    landlord, contactName, contactPhone, trustScore, trustLevel,
+    landlord, contactName, contactPhone,
     viewCount, favoriteCount, commentCount, latitude, longitude, electricityPrice, waterPrice,
     roomCount, toiletCount, currentOccupants, maxOccupants, availableFrom, furnitureStatus,
     curfewType, toiletType, petAllowed, parkingAvailable, genderRequirement, categoryCode,
@@ -422,13 +439,6 @@ const ListingDetailPage = () => {
                 />
               ))}
             </Stack>
-          )}
-
-          {/* Cảnh báo uy tín thấp */}
-          {trustLevel && trustLevel !== 'NORMAL' && (
-            <Box sx={{ mt: 2 }}>
-              <TrustScoreBadge score={trustScore} level={trustLevel} variant="alert" />
-            </Box>
           )}
 
           <Typography variant="h5" component="h1" sx={{ fontWeight: 800, mt: 2 }}>
@@ -667,11 +677,6 @@ const ListingDetailPage = () => {
                   )}
                 </Box>
               </Stack>
-              {landlord?.trustLevel && landlord.trustLevel !== 'NORMAL' && (
-                <Box sx={{ mt: 1 }}>
-                  <TrustScoreBadge score={landlord.trustScore} level={landlord.trustLevel} variant="inline" />
-                </Box>
-              )}
 
               <Divider sx={{ my: 2 }} />
 
@@ -714,16 +719,6 @@ const ListingDetailPage = () => {
                 )}
               </Stack>
             </Paper>
-
-            {/* Tin liên quan */}
-            {related.length > 0 && (
-              <Box sx={{ mt: 2 }}>
-                <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
-                  ✨ Tin tương tự
-                </Typography>
-                <ListingGrid items={related.slice(0, 3)} columns={{ xs: 1, sm: 1, md: 1 }} cardVariant="horizontal" showFavorite={false} />
-              </Box>
-            )}
           </Box>
         </Grid>
       </Grid>
@@ -815,6 +810,40 @@ const ListingDetailPage = () => {
             disabled={reviewSubmitting || (reviewRating <= 2 && !reviewContent.trim())}
           >
             {reviewSubmitting ? 'Đang gửi…' : 'Gửi đánh giá'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog tin nhắn đầu tiên gửi chủ trọ */}
+      <Dialog open={chatOpen} onClose={() => !chatSubmitting && setChatOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Nhắn tin cho chủ trọ</DialogTitle>
+        <DialogContent>
+          <TextField
+            label="Tin nhắn"
+            value={chatMessage}
+            onChange={(e) => setChatMessage(e.target.value)}
+            multiline
+            minRows={3}
+            fullWidth
+            autoFocus
+            sx={{ mt: 1 }}
+            inputProps={{ maxLength: FIRST_MESSAGE_MAX }}
+            error={chatMessage.length > 0 && chatMessage.trim().length < FIRST_MESSAGE_MIN}
+            helperText={chatMessage.trim().length < FIRST_MESSAGE_MIN
+              ? `Tối thiểu ${FIRST_MESSAGE_MIN} ký tự`
+              : `${chatMessage.length}/${FIRST_MESSAGE_MAX}`}
+          />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button color="inherit" onClick={() => setChatOpen(false)} disabled={chatSubmitting}>
+            Hủy
+          </Button>
+          <Button
+            variant="contained"
+            onClick={submitFirstMessage}
+            disabled={chatSubmitting || chatMessage.trim().length < FIRST_MESSAGE_MIN}
+          >
+            {chatSubmitting ? 'Đang gửi…' : 'Gửi tin nhắn'}
           </Button>
         </DialogActions>
       </Dialog>

@@ -19,7 +19,7 @@ const GROUP_OPTIONS = [
 /**
  * Cấu hình hệ thống theo nhóm (docs/04 §10, API 4.20.1/4.20.2). Mọi ngưỡng nghiệp vụ (không hardcode)
  * — thời hạn tin, upload, kiểm duyệt, rate limit... Quyền SYSTEM_CONFIG_MANAGE (chỉ Admin). Nhóm
- * TRUST/AI nằm ở trang Cấu hình AI. Lưu bắt buộc kèm lý do (audit).
+ * AI nằm ở trang Cấu hình AI. Lưu bắt buộc kèm lý do (audit).
  */
 const SystemConfigPage = () => {
   const [data, setData] = useState(null);
@@ -59,7 +59,7 @@ const SystemConfigPage = () => {
     <Box>
       <AdminPageHeader
         title="Cấu hình hệ thống"
-        subtitle="Ngưỡng nghiệp vụ theo nhóm — nhóm uy tín/AI ở trang Cấu hình AI"
+        subtitle="Ngưỡng nghiệp vụ theo nhóm — nhóm AI ở trang Cấu hình AI"
         actions={
           <TextField select size="small" label="Nhóm" value={group} onChange={(e) => setGroup(e.target.value)} sx={{ minWidth: 180 }}>
             {GROUP_OPTIONS.map((o) => <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>)}

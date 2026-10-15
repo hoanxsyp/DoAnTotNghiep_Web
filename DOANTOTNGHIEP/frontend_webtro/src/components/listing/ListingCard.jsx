@@ -1,4 +1,5 @@
-import { Link as RouterLink } from 'react-router-dom';
+import { useState } from 'react';
+import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   Card,
   CardActionArea,
@@ -17,7 +18,9 @@ import SquareFootOutlinedIcon from '@mui/icons-material/SquareFootOutlined';
 import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment';
 import ImageNotSupportedOutlinedIcon from '@mui/icons-material/ImageNotSupportedOutlined';
 import StatusChip from '@/components/common/StatusChip';
-import TrustScoreBadge from '@/components/listing/TrustScoreBadge';
+import favoriteApi from '@/api/favoriteApi';
+import useAuth from '@/hooks/useAuth';
+import { notify } from '@/utils/toast';
 import { formatPrice, formatArea, fromNow } from '@/utils/format';
 
 /**
@@ -27,8 +30,8 @@ import { formatPrice, formatArea, fromNow } from '@/utils/format';
  * - Tiêu đề, giá (formatPrice), diện tích, khu vực.
  * - Nhãn "Nổi bật" khi promoted (PROMO-02).
  * - StatusChip khi showStatus (tin của chủ trọ).
- * - TrustScoreBadge khi trust thấp (trustLevel != NORMAL hoặc lowTrustWarning).
- * - Nút tim (onFavoriteToggle). unavailable -> grayscale + overlay [§3.9].
+ * - Nút tim: có onFavoriteToggle thì gọi nó, không có thì thẻ tự lưu/bỏ lưu qua favoriteApi.
+ *   unavailable -> grayscale + overlay [§3.9].
  * - Click -> /tin/{slug}-{id}. Bọc <Link> thật để mở tab mới được.
  *
  * Props: listing (obj), variant 'vertical'|'horizontal'|'compact', showFavorite (bool),
@@ -43,6 +46,13 @@ export default function ListingCard({
   onFavoriteToggle,
   actions,
 }) {
+  const { isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+  const routerLocation = useLocation();
+  // null = theo listing.favoritedByMe từ API; sau khi bấm thì giữ trạng thái cục bộ.
+  const [favLocal, setFavLocal] = useState(null);
+  const [favBusy, setFavBusy] = useState(false);
+
   if (!listing) return null;
 
   const {
@@ -56,10 +66,6 @@ export default function ListingCard({
     shortAddress,
     thumbnailUrl,
     primaryImageUrl,
-    trustScore,
-    trustLevel,
-    trustLabel,
-    lowTrustWarning,
     favoritedByMe,
     promoted,
     promotedLabel,
@@ -68,28 +74,59 @@ export default function ListingCard({
     publishedAt,
   } = listing;
 
+  const favorited = favLocal ?? !!favoritedByMe;
+
+  // Trang cha truyền onFavoriteToggle (vd. "Tin đã lưu") thì để trang cha xử lý; ngược lại thẻ tự
+  // gọi API lưu/bỏ lưu. 409/404 nghĩa là server đã ở trạng thái đích -> chỉ đồng bộ lại UI.
+  const handleFavorite = async () => {
+    if (onFavoriteToggle) {
+      onFavoriteToggle(listing);
+      return;
+    }
+    if (!isAuthenticated) {
+      notify.info('Đăng nhập để lưu tin vào danh sách của bạn.');
+      navigate('/dang-nhap', { state: { from: routerLocation.pathname + routerLocation.search } });
+      return;
+    }
+    if (favBusy) return;
+    const next = !favorited;
+    setFavBusy(true);
+    setFavLocal(next);
+    try {
+      if (next) await favoriteApi.add(id);
+      else await favoriteApi.remove(id);
+      notify.success(next ? 'Đã lưu tin vào danh sách của bạn.' : 'Đã bỏ lưu tin.');
+    } catch (err) {
+      if (err.errorCode === 'FAVORITE_ALREADY_EXISTS') setFavLocal(true);
+      else if (err.errorCode === 'FAVORITE_NOT_FOUND') setFavLocal(false);
+      else {
+        setFavLocal(!next);
+        notify.apiError(err);
+      }
+    } finally {
+      setFavBusy(false);
+    }
+  };
+
   const to = `/tin/${slug ? `${slug}-` : ''}${id}`;
   const image = thumbnailUrl || primaryImageUrl;
   const area_ = area != null ? formatArea(area) : null;
   const location = shortAddress || [districtName, provinceName].filter(Boolean).join(', ');
   const timeText = fromNow(publishedAt || createdAt);
 
-  // Trust: chỉ hiện badge khi rủi ro. trustLevel từ API là nguồn chuẩn; fallback theo cờ.
-  const level = trustLevel || (lowTrustWarning ? 'RISKY' : 'NORMAL');
-  const showTrust = level !== 'NORMAL' || lowTrustWarning === true;
-
   const isHorizontal = variant === 'horizontal';
   const isCompact = variant === 'compact';
 
   const favoriteBtn = showFavorite && (
-    <Tooltip title={favoritedByMe ? 'Bỏ lưu tin' : 'Lưu tin'}>
+    <Tooltip title={favorited ? 'Bỏ lưu tin' : 'Lưu tin'}>
       <IconButton
         size="small"
-        aria-label={favoritedByMe ? 'Bỏ lưu tin' : 'Lưu tin'}
+        aria-label={favorited ? 'Bỏ lưu tin' : 'Lưu tin'}
+        disabled={favBusy}
         onClick={(e) => {
           e.preventDefault();
           e.stopPropagation();
-          onFavoriteToggle?.(listing);
+          handleFavorite();
         }}
         sx={{
           position: 'absolute',
@@ -101,7 +138,7 @@ export default function ListingCard({
           zIndex: 2,
         }}
       >
-        {favoritedByMe ? (
+        {favorited ? (
           <FavoriteIcon fontSize="small" color="error" />
         ) : (
           <FavoriteBorderIcon fontSize="small" />
@@ -230,10 +267,9 @@ export default function ListingCard({
         )}
       </Stack>
 
-      {(showStatus || showTrust) && (
+      {showStatus && status && (
         <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: 'wrap', gap: 0.5 }}>
-          {showStatus && status && <StatusChip status={status} type="listing" />}
-          {showTrust && <TrustScoreBadge score={trustScore} level={level} variant="inline" />}
+          <StatusChip status={status} type="listing" />
         </Stack>
       )}
 

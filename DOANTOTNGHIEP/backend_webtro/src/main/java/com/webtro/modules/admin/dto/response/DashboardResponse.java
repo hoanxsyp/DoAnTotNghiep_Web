@@ -102,10 +102,7 @@ public class DashboardResponse {
     @Getter @Setter @Builder @NoArgsConstructor @AllArgsConstructor
     @Schema(name = "DashboardAiAlerts")
     public static class AiAlerts {
-        private long listingsFlaggedBySentiment;
         private long listingsWithPriceDeviation;
-        private long pendingSentimentAnalysis;
-        private boolean sentimentModuleEnabled;
         private boolean recommendationModuleEnabled;
         private boolean chatbotModuleEnabled;
         private boolean priceModuleEnabled;

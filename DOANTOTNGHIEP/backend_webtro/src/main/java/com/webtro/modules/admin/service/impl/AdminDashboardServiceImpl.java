@@ -4,7 +4,6 @@ import com.webtro.common.enums.ListingStatus;
 import com.webtro.common.enums.PaymentStatus;
 import com.webtro.common.enums.ReportSeverity;
 import com.webtro.common.enums.ReportStatus;
-import com.webtro.common.enums.SentimentLabel;
 import com.webtro.common.enums.UserStatus;
 import com.webtro.constant.ConfigKey;
 import com.webtro.constant.ErrorCode;
@@ -19,8 +18,6 @@ import com.webtro.modules.admin.service.AdminDashboardService;
 import com.webtro.modules.admin.service.SystemConfigService;
 import com.webtro.modules.payment.entity.PromotionPackage;
 import com.webtro.modules.payment.repository.PromotionPackageRepository;
-import com.webtro.modules.ai.entity.SentimentResult;
-import com.webtro.modules.ai.repository.SentimentResultRepository;
 import com.webtro.modules.catalog.entity.Category;
 import com.webtro.modules.catalog.entity.Province;
 import com.webtro.modules.catalog.repository.CategoryRepository;
@@ -72,7 +69,6 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
     private final AdminUserRoleMetricsRepository userRoleMetricsRepository;
     private final ProvinceRepository provinceRepository;
     private final CategoryRepository categoryRepository;
-    private final SentimentResultRepository sentimentResultRepository;
     private final SystemConfigService systemConfigService;
 
     // ============================ Dashboard ============================
@@ -181,14 +177,9 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
     }
 
     private DashboardResponse.AiAlerts buildAiAlerts() {
-        long flaggedBySentiment = listingRepository.count(listingStatus(ListingStatus.NEED_REVIEW));
         long priceDeviation = listingRepository.count(listingAlive().and(listingPriceDeviation()));
-        long pendingSentiment = sentimentResultRepository.count(sentimentPending());
         return DashboardResponse.AiAlerts.builder()
-                .listingsFlaggedBySentiment(flaggedBySentiment)
                 .listingsWithPriceDeviation(priceDeviation)
-                .pendingSentimentAnalysis(pendingSentiment)
-                .sentimentModuleEnabled(systemConfigService.getBoolean(ConfigKey.AI_SENTIMENT_ENABLED))
                 .recommendationModuleEnabled(systemConfigService.getBoolean(ConfigKey.AI_RECOMMENDATION_ENABLED))
                 .chatbotModuleEnabled(systemConfigService.getBoolean(ConfigKey.AI_CHATBOT_ENABLED))
                 .priceModuleEnabled(systemConfigService.getBoolean(ConfigKey.AI_PRICE_ENABLED))
@@ -470,12 +461,6 @@ public class AdminDashboardServiceImpl implements AdminDashboardService {
                 cb.isNull(r.get("deletedAt")),
                 cb.greaterThanOrEqualTo(r.get("createdAt"), from),
                 cb.lessThan(r.get("createdAt"), to));
-    }
-
-    private Specification<SentimentResult> sentimentPending() {
-        return (r, q, cb) -> cb.and(
-                cb.equal(r.get("label"), SentimentLabel.PENDING_ANALYSIS),
-                cb.isTrue(r.get("isLatest")));
     }
 
     // ============================ Tiện ích ============================

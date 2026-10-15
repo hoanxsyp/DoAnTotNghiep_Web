@@ -206,6 +206,8 @@ const router = createBrowserRouter([
       { path: '/quan-ly/tin-dang/:id/sua', element: load(EditListingPage) },
       { path: '/quan-ly/tin-dang/:id/thong-ke', element: load(ListingStatsPage) },
       { path: '/quan-ly/nguoi-lien-he', element: load(ContactsPage) },
+      // Cùng trang với /tai-khoan/tin-nhan; API trả myRole nên dùng chung được cho chủ trọ.
+      { path: '/quan-ly/tin-nhan', element: load(MessagesPage) },
       { path: '/quan-ly/goi-dich-vu', element: loadForRoles([ROLES.LANDLORD, ROLES.ADMIN], LandlordPackagesPage) },
       { path: '/quan-ly/thanh-toan', element: loadForRoles([ROLES.LANDLORD, ROLES.ADMIN], LandlordPaymentsPage) },
       { path: '/quan-ly/thanh-toan/ket-qua', element: loadForRoles([ROLES.LANDLORD, ROLES.ADMIN], PaymentResultPage) },

@@ -129,15 +129,6 @@ public interface ListingRepository
                                                @Param("maxThreshold") Instant maxThreshold,
                                                @Param("dayStart") Instant dayStart, Pageable pageable);
 
-    /** Id các tin ở {@code statuses} (đang hiển thị) — {@code TrustScoreRecalcJob} tính lại điểm. */
-    @Query("SELECT l.id FROM Listing l WHERE l.status IN :statuses AND l.deletedAt IS NULL "
-            + "ORDER BY l.id ASC")
-    List<Long> findIdsByStatusIn(@Param("statuses") Collection<ListingStatus> statuses, Pageable pageable);
-
-    /** Id chủ trọ (distinct) có tin ở {@code statuses} — {@code TrustScoreRecalcJob} tính lại điểm chủ trọ. */
-    @Query("SELECT DISTINCT l.ownerId FROM Listing l WHERE l.status IN :statuses AND l.deletedAt IS NULL")
-    List<Long> findDistinctOwnerIdsByStatusIn(@Param("statuses") Collection<ListingStatus> statuses);
-
     /**
      * Tin còn cờ đẩy ({@code is_promoted = true}) nhưng đã quá {@code promoted_until} — dùng cho
      * {@code PromotionExpiryJob} gỡ cờ (phòng trường hợp lượt đẩy không còn khớp bản ghi subscription).
@@ -158,14 +149,6 @@ public interface ListingRepository
     // ==================================================================
     //  Truy vấn phục vụ màn quản trị AI (canonical 4.19) — thêm cho AdminAiController
     // ==================================================================
-
-    /**
-     * Tin bị AI đánh dấu cần kiểm tra do cảm xúc tiêu cực ({@code need_review_count > 0}) — nguồn cho
-     * danh sách cảnh báo sentiment ở màn quản trị AI ({@code AI_LOG_VIEW}). Bỏ qua tin đã xóa mềm;
-     * thứ tự sắp xếp do {@link Pageable} quyết định (mặc định theo {@code last_need_review_at} gần nhất).
-     */
-    @Query("SELECT l FROM Listing l WHERE l.needReviewCount > 0 AND l.deletedAt IS NULL")
-    Page<Listing> findSentimentAlerts(Pageable pageable);
 
     /**
      * Tin bị AI đánh cờ lệch giá ({@code price_deviation_flag = true}) — nguồn cho danh sách tin

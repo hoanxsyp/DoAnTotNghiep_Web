@@ -12,8 +12,8 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Truy vấn bình luận. Dùng {@link JpaSpecificationExecutor} cho lọc động (trạng thái, sentiment,
- * cờ rủi ro...). Mọi truy vấn công khai lọc {@code deleted_at IS NULL}.
+ * Truy vấn bình luận. Dùng {@link JpaSpecificationExecutor} cho lọc động (trạng thái, spam, từ
+ * khóa...). Mọi truy vấn công khai lọc {@code deleted_at IS NULL}.
  */
 @Repository
 public interface CommentRepository extends JpaRepository<Comment, Long>, JpaSpecificationExecutor<Comment> {

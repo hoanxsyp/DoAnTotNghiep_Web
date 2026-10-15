@@ -29,7 +29,6 @@ public class NotificationMapper {
             NotificationType.LISTING_EXPIRING,
             NotificationType.LISTING_EXPIRED,
             NotificationType.REPORT_THRESHOLD,
-            NotificationType.AI_NEGATIVE_ALERT,
             NotificationType.VIOLATION_WARNING);
 
     /** Loại có icon ERROR (tiêu cực/chặn). */

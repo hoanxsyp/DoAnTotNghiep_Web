@@ -1,4 +1,4 @@
-# ai_rental — API dự đoán giá thuê (FastAPI). Phục vụ model MONOTONIC (LightGBM) — nhẹ, không TF.
+# ai_rental — API dự đoán giá thuê (FastAPI). Phục vụ LightGBM tốt nhất mặc định — nhẹ, không TF.
 FROM python:3.12-slim
 
 WORKDIR /app
@@ -15,9 +15,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY serving/ serving/
 COPY preprocessing/normalizers.py preprocessing/normalizers.py
 
-# artifacts: model monotonic (mặc định) + model cây (fallback sklearn) + dữ liệu cho /meta
-COPY models/hanoi_all/monotonic_bundle.joblib   models/hanoi_all/monotonic_bundle.joblib
-COPY models/hanoi_all/monotonic_metadata.json   models/hanoi_all/monotonic_metadata.json
+# artifacts: model LightGBM tốt nhất + dữ liệu cho /meta
 COPY models/hanoi_all/model.joblib              models/hanoi_all/model.joblib
 COPY models/hanoi_all/metadata.json             models/hanoi_all/metadata.json
 COPY data/processed/                           data/processed/

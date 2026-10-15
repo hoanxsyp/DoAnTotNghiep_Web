@@ -18,7 +18,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 /**
- * Cấu hình 4 module AI (SENTIMENT/RECOMMENDATION/CHATBOT/PRICE) [§9]: mỗi bản ghi là một khóa cấu
+ * Cấu hình các module AI (RECOMMENDATION/CHATBOT/PRICE) [§9]: mỗi bản ghi là một khóa cấu
  * hình JSON của một module, có version để theo dõi thay đổi.
  *
  * <p>Bảng nghiệp vụ (có audit + xóa mềm) -> kế thừa {@link AuditableEntity}. Duy nhất theo

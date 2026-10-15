@@ -17,11 +17,12 @@ import PriceRangeSlider from '@/components/search/PriceRangeSlider';
 import EmptyState from '@/components/common/EmptyState';
 import useResponsive from '@/hooks/useResponsive';
 import { GENDER_REQUIREMENT, FURNITURE_STATUS, PAGE_SIZE } from '@/constants';
+import { formatPrice, formatArea } from '@/utils/format';
 
 const toItems = (d) => (Array.isArray(d) ? d : d?.items ?? []);
 
 const SORTS = [
-  { value: 'relevance,desc', label: 'Liên quan nhất' },
+  { value: 'RELEVANCE', label: 'Liên quan nhất' },
   { value: 'publishedAt,desc', label: 'Mới nhất' },
   { value: 'price,asc', label: 'Giá thấp → cao' },
   { value: 'price,desc', label: 'Giá cao → thấp' },
@@ -37,17 +38,20 @@ const AREA_MAX = 100;
 // Loại ký tự nguy hiểm khỏi keyword (lớp lọc UX; chống XSS/SQLi thật ở BE).
 const sanitizeKeyword = (s = '') => s.replace(/[<>"'`\\]/g, '').slice(0, 100);
 
+// Tham số dạng danh sách trên URL lưu "A,B" (categoryCode, amenityIds).
+const splitList = (v) => (v ? v.split(',').filter(Boolean) : []);
+
 const FilterPanel = ({ filters, onChange, onReset, categories, provinces, districts, amenities }) => {
   const set = (key) => (value) => onChange(key, value);
-  const amenityIds = filters.amenityIds ? filters.amenityIds.split(',').filter(Boolean) : [];
+  const amenityIds = splitList(filters.amenityIds);
+  const categoryCodes = splitList(filters.categoryCode);
 
-  const toggleAmenity = (id) => {
-    const idStr = String(id);
-    const next = amenityIds.includes(idStr)
-      ? amenityIds.filter((x) => x !== idStr)
-      : [...amenityIds, idStr];
-    onChange('amenityIds', next.join(','));
+  const toggleIn = (key, list, value) => {
+    const next = list.includes(value) ? list.filter((x) => x !== value) : [...list, value];
+    onChange(key, next.join(','));
   };
+  const toggleAmenity = (id) => toggleIn('amenityIds', amenityIds, String(id));
+  const toggleCategory = (code) => toggleIn('categoryCode', categoryCodes, code);
 
   return (
     <Box>
@@ -70,8 +74,8 @@ const FilterPanel = ({ filters, onChange, onReset, categories, provinces, distri
                 control={
                   <Checkbox
                     size="small"
-                    checked={filters.categoryCode === c.code}
-                    onChange={(e) => set('categoryCode')(e.target.checked ? c.code : '')}
+                    checked={categoryCodes.includes(c.code)}
+                    onChange={() => toggleCategory(c.code)}
                   />
                 }
                 label={c.name}
@@ -91,8 +95,7 @@ const FilterPanel = ({ filters, onChange, onReset, categories, provinces, distri
               label="Tỉnh/TP"
               value={filters.provinceId || ''}
               onChange={(e) => {
-                onChange('provinceId', e.target.value);
-                onChange('districtId', '');
+                onChange({ provinceId: e.target.value, districtId: '' });
               }}
             >
               <MenuItem value="">Toàn quốc</MenuItem>
@@ -131,8 +134,7 @@ const FilterPanel = ({ filters, onChange, onReset, categories, provinces, distri
             unit="đ"
             value={[Number(filters.priceFrom) || 0, Number(filters.priceTo) || PRICE_MAX]}
             onChange={([from, to]) => {
-              onChange('priceFrom', from > 0 ? from : '');
-              onChange('priceTo', to < PRICE_MAX ? to : '');
+              onChange({ priceFrom: from > 0 ? from : '', priceTo: to < PRICE_MAX ? to : '' });
             }}
           />
         </AccordionDetails>
@@ -148,14 +150,13 @@ const FilterPanel = ({ filters, onChange, onReset, categories, provinces, distri
             unit="m²"
             value={[Number(filters.areaFrom) || 0, Number(filters.areaTo) || AREA_MAX]}
             onChange={([from, to]) => {
-              onChange('areaFrom', from > 0 ? from : '');
-              onChange('areaTo', to < AREA_MAX ? to : '');
+              onChange({ areaFrom: from > 0 ? from : '', areaTo: to < AREA_MAX ? to : '' });
             }}
           />
         </AccordionDetails>
       </Accordion>
 
-      {filters.categoryCode === 'ROOMMATE' && (
+      {categoryCodes.includes('ROOMMATE') && (
         <Accordion defaultExpanded disableGutters>
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>Ở ghép — giới tính</AccordionSummary>
           <AccordionDetails>
@@ -304,7 +305,7 @@ const SearchPage = () => {
   }, [searchParams]);
 
   const page = Number(searchParams.get('page')) || 0;
-  const sort = searchParams.get('sort') || 'relevance,desc';
+  const sort = searchParams.get('sort') || 'RELEVANCE';
 
   const activeFilterCount = FILTER_KEYS.filter(
     (k) => k !== 'keyword' && searchParams.get(k),
@@ -373,13 +374,19 @@ const SearchPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queryString]);
 
+  // updateParam(key, value) hoặc updateParam({ k1: v1, k2: v2 }). Đổi nhiều tham số thì phải gộp
+  // vào 1 lần gọi: searchParams lấy từ lần render trước nên gọi 2 lần liên tiếp, lần sau sẽ ghi đè lần đầu.
   const updateParam = useCallback(
-    (key, value) => {
+    (keyOrPatch, value) => {
+      const patch = typeof keyOrPatch === 'object' ? keyOrPatch : { [keyOrPatch]: value };
       const next = new URLSearchParams(searchParams);
-      if (value === '' || value == null) next.delete(key);
-      else next.set(key, value);
-      if (key !== 'page') next.set('page', '0'); // đổi filter -> về trang đầu
-      setSearchParams(next, { replace: key !== 'page' });
+      Object.entries(patch).forEach(([key, v]) => {
+        if (v === '' || v == null) next.delete(key);
+        else next.set(key, v);
+      });
+      const onlyPage = Object.keys(patch).every((k) => k === 'page');
+      if (!onlyPage) next.set('page', '0'); // đổi filter -> về trang đầu
+      setSearchParams(next, { replace: !onlyPage });
     },
     [searchParams, setSearchParams],
   );
@@ -390,9 +397,10 @@ const SearchPage = () => {
 
   const heading = useMemo(() => {
     const parts = [];
-    if (filters.categoryCode) {
-      const c = categories.find((x) => x.code === filters.categoryCode);
-      parts.push(c?.name || 'Tin cho thuê');
+    const codes = splitList(filters.categoryCode);
+    if (codes.length) {
+      const names = codes.map((code) => categories.find((x) => x.code === code)?.name).filter(Boolean);
+      parts.push(names.length ? names.join(', ') : 'Tin cho thuê');
     } else {
       parts.push('Phòng trọ, nhà cho thuê');
     }
@@ -402,6 +410,30 @@ const SearchPage = () => {
     }
     return parts.join(' ');
   }, [filters.categoryCode, filters.provinceId, categories, provinces]);
+
+  // Nhãn hiển thị cho chip filter đang bật (thay vì tên tham số thô).
+  const chipLabel = (key, value) => {
+    const nameOf = (list, v, field = 'id') => list.find((x) => String(x[field]) === String(v))?.name;
+    const names = (list, field) =>
+      splitList(value).map((v) => nameOf(list, v, field) || v).join(', ');
+    switch (key) {
+      case 'categoryCode': return names(categories, 'code');
+      case 'provinceId': return nameOf(provinces, value) || 'Tỉnh/TP';
+      case 'districtId': return nameOf(districts, value) || 'Quận/huyện';
+      case 'priceFrom': return `Giá từ ${formatPrice(value)}`;
+      case 'priceTo': return `Giá đến ${formatPrice(value)}`;
+      case 'areaFrom': return `Diện tích từ ${formatArea(value)}`;
+      case 'areaTo': return `Diện tích đến ${formatArea(value)}`;
+      case 'genderRequirement': return GENDER_REQUIREMENT[value] || value;
+      case 'furnitureStatus': return FURNITURE_STATUS[value] || value;
+      case 'toiletType': return `Vệ sinh ${(TOILET[value] || value).toLowerCase()}`;
+      case 'curfewType': return `Giờ giấc: ${(CURFEW[value] || value).toLowerCase()}`;
+      case 'petAllowed': return 'Cho nuôi thú cưng';
+      case 'parkingAvailable': return 'Có chỗ để xe';
+      case 'amenityIds': return `Tiện ích: ${names(amenities)}`;
+      default: return value;
+    }
+  };
 
   const panel = (
     <FilterPanel
@@ -506,7 +538,7 @@ const SearchPage = () => {
           {activeFilterCount > 0 && (
             <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: 'wrap', gap: 1 }}>
               {FILTER_KEYS.filter((k) => k !== 'keyword' && searchParams.get(k)).map((k) => (
-                <Chip key={k} label={k} onDelete={() => updateParam(k, '')} size="small" />
+                <Chip key={k} label={chipLabel(k, searchParams.get(k))} onDelete={() => updateParam(k, '')} size="small" />
               ))}
               <Button size="small" onClick={handleReset}>
                 Xóa lọc

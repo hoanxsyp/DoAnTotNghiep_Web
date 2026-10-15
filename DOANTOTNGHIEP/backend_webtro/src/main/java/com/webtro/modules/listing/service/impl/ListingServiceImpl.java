@@ -47,7 +47,7 @@ import com.webtro.modules.listing.service.ListingCategoryCountPublisher;
 import com.webtro.modules.listing.service.ListingOwnerStatsPublisher;
 import com.webtro.modules.listing.service.ListingService;
 import com.webtro.modules.listing.service.ListingVisibilityService;
-import com.webtro.modules.listing.service.TrustScoreService;
+import com.webtro.modules.listing.spi.FavoriteStatusGateway;
 import com.webtro.modules.listing.statemachine.ListingEvent;
 import com.webtro.modules.listing.statemachine.ListingStateMachine;
 import com.webtro.modules.payment.entity.PromotionPackage;
@@ -105,7 +105,6 @@ public class ListingServiceImpl implements ListingService {
     private final ListingVisibilityService visibilityService;
     private final ListingCategoryCountPublisher categoryCountPublisher;
     private final ListingOwnerStatsPublisher ownerStatsPublisher;
-    private final TrustScoreService trustScoreService;
     private final ListingMapper mapper;
 
     private final SystemConfigService config;
@@ -120,6 +119,7 @@ public class ListingServiceImpl implements ListingService {
     private final AmenityRepository amenityRepository;
     private final LandlordProfileRepository landlordProfileRepository;
     private final PromotionPackageRepository promotionPackageRepository;
+    private final FavoriteStatusGateway favoriteStatusGateway;
 
     // ==================================================================
     //  CRUD
@@ -551,7 +551,11 @@ public class ListingServiceImpl implements ListingService {
         }
 
         boolean authenticated = viewerId != null;
-        return mapper.toDetail(listing, authenticated, owner || privileged);
+        ListingDetailResponse detail = mapper.toDetail(listing, authenticated, owner || privileged);
+        if (authenticated) {
+            detail.setFavoritedByMe(favoriteStatusGateway.isFavorited(viewerId, listing.getId()));
+        }
+        return detail;
     }
 
     @Override
@@ -614,29 +618,9 @@ public class ListingServiceImpl implements ListingService {
                 .commentCount(nz(listing.getCommentCount()))
                 .reviewCount(nz(listing.getReviewCount()))
                 .averageRating(listing.getAverageRating())
-                .trustScore(intOf(listing.getTrustScore()))
                 .conversionRatePercent(conversion)
                 .daysActive(daysBetween(listing.getPublishedAt(), Instant.now()))
                 .daysRemaining(remainingDays(listing.getExpiredAt()))
-                .build();
-
-        int comment = nz(listing.getCommentCount());
-        int positive = nz(listing.getPositiveCommentCount());
-        int negative = nz(listing.getNegativeCommentCount());
-        int neutral = Math.max(0, comment - positive - negative);
-        BigDecimal negativeRatio = comment == 0 ? BigDecimal.ZERO
-                : BigDecimal.valueOf(negative).divide(BigDecimal.valueOf(comment), 3, RoundingMode.HALF_UP);
-        BigDecimal ratioL1 = config.getDecimal(ConfigKey.AI_SENTIMENT_NEGATIVE_RATIO_L1);
-        int minCommentsL1 = config.getInt(ConfigKey.AI_SENTIMENT_MIN_COMMENTS_L1);
-        boolean flagged = comment >= minCommentsL1 && negativeRatio.compareTo(ratioL1) >= 0;
-
-        ListingStatsResponse.SentimentSummary sentiment = ListingStatsResponse.SentimentSummary.builder()
-                .positive(positive)
-                .neutral(neutral)
-                .negative(negative)
-                .negativeRatio(negativeRatio)
-                .needReviewThresholdRatio(ratioL1)
-                .flagged(flagged)
                 .build();
 
         ListingStatsResponse.Promotion promotion = ListingStatsResponse.Promotion.builder()
@@ -651,7 +635,6 @@ public class ListingServiceImpl implements ListingService {
                 .title(listing.getTitle())
                 .status(listing.getStatus().name())
                 .summary(summary)
-                .sentimentSummary(sentiment)
                 .promotion(promotion)
                 .timeSeries(List.of())
                 .build();

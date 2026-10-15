@@ -1,7 +1,6 @@
 package com.webtro.modules.user.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.webtro.common.enums.TrustLabel;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -36,12 +35,6 @@ public class FollowingItemResponse {
 
     @Schema(description = "Đã được xác minh chưa", example = "true")
     private boolean verified;
-
-    @Schema(description = "Điểm uy tín", example = "87")
-    private Integer trustScore;
-
-    @Schema(description = "Nhãn uy tín", example = "GOOD")
-    private TrustLabel trustLabel;
 
     @Schema(description = "Điểm đánh giá trung bình", example = "4.5")
     private BigDecimal averageRating;

@@ -10,9 +10,6 @@ public enum AutoHideReason {
     /** Vượt ngưỡng báo cáo */
     REPORT_THRESHOLD("Vượt ngưỡng báo cáo"),
 
-    /** Tỷ lệ tiêu cực cao */
-    SENTIMENT_NEGATIVE("Tỷ lệ tiêu cực cao"),
-
     /** Chứa từ khóa cấm */
     BANNED_KEYWORD("Chứa từ khóa cấm");
 

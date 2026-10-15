@@ -2,7 +2,9 @@ package com.webtro.modules.ai.spi;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Cổng (SPI) mà module {@code ai} cần từ module {@code interaction} để dựng
@@ -49,6 +51,9 @@ public interface InteractionSignalGateway {
 
     /** Id các tin người dùng đã xem gần đây (chống gợi ý lặp §9.2), kể từ {@code since}. */
     List<Long> recentlyViewedListingIds(Long userId, Instant since);
+
+    /** Trong {@code listingIds}, những tin người dùng đang lưu — cờ {@code favoritedByMe} của tin gợi ý. */
+    Set<Long> favoritedListingIds(Long userId, Collection<Long> listingIds);
 
     /** Có đủ dữ liệu hành vi để cá nhân hóa không (quyết định cold-start). */
     boolean hasBehaviorData(Long userId);

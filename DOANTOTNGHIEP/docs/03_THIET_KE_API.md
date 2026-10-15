@@ -4,6 +4,12 @@
 > **Cập nhật 2026-08-09:** phân quyền hiện hành là **role-only**. Hệ thống không còn entity/repository/bảng nghiệp vụ `permissions` hay `role_permissions`; Flyway `V15__drop_permission_tables.sql` drop hai bảng này sau các migration lịch sử. Backend kiểm tra bằng `@PreAuthorize("hasRole/hasAnyRole")` và `SecurityUtils.hasRole/hasAnyRole`; JWT chỉ chứa `role`. Tenant được phép tạo tin nhưng service chỉ chấp nhận `categoryCode = ROOMMATE`; Landlord/Admin tạo được mọi loại tin. Access token 15 phút, refresh token 1 ngày, cả hai lưu `localStorage`; khi refresh token còn dưới 15 phút và access token vẫn còn hạn, frontend chủ động gọi `/api/auth/refresh` để xoay refresh token.
 <!-- WEBTRO_ROLE_ONLY_UPDATE_END -->
 
+> **Cập nhật 2026-10-14:** hệ thống **không còn điểm uy tín** (trust score) cho tin đăng và chủ trọ
+> (Flyway `V22`, canonical mục 18). Các field `trustScore`, `trustLabel`, `lowTrustWarning`,
+> `ownerTrustScore`…, bộ lọc `minTrustScore`/`maxTrustScore`, sắp xếp theo `trustScore`, nhóm cấu
+> hình `trust.*` và việc tính lại điểm sau đánh giá/bình luận/report đã được gỡ khỏi tài liệu này.
+> Công thức gợi ý còn 8 số hạng (canonical 10.2).
+
 > **Phạm vi:** tài liệu này là hợp đồng kỹ thuật giữa `backend_webtro/` và `frontend_webtro/`.
 > Hai bên code song song dựa trên tài liệu này mà không cần trao đổi thêm.
 >
@@ -42,7 +48,7 @@
 | Tài nguyên con | Lồng tối đa **2 cấp** | `/api/listings/42/images/7` | `/api/listings/42/images/7/tags/3` |
 | Hành động không CRUD | Động từ ở cấp cuối, dùng `POST`/`PUT` | `POST /api/listings/42/submit` | `POST /api/submitListing` |
 | Quản trị | Luôn dưới `/api/admin/**` (canonical §7.3) | `/api/admin/reports` | `/api/reports/admin` |
-| JSON field | `camelCase` (canonical §2) | `trustScore` | `trust_score` |
+| JSON field | `camelCase` (canonical §2) | `averageRating` | `average_rating` |
 | Enum trong JSON | `UPPER_SNAKE_CASE`, đúng canonical §5 | `"status": "NEED_REVIEW"` | `"status": "needReview"` |
 | **Tài nguyên "của tôi"** | Hậu tố **`/my`** cho danh sách lọc theo chủ sở hữu đang đăng nhập | `GET /api/listings/my` | `GET /api/listings/me` |
 | **Thực thể người dùng hiện tại** | Hậu tố **`/me`** **chỉ** dùng cho chính hồ sơ người dùng và tài nguyên con của nó | `GET /api/users/me`, `POST /api/users/me/avatar` | `GET /api/users/my` |
@@ -217,7 +223,6 @@ Authorization: Bearer <accessToken>
 | Ngày (không giờ) | `yyyy-MM-dd`, kiểu `LocalDate` | `"availableFrom": "2026-08-01"` |
 | Tiền | `BigDecimal(15,2)`, đơn vị **VND**, trả về dạng **number** (canonical §7.3) | `"price": 3500000.00` |
 | Diện tích | `BigDecimal(8,2)`, đơn vị **m²** | `"area": 25.50` |
-| Điểm uy tín | int `0..100` (canonical §9 `trust.min`/`trust.max`) | `"trustScore": 87` |
 | Điểm trung bình | `BigDecimal(2,1)`, `0.0..5.0` | `"averageRating": 4.5` |
 | Sentiment score | double `-1.0..1.0` (canonical §10.1) | `"sentimentScore": -0.62` |
 | Confidence | double `0.0..1.0` | `"confidence": 0.83` |
@@ -1241,7 +1246,6 @@ Controller: `UserController`, `FollowController`. Tag Swagger: `02. User`.
     "landlordProfile": {
       "verified": true,
       "verifiedAt": "2026-05-02T03:11:00Z",
-      "trustScore": 87,
       "totalListings": 6,
       "activeListings": 4,
       "averageRating": 4.5,
@@ -1397,8 +1401,6 @@ tên thành UUID; lưu ngoài webroot; tạo thumbnail 128×128; **không** ph�
     "avatarUrl": "https://cdn.webtro.vn/avatars/8f3c2a1e.webp",
     "isLandlord": true,
     "verified": true,
-    "trustScore": 87,
-    "trustLabel": "UY_TIN",
     "averageRating": 4.5,
     "totalReviews": 23,
     "totalActiveListings": 4,
@@ -1423,8 +1425,7 @@ tên thành UUID; lưu ngoài webroot; tạo thumbnail 128×128; **không** ph�
 2. Đăng nhập → số đầy đủ, `phoneMasked = false`.
 3. `email`, `dateOfBirth`, `address`, `status` **không bao giờ** xuất hiện ở đây `[§11.1]` "Không lộ thông tin nhạy cảm".
 4. `followedByMe` chỉ có khi đăng nhập; khách → `false`.
-5. `trustLabel` suy ra từ `trustScore` theo canonical §9: `< 25` → `CAN_KIEM_DUYET`; `< 40` → `RUI_RO`; `>= 40` → `BINH_THUONG`; `>= 80` → `UY_TIN` `[§5.8]`.
-6. User `LOCKED`/`DELETED` → `404 USER_NOT_FOUND` với người thường; Admin có `USER_MANAGE` xem qua `/api/admin/users/{id}`.
+5. User `LOCKED`/`DELETED` → `404 USER_NOT_FOUND` với người thường; Admin có `USER_MANAGE` xem qua `/api/admin/users/{id}`.
 
 ---
 
@@ -1505,7 +1506,7 @@ cần audit, nên không áp dụng soft delete (canonical §6.1 áp cho dữ li
 | Mã chức năng | `[§2.5]` **FOLLOW-02**; sitemap `/tai-khoan/dang-theo-doi` (canonical §12) — **[BỔ SUNG NGOÀI `[§12.2]`]** |
 | Quyền | **authenticated** |
 
-**Query params:** `page` (0), `size` (20, max 100), `sort` (`createdAt,desc`; ∈ {`createdAt`, `trustScore`}).
+**Query params:** `page` (0), `size` (20, max 100), `sort` (`createdAt,desc`; ∈ {`createdAt`}).
 
 **Response 200**
 
@@ -1520,8 +1521,6 @@ cần audit, nên không áp dụng soft delete (canonical §6.1 áp cho dữ li
         "fullName": "Nguyễn Văn An",
         "avatarUrl": "https://cdn.webtro.vn/avatars/8f3c2a1e.webp",
         "verified": true,
-        "trustScore": 87,
-        "trustLabel": "UY_TIN",
         "averageRating": 4.5,
         "activeListingCount": 4,
         "newListingCountSinceLastVisit": 2,
@@ -1562,7 +1561,6 @@ cần audit, nên không áp dụng soft delete (canonical §6.1 áp cho dữ li
     "chatEnabled": true,
     "verificationStatus": "VERIFIED",
     "verifiedAt": "2026-05-02T03:11:00Z",
-    "trustScore": 87,
     "totalListings": 6,
     "activeListings": 4,
     "postingSuspended": false,
@@ -1752,8 +1750,7 @@ xem mục 1.3). Đây là **ngoại lệ envelope** đã được canonical §7.
    - `favorites`, `search_histories`, `view_histories`, `notification_preferences`,
      `refresh_tokens` → xóa mềm/xóa cứng theo đúng bảng (dữ liệu cá nhân, không có FK RESTRICT trỏ tới).
    - `comments`, `reviews`, `reports`, `payments`, `listings` → **giữ nguyên**, chỉ hiển thị dưới tên
-     ẩn danh `[§10.2]`. Điểm `trust_score` của các chủ trọ bị ảnh hưởng **không** tính lại (review
-     vẫn hợp lệ, chỉ ẩn danh người viết).
+     ẩn danh `[§10.2]` (review vẫn hợp lệ, chỉ ẩn danh người viết).
 
 6. `GET /api/users/{id}` với user đã xóa → **`404 USER_NOT_FOUND`** (không phải `410`) — nhất quán
    với **ADR-12**: không tiết lộ sự tồn tại của tài nguyên không xem được `[§11.1]`.
@@ -2038,8 +2035,6 @@ có `SYSTEM_CONFIG_MANAGE` (canonical §4.2 — chỉ Admin) nên **không thể
    |---|---|---|
    | `moderation.*` | `moderation.autohide.report_count` = 5 | Kẻ xấu biết cần **bao nhiêu** report để hạ tin đối thủ `[§5.3]` |
    | | `moderation.threshold.spam_comment_count` = 10 | Biết ngưỡng để spam **ngay dưới** ngưỡng `[§5.4]` |
-   | `trust.*` | `trust.weight.valid_report` = 10 | Lộ công thức điểm uy tín → chơi hệ thống điểm `[§5.8]` |
-   | | `trust.threshold.need_review` = 25 | Biết cần giữ điểm trên bao nhiêu để tránh bị soi |
    | `security.*` | `security.login.captcha_after_attempts` = 3 | Dò mật khẩu **ngay dưới** ngưỡng captcha `[§3.2]` |
    | `spam.*` | `spam.listing.daily` = 10 | Đăng spam sát trần rate limit `[§11.10]` |
    | `ai.*` | `ai.sentiment.low_confidence_threshold` | Lộ tham số mô hình `[§10.10]` |
@@ -2107,7 +2102,6 @@ Tag Swagger: `04. Listing`.
 | `depositMax` | BigDecimal | ✘ | — | `>= 0` | `[§6.3]` "DepositAmount" |
 | `availableFrom` | date | ✘ | — | `yyyy-MM-dd`; tin có `available_from <= availableFrom` | `[§3.3]` "AvailableFrom" |
 | `verifiedLandlordOnly` | boolean | ✘ | `false` | `true` → chỉ tin của chủ trọ đã xác thực | `[§10.3]` |
-| `minTrustScore` | int | ✘ | — | `0..100` | `[§5.8]` |
 | `latitude` / `longitude` / `radiusKm` | double | ✘ | — | `radiusKm ∈ 0.5..50`; ba param đi cùng nhau | `[§3.3]` "Latitude/Longitude nếu có bản đồ"; `[§13.2]` "lọc khu vực" |
 | `page` | int | ✘ | `0` | `>= 0` | canonical §7.3 |
 | `size` | int | ✘ | `20` | `1..100` (> 100 ép về 100) | canonical §7.3 |
@@ -2124,7 +2118,6 @@ Tag Swagger: `04. Listing`.
 | `price,desc` | Giá cao → thấp | `promotedPriority DESC, price DESC` |
 | `area,asc` / `area,desc` | Diện tích | `promotedPriority DESC, area ASC/DESC` |
 | `viewCount,desc` | Xem nhiều nhất | `promotedPriority DESC, view_count DESC` |
-| `trustScore,desc` | Uy tín cao nhất | `promotedPriority DESC, trust_score DESC` |
 | `distance,asc` | Gần nhất (cần `latitude`+`longitude`+`radiusKm`) | `promotedPriority DESC, distance ASC` |
 
 > **`promotedPriority` luôn là tiêu chí đầu tiên** nhưng chỉ **trong phạm vi kết quả đã lọc** —
@@ -2178,9 +2171,6 @@ X-Api-Version: 1
         "petAllowed": false,
         "parkingAvailable": true,
         "amenityCodes": ["AIR_CONDITIONER", "BALCONY", "PARKING"],
-        "trustScore": 92,
-        "trustLabel": "UY_TIN",
-        "lowTrustWarning": false,
         "averageRating": 4.6,
         "reviewCount": 12,
         "viewCount": 1543,
@@ -2278,8 +2268,7 @@ X-Api-Version: 1
 
 6. **`favoritedByMe`** chỉ tính khi có token (batch query một lần cho cả trang, tránh N+1); khách → `false`.
 
-7. **`lowTrustWarning`** = `trustScore < trust.threshold.risky` (40) `[§5.8]` → FE hiện nhãn cảnh
-   báo nhẹ `[§3.8]` *"Tin có cảnh báo uy tín thấp có thể hiển thị nhãn cảnh báo nhẹ"*.
+7. *(Đã bỏ — nhãn cảnh báo uy tín `lowTrustWarning` không còn, `V22`.)*
 
 8. **Che số điện thoại:** `ListingSummaryResponse` **không chứa** số điện thoại — số chỉ có ở
    `ListingDetailResponse` và bị mask nếu chưa đăng nhập `[§3.8]`, canonical §8.
@@ -2437,8 +2426,6 @@ xuất hiện ≥ 5 lần để không lộ truy vấn cá nhân `[§11.11]` *"K
       "fullName": "Nguyễn Văn An",
       "avatarUrl": "https://cdn.webtro.vn/avatars/8f3c2a1e.webp",
       "verified": true,
-      "trustScore": 87,
-      "trustLabel": "UY_TIN",
       "averageRating": 4.5,
       "totalActiveListings": 4,
       "chatEnabled": true,
@@ -2449,9 +2436,6 @@ xuất hiện ≥ 5 lần để không lộ truy vấn cá nhân `[§11.11]` *"K
     "contactPhone": "0901***456",
     "phoneMasked": true,
     "status": "ACTIVE",
-    "trustScore": 92,
-    "trustLabel": "UY_TIN",
-    "lowTrustWarning": false,
     "averageRating": 4.6,
     "reviewCount": 12,
     "commentCount": 8,
@@ -2491,7 +2475,7 @@ xuất hiện ≥ 5 lần để không lộ truy vấn cá nhân `[§11.11]` *"K
 5. **Che số điện thoại** (canonical §8, `[§3.8]`): khách → `contactPhone = "0901***456"`,
    `phoneMasked = true`. Đã đăng nhập → số đầy đủ, `phoneMasked = false`. `MaskUtil.maskPhone()`
    giữ 4 số đầu + 3 số cuối.
-6. **Nhãn cảnh báo uy tín** `[§3.8]`: `lowTrustWarning = trustScore < trust.threshold.risky` (40) `[§5.8]`.
+6. *(Đã bỏ — nhãn cảnh báo uy tín `lowTrustWarning` không còn, `V22`.)*
 7. **`canReview`**: `true` khi user đăng nhập, chưa đánh giá, không phải chủ tin, và (nếu
    `review.require_contact = true`) đã có `ContactLog` `[§3.12]`.
 8. **`canComment`**: `true` khi đăng nhập, có `COMMENT_CREATE`, chưa bị `COMMENT_SUSPENDED` `[§5.4]`.
@@ -2537,7 +2521,6 @@ xuất hiện ≥ 5 lần để không lộ truy vấn cá nhân `[§11.11]` *"K
         "area": 20.00,
         "shortAddress": "Phường 1, Quận Bình Thạnh, TP. Hồ Chí Minh",
         "thumbnailUrl": "https://cdn.webtro.vn/listings/1187/thumb/x9y8z7.webp",
-        "trustScore": 85,
         "averageRating": 4.3,
         "promoted": false,
         "matchScore": 0.87,
@@ -2600,7 +2583,6 @@ và loại chính tin `{id}` `[§9.2]`. Ghi `recommendation_logs` để giải t
         "area": 28.00,
         "shortAddress": "Phường 10, Quận Gò Vấp, TP. Hồ Chí Minh",
         "thumbnailUrl": "https://cdn.webtro.vn/listings/1203/thumb/p1q2r3.webp",
-        "trustScore": 90,
         "promoted": false,
         "matchScore": 0.81,
         "matchReasons": ["Khu vực bạn thường xem", "Trong khoảng giá bạn quan tâm", "Có thang máy như tin bạn đã lưu"]
@@ -2886,12 +2868,11 @@ nhưng bỏ `submitImmediately`, thêm:
    khi chủ trọ chưa xác thực email** (`verifications.EMAIL != VERIFIED`). Xác thực chủ trọ
    (`LANDLORD`) là **không bắt buộc** để đăng tin, chỉ ảnh hưởng auto-approve và huy hiệu
    `[§13.2]` *"Xác thực chủ trọ: chỉ cần trạng thái xác thực thủ công bởi Admin"*.
-4. **Auto-approve** `[§3.3]` Luồng phụ *"Nếu chủ trọ đã được xác thực uy tín, hệ thống có thể tự
+4. **Auto-approve** `[§3.3]` Luồng phụ *"Nếu chủ trọ đã được xác thực, hệ thống có thể tự
    động duyệt tin ít rủi ro"*: khi **tất cả** điều kiện sau đúng thì `PENDING → ACTIVE` ngay,
    `autoApproved = true`:
    - `listing.auto_approve.trusted_landlord = true` (mặc định **`false`** — canonical §9);
    - `landlord_profiles.verification_status = VERIFIED`;
-   - `trustScore >= trust.threshold.risky` (40) `[§5.8]`;
    - không có từ khóa cấm mức `MILD`;
    - `deviationFlagged = false` `[§9.4]`;
    - không có `violation_warnings` trong 30 ngày `[§5.4]`.
@@ -3327,7 +3308,6 @@ quan trọng"* → chạy async, ghi `prediction_histories`.
       "commentCount": 8,
       "reviewCount": 12,
       "averageRating": 4.6,
-      "trustScore": 92,
       "conversionRatePercent": 2.20,
       "daysActive": 7,
       "daysRemaining": 23
@@ -3410,7 +3390,6 @@ cảnh báo sớm `[§1.2]` *"Nhận cảnh báo khi tin có nhiều bình luậ
         "status": "ACTIVE",
         "statusLabel": "Đang hiển thị",
         "rejectReason": null,
-        "trustScore": 92,
         "viewCount": 1544,
         "favoriteCount": 87,
         "contactCount": 34,
@@ -3433,7 +3412,6 @@ cảnh báo sớm `[§1.2]` *"Nhận cảnh báo khi tin có nhiều bình luậ
         "status": "REJECTED",
         "statusLabel": "Bị từ chối",
         "rejectReason": "Ảnh không thể hiện đúng phòng cho thuê, vui lòng cập nhật ảnh thật.",
-        "trustScore": 100,
         "viewCount": 0,
         "favoriteCount": 0,
         "contactCount": 0,
@@ -3675,7 +3653,6 @@ người dùng phải bỏ lưu được cả tin đã hết hạn `[§3.9]` Lu�
         "area": 22.00,
         "shortAddress": "Phường 25, Quận Bình Thạnh, TP. Hồ Chí Minh",
         "thumbnailUrl": "https://cdn.webtro.vn/listings/1024/thumb/a1b2c3d4.webp",
-        "trustScore": 92,
         "favoritedByMe": true,
         "favoritedAt": "2026-07-14T08:12:00Z",
         "status": "ACTIVE",
@@ -3691,7 +3668,6 @@ người dùng phải bỏ lưu được cả tin đã hết hạn `[§3.9]` Lu�
         "area": 16.00,
         "shortAddress": "Phường Tân Chánh Hiệp, Quận 12, TP. Hồ Chí Minh",
         "thumbnailUrl": "https://cdn.webtro.vn/listings/877/thumb/z9x8y7.webp",
-        "trustScore": 78,
         "favoritedByMe": true,
         "favoritedAt": "2026-06-30T11:45:00Z",
         "status": "EXPIRED",
@@ -4513,8 +4489,7 @@ Sửa xong → **kích hoạt phân tích lại sentiment** `[§5.5]`, `[§9.1]`
    `COMMENT_MODERATE`; chủ trọ chỉ được *"báo cáo hoặc phản hồi"*.
 3. Tác giả xóa trong cửa sổ `comment.edit_window_minutes`; ngoài cửa sổ → `422 COMMENT_EDIT_WINDOW_EXPIRED`
    (dùng `POST /api/reports` nếu muốn gỡ). Moderator **không** bị giới hạn cửa sổ.
-4. Bình luận bị xóa → **loại khỏi thống kê sentiment** và không tính điểm uy tín (canonical §10.1),
-   kích hoạt `TrustScoreRecalcJob` cho tin đó.
+4. Bình luận bị xóa → **loại khỏi thống kê sentiment** (canonical §10.1).
 5. Xóa comment gốc → replies vẫn giữ, hiển thị *"Bình luận gốc đã bị xóa"*.
 
 ---
@@ -4687,10 +4662,7 @@ giả và `REVIEW_MODERATE`. **Đánh giá tiêu cực vẫn hiển thị** nế
 4. Không đánh giá tin của chính mình → `422 REVIEW_SELF_FORBIDDEN`.
 5. **Tính lại điểm trung bình** (bước 5) cho **cả tin và chủ trọ** `[§3.12]`, `[§8.6]`:
    `listings.average_rating`, `landlord_profiles.average_rating` — cập nhật ngay trong transaction.
-6. **Kích hoạt tính lại `TrustScore`** `[§5.7]` *"Có đánh giá mới"* — trọng số
-   `trust.weight.average_rating` = 5 `[§5.8]`, chạy async + `TrustScoreRecalcJob` 02:00 hằng ngày
-   (canonical §11).
-7. Thông báo chủ trọ `NotificationType = NEW_REVIEW` `[§5.6]` (bước 6 `[§8.6]`).
+6. Thông báo chủ trọ `NotificationType = NEW_REVIEW` `[§5.6]` (bước 6 `[§8.6]`).
 
 ---
 
@@ -4713,7 +4685,7 @@ giả và `REVIEW_MODERATE`. **Đánh giá tiêu cực vẫn hiển thị** nế
 `review.edit_window_hours` (24 — canonical §9) → `422 REVIEW_EDIT_WINDOW_EXPIRED`.
 **Admin/Moderator không được sửa nội dung** `[§10.9]` *"Không sửa nội dung đánh giá của người dùng.
 Chỉ ẩn hoặc khôi phục"* → nếu principal không phải tác giả → `403 REVIEW_CONTENT_IMMUTABLE_BY_ADMIN`.
-Sửa `rating` → tính lại `average_rating` của tin + chủ trọ + `TrustScore`.
+Sửa `rating` → tính lại `average_rating` của tin + chủ trọ.
 
 ---
 
@@ -4741,7 +4713,7 @@ Sửa `rating` → tính lại `average_rating` của tin + chủ trọ + `Trust
 - **`REVIEW_MODERATE`** → `ReviewStatus = HIDDEN` (**ẩn**, không xóa) + ghi `moderation_actions`
   (`type = HIDE`) + `reason` — `[§10.9]` *"Chỉ ẩn hoặc khôi phục"*, `[§2.7]` REV-03.
   Khôi phục qua `PUT /api/admin/reviews/{id}/unhide` (mục 4.15).
-- Cả hai trường hợp → tính lại `average_rating` + `TrustScore`.
+- Cả hai trường hợp → tính lại `average_rating` của tin + chủ trọ.
 
 ---
 
@@ -5876,7 +5848,7 @@ Controller: `AdminUserController`, `AdminLandlordController`. Tag Swagger: `13. 
 | `verified` | boolean | ✘ | — | Đã xác thực email |
 | `from` / `to` | date | ✘ | — | Lọc theo `created_at` |
 | `page` / `size` | int | ✘ | `0` / `20` | `size ≤ 100` |
-| `sort` | string | ✘ | `createdAt,desc` | ∈ {`createdAt`, `lastLoginAt`, `fullName`, `trustScore`} |
+| `sort` | string | ✘ | `createdAt,desc` | ∈ {`createdAt`, `lastLoginAt`, `fullName`} |
 
 **Response 200**
 
@@ -5892,7 +5864,7 @@ Controller: `AdminUserController`, `AdminLandlordController`. Tag Swagger: `13. 
         "role": "ROLE_LANDLORD",
         "status": "ACTIVE", "statusLabel": "Đang hoạt động",
         "emailVerified": true, "phoneVerified": false, "landlordVerified": true,
-        "trustScore": 87, "listingCount": 6, "activeListingCount": 4,
+        "listingCount": 6, "activeListingCount": 4,
         "validReportCount": 0, "warningCount": 0,
         "lockReason": null, "lockedAt": null, "lockedBy": null,
         "createdAt": "2026-01-14T08:00:00Z", "lastLoginAt": "2026-07-17T09:58:00Z"
@@ -5903,7 +5875,7 @@ Controller: `AdminUserController`, `AdminLandlordController`. Tag Swagger: `13. 
         "role": "ROLE_LANDLORD",
         "status": "LOCKED", "statusLabel": "Đã bị khóa",
         "emailVerified": true, "phoneVerified": false, "landlordVerified": false,
-        "trustScore": 12, "listingCount": 9, "activeListingCount": 0,
+        "listingCount": 9, "activeListingCount": 0,
         "validReportCount": 7, "warningCount": 4,
         "lockReason": "Đăng nhiều tin có ảnh không thật và thông tin sai lệch nghiêm trọng.",
         "lockedAt": "2026-07-11T04:22:00Z", "lockedBy": "Quản trị viên",
@@ -5943,7 +5915,7 @@ Controller: `AdminUserController`, `AdminLandlordController`. Tag Swagger: `13. 
     "lockedAt": "2026-07-11T04:22:00Z", "lockedById": 1, "lockedByName": "Quản trị viên",
     "emailVerified": true, "phoneVerified": false,
     "landlordProfile": { "verified": false, "verificationStatus": "REJECTED",
-                         "trustScore": 12, "businessName": null, "chatEnabled": true },
+                         "businessName": null, "chatEnabled": true },
     "statistics": {
       "listingCount": 9, "activeListingCount": 0, "lockedListingCount": 6,
       "commentCount": 41, "reviewCount": 2, "reportsMadeCount": 1,
@@ -6123,10 +6095,9 @@ Audit `AuditAction = USER_UNLOCK` `[§11.4]`.
 |---|---|:--:|---|---|
 | `keyword` | string | ✘ | — | ≤ 100 ký tự (tên, email, SĐT, tên cơ sở) |
 | `verificationStatus` | enum[] | ✘ | tất cả | ∈ `VerificationStatus` (canonical §5) |
-| `minTrustScore` / `maxTrustScore` | int | ✘ | — | `0..100` `[§10.3]` "Xem điểm uy tín" |
 | `postingSuspended` | boolean | ✘ | — | `[§10.3]` "Hạn chế đăng tin nếu vi phạm" |
 | `page` / `size` | int | ✘ | `0` / `20` | `size ≤ 100` |
-| `sort` | string | ✘ | `trustScore,asc` | ∈ {`trustScore`, `listingCount`, `createdAt`, `validReportCount`} |
+| `sort` | string | ✘ | `createdAt,desc` | ∈ {`listingCount`, `createdAt`, `validReportCount`} |
 
 **Response 200**
 
@@ -6142,7 +6113,7 @@ Audit `AuditAction = USER_UNLOCK` `[§11.4]`.
         "businessName": "Nhà trọ An Bình",
         "verificationStatus": "VERIFIED", "verifiedAt": "2026-05-02T03:11:00Z",
         "verifiedByName": "Kiểm duyệt viên",
-        "trustScore": 87, "trustLabel": "UY_TIN",
+        
         "listingCount": 6, "activeListingCount": 4, "lockedListingCount": 0,
         "averageRating": 4.5, "reviewCount": 23,
         "validReportCount": 0, "warningCountLast30Days": 0,
@@ -6159,7 +6130,7 @@ Audit `AuditAction = USER_UNLOCK` `[§11.4]`.
 
 **Mã lỗi:** `UNAUTHORIZED`, `FORBIDDEN`, `INVALID_SORT_FIELD`, `VALIDATION_FAILED`.
 
-**Quy tắc `[§10.3]`:** phủ *"Xem số tin đã đăng"*, *"Xem điểm uy tín"*, *"Xem số report đã xác nhận"*.
+**Quy tắc `[§10.3]`:** phủ *"Xem số tin đã đăng"*, *"Xem số report đã xác nhận"* (điểm uy tín đã bỏ — `V22`).
 `totalRevenue` **chỉ hiện** khi principal có `PAYMENT_MANAGE`/`STATISTIC_VIEW`; Moderator gọi →
 field bị bỏ (`NON_NULL`) `[§1.2]` *"không quản lý ... doanh thu"* (mục 5.7).
 
@@ -6398,11 +6369,10 @@ Controller: `AdminListingController`, `AdminModerationController`. Tag Swagger: 
 | `provinceId` / `districtId` / `wardId` | long | ✘ | — | |
 | `flaggedByAi` | boolean | ✘ | — | Tin bị AI đánh dấu `[§7.4]` "Xem cảnh báo AI" |
 | `priceDeviationFlagged` | boolean | ✘ | — | Lệch giá `[§9.4]` *"Admin có thể dùng danh sách tin lệch giá lớn để kiểm duyệt"* |
-| `maxTrustScore` | int | ✘ | — | `0..100`; lọc tin rủi ro `[§5.8]` |
 | `reportCountMin` | int | ✘ | — | `>= 1`; tin bị report nhiều `[§7.4]` "Xem danh sách tin bị báo cáo" |
 | `from` / `to` | date | ✘ | — | Theo `created_at` |
 | `page` / `size` | int | ✘ | `0` / `20` | `size ≤ 100` |
-| `sort` | string | ✘ | `createdAt,asc` | ∈ {`createdAt`, `publishedAt`, `trustScore`, `reportCount`, `price`} |
+| `sort` | string | ✘ | `createdAt,asc` | ∈ {`createdAt`, `publishedAt`, `reportCount`, `price`} |
 
 > Mặc định `createdAt,asc` — hàng đợi duyệt theo **FIFO**, tin chờ lâu nhất lên trước `[§4.3]`.
 
@@ -6424,9 +6394,8 @@ Controller: `AdminListingController`, `AdminModerationController`. Tag Swagger: 
         "thumbnailUrl": "https://cdn.webtro.vn/listings/1305/thumb/g7h8i9.webp",
         "imageCount": 5,
         "owner": { "id": 61, "fullName": "Đỗ Thị Mai", "email": "mai.do@gmail.com",
-                   "trustScore": 74, "verified": true, "listingCount": 3 },
+                   "verified": true, "listingCount": 3 },
         "status": "PENDING", "statusLabel": "Chờ duyệt",
-        "trustScore": 100,
         "reportCount": 0,
         "flaggedByAi": false,
         "priceDeviationFlagged": true,
@@ -6951,7 +6920,7 @@ yêu cầu `LISTING_MODERATE` (quyền **hành động**, không phải quyền 
 | `categoryId` | long | ✘ | — | tồn tại |
 | `provinceId` | long | ✘ | — | tồn tại |
 | `page` / `size` | int | ✘ | `0` / `20` | `size ≤ 100` |
-| `sort` | string | ✘ | `oldestFirst` | ∈ {`oldestFirst`, `newestFirst`, `trustScore,asc`, `reportCount,desc`} |
+| `sort` | string | ✘ | `oldestFirst` | ∈ {`oldestFirst`, `newestFirst`, `reportCount,desc`} |
 
 **Định nghĩa từng tab — nguồn sự thật:**
 
@@ -6982,7 +6951,6 @@ yêu cầu `LISTING_MODERATE` (quyền **hành động**, không phải quyền 
         "queueType": "pending",
         "ownerId": 55,
         "ownerName": "Trần Văn Bình",
-        "ownerTrustScore": 68,
         "ownerVerified": false,
         "ownerListingCount": 3,
         "submittedAt": "2026-07-16T02:10:00Z",
@@ -7004,7 +6972,6 @@ yêu cầu `LISTING_MODERATE` (quyền **hành động**, không phải quyền 
         "queueType": "ai_alert",
         "ownerId": 61,
         "ownerName": "Lê Thị Cúc",
-        "ownerTrustScore": 34,
         "ownerVerified": false,
         "ownerListingCount": 11,
         "submittedAt": "2026-07-15T09:00:00Z",
@@ -7034,8 +7001,8 @@ yêu cầu `LISTING_MODERATE` (quyền **hành động**, không phải quyền 
 3. `aiFlags[]` và `priceDeviationPercent` là **thông tin tham khảo cho người**, **không** phải lệnh —
    **ADR-02**, canonical §10 *"AI không bao giờ tự khóa tài khoản"*. Moderator vẫn phải bấm
    `/approve` hoặc `/reject` thủ công.
-4. `ownerTrustScore`, `ownerVerified`, `ownerListingCount` hiện ngay trong hàng đợi để Moderator
-   đánh giá bối cảnh mà không phải mở hồ sơ `[§5.8]`.
+4. `ownerVerified`, `ownerListingCount` hiện ngay trong hàng đợi để Moderator
+   đánh giá bối cảnh mà không phải mở hồ sơ.
 5. Tab `reported` gom theo **tin**, không theo từng report — một tin bị 5 người báo cáo hiện **một**
    dòng với `reportCount = 5`. Chi tiết các report xem ở mục 4.16.7 (`/reports/target/...`).
 6. Endpoint **chỉ đọc** — mọi hành động đi qua 4.14.3–4.14.10 hoặc 4.14.13 (bulk).
@@ -7167,7 +7134,6 @@ Toàn bộ **[BỔ SUNG NGOÀI `[§12]`]** — bắt buộc bởi `[§2.12]` **A
         },
         "reportCount": 0,
         "markedSpam": false,
-        "excludedFromTrustScore": false,
         "moderationReason": null,
         "createdAt": "2026-07-16T07:40:00Z"
       }
@@ -7212,7 +7178,7 @@ Toàn bộ **[BỔ SUNG NGOÀI `[§12]`]** — bắt buộc bởi `[§2.12]` **A
   "data": { "id": 4501, "status": "HIDDEN", "previousStatus": "VISIBLE",
             "reason": "Bình luận chứa cáo buộc chưa được kiểm chứng, đã chuyển sang xử lý báo cáo.",
             "moderatorName": "Kiểm duyệt viên", "moderationActionId": 15220,
-            "trustScoreRecalculated": true, "authorNotified": true,
+            "authorNotified": true,
             "hiddenAt": "2026-07-17T10:00:00Z" },
   "timestamp": "2026-07-17T10:00:00Z"
 }
@@ -7222,8 +7188,7 @@ Toàn bộ **[BỔ SUNG NGOÀI `[§12]`]** — bắt buộc bởi `[§2.12]` **A
 `MODERATION_REASON_REQUIRED`, `VALIDATION_FAILED`.
 
 **Quy tắc:** `CommentStatus`: `VISIBLE`/`PENDING` → `HIDDEN` (canonical §5). Bình luận `HIDDEN`
-**loại khỏi thống kê sentiment** và không tính điểm uy tín → kích hoạt `TrustScoreRecalcJob`
-cho tin (canonical §10.1). `moderation_actions` (`type = HIDE`).
+**loại khỏi thống kê sentiment** (canonical §10.1). `moderation_actions` (`type = HIDE`).
 
 ---
 
@@ -7244,7 +7209,7 @@ cho tin (canonical §10.1). `moderation_actions` (`type = HIDE`).
   "message": "Đã hiện lại bình luận",
   "data": { "id": 4501, "status": "VISIBLE", "previousStatus": "HIDDEN",
             "reason": "Sau khi xác minh, nội dung bình luận phản ánh đúng sự thật.",
-            "moderationActionId": 15221, "trustScoreRecalculated": true,
+            "moderationActionId": 15221,
             "unhiddenAt": "2026-07-17T10:00:00Z" },
   "timestamp": "2026-07-17T10:00:00Z"
 }
@@ -7252,8 +7217,8 @@ cho tin (canonical §10.1). `moderation_actions` (`type = HIDE`).
 
 **Mã lỗi:** `UNAUTHORIZED`, `FORBIDDEN`, `COMMENT_NOT_FOUND`, `MODERATION_REASON_REQUIRED`.
 
-**Quy tắc:** `HIDDEN`/`PENDING` → `VISIBLE`. Bình luận trở lại thống kê sentiment → tính lại
-`TrustScore`. `ModerationActionType = UNHIDE` (canonical §5).
+**Quy tắc:** `HIDDEN`/`PENDING` → `VISIBLE`. Bình luận trở lại thống kê sentiment.
+`ModerationActionType = UNHIDE` (canonical §5).
 
 ---
 
@@ -7261,7 +7226,7 @@ cho tin (canonical §10.1). `moderation_actions` (`type = HIDE`).
 
 | Mục | Nội dung |
 |---|---|
-| Mã chức năng | `[§9.1]` *"Người dùng spam bình luận tiêu cực: Moderator có thể loại khỏi thống kê"*; canonical §10.1 *"Bình luận bị Moderator đánh dấu spam → loại khỏi thống kê điểm uy tín"*; `[§5.4]` |
+| Mã chức năng | `[§9.1]` *"Người dùng spam bình luận tiêu cực: Moderator có thể loại khỏi thống kê"*; canonical §10.1 *"Bình luận bị Moderator đánh dấu spam → loại khỏi thống kê cảm xúc"*; `[§5.4]` |
 | Quyền | `COMMENT_MODERATE` |
 
 **Request body**
@@ -7277,15 +7242,14 @@ cho tin (canonical §10.1). `moderation_actions` (`type = HIDE`).
 ```json
 {
   "success": true,
-  "message": "Đã đánh dấu bình luận là spam và loại khỏi thống kê điểm uy tín",
+  "message": "Đã đánh dấu bình luận là spam và loại khỏi thống kê cảm xúc",
   "data": {
-    "id": 4610, "markedSpam": true, "excludedFromTrustScore": true,
+    "id": 4610, "markedSpam": true,
     "status": "HIDDEN",
     "reason": "Tài khoản đăng 14 bình luận tiêu cực giống nhau trên nhiều tin trong 1 giờ.",
     "authorSpamCommentCountLastHour": 14,
     "commentSuspensionTriggered": true,
     "commentSuspensionThreshold": 10,
-    "trustScoreRecalculated": true,
     "moderationActionId": 15225,
     "markedAt": "2026-07-17T10:00:00Z"
   },
@@ -7297,9 +7261,7 @@ cho tin (canonical §10.1). `moderation_actions` (`type = HIDE`).
 `VALIDATION_FAILED`.
 
 **Quy tắc nghiệp vụ:**
-1. `excludedFromTrustScore = true` → bình luận **bị loại khỏi** mọi thống kê sentiment và công thức
-   `TrustScore` — `[§9.1]` *"Bình luận đã bị Moderator xác định spam không dùng để tính điểm uy tín"*,
-   canonical §10.1. Kích hoạt tính lại ngay.
+1. `markedSpam = true` → bình luận **bị loại khỏi** mọi thống kê sentiment — `[§9.1]`, canonical §10.1.
 2. **`commentSuspensionTriggered`** khi `authorSpamCommentCountLastHour >= moderation.threshold.spam_comment_count`
    (10) trong `moderation.threshold.spam_comment_window_hours` (1) → tự động tạm khóa chức năng
    bình luận của tác giả `[§5.4]` *"10 bình luận spam trong 1 giờ: tạm khóa chức năng bình luận"*,
@@ -7390,7 +7352,7 @@ Chỉ ẩn hoặc khôi phục"*.
 **Quy tắc quan trọng `[§3.12]`:** *"Đánh giá quá tiêu cực **vẫn được hiển thị** nếu không vi phạm
 nội dung"* → **chỉ ẩn khi vi phạm nội dung** (xúc phạm, lộ thông tin cá nhân, spam), **không**
 ẩn vì điểm thấp. `reason` bắt buộc `[§10.9]` *"Cần lưu lý do kiểm duyệt"*.
-Ẩn → tính lại `average_rating` của tin + chủ trọ + `TrustScore`.
+Ẩn → tính lại `average_rating` của tin + chủ trọ.
 `ReviewStatus`: `VISIBLE → HIDDEN` (canonical §5) — **không** `DELETED`.
 
 ---
@@ -7420,7 +7382,7 @@ nội dung"* → **chỉ ẩn khi vi phạm nội dung** (xúc phạm, lộ thô
 ```
 
 **Mã lỗi:** `UNAUTHORIZED`, `FORBIDDEN`, `REVIEW_NOT_FOUND`, `MODERATION_REASON_REQUIRED`.
-**Quy tắc:** `HIDDEN → VISIBLE`; tính lại `average_rating` + `TrustScore`.
+**Quy tắc:** `HIDDEN → VISIBLE`; tính lại `average_rating` của tin + chủ trọ.
 `ModerationActionType = UNHIDE`.
 
 ---
@@ -7457,13 +7419,12 @@ hàng chục bình luận của **cùng một** tài khoản cùng lúc. Bấm �
     "failureCount": 0,
     "succeeded": [
       { "id": 5501, "previousStatus": "VISIBLE", "newStatus": "HIDDEN",
-        "markedSpam": true, "excludedFromTrustScore": true },
+        "markedSpam": true },
       { "id": 5502, "previousStatus": "VISIBLE", "newStatus": "HIDDEN",
-        "markedSpam": true, "excludedFromTrustScore": true }
+        "markedSpam": true }
     ],
     "failed": [],
     "affectedListingIds": [1024, 998],
-    "trustScoreRecalculatedFor": [42, 55],
     "auditLogIds": [44160, 44161],
     "processedAt": "2026-07-17T10:00:00Z"
   },
@@ -7478,15 +7439,12 @@ hàng chục bình luận của **cùng một** tài khoản cùng lúc. Bấm �
 1. **Mỗi bình luận là một giao dịch độc lập**, trả kết quả từng phần trong `succeeded`/`failed` —
    cùng nguyên tắc với mục 4.14.13 quy tắc 1. Bình luận không tồn tại → `COMMENT_NOT_FOUND`; đã ở
    đúng trạng thái đích → `COMMENT_INVALID_TRANSITION`.
-2. **`MARK_SPAM` = `HIDE` + hai cờ**: đặt `comments.marked_spam = true` **và**
-   `excluded_from_trust_score = true`, đồng thời `status = HIDDEN`. Căn cứ `[§9.1]` *"Bình luận đã bị
-   Moderator xác định spam **không dùng để tính điểm uy tín**"* + canonical §10.1. Đây là điểm khác
-   biệt cốt lõi giữa `HIDE` (ẩn nhưng **vẫn** tính điểm) và `MARK_SPAM` (ẩn **và** loại khỏi điểm).
-3. **Tính lại `trust_score`** cho chủ trọ của các tin bị ảnh hưởng **một lần duy nhất sau cả lô**
-   (không phải mỗi bình luận một lần) — `trustScoreRecalculatedFor[]` liệt kê `userId` đã tính lại.
-   Gộp như vậy tránh 50 lần tính lại thừa `[§11.3]`.
+2. **`MARK_SPAM` = `HIDE` + cờ spam**: đặt `comments.marked_spam = true`, đồng thời
+   `status = HIDDEN`. Căn cứ `[§9.1]` + canonical §10.1: bình luận spam bị loại khỏi thống kê cảm xúc.
+   Đây là điểm khác biệt giữa `HIDE` (chỉ ẩn) và `MARK_SPAM` (ẩn **và** loại khỏi thống kê).
+3. *(Đã bỏ — không còn tính lại điểm uy tín sau lô, `V22`.)*
 4. **`UNHIDE` không tự gỡ cờ spam**: bình luận `marked_spam = true` được `UNHIDE` → hiện lại nhưng
-   **vẫn** `excluded_from_trust_score = true`. Gỡ cờ spam là quyết định riêng, làm qua
+   **vẫn** bị loại khỏi thống kê. Gỡ cờ spam là quyết định riêng, làm qua
    `PUT /api/admin/comments/{id}/mark-spam` với `spam: false` (mục 4.15.4).
 5. Trần **50** phần tử; ghi **một** `audit_logs` cho **mỗi** bình luận `[§11.4]`, cùng `request_id`.
 6. Thông báo cho người viết gửi **theo từng bình luận** `[§5.6]`, trừ `action = MARK_SPAM` — spam
@@ -7535,7 +7493,7 @@ Controller: `AdminReportController`, `AdminWarningController`. Tag Swagger: `16.
         "id": 6601,
         "targetType": "LISTING", "targetId": 877,
         "targetTitle": "Phòng trọ giá rẻ Quận 12, gần Đại học Ngoại ngữ Tin học",
-        "targetOwnerId": 117, "targetOwnerName": "Vũ Đình Khoa", "targetOwnerTrustScore": 12,
+        "targetOwnerId": 117, "targetOwnerName": "Vũ Đình Khoa",
         "reason": "FAKE_IMAGE", "reasonLabel": "Ảnh không thật",
         "description": "Ảnh trong tin là ảnh lấy từ một tin khác trên mạng.",
         "evidenceImageUrl": "https://cdn.webtro.vn/reports/6601/e1f2a3b4.webp",
@@ -7569,7 +7527,7 @@ Controller: `AdminReportController`, `AdminWarningController`. Tag Swagger: `16.
         "targetType": "LISTING", "targetId": 877,
         "targetTitle": "Phòng trọ giá rẻ Quận 12, gần Đại học Ngoại ngữ Tin học",
         "targetStatus": "NEED_REVIEW",
-        "targetOwnerId": 117, "targetOwnerName": "Vũ Đình Khoa", "targetOwnerTrustScore": 12,
+        "targetOwnerId": 117, "targetOwnerName": "Vũ Đình Khoa",
         "reportCount": 6,
         "distinctReporterCount": 6,
         "maxSeverity": "CRITICAL",
@@ -7627,7 +7585,7 @@ nhiều lần `[§3.13]`.
       "price": 1200000.00, "area": 18.00,
       "shortAddress": "Phường Tân Chánh Hiệp, Quận 12, TP. Hồ Chí Minh",
       "images": [ { "id": 431, "url": "https://cdn.webtro.vn/listings/877/q1w2e3.webp", "primary": true } ],
-      "owner": { "id": 117, "fullName": "Vũ Đình Khoa", "trustScore": 12,
+      "owner": { "id": 117, "fullName": "Vũ Đình Khoa",
                  "verified": false, "listingCount": 9, "lockedListingCount": 6,
                  "warningCountLast30Days": 4, "validReportCount": 7 }
     },
@@ -7777,8 +7735,8 @@ Moderator xử lý trùng. Report cùng target cũng được gán theo (`relate
    khóa tin là việc của Admin (canonical §4.2).
 2. **`REJECTED` cho `NO_VIOLATION`** — report bị bác, tăng `rejectedReportCount` của người báo cáo
    → nhiều lần → `REPORT_RESTRICTED_ABUSE` `[§3.13]`.
-3. **`ValidReportCount` +1** cho chủ tin khi `result != NO_VIOLATION` → ảnh hưởng `TrustScore`
-   với trọng số `trust.weight.valid_report` = 10 `[§5.8]`, canonical §9 → kích hoạt tính lại.
+3. **`ValidReportCount` +1** cho chủ tin khi `result != NO_VIOLATION` (hiển thị ở hồ sơ chủ trọ
+   cho Admin `[§10.3]`).
 4. **Cảnh báo** `[§10.8]` → ghi `violation_warnings` (canonical §6: entity tồn tại để đếm ngưỡng
    `[§5.4]`) + `NotificationType = VIOLATION_WARNING` `[§5.6]`.
 5. **Phản hồi người báo cáo** `[§10.8]` → hiện ở `GET /api/reports/my` (mục 4.8.2).
@@ -7935,7 +7893,6 @@ cả nhóm. Hai endpoint bổ trợ nhau, không trùng.
       "url": "/tin-dang/phong-tro-moi-xay-co-gac-lung-quan-binh-thanh",
       "ownerId": 42,
       "ownerName": "Nguyễn Văn An",
-      "ownerTrustScore": 61,
       "ownerWarningCountLast30Days": 1
     },
     "summary": {
@@ -7992,7 +7949,7 @@ cả nhóm. Hai endpoint bổ trợ nhau, không trùng.
    `[§3.13]` *"Nếu report sai nhiều lần, tài khoản báo cáo có thể bị hạn chế"*
    (ngưỡng `report.abuse.rejected_count` = 5, xem mục 11.2.D).
 4. `target` trả **ảnh chụp bối cảnh** đúng theo `targetType`: `LISTING` → tiêu đề + chủ tin;
-   `USER` → tên + trust score; `COMMENT`/`REVIEW` → trích nội dung + tin chứa nó. Nhờ vậy Moderator
+   `USER` → tên + trạng thái xác thực; `COMMENT`/`REVIEW` → trích nội dung + tin chứa nó. Nhờ vậy Moderator
    không phải mở thêm tab.
 5. Endpoint **chỉ đọc**. Xử lý cả nhóm → mục 4.16.8.
 
@@ -8045,8 +8002,6 @@ nhóm bằng **một** quyết định nhất quán.
     },
     "warningIssued": true,
     "warningId": 3312,
-    "ownerTrustScoreBefore": 61,
-    "ownerTrustScoreAfter": 51,
     "reportersNotified": 6,
     "ownerNotified": true,
     "auditLogIds": [44170, 44171, 44172, 44173, 44174, 44175],
@@ -8076,9 +8031,8 @@ nhóm bằng **một** quyết định nhất quán.
    định nghiệp vụ áp lên **một** đối tượng, không phải N thao tác độc lập. Nếu hạ tin thất bại thì
    **không** report nào được đánh dấu đã xử lý — tránh trạng thái "đã trả lời người báo cáo là đã
    xử lý" trong khi tin vẫn hiển thị.
-2. **Hành động trên đối tượng chạy đúng một lần**, dù có 7 report — không hạ tin 7 lần, không trừ
-   `trust_score` 7 lần. `ownerTrustScoreBefore/After` cho thấy chỉ trừ **một** lần theo
-   `trust.weight.valid_report` (10) `[§5.8]`.
+2. **Hành động trên đối tượng chạy đúng một lần**, dù có 7 report — không hạ tin 7 lần, không cảnh
+   báo chủ tin 7 lần.
 3. **Mọi người báo cáo đều nhận phản hồi** — `reportersNotified` đếm số người **khác nhau** nhận
    `NotificationType = REPORT_RESOLVED` kèm `moderatorResponse` `[§10.8]`
    *"Gửi phản hồi cho người báo cáo"*, `[§5.6]`. Một người gửi 2 report → nhận **1** thông báo.
@@ -8755,7 +8709,7 @@ Mã chức năng: `[§2.11]` **AI-07** (quản lý log), **AI-08** (cấu hình 
         "status": "SUCCESS", "processingTimeMs": 2, "retryCount": 0,
         "errorMessage": null,
         "skipReason": "TOO_SHORT",
-        "skipNote": "Độ dài 2 ký tự < ai.sentiment.min_length (10) → NEUTRAL, không tính điểm uy tín",
+        "skipNote": "Độ dài 2 ký tự < ai.sentiment.min_length (10) → NEUTRAL, không tính vào thống kê cảm xúc",
         "createdAt": "2026-07-16T05:12:00Z"
       }
     ],
@@ -8790,7 +8744,7 @@ Mã chức năng: `[§2.11]` **AI-07** (quản lý log), **AI-08** (cấu hình 
         },
         "topScores": [
           { "listingId": 1203, "score": 0.81, "areaMatch": 1.0, "priceMatch": 0.95,
-            "categoryMatch": 1.0, "amenityMatch": 0.5, "trustScoreNorm": 0.90,
+            "categoryMatch": 1.0, "amenityMatch": 0.5,
             "freshness": 0.72, "promotedBoost": 1.0 }
         ],
         "status": "SUCCESS", "processingTimeMs": 47, "cacheHit": false,
@@ -8910,7 +8864,7 @@ của đồ án, không phải hộp đen.
         "listingId": 877,
         "listingTitle": "Phòng trọ giá rẻ Quận 12, gần Đại học Ngoại ngữ Tin học",
         "listingStatus": "NEED_REVIEW",
-        "ownerId": 117, "ownerName": "Vũ Đình Khoa", "ownerTrustScore": 12,
+        "ownerId": 117, "ownerName": "Vũ Đình Khoa",
         "level": "HIGH",
         "detail": {
           "commentCount": 10, "negativeCount": 7, "negativeRatio": 0.70,
@@ -8930,7 +8884,7 @@ của đồ án, không phải hộp đen.
         "listingId": 1305,
         "listingTitle": "Cho thuê phòng trọ Q7 gần Lotte Mart, có gác",
         "listingStatus": "PENDING",
-        "ownerId": 61, "ownerName": "Đỗ Thị Mai", "ownerTrustScore": 74,
+        "ownerId": 61, "ownerName": "Đỗ Thị Mai",
         "level": "MEDIUM",
         "detail": {
           "inputPrice": 3800000.00, "suggestedPrice": 2680000.00,
@@ -8986,7 +8940,7 @@ cực đơn lẻ không làm khóa tin"*. `suggestedAction` là đề xuất cho
         "listingId": 877,
         "title": "Phòng trọ giá rẻ Quận 12, gần Đại học Ngoại ngữ Tin học",
         "status": "NEED_REVIEW",
-        "ownerId": 117, "ownerName": "Vũ Đình Khoa", "ownerTrustScore": 12,
+        "ownerId": 117, "ownerName": "Vũ Đình Khoa",
         "shortAddress": "Phường Tân Chánh Hiệp, Quận 12, TP. Hồ Chí Minh",
         "categoryCode": "BOARDING_HOUSE", "area": 18.00,
         "inputPrice": 1200000.00,
@@ -9009,7 +8963,7 @@ cực đơn lẻ không làm khóa tin"*. `suggestedAction` là đề xuất cho
 **Mã lỗi:** `UNAUTHORIZED`, `FORBIDDEN`, `INVALID_SORT_FIELD`, `VALIDATION_FAILED`.
 
 **Quy tắc `[§9.4]`:** `direction = BELOW` được ưu tiên hiển thị vì *"Nếu giá thấp bất thường, có
-thể đánh dấu cần kiểm duyệt để tránh tin giả"* — kết hợp `reportCount` và `ownerTrustScore` giúp
+thể đánh dấu cần kiểm duyệt để tránh tin giả"* — kết hợp `reportCount` và trạng thái xác thực chủ trọ giúp
 Moderator/Admin phát hiện tin lừa đảo. **Danh sách này chỉ để kiểm duyệt**, tin vẫn hiển thị bình
 thường `[§3.3]` *"Tin có giá quá bất thường so với AI đề xuất không bị chặn tự động"*.
 
@@ -9041,8 +8995,7 @@ thường `[§3.3]` *"Tin có giá quá bất thường so với AI đề xuất
     "jobId": "reanalyze-7f3a2c1e-9b4d-4a11-8c62-0d5e2b6f8a91",
     "scope": "PENDING_ANALYSIS_ONLY",
     "queuedCommentCount": 47,
-    "estimatedSeconds": 5,
-    "trustScoreRecalcQueued": true
+    "estimatedSeconds": 5
   },
   "timestamp": "2026-07-17T10:00:00Z"
 }
@@ -9052,7 +9005,6 @@ thường `[§3.3]` *"Tin có giá quá bất thường so với AI đề xuất
 `AI_MODULE_DISABLED`, `VALIDATION_FAILED`, `RATE_LIMIT_EXCEEDED`.
 
 **Quy tắc:** **202** (không 200) vì xử lý **async qua queue** (canonical §10, `[§11.6]`).
-Sau khi phân tích xong → tự động kích hoạt `TrustScoreRecalcJob` cho các tin liên quan `[§5.7]`.
 `ai.sentiment.enabled = false` → `503 AI_MODULE_DISABLED` `[§10.10]`.
 
 ---
@@ -9120,28 +9072,6 @@ Sau khi phân tích xong → tự động kích hoạt `TrustScoreRecalcJob` cho
     "chatbot": [
       { "key": "ai.chatbot.max_clarify_turns", "value": 3, "type": "INT", "defaultValue": 3,
         "min": 1, "max": 5, "label": "Số lượt hỏi lại tối đa", "source": "[§9.3]" }
-    ],
-    "trustWeights": [
-      { "key": "trust.base_score",              "value": 100, "type": "INT", "defaultValue": 100,
-        "min": 0, "max": 100, "label": "Điểm uy tín cơ sở", "source": "[§5.8]" },
-      { "key": "trust.weight.positive_comment", "value": 1,   "type": "INT", "defaultValue": 1,
-        "min": 0, "max": 50, "label": "Trọng số bình luận tích cực", "source": "[§5.8]" },
-      { "key": "trust.weight.negative_comment", "value": 2,   "type": "INT", "defaultValue": 2,
-        "min": 0, "max": 50, "label": "Trọng số bình luận tiêu cực", "source": "[§5.8]" },
-      { "key": "trust.weight.average_rating",   "value": 5,   "type": "INT", "defaultValue": 5,
-        "min": 0, "max": 50, "label": "Trọng số điểm đánh giá trung bình", "source": "[§5.8]" },
-      { "key": "trust.weight.valid_report",     "value": 10,  "type": "INT", "defaultValue": 10,
-        "min": 0, "max": 50, "label": "Trọng số report hợp lệ", "source": "[§5.8]" },
-      { "key": "trust.weight.violation_warning","value": 15,  "type": "INT", "defaultValue": 15,
-        "min": 0, "max": 50, "label": "Trọng số cảnh báo vi phạm", "source": "[§5.8]" },
-      { "key": "trust.min",                     "value": 0,   "type": "INT", "defaultValue": 0,
-        "min": 0, "max": 100, "label": "Điểm uy tín tối thiểu", "source": "[§5.8]" },
-      { "key": "trust.max",                     "value": 100, "type": "INT", "defaultValue": 100,
-        "min": 0, "max": 100, "label": "Điểm uy tín tối đa", "source": "[§5.8]" },
-      { "key": "trust.threshold.risky",         "value": 40,  "type": "INT", "defaultValue": 40,
-        "min": 0, "max": 100, "label": "Ngưỡng đánh dấu rủi ro", "source": "[§5.8]" },
-      { "key": "trust.threshold.need_review",   "value": 25,  "type": "INT", "defaultValue": 25,
-        "min": 0, "max": 100, "label": "Ngưỡng cần kiểm duyệt", "source": "[§5.8]" }
     ]
   },
   "timestamp": "2026-07-17T10:00:00Z"
@@ -9150,8 +9080,8 @@ Sau khi phân tích xong → tự động kích hoạt `TrustScoreRecalcJob` cho
 
 **Mã lỗi:** `UNAUTHORIZED`, `FORBIDDEN`.
 
-**Quy tắc `[§10.10]`:** phủ *"Cấu hình ngưỡng bình luận tiêu cực"*, *"Cấu hình trọng số điểm uy tín"*,
-*"Bật/tắt từng module AI nếu cần bảo trì"*. Key **trùng 100%** canonical §9 — không thêm/bớt.
+**Quy tắc `[§10.10]`:** phủ *"Cấu hình ngưỡng bình luận tiêu cực"*,
+*"Bật/tắt từng module AI nếu cần bảo trì"*. Key **trùng** canonical §9 (trừ nhóm `trust.*` đã bỏ ở `V22`).
 
 ---
 
@@ -9173,7 +9103,7 @@ Sau khi phân tích xong → tự động kích hoạt `TrustScoreRecalcJob` cho
 {
   "configs": [
     { "key": "ai.sentiment.negative_ratio_l1", "value": 0.45 },
-    { "key": "trust.weight.negative_comment",  "value": 3 },
+    { "key": "ai.sentiment.min_comments_l1",   "value": 6 },
     { "key": "ai.chatbot.enabled",             "value": false }
   ],
   "reason": "Điều chỉnh ngưỡng cảm xúc sau khi rà soát 1.000 bình luận thực tế; tạm tắt chatbot để bảo trì từ điển."
@@ -9189,12 +9119,12 @@ Sau khi phân tích xong → tự động kích hoạt `TrustScoreRecalcJob` cho
   "data": {
     "updated": [
       { "key": "ai.sentiment.negative_ratio_l1", "oldValue": 0.40,  "newValue": 0.45 },
-      { "key": "trust.weight.negative_comment",  "oldValue": 2,     "newValue": 3 },
+      { "key": "ai.sentiment.min_comments_l1",   "oldValue": 5,     "newValue": 6 },
       { "key": "ai.chatbot.enabled",             "oldValue": true,  "newValue": false }
     ],
     "cacheInvalidated": true,
     "recalcJobQueued": true,
-    "recalcJobNote": "Thay đổi trọng số điểm uy tín — đã đưa job tính lại TrustScore vào hàng đợi [§9.1]",
+    "recalcJobNote": "Thay đổi ngưỡng cảm xúc — đã đưa job đánh giá lại ngưỡng vào hàng đợi [§9.1]",
     "auditLogIds": [44200, 44201, 44202],
     "updatedAt": "2026-07-17T10:00:00Z"
   },
@@ -9212,8 +9142,8 @@ Sau khi phân tích xong → tự động kích hoạt `TrustScoreRecalcJob` cho
    liên quan"*, `[§9.2]` *"Tin trả phí có thể tăng thứ hạng nhưng vẫn cần phù hợp nhu cầu"*).
 3. **Invalidate cache `SystemConfigService`** ngay (canonical §9 *"Đọc qua SystemConfigService có
    cache Redis, invalidate khi Admin cập nhật"*).
-4. **Đổi trọng số `trust.*` hoặc ngưỡng sentiment → tự động queue `TrustScoreRecalcJob`**
-   `[§9.1]` *"Hệ thống chạy job tính lại khi thay đổi cấu hình ngưỡng"*.
+4. **Đổi ngưỡng sentiment → tự động queue job đánh giá lại ngưỡng** `[§9.1]` *"Hệ thống chạy job
+   tính lại khi thay đổi cấu hình ngưỡng"*.
 5. **Audit bắt buộc** `[§10.10]` *"Mọi thay đổi cấu hình AI cần audit log"*, `[§11.4]`
    *"Thay đổi cấu hình AI"* → mỗi key một `audit_logs` với `AuditAction = AI_CONFIG_CHANGE`
    (canonical §5), lưu `oldValue`/`newValue`/`reason`.
@@ -9237,7 +9167,7 @@ Tag Swagger: `20. Admin - System`.
 | Mã chức năng | `[§2.12]` **ADM-14**; `[§7.5]` *"Quản lý cấu hình: Cấu hình thời hạn tin, upload, email"*; canonical §12 `/admin/cau-hinh` — **[BỔ SUNG NGOÀI `[§12.10]`]** |
 | Quyền | **`SYSTEM_CONFIG_MANAGE`** (**chỉ Admin** — Moderator `403` `[§1.2]`) |
 
-**Query param:** `group` (enum, ✘, `LISTING` \| `MODERATION` \| `TRUST` \| `AI` \| `INTERACTION` \| `PROMOTION` \| `SECURITY` \| `SPAM` \| `ALL`, mặc định `ALL`).
+**Query param:** `group` (enum, ✘, `LISTING` \| `MODERATION` \| `AI` \| `INTERACTION` \| `PROMOTION` \| `SECURITY` \| `SPAM` \| `ALL`, mặc định `ALL`).
 
 **Response 200** — **toàn bộ key canonical §9**, nhóm theo prefix:
 
@@ -9275,7 +9205,7 @@ Tag Swagger: `20. Admin - System`.
             "label": "Tin NeedReview vẫn hiển thị công khai", "source": "[§5.1]" },
           { "key": "listing.auto_approve.trusted_landlord", "value": false, "type": "BOOLEAN",
             "defaultValue": false,
-            "label": "Tự động duyệt tin của chủ trọ uy tín", "source": "[§3.3]" }
+            "label": "Tự động duyệt tin của chủ trọ đã xác thực", "source": "[§3.3]" }
         ]
       },
       {
@@ -9345,7 +9275,7 @@ Tag Swagger: `20. Admin - System`.
         ]
       }
     ],
-    "note": "Nhóm TRUST và AI xem/sửa tại /api/admin/ai/config (quyền AI_CONFIG_MANAGE)"
+    "note": "Nhóm AI xem/sửa tại /api/admin/ai/config (quyền AI_CONFIG_MANAGE)"
   },
   "timestamp": "2026-07-17T10:00:00Z"
 }
@@ -9369,7 +9299,7 @@ Tag Swagger: `20. Admin - System`.
 
 | Field | Kiểu | Bắt buộc | Ràng buộc | Mô tả |
 |---|---|:--:|---|---|
-| `configs` | object[] | ✔ | không rỗng; `{ key, value }`; `key` ∈ canonical §9 (trừ nhóm `ai.*`/`trust.*` — dùng `/api/admin/ai/config`) | Cấu hình cần đổi |
+| `configs` | object[] | ✔ | không rỗng; `{ key, value }`; `key` ∈ canonical §9 (trừ nhóm `ai.*` — dùng `/api/admin/ai/config`) | Cấu hình cần đổi |
 | `reason` | string | ✔ | 10–500 ký tự | Lý do (audit) |
 
 **Response 200**
@@ -9401,7 +9331,7 @@ Tag Swagger: `20. Admin - System`.
 3. **Thay đổi không hồi tố**: đổi `listing.display_days` **không** thay `expired_at` của tin đã
    duyệt — chỉ áp dụng cho lần `APPROVE`/`RENEW` kế tiếp `[§5.2]`.
 4. Audit `AuditAction = SYSTEM_CONFIG_CHANGE` (canonical §5) `[§11.4]`.
-5. Key `ai.*`/`trust.*` gửi vào đây → `400 CONFIG_KEY_UNKNOWN` với thông điệp hướng dẫn dùng
+5. Key `ai.*` gửi vào đây → `400 CONFIG_KEY_UNKNOWN` với thông điệp hướng dẫn dùng
    `/api/admin/ai/config` — giữ đúng ranh giới `AI_CONFIG_MANAGE` vs `SYSTEM_CONFIG_MANAGE`
    (canonical §4.2).
 
@@ -9800,7 +9730,6 @@ Dùng ở: `GET /api/listings`, `/api/search/listings`, `/api/listings/{id}/rela
 | `primaryImageUrl` / `thumbnailUrl` / `imageCount` | string / int | luôn | `[§11.3]` lazy load |
 | `maxOccupants`, `genderRequirement`, `furnitureStatus`, `curfewType`, `toiletType`, `petAllowed`, `parkingAvailable` | | luôn | Bộ lọc `[§3.7]` |
 | `amenityCodes` | string[] | luôn | Chỉ code, không object đầy đủ |
-| `trustScore` / `trustLabel` / `lowTrustWarning` | int / enum / boolean | luôn | `[§5.8]`, `[§3.8]` |
 | `averageRating` / `reviewCount` | BigDecimal / int | luôn | |
 | `viewCount` / `favoriteCount` | int | luôn | |
 | `promoted` / `promotedLabel` | boolean / string | luôn | `[§2.9]` PROMO-02 |
@@ -9875,7 +9804,6 @@ Dùng ở: `GET /api/users/{id}`, nhúng trong `ListingDetailResponse.landlord`,
 |---|---|---|
 | `id`, `fullName`, `avatarUrl` | | luôn |
 | `isLandlord`, `verified` | boolean | luôn — `[§7.1]` "Xem thông tin công khai" |
-| `trustScore`, `trustLabel` | int / enum | luôn `[§5.8]` |
 | `averageRating`, `totalReviews` | | luôn |
 | `totalActiveListings`, `totalClosedListings` | int | luôn |
 | `contactName` | string | luôn |
@@ -10299,7 +10227,7 @@ trực tiếp. Xem ADR-07 (mục 11).
 | `commentId` | long | điều kiện | tồn tại | Phân tích lại bình luận có sẵn `[§9.1]` "CommentId" |
 | `text` | string | điều kiện | 1–1000 ký tự | Thử nghiệm từ điển với văn bản bất kỳ |
 | `accountAgeDays` | int | ✘ | `>= 0`; chỉ dùng với `text` | Mô phỏng trọng số tài khoản mới `[§9.1]` |
-| `persist` | boolean | ✘ | mặc định `false`; chỉ có tác dụng với `commentId` | `true` → ghi đè `sentiment_results` + tính lại `TrustScore` |
+| `persist` | boolean | ✘ | mặc định `false`; chỉ có tác dụng với `commentId` | `true` → ghi đè `sentiment_results` |
 
 **Response 200**
 
@@ -10331,11 +10259,6 @@ trực tiếp. Xem ADR-07 (mục 11).
       "normalizedScore": -0.82,
       "reason": "Phát hiện 3 cụm tiêu cực mạnh, không có cụm tích cực đối trọng"
     },
-    "trustScoreImpact": {
-      "listingTrustScoreBefore": 34,
-      "listingTrustScoreAfter": 32,
-      "recalculated": true
-    },
     "processingTimeMs": 14,
     "persisted": true,
     "analyzedAt": "2026-07-17T10:00:00Z"
@@ -10360,9 +10283,8 @@ trực tiếp. Xem ADR-07 (mục 11).
     "isRiskComment": false,
     "weight": 0.0,
     "skipReason": "TOO_SHORT",
-    "skipNote": "Độ dài 2 ký tự nhỏ hơn ai.sentiment.min_length (10) → gắn NEUTRAL, không tính vào điểm uy tín [§9.1]",
+    "skipNote": "Độ dài 2 ký tự nhỏ hơn ai.sentiment.min_length (10) → gắn NEUTRAL, không tính vào thống kê cảm xúc [§9.1]",
     "explanation": { "matchedTokens": [] },
-    "trustScoreImpact": { "recalculated": false },
     "processingTimeMs": 2,
     "analyzedAt": "2026-07-17T10:00:00Z"
   },
@@ -10417,11 +10339,11 @@ hoặc Mixed nếu hệ thống hỗ trợ"* → hệ thống **hỗ trợ** `MI
 |---|---|---|
 | Output đủ 5 thành phần | `label`, `score`, `confidence`, `isRiskComment`, `action` | `[§9.1]` Output |
 | Thuật toán | Chuẩn hóa → tách token → từ điển có trọng số → **phủ định** ("không", "chẳng", "chưa" đảo dấu trong cửa sổ 3 từ) → **từ tăng cường** ("rất", "cực kỳ", "quá" ×1.5) → emoji → **n-gram** | canonical §10.1 |
-| Độ dài < `ai.sentiment.min_length` (10) | → `NEUTRAL`, `weight = 0`, **không** tính điểm uy tín | `[§9.1]`, canonical §10.1 |
+| Độ dài < `ai.sentiment.min_length` (10) | → `NEUTRAL`, `weight = 0`, **không** tính vào thống kê cảm xúc | `[§9.1]`, canonical §10.1 |
 | Vừa khen vừa chê | → **`MIXED`** (canonical §5 có sẵn label này) | `[§9.1]` |
 | Mỉa mai / khó phân tích | `confidence < 0.5` → `action` tối đa `WATCH`, **không** kích hoạt hành động nặng | `[§9.1]` |
 | Tài khoản < `ai.sentiment.new_account_days` (7) | `weight = ai.sentiment.new_account_weight` (0.5) | `[§9.1]`, canonical §9 |
-| Bị đánh dấu spam | **loại khỏi** thống kê điểm uy tín | `[§9.1]`, canonical §10.1 |
+| Bị đánh dấu spam | **loại khỏi** thống kê cảm xúc | `[§9.1]`, canonical §10.1 |
 | Một bình luận tiêu cực đơn lẻ | **không** làm khóa tin | `[§9.1]` |
 
 **Ngưỡng đánh dấu `[§9.1]` "Gợi ý ngưỡng" (canonical §9):**
@@ -10492,11 +10414,11 @@ hoặc Mixed nếu hệ thống hỗ trợ"* → hệ thống **hỗ trợ** `MI
         "price": 4000000.00, "area": 28.00,
         "shortAddress": "Phường 10, Quận Gò Vấp, TP. Hồ Chí Minh",
         "thumbnailUrl": "https://cdn.webtro.vn/listings/1203/thumb/p1q2r3.webp",
-        "trustScore": 90, "averageRating": 4.7, "promoted": false,
+        "averageRating": 4.7, "promoted": false,
         "matchScore": 0.812,
         "scoreBreakdown": {
           "areaMatch": 1.00, "priceMatch": 0.95, "categoryMatch": 1.00,
-          "amenityMatch": 0.50, "trustScoreNorm": 0.90, "freshness": 0.72,
+          "amenityMatch": 0.50, "freshness": 0.72,
           "promotedBoost": 1.00
         },
         "matchReasons": [
@@ -10513,11 +10435,11 @@ hoặc Mixed nếu hệ thống hỗ trợ"* → hệ thống **hỗ trợ** `MI
         "price": 3200000.00, "area": 20.00,
         "shortAddress": "Phường 1, Quận Bình Thạnh, TP. Hồ Chí Minh",
         "thumbnailUrl": "https://cdn.webtro.vn/listings/1187/thumb/x9y8z7.webp",
-        "trustScore": 85, "averageRating": 4.3, "promoted": true, "promotedLabel": "Tin nổi bật",
+        "averageRating": 4.3, "promoted": true, "promotedLabel": "Tin nổi bật",
         "matchScore": 0.798,
         "scoreBreakdown": {
           "areaMatch": 1.00, "priceMatch": 0.98, "categoryMatch": 1.00,
-          "amenityMatch": 1.00, "trustScoreNorm": 0.85, "freshness": 0.65,
+          "amenityMatch": 1.00, "freshness": 0.65,
           "promotedBoost": 1.15
         },
         "matchReasons": [
@@ -10556,7 +10478,7 @@ hoặc Mixed nếu hệ thống hỗ trợ"* → hệ thống **hỗ trợ** `MI
         "price": 3800000.00, "area": 24.00,
         "shortAddress": "Phường Tân Phong, Quận 7, TP. Hồ Chí Minh",
         "thumbnailUrl": "https://cdn.webtro.vn/listings/1305/thumb/g7h8i9.webp",
-        "trustScore": 100, "promoted": false,
+        "promoted": false,
         "matchScore": 0.55,
         "matchReasons": ["Tin mới đăng hôm nay", "Phổ biến tại Quận 7"]
       }
@@ -10576,8 +10498,10 @@ hoặc Mixed nếu hệ thống hỗ trợ"* → hệ thống **hỗ trợ** `MI
 
 1. **Công thức điểm (chốt — canonical §10.2):**
    ```
-   score = 0.30·areaMatch + 0.25·priceMatch + 0.15·categoryMatch
-         + 0.10·amenityMatch + 0.10·trustScoreNorm + 0.10·freshness
+   score = ( 0.22·locationMatch + 0.12·areaSizeMatch + 0.20·priceMatch
+           + 0.12·categoryMatch + 0.08·amenityMatch  + 0.08·occupantMatch
+           + 0.06·genderMatch   + 0.06·freshness ) / W
+   // W = tổng trọng số áp dụng: 0.94 với tin ROOMMATE, 0.88 với tin khác (genderMatch chỉ áp cho ROOMMATE)
    finalScore = score × promotedBoost          // promotedBoost ≤ ai.recommendation.promoted_boost = 1.15
    ```
 2. **`UserPreferenceProfile`** dựng từ (canonical §10.2):
@@ -10653,7 +10577,7 @@ hoặc Mixed nếu hệ thống hỗ trợ"* → hệ thống **hỗ trợ** `MI
         "price": 3500000.00, "area": 22.00,
         "shortAddress": "Phường 25, Quận Bình Thạnh, TP. Hồ Chí Minh",
         "thumbnailUrl": "https://cdn.webtro.vn/listings/1024/thumb/a1b2c3d4.webp",
-        "trustScore": 92, "averageRating": 4.6, "promoted": true
+        "averageRating": 4.6, "promoted": true
       }
     ],
     "totalResults": 18,
@@ -11284,7 +11208,7 @@ sequenceDiagram
                 SM-->>FE: 400 IMAGE_COUNT_MIN [§3.3]
             else Đủ ảnh
                 SM->>DB: UPDATE listings SET status = PENDING [§8.1]
-                alt Auto-approve: chủ trọ VERIFIED + trustScore >= 40<br/>+ listing.auto_approve.trusted_landlord = true [§3.3]
+                alt Auto-approve: chủ trọ VERIFIED<br/>+ listing.auto_approve.trusted_landlord = true [§3.3]
                     SM->>DB: PENDING -> ACTIVE, published_at, expired_at = now + listing.display_days
                     LS->>NS: notify(L, LISTING_APPROVED)
                 else Mặc định (auto_approve = false)
@@ -11399,7 +11323,6 @@ sequenceDiagram
     participant DB as MySQL
     participant Q as AI Queue (@Async aiExecutor)
     participant SA as SentimentAnalyzer
-    participant TS as TrustScoreService
     participant SM as ListingStateMachine
     participant NS as NotificationService
     actor A as Admin/Moderator
@@ -11434,7 +11357,7 @@ sequenceDiagram
         else Phân tích thành công
             SA->>SA: Chuẩn hóa -> token -> từ điển có trọng số<br/>-> phủ định (cửa sổ 3 từ) -> tăng cường (×1.5)<br/>-> emoji -> n-gram
             alt Độ dài < ai.sentiment.min_length (10)
-                SA->>SA: label = NEUTRAL, weight = 0<br/>KHÔNG tính vào điểm uy tín [§9.1]
+                SA->>SA: label = NEUTRAL, weight = 0<br/>KHÔNG tính vào thống kê cảm xúc [§9.1]
             else Có cả cụm khen và chê mạnh
                 SA->>SA: label = MIXED [§9.1]
             else Tài khoản < ai.sentiment.new_account_days (7)
@@ -11445,9 +11368,6 @@ sequenceDiagram
             Q->>DB: UPDATE comments SET sentiment_label, sentiment_score
             Q->>DB: Cập nhật thống kê sentiment của tin [§9.1] bước 6
 
-            Q->>TS: recalculate(listingId, landlordId) [§8.3] "Tính lại TrustScore"
-            TS->>TS: score = trust.base_score (100)<br/>+ positiveCount × trust.weight.positive_comment (1)<br/>- negativeCount × trust.weight.negative_comment (2)<br/>+ avgRating × trust.weight.average_rating (5)<br/>- validReportCount × trust.weight.valid_report (10)<br/>- warningCount × trust.weight.violation_warning (15)<br/>clamp [trust.min=0, trust.max=100] [§5.8]
-            TS->>DB: UPDATE listings.trust_score, landlord_profiles.trust_score [§8.3]
 
             alt commentCount >= ai.sentiment.min_comments_l1 (5)<br/>VÀ negativeRatio >= ai.sentiment.negative_ratio_l1 (0.40)
                 Note over Q,SM: [§8.3] alt "Tiêu cực vượt ngưỡng"
@@ -11575,7 +11495,7 @@ sequenceDiagram
                 Note over RE,DB: LOẠI BỎ BẮT BUỘC [§9.2]:<br/>- tin HIDDEN/EXPIRED/LOCKED/CLOSED/DELETED<br/>- tin user đã xem gần đây (chống lặp)<br/>- tin của chính user
                 DB-->>RE: Ứng viên
 
-                RE->>RE: Chấm điểm phù hợp nghiệp vụ [§8.5]:<br/>score = 0.30·areaMatch + 0.25·priceMatch<br/>+ 0.15·categoryMatch + 0.10·amenityMatch<br/>+ 0.10·trustScoreNorm + 0.10·freshness
+                RE->>RE: Chấm điểm phù hợp nghiệp vụ [§8.5]:<br/>score = 0.30·areaMatch + 0.25·priceMatch<br/>+ 0.15·categoryMatch + 0.10·amenityMatch<br/>+ 0.10·freshness (8 số hạng, canonical 10.2)
                 RE->>RE: finalScore = score × promotedBoost<br/>(trần ai.recommendation.promoted_boost = 1.15)
                 Note over RE: [§9.2] "Tin trả phí có thể tăng thứ hạng<br/>nhưng vẫn cần phù hợp nhu cầu"
 
@@ -11603,7 +11523,6 @@ sequenceDiagram
     participant API as ReviewController
     participant RS as ReviewServiceImpl
     participant DB as MySQL
-    participant TS as TrustScoreService
     participant NS as NotificationService
     actor L as Chủ trọ
 
@@ -11642,10 +11561,6 @@ sequenceDiagram
                     RS->>DB: Tính lại AverageRating của CHỦ TRỌ [§8.6]
                     Note over RS,DB: [§3.12] bước 5 "cập nhật điểm trung bình<br/>của tin và chủ trọ"
 
-                    RS->>TS: recalculate(listingId, landlordId) [§5.7] "Có đánh giá mới"
-                    TS->>TS: + avgRating × trust.weight.average_rating (5) [§5.8]
-                    TS->>DB: UPDATE trust_score
-
                     RS->>NS: notify(L, NEW_REVIEW) [§8.6][§5.6]
                     NS-->>L: "Bạn có đánh giá mới cho tin ..." [§8.6]
 
@@ -11662,7 +11577,7 @@ sequenceDiagram
         alt now - createdAt > review.edit_window_hours (24)
             API-->>FE: 422 REVIEW_EDIT_WINDOW_EXPIRED
         else Trong cửa sổ
-            API->>DB: UPDATE reviews + tính lại average_rating + trust_score
+            API->>DB: UPDATE reviews + tính lại average_rating
             API-->>FE: 200
         end
     end
@@ -11726,7 +11641,7 @@ sequenceDiagram
     FE->>API: GET /api/admin/reports/{id}
     API->>DB: Lấy tin, chủ trọ, lịch sử report, bình luận [§8.7]
     DB-->>API: Toàn bộ ngữ cảnh
-    API-->>M: {target, owner{trustScore, warningCount, lockedListingCount},<br/>relatedReports[], targetComments[], sentimentSummary,<br/>recommendedResult: "SEVERE_LOCK", recommendationBasis[]}
+    API-->>M: {target, owner{warningCount, lockedListingCount},<br/>relatedReports[], targetComments[], sentimentSummary,<br/>recommendedResult: "SEVERE_LOCK", recommendationBasis[]}
     Note over API,M: [§4.4] "Moderator xem nội dung, bình luận, lịch sử report"<br/>recommendedResult chỉ là ĐỀ XUẤT [§10.10]
 
     M->>FE: Nhận xử lý
@@ -11748,7 +11663,7 @@ sequenceDiagram
             SM->>DB: UPDATE listings SET status = LOCKED [§8.7] "Cập nhật Listing Locked"
             API->>DB: INSERT violation_warnings (severity, reason) [§5.4]
             API->>DB: UPDATE reports SET status = RESOLVED, result = SEVERE_LOCK<br/>(kèm mọi report cùng target — [§3.13] "gom nhóm")
-            API->>DB: UPDATE listings/landlord_profiles: validReportCount++<br/>-> trust_score -= trust.weight.valid_report (10) [§5.8]
+            API->>DB: UPDATE landlord_profiles: validReportCount++
 
             API->>NS: notify(L, LISTING_LOCKED + lý do) [§8.7][§5.6]
             NS-->>L: "Tin của bạn đã bị khóa. Lý do: ..." [§8.7]
@@ -12516,7 +12431,7 @@ canonical §5.
 | 8 | `CloseReason` | `RENTED_OUT`, `NO_LONGER_AVAILABLE` | `[§3.6]` *"Đã cho thuê hoặc không còn nhu cầu"*; cần cho thống kê `[§3.6]` *"tỷ lệ thành công"* | 4.4.13, 4.12.2 |
 | 9 | `RejectReasonCode` | `FAKE_IMAGE`, `WRONG_INFO`, `BANNED_CONTENT`, `DUPLICATE`, `INSUFFICIENT_INFO`, `PRICE_SUSPICIOUS`, `OTHER` | Thống kê lý do từ chối `[§10.4]`; `reason` text vẫn bắt buộc | 4.14.4 |
 | 10 | `AdministrativeUnitType` | Province: `TINH`, `THANH_PHO_TRUNG_UONG` · District: `QUAN`, `HUYEN`, `THI_XA`, `THANH_PHO_THUOC_TINH` · Ward: `PHUONG`, `XA`, `THI_TRAN` | `[§10.5]` *"Quản lý tỉnh/thành, quận/huyện, phường/xã"*; entity `Province`/`District`/`Ward` (canonical §6) | 4.3.2–4.3.4, 4.17.5 |
-| 11 | `TrustLabel` | `UY_TIN` (≥80), `BINH_THUONG` (≥40), `RUI_RO` (<40), `CAN_KIEM_DUYET` (<25) | Nhãn hiển thị suy ra từ `trust.threshold.risky` (40) / `need_review` (25) `[§5.8]`, `[§3.8]` *"nhãn cảnh báo nhẹ"*. **Không lưu DB** — tính khi map | 4.2.5, 5.2 |
+| 11 | ~~`TrustLabel`~~ | *(đã bỏ — `V22`)* | Điểm uy tín không còn nên không còn nhãn | — |
 | 12 | `ChatbotMessageRole` | `USER`, `BOT` | Entity `ChatbotMessage` (canonical §6) | 7.3.3 |
 | 13 | `PriceTriggerReason` | `LISTING_CREATE`, `LISTING_UPDATE`, `AMENITY_CHANGE`, `MANUAL_REQUEST`, `CONFIG_CHANGE` | Entity `PredictionHistory` (canonical §6); phủ đúng `[§5.9]` "Khi nào tính lại giá dự đoán" | 7.4.2 |
 | 14 | `AiLogModule` | `SENTIMENT`, `RECOMMENDATION`, `CHATBOT`, `PRICE` | Query param của `GET /api/admin/ai/logs` `[§12.9]`, `[§10.10]` | 4.19.1 |
@@ -12534,7 +12449,7 @@ canonical §5.
 | 6 | `listings` | `close_reason VARCHAR(30)`, `still_available BOOLEAN DEFAULT TRUE` | `[§3.6]` thống kê tỷ lệ thành công; `[§3.4]` *"Thay đổi trạng thái còn phòng/hết phòng không cần kiểm duyệt"* |
 | 7 | `listings` | `title_normalized VARCHAR(200)`, `description_normalized TEXT` | Tìm kiếm tiếng Việt **không dấu** `[§3.7]` — xem **ADR-16** |
 | 8 | `listings` | `reject_reason VARCHAR(500)`, `lock_reason VARCHAR(500)`, `lock_severity VARCHAR(20)` | `[§10.4]` *"Từ chối tin phải nhập lý do"*, *"Khóa tin phải nhập lý do và mức độ vi phạm"*; canonical §5.1 |
-| 9 | `comments` | `marked_spam BOOLEAN DEFAULT FALSE`, `excluded_from_trust_score BOOLEAN DEFAULT FALSE` | **`[§9.1]`** *"Bình luận đã bị Moderator xác định spam không dùng để tính điểm uy tín"*; canonical §10.1 |
+| 9 | `comments` | `marked_spam BOOLEAN DEFAULT FALSE` | **`[§9.1]`** bình luận spam bị loại khỏi thống kê cảm xúc; canonical §10.1 |
 | 10 | `payments` | `gateway_transaction_id VARCHAR(100)`, `gateway_response_code VARCHAR(20)`, `failure_reason VARCHAR(255)`, `expires_at DATETIME`, `callback_received_at DATETIME`, `original_amount DECIMAL(15,2)`, `discount_amount DECIMAL(15,2)`, `coupon_code VARCHAR(32)`, `purpose VARCHAR(20)` | `[§3.14]`, `[§10.7]` đối soát; mục 6 callback; `[§10.6]` coupon |
 | 11 | `sentiment_results` | `weight DECIMAL(3,2)`, `matched_tokens JSON`, `retry_count INT`, `skip_reason VARCHAR(30)`, `processing_time_ms INT` | `[§9.1]` trọng số tài khoản mới, ngoại lệ quá ngắn; `[§10.10]` xem log; AI **giải thích được** |
 | 12 | `notifications` | `icon_type VARCHAR(20)`, `target_type VARCHAR(30)`, `target_id BIGINT UNSIGNED`, `target_url VARCHAR(255)` | `[§11.12]`; FE cần điều hướng từ thông báo |

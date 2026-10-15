@@ -253,7 +253,6 @@ public enum ErrorCode {
     CHATBOT_RATE_LIMIT(HttpStatus.TOO_MANY_REQUESTS, "Bạn gửi câu hỏi quá nhanh, vui lòng chậm lại"),
     CHATBOT_CONVERSATION_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy phiên trò chuyện"),
     CHATBOT_OUT_OF_SCOPE(HttpStatus.OK, "Câu hỏi nằm ngoài phạm vi hỗ trợ"),
-    SENTIMENT_COMMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy bình luận cần phân tích"),
     AI_CONFIG_KEY_UNKNOWN(HttpStatus.BAD_REQUEST, "Khóa cấu hình AI không hợp lệ: {key}"),
     AI_CONFIG_VALUE_INVALID(HttpStatus.BAD_REQUEST, "Giá trị cấu hình không hợp lệ cho khóa {key}"),
 

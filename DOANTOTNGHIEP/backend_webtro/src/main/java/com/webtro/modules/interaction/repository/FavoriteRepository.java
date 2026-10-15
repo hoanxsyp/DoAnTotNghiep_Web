@@ -4,9 +4,12 @@ import com.webtro.modules.interaction.entity.Favorite;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -34,4 +37,10 @@ public interface FavoriteRepository extends JpaRepository<Favorite, Long> {
 
     /** Người dùng đã lưu tin nào chưa (quyết định cold-start). */
     boolean existsByUserIdAndDeletedAtIsNull(Long userId);
+
+    /** Trong {@code listingIds}, những tin người dùng đang lưu — cờ {@code favoritedByMe}. */
+    @Query("select f.listingId from Favorite f "
+            + "where f.userId = :userId and f.listingId in :listingIds and f.deletedAt is null")
+    List<Long> findFavoritedListingIds(@Param("userId") Long userId,
+                                       @Param("listingIds") Collection<Long> listingIds);
 }

@@ -18,7 +18,7 @@ import java.util.List;
 /**
  * Chi tiết một báo cáo kèm ngữ cảnh để Moderator ra quyết định (canonical 4.16.2).
  *
- * <p>Ghi chú phạm vi: các trường phái sinh từ module AI (thống kê cảm xúc của tin) không thuộc dữ
+ * <p>Ghi chú phạm vi: các trường phái sinh từ module AI không thuộc dữ
  * liệu module moderation nắm giữ nên không đưa vào đây; {@link #recommendedResult} được suy heuristic
  * từ số liệu report + số tin bị khóa của chủ (dữ liệu module này có).
  */
@@ -73,7 +73,6 @@ public class ReportDetailResponse {
         private String excerpt;
         private Long ownerId;
         private String ownerName;
-        private Integer ownerTrustScore;
         private Long ownerWarningCountLast30Days;
         private Long ownerLockedListingCountLast60Days;
     }

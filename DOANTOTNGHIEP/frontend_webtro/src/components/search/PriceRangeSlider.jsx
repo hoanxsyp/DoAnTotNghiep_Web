@@ -84,18 +84,22 @@ export default function PriceRangeSlider({
       </Box>
 
       {showInputs && (
-        <Stack direction="row" spacing={1} alignItems="center">
+        // Xếp dọc, mỗi ô full chiều ngang: sidebar hẹp, xếp ngang thì "20.000.000 đ" bị cắt.
+        <Stack spacing={1.5} sx={{ mt: 1 }}>
           <TextField
             label="Từ"
+            size="small"
+            fullWidth
             value={fmt(local[0])}
             onChange={handleInput(0)}
             onBlur={handleBlur}
             inputProps={{ inputMode: 'numeric' }}
             InputProps={{ endAdornment: <InputAdornment position="end">{unit}</InputAdornment> }}
           />
-          <Typography color="text.secondary">–</Typography>
           <TextField
             label="Đến"
+            size="small"
+            fullWidth
             value={fmt(local[1])}
             onChange={handleInput(1)}
             onBlur={handleBlur}

@@ -20,7 +20,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Adapter (canonical luật 4/7, mục 10.2 §9.2) — hiện thực SPI {@link InteractionSignalGateway} của
@@ -100,6 +103,15 @@ public class InteractionSignalGatewayAdapter implements InteractionSignalGateway
             return List.of();
         }
         return viewHistoryRepository.findDistinctListingIdsByUserIdSince(userId, since);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Set<Long> favoritedListingIds(Long userId, Collection<Long> listingIds) {
+        if (userId == null || listingIds == null || listingIds.isEmpty()) {
+            return Set.of();
+        }
+        return new HashSet<>(favoriteRepository.findFavoritedListingIds(userId, listingIds));
     }
 
     /** Có bất kỳ tín hiệu hành vi nào không (xem/lưu/liên hệ/tìm kiếm) — quyết định cold-start. */

@@ -20,7 +20,6 @@ import com.webtro.modules.listing.dto.response.ListingImageResponse;
 import com.webtro.modules.listing.dto.response.ListingSummaryResponse;
 import com.webtro.modules.listing.repository.ListingAmenityRepository;
 import com.webtro.modules.listing.repository.ListingImageRepository;
-import com.webtro.modules.listing.service.TrustScoreService;
 import com.webtro.modules.listing.statemachine.ListingEvent;
 import com.webtro.modules.listing.statemachine.ListingStateMachine;
 import com.webtro.modules.user.entity.LandlordProfile;
@@ -58,7 +57,6 @@ public class ListingMapper {
     private final ListingAmenityRepository listingAmenityRepository;
     private final UserRepository userRepository;
     private final LandlordProfileRepository landlordProfileRepository;
-    private final TrustScoreService trustScoreService;
     private final ListingStateMachine stateMachine;
     private final SystemConfigService config;
 
@@ -82,7 +80,6 @@ public class ListingMapper {
                 .area(l.getArea())
                 .shortAddress(shortAddress(l))
                 .thumbnailUrl(primaryThumbnail(l.getId()))
-                .trustScore(toInt(l.getTrustScore()))
                 .averageRating(l.getAverageRating())
                 .promoted(Boolean.TRUE.equals(l.getIsPromoted()));
 
@@ -118,7 +115,6 @@ public class ListingMapper {
         LocationParts location = locationOf(l.getWardId());
 
         boolean revealSensitive = viewerAuthenticated || privileged;
-        int trust = toInt(l.getTrustScore());
 
         return ListingDetailResponse.builder()
                 .id(l.getId())
@@ -164,9 +160,6 @@ public class ListingMapper {
                 .phoneMasked(!revealSensitive)
                 .status(l.getStatus().name())
                 .statusLabel(l.getStatus().getLabel())
-                .trustScore(trust)
-                .trustLabel(trustScoreService.labelOf(trust).name())
-                .lowTrustWarning(trust < config.getInt(ConfigKey.TRUST_THRESHOLD_RISKY))
                 .averageRating(l.getAverageRating())
                 .reviewCount(l.getReviewCount())
                 .commentCount(l.getCommentCount())
@@ -237,15 +230,12 @@ public class ListingMapper {
         Optional<LandlordProfile> profileOpt = landlordProfileRepository.findByUser_IdAndDeletedAtIsNull(ownerId);
         LandlordProfile profile = profileOpt.orElse(null);
 
-        int trust = profile == null ? config.getInt(ConfigKey.TRUST_BASE_SCORE) : toInt(profile.getTrustScore());
         return LandlordSummaryResponse.builder()
                 .id(ownerId)
                 .fullName(user == null ? null : user.getFullName())
                 .avatarUrl(user == null ? null : user.getAvatarUrl())
                 .verified(profile != null
                         && profile.getVerificationStatus() == com.webtro.common.enums.VerificationStatus.VERIFIED)
-                .trustScore(trust)
-                .trustLabel(trustScoreService.labelOf(trust).name())
                 .averageRating(profile == null ? BigDecimal.ZERO : profile.getAverageRating())
                 .totalActiveListings(profile == null ? 0 : profile.getTotalActiveListings())
                 .chatEnabled(profile == null || Boolean.TRUE.equals(profile.getAllowChat()))

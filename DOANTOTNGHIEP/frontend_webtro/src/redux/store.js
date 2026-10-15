@@ -2,9 +2,10 @@ import { configureStore } from '@reduxjs/toolkit';
 import authReducer from './authSlice';
 import uiReducer from './uiSlice';
 import notificationReducer from './notificationSlice';
+import chatReducer from './chatSlice';
 
 /**
- * Redux store. Chỉ chứa state DÙNG CHUNG nhiều trang (canonical luật F4): auth, ui, notification.
+ * Redux store. Chỉ chứa state DÙNG CHUNG nhiều trang (canonical luật F4): auth, ui, notification, chat.
  * State riêng của một trang để useState trong trang đó — không nhét vào đây.
  */
 export const store = configureStore({
@@ -12,6 +13,7 @@ export const store = configureStore({
     auth: authReducer,
     ui: uiReducer,
     notification: notificationReducer,
+    chat: chatReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

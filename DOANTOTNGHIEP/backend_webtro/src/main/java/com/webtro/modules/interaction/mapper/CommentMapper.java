@@ -39,8 +39,6 @@ public class CommentMapper {
                 .content(c.getContent())
                 .status(c.getStatus() == null ? null : c.getStatus().name())
                 .author(author)
-                .sentimentLabel(c.getSentimentLabel() == null ? null : c.getSentimentLabel().name())
-                .sentimentScore(c.getSentimentScore())
                 .editable(editable)
                 .editableUntil(editableUntil)
                 .deletable(deletable)
@@ -51,7 +49,7 @@ public class CommentMapper {
     }
 
     /**
-     * Ánh xạ sang DTO cho màn hình kiểm duyệt (kèm thông tin ẩn/spam/rủi ro và nhãn cảm xúc đầy đủ).
+     * Ánh xạ sang DTO cho màn hình kiểm duyệt (kèm thông tin ẩn/spam).
      *
      * @param author tác giả đã nạp qua gateway (có thể null nếu tài khoản đã bị xóa)
      */
@@ -64,12 +62,7 @@ public class CommentMapper {
                 .status(c.getStatus() == null ? null : c.getStatus().name())
                 .statusLabel(c.getStatus() == null ? null : c.getStatus().getLabel())
                 .author(author)
-                .sentimentLabel(c.getSentimentLabel() == null ? null : c.getSentimentLabel().name())
-                .sentimentLabelText(c.getSentimentLabel() == null ? null : c.getSentimentLabel().getLabel())
-                .sentimentScore(c.getSentimentScore())
-                .sentimentConfidence(c.getSentimentConfidence())
                 .isSpam(c.getIsSpam())
-                .isRiskComment(c.getIsRiskComment())
                 .containsBannedKeyword(c.getContainsBannedKeyword())
                 .isOwnerReply(c.getIsOwnerReply())
                 .replyCount(c.getReplyCount())

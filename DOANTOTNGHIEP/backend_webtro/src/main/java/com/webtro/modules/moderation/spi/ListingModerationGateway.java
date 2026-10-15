@@ -12,7 +12,7 @@ import java.util.Optional;
  * (gọi module khác qua interface, không đụng repository của nó).
  *
  * <p><b>Quyết định kiến trúc:</b> tại thời điểm viết module moderation, module listing mới chỉ có
- * entity + repository + {@code ListingStateMachine} + {@code TrustScoreService}, chưa có
+ * entity + repository + {@code ListingStateMachine}, chưa có
  * {@code ListingService}. Theo đúng quy ước đã áp dụng ở {@code interaction.spi.ListingGateway},
  * hợp đồng cross-module được khai báo dạng SPI <i>do bên tiêu dùng sở hữu</i> (đặt tại
  * {@code moderation.spi}). Module {@code listing} phải cung cấp một {@code @Component} hiện thực

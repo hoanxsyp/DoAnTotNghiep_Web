@@ -2,7 +2,6 @@ package com.webtro.modules.interaction.service;
 
 import com.webtro.common.PageResponse;
 import com.webtro.common.enums.CommentStatus;
-import com.webtro.common.enums.SentimentLabel;
 import com.webtro.modules.interaction.dto.request.CreateCommentRequest;
 import com.webtro.modules.interaction.dto.request.UpdateCommentRequest;
 import com.webtro.modules.interaction.dto.response.AdminCommentResponse;
@@ -15,10 +14,10 @@ import org.springframework.data.domain.Pageable;
  */
 public interface CommentService {
 
-    /** Danh sách bình luận của tin (ẩn danh); lồng một cấp; kèm thống kê cảm xúc. */
+    /** Danh sách bình luận của tin (ẩn danh); lồng một cấp. */
     CommentPageResponse listComments(Long listingId, boolean includeReplies, Long viewerId, Pageable pageable);
 
-    /** Tạo bình luận (rate limit, quét từ khóa cấm, publish {@code CommentCreatedEvent} cho AI). */
+    /** Tạo bình luận (rate limit, quét từ khóa cấm). */
     CommentResponse createComment(Long listingId, CreateCommentRequest request, Long userId);
 
     /** Trả lời một bình luận gốc (đường tắt của tạo bình luận với {@code parentCommentId} từ path). */
@@ -39,12 +38,11 @@ public interface CommentService {
     // ------------------ Kiểm duyệt (COMMENT_MODERATE) — canonical 4.7.5 ------------------
 
     /**
-     * Danh sách bình luận cho màn hình kiểm duyệt: lọc theo trạng thái / nhãn cảm xúc / cờ spam /
-     * từ khóa nội dung / tin, phân trang; kèm nhãn cảm xúc và thông tin ẩn.
+     * Danh sách bình luận cho màn hình kiểm duyệt: lọc theo trạng thái / cờ spam / từ khóa nội dung /
+     * tin, phân trang; kèm thông tin ẩn.
      */
-    PageResponse<AdminCommentResponse> adminListComments(CommentStatus status, SentimentLabel sentiment,
-                                                         Boolean isSpam, String keyword, Long listingId,
-                                                         Pageable pageable);
+    PageResponse<AdminCommentResponse> adminListComments(CommentStatus status, Boolean isSpam,
+                                                         String keyword, Long listingId, Pageable pageable);
 
     /**
      * Ẩn bình luận vi phạm (dùng cho endpoint admin): đặt {@code HIDDEN}, ghi lý do/người/thời điểm,
@@ -59,8 +57,7 @@ public interface CommentService {
     AdminCommentResponse unhideByModeration(Long commentId, Long moderatorId);
 
     /**
-     * Đánh dấu bình luận là spam ({@code is_spam = true}, trọng số uy tín = 0 để loại khỏi công thức
-     * tính điểm uy tín) và ghi AuditLog {@code COMMENT_SPAM}. Trả bản ghi sau khi cập nhật.
+     * Đánh dấu bình luận là spam ({@code is_spam = true}) và ghi AuditLog {@code COMMENT_SPAM}. Trả bản ghi sau khi cập nhật.
      */
     AdminCommentResponse markSpam(Long commentId, Long moderatorId);
 }

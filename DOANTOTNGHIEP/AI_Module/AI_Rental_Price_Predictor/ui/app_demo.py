@@ -2,7 +2,7 @@
 """
 Giao diện dự đoán giá thuê (chỉ 1 trang, standalone).
 Chạy:  streamlit run app_demo.py
-Muốn TRANG CHỦ CHUNG (cả 2 module): streamlit run home.py
+Muốn dùng trang chủ của module: streamlit run home.py
 """
 import streamlit as st
 

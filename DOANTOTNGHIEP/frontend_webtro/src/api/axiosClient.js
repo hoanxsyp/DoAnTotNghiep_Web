@@ -31,7 +31,8 @@ const flushQueue = (error, token = null) => {
   pendingQueue = [];
 };
 
-const requestTokenRefresh = async () => {
+// Export cho kênh không đi qua axios (WebSocket chat) làm mới access token trước khi kết nối lại.
+export const requestTokenRefresh = async () => {
   if (isRefreshing) {
     return new Promise((resolve, reject) => {
       pendingQueue.push({ resolve, reject });

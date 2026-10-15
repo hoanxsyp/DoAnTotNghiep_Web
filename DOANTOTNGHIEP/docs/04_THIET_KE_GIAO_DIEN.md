@@ -67,7 +67,7 @@ qua `theme.breakpoints.up(...)`. Không dùng `breakpoints.down()` làm style g�
 | Thứ tự tiêu đề | Mỗi trang đúng **một** `<h1>` (component `PageHeader`), không nhảy cấp h1→h3 | Review PR |
 | Ngôn ngữ | `<html lang="vi">` trong `index.html`; DayJS locale `vi` | Bắt buộc |
 | Trạng thái động | Toast bọc trong `aria-live="polite"`; lỗi form dùng `aria-invalid` + `aria-describedby` trỏ tới helper text | React Hook Form + MUI TextField làm sẵn |
-| Không dựa mỗi màu để truyền tin | `StatusChip` luôn có **text nhãn** kèm màu; `SentimentChip` có icon + text; `TrustScoreBadge` có số điểm, không chỉ màu | Đặc tả component mục 6 |
+| Không dựa mỗi màu để truyền tin | `StatusChip` luôn có **text nhãn** kèm màu; `SentimentChip` có icon + text | Đặc tả component mục 6 |
 
 ### 1.4. Nguyên tắc nội dung tiếng Việt
 
@@ -91,8 +91,7 @@ thời hệ thống có trục nghiệp vụ "Niềm tin giữa người thuê v
   với dải xanh dương đã bão hòa ở các sàn BĐS; đủ đậm để đạt AA trên nền trắng.
 - **Secondary = cam đất** (`#E65100`): màu nhấn ấm cho CTA thứ cấp và nhãn "Tin nổi bật"
   (`PROMO-02` `[§2.9]`), tương phản mạnh với teal trên vòng tròn màu.
-- **Warning** phải dùng cho cảnh báo lệch giá `[§9.4]` và `TrustScoreBadge` mức rủi ro
-  `[§5.8]` → cố tình chọn tông đậm hơn mặc định MUI (`#ED6C02` chỉ đạt 3.1:1, **không đạt AA**).
+- **Warning** phải dùng cho cảnh báo lệch giá `[§9.4]` → cố tình chọn tông đậm hơn mặc định MUI (`#ED6C02` chỉ đạt 3.1:1, **không đạt AA**).
 
 #### 2.1.1. Light theme
 
@@ -880,7 +879,7 @@ Tin nhắn / Thông báo) — giảm số lần phải mở Drawer.
 │ │ Nhà trọ An │ │ ├─────────────────────────────────────────────────────────┤ │
 │ │ ✓ Đã xác   │ │ │                                                         │ │
 │ │   thực     │ │ │  <Outlet />                                             │ │
-│ │ Uy tín: 87 │ │ │                                                         │ │
+│ │ 8 tin đăng │ │ │                                                         │ │
 │ └────────────┘ │ │                                                         │ │
 │                │ │                                                         │ │
 │ ▸ Tổng quan    │ │                                                         │ │
@@ -906,7 +905,7 @@ Tin nhắn / Thông báo) — giảm số lần phải mở Drawer.
 | Thành phần | Chi tiết |
 |---|---|
 | Header | Riêng, có chữ "Kênh chủ trọ" để người dùng biết đang ở khu vực quản lý (vì `ROLE_LANDLORD` cũng có quyền người thuê — canonical mục 4.1). |
-| Sidebar | `Drawer variant="permanent"` ở `md+`, `variant="temporary"` ở dưới `md`. Có khối tóm tắt chủ trọ: avatar, tên, chip "Đã xác thực" (`VerificationType.LANDLORD` = `VERIFIED`), `TrustScoreBadge`. |
+| Sidebar | `Drawer variant="permanent"` ở `md+`, `variant="temporary"` ở dưới `md`. Có khối tóm tắt chủ trọ: avatar, tên, chip "Đã xác thực" (`VerificationType.LANDLORD` = `VERIFIED`), số tin đang hiển thị. |
 | Nút "Đăng tin mới" | Ở header **và** trong sidebar — hành động chính của actor này `[§4.2]`, cần luôn trong tầm tay. Chỉ render khi có `LISTING_CREATE`. |
 | Breadcrumb | Luôn hiện từ `sm+`. |
 
@@ -1345,18 +1344,18 @@ number/array/boolean).
 │ │   │                     │  [2]  │     │ │ ├──────────────────────────────┤ │
 │ │   │      ảnh chính      ├───────┤     │ │ │  (Avatar) Nguyễn Văn B       │ │
 │ │   │      (16:9)         │  [3]  │     │ │ │  ✓ Đã xác thực               │ │
-│ │   │                     ├───────┤     │ │ │  TrustScoreBadge: 87 · Tốt   │ │
+│ │   │                     ├───────┤     │ │ │  Đánh giá 4,5/5 (12)         │ │
 │ │   │                     │ +5 ảnh│     │ │ │  Tham gia 03/2024 · 8 tin    │ │
 │ │   └─────────────────────┴───────┘     │ │ ├──────────────────────────────┤ │
 │ └───────────────────────────────────────┘ │ │ [📞  0901***456  Hiện số]    │ │  ← MaskUtil
 │                                           │ │ [💬  Nhắn tin cho chủ trọ]   │ │
-│ ┌───────────────────────────────────────┐ │ │ [♡   Lưu tin]  [⚑ Báo cáo]   │ │
-│ │ ⚠ Tin này có điểm uy tín thấp. Hãy   │ │ ├──────────────────────────────┤ │
-│ │   kiểm tra kỹ trước khi đặt cọc.     │ │ │ [👤 Xem trang chủ trọ →]     │ │
-│ └───────────────────────────────────────┘ │ └──────────────────────────────┘ │
-│  ↑ Alert severity="warning" — CHỈ hiện    │                                  │
-│    khi trustScore < trust.threshold.risky │ ┌──────────────────────────────┐ │
-│    (40) [§3.8][§5.8]                      │ │ 📊 Giá tham khảo khu vực     │ │
+│                                           │ │ [♡   Lưu tin]  [⚑ Báo cáo]   │ │
+│                                           │ ├──────────────────────────────┤ │
+│                                           │ │ [👤 Xem trang chủ trọ →]     │ │
+│                                           │ └──────────────────────────────┘ │
+│                                           │                                  │
+│                                           │ ┌──────────────────────────────┐ │
+│                                           │ │ 📊 Giá tham khảo khu vực     │ │
 │                                           │ │ 3,8 – 5,2 triệu (TB 4,4tr)   │ │
 │ <h1> Phòng trọ 25m² gần ĐH Bách Khoa,     │ │ Độ tin cậy: Cao              │ │
 │      Quận 10, có gác, giờ tự do </h1>     │ │ (ẩn nếu INSUFFICIENT_DATA)   │ │
@@ -1428,7 +1427,7 @@ number/array/boolean).
 ```
 
 **Mobile (`xs`)**
-- 1 cột. Thứ tự: Gallery → cảnh báo uy tín → tiêu đề → giá (đưa **lên trên** thông số vì là
+- 1 cột. Thứ tự: Gallery → tiêu đề → giá (đưa **lên trên** thông số vì là
   thông tin quyết định) → thông số (grid 2 cột thay vì 4) → mô tả → tiện ích → vị trí → khối
   chủ trọ → giá tham khảo → đánh giá → bình luận → tin tương tự.
 - **Sticky bottom action bar** (h=64px, `elevation={8}`, luôn hiện) — hiện thực `[§11.7]`
@@ -1443,7 +1442,7 @@ number/array/boolean).
 - Gallery: full-bleed (tràn mép), swipe ngang, đếm `3/8` góc dưới phải, bấm → full-screen viewer.
 - Khối "Giá tham khảo khu vực" đặt ngay sau khối thông số.
 
-**Component:** `ImageGallery`, `TrustScoreBadge`, `RichTextViewer`, `RatingStars`,
+**Component:** `ImageGallery`, `RichTextViewer`, `RatingStars`,
 `CommentThread`, `ListingCard` (compact), `EmptyState`, `LoadingSkeleton`, `ConfirmDialog`,
 `ReportDialog`, `MaskedPhoneButton`, `FavoriteButton`, `SpecGrid`, `AmenityChipGroup`,
 `PriceReferenceCard`, `StaticMap`.
@@ -1480,21 +1479,6 @@ kiểm: đã có `ContactLog` với tin này **và** chưa từng đánh giá ti
 vì chưa liên hệ → hiện text mờ *"Bạn cần liên hệ chủ trọ trước khi đánh giá tin này."* — giải
 thích lý do thay vì ẩn im lặng. Nếu đã đánh giá rồi → nút đổi thành "Sửa đánh giá của bạn"
 (trong `review.edit_window_hours` = 24, hết hạn thì disable + tooltip).
-
-**Cảnh báo uy tín thấp** `[§3.8]` *"Tin có cảnh báo uy tín thấp có thể hiển thị nhãn cảnh báo
-nhẹ"*:
-
-| `trustScore` | Hiển thị |
-|---|---|
-| `≥ 40` (`trust.threshold.risky`) | Không có cảnh báo |
-| `< 40` và `≥ 25` | `<Alert severity="warning" variant="outlined">` — *"Tin này có điểm uy tín thấp. Hãy kiểm tra kỹ thông tin và không chuyển tiền trước khi xem phòng."* |
-| `< 25` (`trust.threshold.need_review`) | Cùng nội dung nhưng `severity="error"`. Tin ở mức này thường đã bị `FLAG_NEED_REVIEW` |
-
-Ngưỡng **không hardcode**: `GET /api/listings/{id}` trả sẵn `trustLevel: 'NORMAL' | 'RISKY' |
-'NEED_REVIEW'` do BE tính từ `SystemConfig`. FE chỉ map level → severity. **[BỔ SUNG NGOÀI
-CANONICAL]** — canonical mục 9 định nghĩa config `trust.threshold.risky/need_review` nhưng
-không nói FE lấy ngưỡng bằng cách nào; đưa `trustLevel` vào response là cách duy nhất giữ
-đúng luật "không hardcode ngưỡng" ở phía FE.
 
 **Trạng thái**
 
@@ -1567,7 +1551,7 @@ export const reviewSchema = yup.object({
 │  │  (Cover: gradient primary)                                             │  │
 │  │   ┌────────┐                                                           │  │
 │  │   │ Avatar │  <h1> Nguyễn Văn B </h1>  ✓ Đã xác thực                  │  │
-│  │   │ 96px   │  TrustScoreBadge: 87 · Uy tín tốt                        │  │
+│  │   │ 96px   │  Đánh giá 4,5/5 · 12 đánh giá                            │  │
 │  │   └────────┘  Tham gia từ 03/2024 · Phản hồi trong ~2 giờ             │  │
 │  │                                              [+ Theo dõi] [💬 Nhắn tin]│  │
 │  └────────────────────────────────────────────────────────────────────────┘  │
@@ -1591,7 +1575,7 @@ export const reviewSchema = yup.object({
 dõi"/"Nhắn tin" thành 2 nút full-width xếp ngang; StatCard grid 2×2; Tabs `variant="fullWidth"`;
 grid tin 1 cột.
 
-**Component:** `TrustScoreBadge`, `StatCard`, `ListingGrid`, `ListingCard`, `RatingStars`,
+**Component:** `StatCard`, `ListingGrid`, `ListingCard`, `RatingStars`,
 `Tabs`, `EmptyState`, `LoadingSkeleton`, `FollowButton`, `RichTextViewer` (tab Giới thiệu).
 
 **API**
@@ -1600,7 +1584,7 @@ grid tin 1 cột.
 |---|---|
 | Hồ sơ công khai | `GET /api/users/{id}` `[§12.2]` |
 | Tin của chủ trọ | `GET /api/search/listings?ownerId={id}&page=0&size=12` — chỉ trả tin public (BE dùng `ListingVisibilityService.publicStatuses()`, canonical mục 5.2) |
-| Đánh giá về chủ trọ | `GET /api/users/{id}/reviews?page=0&size=10` **[BỔ SUNG NGOÀI CANONICAL]** — `[§12.6]` chỉ có review theo listing, nhưng `[§3.12]` nói rõ *"Đánh giá tin **hoặc chủ trọ**"* và `[§5.7]` yêu cầu tính điểm uy tín chủ trọ từ đánh giá → cần endpoint gộp đánh giá theo chủ trọ |
+| Đánh giá về chủ trọ | `GET /api/users/{id}/reviews?page=0&size=10` **[BỔ SUNG NGOÀI CANONICAL]** — `[§12.6]` chỉ có review theo listing, nhưng `[§3.12]` nói rõ *"Đánh giá tin **hoặc chủ trọ**"* → cần endpoint gộp đánh giá theo chủ trọ |
 | Theo dõi / bỏ theo dõi | `POST /api/users/{id}/follow` · `DELETE /api/users/{id}/follow` `[§12.2]` |
 
 **Trạng thái**
@@ -2782,12 +2766,12 @@ disabled + tooltip.
 ├────────────────────────────────────────────────────────────────────────┤
 │ ┌──────────────────────────────────────────────────────────────────┐   │
 │ │ (Avatar) Nguyễn Văn B  ✓ Đã xác thực                             │   │
-│ │          TrustScoreBadge: 87 · 6 tin đang hiển thị               │   │
+│ │          Đánh giá 4,5/5 · 6 tin đang hiển thị                    │   │
 │ │          🔔 2 tin mới từ khi bạn theo dõi                        │   │
 │ │                        [Xem trang →]  [Đang theo dõi ▾]          │   │
 │ ├──────────────────────────────────────────────────────────────────┤   │
 │ │ (Avatar) Trần Thị C                                              │   │
-│ │          TrustScoreBadge: 62 · 2 tin đang hiển thị               │   │
+│ │          Đánh giá 3,8/5 · 2 tin đang hiển thị                    │   │
 │ │                        [Xem trang →]  [Đang theo dõi ▾]          │   │
 │ └──────────────────────────────────────────────────────────────────┘   │
 ├────────────────────────────────────────────────────────────────────────┤
@@ -2800,7 +2784,7 @@ disabled + tooltip.
 
 **Mobile:** card dọc, nút full-width.
 
-**Component:** `LandlordFollowCard`, `TrustScoreBadge`, `ListingGrid`, `ListingCard`,
+**Component:** `LandlordFollowCard`, `ListingGrid`, `ListingCard`,
 `EmptyState`, `LoadingSkeleton`, `ConfirmDialog`, `Menu`.
 
 **API**
@@ -3016,7 +3000,7 @@ biểu đồ (hành động quan trọng hơn số liệu trên màn hình nhỏ
 │ │ ┌──────┐ Phòng trọ 25m² gần ĐH Bách Khoa, Q.10          StatusChip     │ │
 │ │ │ ảnh  │ 4.500.000 đ/tháng · 25m² · Phòng trọ           (Đang hiển thị)│ │
 │ │ │ 96px │ 📍 Q.10, TP.HCM                                               │ │
-│ │ └──────┘ 👁 420  ♡ 12  📞 8   ·  TrustScoreBadge 87                    │ │
+│ │ └──────┘ 👁 420  ♡ 12  📞 8                                            │ │
 │ │          ⏰ Còn 12 ngày (hết hạn 29/07/2026)                            │ │
 │ │          ★ Đang được đẩy — còn 4 ngày                                  │ │  ← nếu có
 │ │                          [Sửa] [Thống kê] [Đẩy tin] [⋮]                │ │    Subscription
@@ -3041,7 +3025,7 @@ biểu đồ (hành động quan trọng hơn số liệu trên màn hình nhỏ
 **Mobile:** card dọc, ảnh full-width 16:9 trên cùng; nút hành động gom vào Menu `[⋮]` trừ hành
 động chính (theo trạng thái) hiện full-width.
 
-**Component:** `MyListingCard`, `StatusChip`, `TrustScoreBadge`, `Tabs`, `ConfirmDialog`,
+**Component:** `MyListingCard`, `StatusChip`, `Tabs`, `ConfirmDialog`,
 `Menu`, `EmptyState`, `LoadingSkeleton`, `Pagination`, `Alert`.
 
 **API**
@@ -3521,8 +3505,8 @@ duyệt lại"* → khi tin `ACTIVE` và người dùng đổi một trong: `tit
 │ └──────────────────────────────────────────────────────────────────────┘   │
 ├────────────────────────────────────────────────────────────────────────────┤
 │ ┌───────────────────────────────────┬──────────────────────────────────┐   │
-│ │ TỶ LỆ CHUYỂN ĐỔI                  │ ĐIỂM UY TÍN & CẢM XÚC            │   │
-│ │  Xem → Lưu:      2,9%             │  TrustScoreBadge: 87 · Tốt       │   │
+│ │ TỶ LỆ CHUYỂN ĐỔI                  │ CẢM XÚC BÌNH LUẬN                │   │
+│ │  Xem → Lưu:      2,9%             │                                  │   │
 │ │  Xem → Liên hệ:  1,9%             │  ┌────────────────────────────┐  │   │
 │ │  ────────────────────────────     │  │ Cảm xúc bình luận [§9.1]   │  │   │
 │ │  So với trung bình khu vực:       │  │ 😊 Tích cực   2  ████████  │  │   │
@@ -3540,13 +3524,13 @@ duyệt lại"* → khi tin `ACTIVE` và người dùng đổi một trong: `tit
 
 **Mobile:** StatCard 2×2; chart cao 200px, cuộn ngang được nếu nhiều điểm; 2 khối dưới xếp dọc.
 
-**Component:** `StatCard`, `ChartCard`, `TrustScoreBadge`, `SentimentChip`, `StatusChip`,
+**Component:** `StatCard`, `ChartCard`, `SentimentChip`, `StatusChip`,
 `EmptyState`, `LoadingSkeleton`, `ToggleButtonGroup`.
 
 **API:** `GET /api/listings/{id}/stats?range=7d|30d|all` `[§12.3]` →
 `{ viewCount, favoriteCount, contactCount, commentCount, deltas, series: [{date, views,
 favorites, contacts}], conversion: { viewToFavorite, viewToContact, areaAvgViewToContact },
-trustScore, trustLevel, sentimentSummary: { POSITIVE, NEUTRAL, NEGATIVE, MIXED,
+sentimentSummary: { POSITIVE, NEUTRAL, NEGATIVE, MIXED,
 PENDING_ANALYSIS }, promotionPeriods: [{from, to}], suggestions[] }`.
 
 **Trạng thái**
@@ -4290,7 +4274,7 @@ Admin dùng **khóa**, không xóa. Đây là quyết định có chủ đích, 
 │ ┌────────────────────────────────────────────────────────────────────────┐ │
 │ │ (Av 80) Nguyễn Văn B  #1025   StatusChip(Hoạt động)                    │ │
 │ │         b@gmail.com ✓ · 0902345678 ⚠ · Tham gia 12/03/2024             │ │
-│ │         (Người thuê) (Chủ trọ) · TrustScoreBadge 87                    │ │
+│ │         (Người thuê) (Chủ trọ)                                         │ │
 │ │         Đăng nhập cuối: 18/07/2026 14:20                               │ │
 │ │                     [Sửa vai trò] [Khóa tài khoản] [Gửi cảnh báo]      │ │
 │ └────────────────────────────────────────────────────────────────────────┘ │
@@ -4348,18 +4332,18 @@ không hardcode.
 ├────────────────────────────────────────────────────────────────────────────┤
 │ [ Tất cả (312) ] [ Chờ xác thực (8) ] [ Đã xác thực (240) ] [ Bị từ chối ] │
 ├────────────────────────────────────────────────────────────────────────────┤
-│ 🔍 [Tên, email…]  [Điểm uy tín: Tất cả ▾]  [Sắp xếp ▾]                    │
+│ 🔍 [Tên, email…]  [Xác thực: Tất cả ▾]     [Sắp xếp ▾]                    │
 ├────────────────────────────────────────────────────────────────────────────┤
 │ ┌────────────────┬────────┬────────┬─────────┬──────────┬───────────────┐  │
-│ │ Chủ trọ ↕      │ Tin ↕  │ Uy tín↕│ Report  │ Xác thực │ Thao tác      │  │
+│ │ Chủ trọ ↕      │ Tin ↕  │ Sao ↕  │ Report  │ Xác thực │ Thao tác      │  │
 │ │                │ đăng   │        │ xác nhận│          │               │  │
 │ ├────────────────┼────────┼────────┼─────────┼──────────┼───────────────┤  │
-│ │(Av) Nhà trọ An │  8     │Badge 87│    0    │(Đã xác   │ [👁][⋮]      │  │
-│ │ Bình  #1025    │ (6 h.thị)│ Tốt   │         │ thực)    │               │  │
+│ │(Av) Nhà trọ An │  8     │ 4,5/5  │    0    │(Đã xác   │ [👁][⋮]      │  │
+│ │ Bình  #1025    │ (6 h.thị)│       │         │ thực)    │               │  │
 │ ├────────────────┼────────┼────────┼─────────┼──────────┼───────────────┤  │
-│ │(Av) Trần Văn X │  12    │Badge 34│    3    │(Chờ xác  │ [👁][✓][✕]   │  │
-│ │       #0987    │ (2 h.thị)│ Rủi ro│  ⚠     │ thực)    │               │  │
-│ │  ⚠ Điểm uy tín thấp · 3 report đã xác nhận                            │  │
+│ │(Av) Trần Văn X │  12    │ 3,2/5  │    3    │(Chờ xác  │ [👁][✓][✕]   │  │
+│ │       #0987    │ (2 h.thị)│       │  ⚠     │ thực)    │               │  │
+│ │  ⚠ 3 report đã xác nhận                                               │  │
 │ └────────────────┴────────┴────────┴─────────┴──────────┴───────────────┘  │
 └────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -4382,8 +4366,8 @@ Menu `[⋮]`: "Xem hồ sơ" · "Xác thực" / "Hủy xác thực" · "Hạn ch
 │ │[ảnh 1] │[ảnh 2] │[ảnh 3] │  ← bấm phóng to         │
 │ └────────┴────────┴────────┘                         │
 │ ──────────────────────────────────────────────────── │
-│ ⚠ Chủ trọ này có 3 report đã xác nhận và điểm uy tín │
-│   34 (mức rủi ro).                                   │
+│ ⚠ Chủ trọ này có 3 report đã xác nhận.               │
+│                                                      │
 │                                                      │
 │ Ghi chú xử lý *                                      │
 │ ┌──────────────────────────────────────────────────┐ │
@@ -4392,24 +4376,23 @@ Menu `[⋮]`: "Xem hồ sơ" · "Xác thực" / "Hủy xác thực" · "Hạn ch
 └──────────────────────────────────────────────────────┘
 ```
 
-**Component:** `DataTable`, `TrustScoreBadge`, `StatusChip`, `Dialog`, `ImageGallery`,
+**Component:** `DataTable`, `StatusChip`, `Dialog`, `ImageGallery`,
 `TextField`, `ConfirmDialog`, `Alert`, `Tabs`.
 
 **API [BỔ SUNG NGOÀI CANONICAL]** — `[§12]` không có nhóm endpoint chủ trọ dù `[§10.3]` liệt kê
-6 chức năng:
+5 chức năng:
 
 | Mục đích | Endpoint |
 |---|---|
-| Danh sách | `GET /api/admin/landlords?keyword=&verificationStatus=&trustLevel=&page=&size=&sort=` |
+| Danh sách | `GET /api/admin/landlords?keyword=&verificationStatus=&page=&size=&sort=` |
 | Chi tiết + giấy tờ | `GET /api/admin/landlords/{id}` |
 | Xác thực | `PUT /api/admin/landlords/{id}/verify` body `{ note }` → `VerificationStatus.VERIFIED` |
 | Từ chối | `PUT /api/admin/landlords/{id}/reject-verification` body `{ reason }` → `REJECTED` |
 | Hủy xác thực | `PUT /api/admin/landlords/{id}/unverify` body `{ reason }` |
 | Hạn chế đăng tin | `PUT /api/admin/landlords/{id}/restrict-posting` body `{ restricted, reason, until }` — `[§10.3]` *"Hạn chế đăng tin nếu vi phạm"* + `[§5.4]` *"3 lần cảnh báo trong 30 ngày: khóa đăng tin tạm thời"* |
 
-**Đối chiếu đủ 6 chức năng `[§10.3]`:** ✓ Xem danh sách (bảng) · ✓ Xem số tin đã đăng (cột "Tin
-đăng") · ✓ Xem điểm uy tín (cột `TrustScoreBadge`) · ✓ Xem số report đã xác nhận (cột "Report
-xác nhận") · ✓ Xác thực/hủy xác thực (Dialog) · ✓ Hạn chế đăng tin (Menu).
+**Đối chiếu đủ 5 chức năng `[§10.3]`:** ✓ Xem danh sách (bảng) · ✓ Xem số tin đã đăng (cột "Tin
+đăng") · ✓ Xem số report đã xác nhận (cột "Report xác nhận") · ✓ Xác thực/hủy xác thực (Dialog) · ✓ Hạn chế đăng tin (Menu).
 
 **Trạng thái**
 
@@ -4419,8 +4402,8 @@ xác nhận") · ✓ Xác thực/hủy xác thực (Dialog) · ✓ Hạn chế �
 | Success (xác thực) | Toast success *"Đã xác thực chủ trọ {tên}."*, badge ✓ hiện trên mọi tin của họ. |
 | Success (từ chối) | Toast + chủ trọ nhận thông báo có lý do (5.3.10 hiện Alert error). |
 
-**Validation:** `note`/`reason` bắt buộc, 10–500 ký tự. Xác thực khi chủ trọ có `trustLevel =
-RISKY` → `ConfirmDialog` cảnh báo thêm một lớp.
+**Validation:** `note`/`reason` bắt buộc, 10–500 ký tự. Xác thực khi chủ trọ có report đã
+xác nhận → `ConfirmDialog` cảnh báo thêm một lớp.
 
 ---
 
@@ -4443,14 +4426,14 @@ RISKY` → `ConfirmDialog` cảnh báo thêm một lớp.
 │ ☑ Đã chọn 3 tin   [Duyệt] [Từ chối] [Gắn cần kiểm tra]        [Bỏ chọn]   │
 ├────────────────────────────────────────────────────────────────────────────┤
 │ ┌──┬──────────────────┬──────────┬────────┬───────┬─────────┬───────────┐  │
-│ │☑ │ Tin đăng ↕       │ Chủ trọ  │ Giá ↕  │Uy tín↕│Trạng thái│ Thao tác  │  │
+│ │☑ │ Tin đăng ↕       │ Chủ trọ  │ Giá ↕  │Report↕│Trạng thái│ Thao tác  │  │
 │ ├──┼──────────────────┼──────────┼────────┼───────┼─────────┼───────────┤  │
-│ │☐ │[ảnh] Phòng trọ   │Nhà trọ An│4,5tr   │Badge  │(Đang    │ [👁][⋮]  │  │
-│ │  │ 25m² gần ĐH… #1234│ Bình     │        │ 87    │ h.thị)  │           │  │
+│ │☐ │[ảnh] Phòng trọ   │Nhà trọ An│4,5tr   │  0    │(Đang    │ [👁][⋮]  │  │
+│ │  │ 25m² gần ĐH… #1234│ Bình     │        │       │ h.thị)  │           │  │
 │ │  │ Q.10, TP.HCM · 12/07                                                │  │
 │ ├──┼──────────────────┼──────────┼────────┼───────┼─────────┼───────────┤  │
-│ │☐ │[ảnh] Phòng trọ   │Trần Văn X│1,2tr   │Badge  │(Cần     │ [👁][⋮]  │  │
-│ │  │ giá rẻ Q.B.Tân   │          │⚠ −45%  │ 22    │ kiểm    │           │  │
+│ │☐ │[ảnh] Phòng trọ   │Trần Văn X│1,2tr   │  3    │(Cần     │ [👁][⋮]  │  │
+│ │  │ giá rẻ Q.B.Tân   │          │⚠ −45%  │       │ kiểm    │           │  │
 │ │  │ #1301            │          │        │       │ tra)    │           │  │
 │ │  │ 🤖 AI: 6/10 bình luận tiêu cực · ⚠ Giá lệch −45% so với tham khảo  │  │
 │ └──┴──────────────────┴──────────┴────────┴───────┴─────────┴───────────┘  │
@@ -4528,12 +4511,12 @@ và mức độ vi phạm"* — `severity` ∈ `ReportSeverity` (`LOW`/`MEDIUM`/
 │ 📍 …                                 │ │   (60% ≥ ngưỡng 50%)            │ │
 │ (thông số, mô tả, tiện ích…)         │ │ • ⚠ Giá thấp hơn 45% tham khảo  │ │
 │                                      │ │ • 🚩 3 báo cáo (2 lừa đảo)      │ │
-│ [ Nội dung ] [ Bình luận (10) ]      │ │ • TrustScoreBadge 22 · Cần      │ │
-│ [ Đánh giá (2) ] [ Report (3) ]      │ │   kiểm duyệt                    │ │
+│ [ Nội dung ] [ Bình luận (10) ]      │ │                                 │ │
+│ [ Đánh giá (2) ] [ Report (3) ]      │ │                                 │ │
 │ [ Lịch sử sửa (5) ] [ Thống kê ]     │ ├─────────────────────────────────┤ │
 │ [ Hành động KD (4) ]                 │ │ CHỦ TRỌ                         │ │
 │                                      │ │ (Av) Trần Văn X #0987           │ │
-│ ┌──────────────────────────────────┐ │ │ Uy tín 34 · 12 tin · 3 report   │ │
+│ ┌──────────────────────────────────┐ │ │ 12 tin · 3 report               │ │
 │ │ (Nội dung tab đang chọn)         │ │ │ [Xem hồ sơ →]                   │ │
 │ └──────────────────────────────────┘ │ ├─────────────────────────────────┤ │
 │                                      │ │ HÀNH ĐỘNG                       │ │
@@ -4592,12 +4575,12 @@ nhanh nhiều tin liên tiếp, không phải bảng tra cứu.
 │ │ 6tr · 3h     │ │ │ ✓ Giá hợp lý (+2,3% so với tham khảo, tin cậy Cao)  │ │
 │ ├──────────────┤ │ │ ✓ Không phát hiện từ khóa cấm                       │ │
 │ │ [ảnh] Ở ghép │ │ │ ✓ Đủ 6 ảnh · ✓ Địa chỉ hợp lệ                       │ │
-│ │ nữ Q.3       │ │ │ ✓ Chủ trọ đã xác thực · Uy tín 87                   │ │
+│ │ nữ Q.3       │ │ │ ✓ Chủ trọ đã xác thực                               │ │
 │ │ 2,2tr · 5h   │ │ └─────────────────────────────────────────────────────┘ │
 │ ├──────────────┤ │ Mô tả: (RichTextViewer)                                 │
 │ │      ⋮       │ │ …                                                       │
 │ └──────────────┘ │ Tiện ích: (Máy lạnh)(Máy giặt)(Ban công)…               │
-│                  │ Chủ trọ: (Av) Nhà trọ An Bình ✓ · Uy tín 87 · 8 tin     │
+│                  │ Chủ trọ: (Av) Nhà trọ An Bình ✓ · 8 tin                 │
 ├──────────────────┴─────────────────────────────────────────────────────────┤
 │ [✕ Từ chối]   [✏ Yêu cầu sửa]   [🏳 Gắn cần kiểm tra]      [✓ Duyệt tin]  │
 │  (phím tắt: R)     (E)                 (F)                     (A)         │
@@ -4613,7 +4596,7 @@ nhanh nhiều tin liên tiếp, không phải bảng tra cứu.
 | Từ khóa cấm | `[§3.3]`, `banned_keywords` (canonical mục 6) |
 | Số ảnh | `listing.image.min/max` |
 | Tỷ lệ bình luận tiêu cực (tab "AI cảnh báo") | `[§9.1]`, `ai.sentiment.negative_ratio_l1/l2` |
-| Uy tín + xác thực chủ trọ | `[§5.8]`, `[§3.3]` *"chủ trọ đã được xác thực uy tín, hệ thống có thể tự động duyệt tin ít rủi ro"* |
+| Xác thực chủ trọ | `[§3.3]` *"chủ trọ đã được xác thực, hệ thống có thể tự động duyệt tin ít rủi ro"* |
 
 **Dialog từ chối** — `[§10.4]` *"Từ chối tin phải nhập lý do"*, `[§5.1]` *"Từ chối: có lý do"*:
 
@@ -4636,7 +4619,7 @@ nhanh nhiều tin liên tiếp, không phải bảng tra cứu.
 
 **Mobile:** hàng đợi thành Drawer; 4 nút hành động dính đáy (2 hàng × 2 nút).
 
-**Component:** `ModerationQueue`, `ImageGallery`, `AutoCheckPanel`, `TrustScoreBadge`,
+**Component:** `ModerationQueue`, `ImageGallery`, `AutoCheckPanel`,
 `RichTextViewer`, `Dialog`, `Chip`, `EmptyState`, `LoadingSkeleton`.
 
 **API:** `GET /api/admin/moderation/queue?type=pending|need_review|reported|ai_alert&page=&size=`
@@ -4714,12 +4697,12 @@ Số lấy từ API (`autoHideRemaining`), **không** tính ở FE.
 │ [ảnh] Phòng trọ giá rẻ Q.Bình Tân  │ ┌─────────────────────────────────┐ │
 │ 1.200.000 đ · 20m² · #1301         │ │ (Av) Người dùng A · 2 giờ trước │ │
 │ StatusChip(Cần kiểm tra)           │ │ Lý do: Lừa đảo                  │ │
-│ TrustScoreBadge 22                 │ │ "Chủ yêu cầu chuyển khoản       │ │
+│                                    │ │ "Chủ yêu cầu chuyển khoản       │ │
 │ [Xem tin đầy đủ →]                 │ │  trước khi xem phòng"           │ │
 │ ─────────────────────────────────  │ │ [ảnh bằng chứng] ← bấm phóng to │ │  ← [§10.8]
 │ CHỦ TRỌ                            │ ├─────────────────────────────────┤ │    "Xem bằng
 │ (Av) Trần Văn X #0987              │ │ (Av) Người dùng B · 3 giờ trước │ │     chứng"
-│ Uy tín 34 · 12 tin · 3 report      │ │ Lý do: Lừa đảo                  │ │
+│ 12 tin · 3 report                  │ │ Lý do: Lừa đảo                  │ │
 │ ⚠ Đã có 1 cảnh báo trong 30 ngày   │ │ "Số điện thoại không liên lạc   │ │
 │ [Xem hồ sơ →]                      │ │  được"                          │ │
 │ ─────────────────────────────────  │ ├─────────────────────────────────┤ │
@@ -4821,8 +4804,8 @@ Menu `[⋮]`: "Xem trong ngữ cảnh" · "Ẩn/Hiện" · **"Đánh dấu spam"
 "Phân tích lại cảm xúc".
 
 **"Đánh dấu spam"** là chức năng bắt buộc — `[§9.1]` *"Bình luận đã bị Moderator xác định spam
-không dùng để tính điểm uy tín"* + canonical 10.1 *"Bình luận bị Moderator đánh dấu spam → loại
-khỏi thống kê điểm uy tín"*. Đánh dấu xong: `TrustScoreRecalcJob` sẽ tính lại (canonical mục 11).
+không được tính vào thống kê cảm xúc của tin"* + canonical 10.1 *"Bình luận bị Moderator đánh dấu
+spam → loại khỏi thống kê cảm xúc"*.
 
 **"Phân tích lại cảm xúc"** — `[§9.1]` *"Admin yêu cầu phân tích lại"* là điều kiện kích hoạt
 chính thức của module sentiment → phải có nút.
@@ -5288,7 +5271,7 @@ loạt** — **[BỔ SUNG NGOÀI CANONICAL]**, cần bổ sung đặc tả vào 
 │ │       │ hơi khó tính"      │ vừa chê)│       │ ⚠ thấp │              │   │
 │ ├───────┼────────────────────┼─────────┼───────┼────────┼──────────────┤   │
 │ │08:15  │"ok"                │(Trung   │  0,00 │ 1,00   │(Không)       │   │
-│ │       │ ℹ Quá ngắn (<10 ký tự) — không tính vào điểm uy tín [§9.1]  │   │
+│ │       │ ℹ Quá ngắn (<10 ký tự) — không tính vào thống kê [§9.1]     │   │
 │ ├───────┼────────────────────┼─────────┼───────┼────────┼──────────────┤   │
 │ │07:40  │"Chỗ này tệ lắm…"   │(Đang    │   —   │   —    │(—)           │   │
 │ │       │ ⚠ AI lỗi/timeout — SentimentRetryJob sẽ thử lại [§9.1]      │   │
@@ -5399,22 +5382,6 @@ có `AI_LOG_VIEW` nhưng **không** có `AI_CONFIG_MANAGE` (canonical mục 4.2)
 │ │                            │  3   │                                    │ │
 │ └────────────────────────────────────────────────────────────────────────┘ │
 │ ┌────────────────────────────────────────────────────────────────────────┐ │
-│ │ ⚖️ TRỌNG SỐ ĐIỂM UY TÍN                              [§5.8][§10.10]    │ │
-│ │  Điểm cơ sở                ┌──────┐  trust.base_score          │ 100 │  │ │
-│ │  + Bình luận tích cực      ┌──────┐  trust.weight.positive_comment│ 1 │  │ │
-│ │  − Bình luận tiêu cực      ┌──────┐  trust.weight.negative_comment│ 2 │  │ │
-│ │  + Đánh giá trung bình ×   ┌──────┐  trust.weight.average_rating  │ 5 │  │ │
-│ │  − Report hợp lệ           ┌──────┐  trust.weight.valid_report    │10 │  │ │
-│ │  − Cảnh báo vi phạm        ┌──────┐  trust.weight.violation_warning│15│  │ │
-│ │  Ngưỡng rủi ro             ┌──────┐  trust.threshold.risky        │40 │  │ │
-│ │  Ngưỡng cần kiểm duyệt     ┌──────┐  trust.threshold.need_review  │25 │  │ │
-│ │ ┌────────────────────────────────────────────────────────────────────┐ │ │
-│ │ │ 📐 Xem trước công thức:                                            │ │ │
-│ │ │ Điểm = 100 + (TíchCực×1) − (TiêuCực×2) + (ĐánhGiáTB×5)            │ │ │
-│ │ │        − (Report×10) − (CảnhBáo×15),  giới hạn [0, 100]           │ │ │
-│ │ └────────────────────────────────────────────────────────────────────┘ │ │
-│ └────────────────────────────────────────────────────────────────────────┘ │
-│ ┌────────────────────────────────────────────────────────────────────────┐ │
 │ │ ℹ AI không bao giờ tự khóa tài khoản. Mọi quyết định nặng cần Admin/    │ │  ← [§10.10]
 │ │   Moderator xác nhận. [§10.10]                                         │ │
 │ └────────────────────────────────────────────────────────────────────────┘ │
@@ -5422,7 +5389,7 @@ có `AI_LOG_VIEW` nhưng **không** có `AI_CONFIG_MANAGE` (canonical mục 4.2)
 └────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Toàn bộ 20 config key trên trùng khớp 100% canonical mục 9** — không thêm, không đổi tên.
+**Toàn bộ config key trên trùng khớp 100% canonical mục 9** — không thêm, không đổi tên.
 
 **Component:** `ConfigSection`, `Switch`, `TextField` (number), `Alert`, `ConfirmDialog`,
 `FormulaPreview`, `LoadingSkeleton`.
@@ -5437,7 +5404,6 @@ có `AI_LOG_VIEW` nhưng **không** có `AI_CONFIG_MANAGE` (canonical mục 4.2)
 | Loading (lưu) | Nút spinner + form disabled. |
 | Success | Toast success *"Đã cập nhật cấu hình AI."* + `AuditAction.AI_CONFIG_CHANGE` được ghi `[§11.4]`. BE invalidate cache Redis (canonical mục 9). |
 | Tắt module | `ConfirmDialog` *"Tắt module {tên}? Chức năng này sẽ ngừng hoạt động cho đến khi bật lại. Dữ liệu log cũ vẫn giữ nguyên."* `[§10.10]` *"Bật/tắt từng module AI nếu cần bảo trì"* |
-| Đổi trọng số uy tín | `ConfirmDialog` *"Thay đổi trọng số sẽ ảnh hưởng điểm uy tín của toàn bộ tin đăng và chủ trọ sau lần chạy job tính lại tiếp theo (02:00 hằng ngày). Tiếp tục?"* — `TrustScoreRecalcJob` (canonical mục 11) + `[§9.1]` *"Hệ thống chạy job tính lại khi thay đổi cấu hình ngưỡng"* |
 
 **Validation**
 
@@ -5451,9 +5417,6 @@ có `AI_LOG_VIEW` nhưng **không** có `AI_CONFIG_MANAGE` (canonical mục 4.2)
 | `ai.price.min_samples` | số nguyên ≥ 1 |
 | `ai.price.deviation_flag_ratio` | 0.05–1.0 |
 | `ai.sentiment.new_account_weight` | 0–1 |
-| `trust.weight.*` | số ≥ 0 |
-| `trust.threshold.need_review` | phải **<** `trust.threshold.risky` — *"Ngưỡng cần kiểm duyệt phải thấp hơn ngưỡng rủi ro"* |
-| `trust.min` / `trust.max` | `min` < `max` |
 
 ---
 
@@ -5568,7 +5531,7 @@ react-chartjs-2 (canonical mục 1.2), `maintainAspectRatio: false`, màu lấy 
 │                  │ │ │ ℹ Bật: tin bị báo cáo vẫn hiển thị trong khi   │  │ │
 │                  │ │ │   chờ kiểm duyệt viên xem xét. [§5.1]          │  │ │
 │                  │ │ └─────────────────────────────────────────────────┘  │ │
-│                  │ │ [━ ○ ] Tự động duyệt tin của chủ trọ uy tín          │ │
+│                  │ │ [━ ○ ] Tự duyệt tin chủ trọ đã xác thực              │ │
 │                  │ │        listing.auto_approve.trusted_landlord = false  │ │
 │                  │ └─────────────────────────────────────────────────────┘ │
 │                  │                        [Khôi phục mặc định] [Lưu]       │
@@ -5787,7 +5750,7 @@ chứng — cho sửa là mất toàn bộ giá trị. Không có nút xóa kể
                           │  │ │ảnh │Phòng trọ 25m² Q.1     │   │  │    Card [§9.3]
                           │  │ │72px│3.800.000 đ · 25m²     │   │  │
                           │  │ │    │📍 P.Bến Nghé, Q.1     │   │  │
-                          │  │ │    │⭐ 4,5 · Uy tín 87     │   │  │
+                          │  │ │    │⭐ 4,5 (12 lượt)       │   │  │
                           │  │ └────┴───────────────────────┘   │  │
                           │  │           [Xem chi tiết] [♡]     │  │
                           │  ├──────────────────────────────────┤  │
@@ -5855,7 +5818,7 @@ kèm *"Mình tìm với thông tin hiện có nhé, bạn có thể lọc thêm 
 | Ràng buộc | Thể hiện ở UI |
 |---|---|
 | *"Chỉ trả tin Active"* | `ChatbotListingCard` chỉ render tin BE trả (BE dùng `publicStatuses()`, canonical 5.2). FE **không** tự lọc/tự thêm tin từ cache. |
-| *"Không bịa thông tin ngoài DB"* | Mọi số liệu trên card (giá, diện tích, uy tín) lấy nguyên từ response. FE **không** tính toán/suy diễn thêm. |
+| *"Không bịa thông tin ngoài DB"* | Mọi số liệu trên card (giá, diện tích, đánh giá) lấy nguyên từ response. FE **không** tính toán/suy diễn thêm. |
 | *"Không cam kết còn phòng"* | Ghi chú cố định dưới ô nhập: *"Trợ lý chỉ tư vấn dựa trên tin đăng có sẵn trên hệ thống."* — hiện **thường trực**, không ẩn được. |
 | *"Không tư vấn pháp lý, không đặt cọc/thương lượng thay"* | Intent `SENSITIVE`/`OUT_OF_SCOPE` xử lý; UI **không có** nút nào dẫn tới hành vi này. |
 
@@ -5890,7 +5853,7 @@ Admin/Moderator 18 · Chatbot 1.
 
 | # | Component | Props | Mô tả | Dùng ở đâu |
 |---|---|---|---|---|
-| 1 | `ListingCard` | `listing` (obj), `variant` `'vertical'\|'horizontal'\|'compact'`, `showFavorite` (bool, mặc định `true`), `showStatus` (bool), `unavailable` (bool), `onFavoriteToggle` (fn), `actions` (node) | Thẻ tin đăng. Ảnh đại diện (lazy, 16:9), nhãn "Nổi bật" (`PROMO-02`), giá rút gọn, diện tích, khu vực, `TrustScoreBadge` khi `trustLevel ≠ NORMAL`, thời gian tương đối, nút tim. `unavailable` → grayscale + overlay `[§3.9]`. Bọc `<Link>` thật để mở tab mới được. | 5.1.1, 5.1.2, 5.1.4, 5.1.10, 5.2.2, 5.2.8, 5.1.3 (tin tương tự) |
+| 1 | `ListingCard` | `listing` (obj), `variant` `'vertical'\|'horizontal'\|'compact'`, `showFavorite` (bool, mặc định `true`), `showStatus` (bool), `unavailable` (bool), `onFavoriteToggle` (fn), `actions` (node) | Thẻ tin đăng. Ảnh đại diện (lazy, 16:9), nhãn "Nổi bật" (`PROMO-02`), giá rút gọn, diện tích, khu vực, thời gian tương đối, nút tim. `unavailable` → grayscale + overlay `[§3.9]`. Bọc `<Link>` thật để mở tab mới được. | 5.1.1, 5.1.2, 5.1.4, 5.1.10, 5.2.2, 5.2.8, 5.1.3 (tin tương tự) |
 | 2 | `ListingGrid` | `listings` (arr), `loading` (bool), `skeletonCount` (num, mặc định 6), `emptyState` (node), `columns` (obj: `{xs,sm,md,lg,xl}`), `cardVariant` | Lưới `ListingCard` responsive. Tự render `LoadingSkeleton` khi `loading`, `EmptyState` khi rỗng — gọi 1 lần, không lặp logic ở từng trang. Cột mặc định `{xs:1, sm:2, md:2, lg:3, xl:4}` (mục 9.1). | 5.1.1, 5.1.2, 5.1.4, 5.2.2, 5.2.8 |
 | 3 | `SearchFilterPanel` | `value` (obj filter), `onChange` (fn), `onApply` (fn), `onReset` (fn), `mode` `'instant'\|'draft'`, `resultCount` (num), `loading` (bool) | Panel lọc đủ 13 tiêu chí `[§3.7]`. `mode='instant'` (desktop): mỗi thay đổi gọi `onChange` ngay. `mode='draft'` (mobile Drawer): giữ state nháp, chỉ `onApply` khi bấm nút. Nhóm "Ở ghép" tự ẩn/hiện theo `categoryCode`. Bọc `AddressSelector`, `PriceRangeSlider`, `AmenityPicker`. | 5.1.2 |
 | 4 | `PriceRangeSlider` | `min` (num), `max` (num), `value` (`[from,to]`), `onChange` (fn), `step` (num), `marks` (arr), `showInputs` (bool), `unit` (`'đ'\|'m²'`) | Slider 2 đầu + 2 ô nhập tay. Slider **không thể** đảo `from > to` `[§3.7]`. Ô nhập tay: tự hoán đổi khi blur + toast info (5.1.2). Format `vi-VN` khi hiển thị, parse về number khi gửi. Debounce 400ms trước `onChange`. Dùng lại cho cả giá và diện tích. | 5.1.2 (giá + diện tích) |
@@ -5899,7 +5862,7 @@ Admin/Moderator 18 · Chatbot 1.
 | 7 | `ImageGallery` | `images` (arr), `alt` (str), `showThumbnails` (bool), `enableFullscreen` (bool), `aspectRatio` (str, mặc định `'16/9'`) | Ảnh chính + thumbnail. Bấm → viewer full-screen: `←`/`→` chuyển, `Esc` đóng, đếm `3/8`, swipe trên mobile. Ảnh lazy trừ ảnh đầu (`loading="eager"` cho LCP, mục 11.2). `alt` bắt buộc. | 5.1.3, 5.4.6, 5.4.7, 5.4.4 (giấy tờ) |
 | 8 | `AddressSelector` | `value` (`{provinceId, districtId, wardId}`), `onChange` (fn), `required` (bool), `levels` (num 1–3, mặc định 3), `multiple` (bool), `error` (obj), `disabled` (bool) | 3 `Autocomplete` **liên tầng**: chọn Tỉnh → tải Huyện + **reset** Huyện/Xã; chọn Huyện → tải Xã + reset Xã. Dữ liệu từ `catalog` slice (đã cache `[§11.11]`), chỉ gọi API khi chưa có. `multiple` cho khu vực hoạt động (5.3.10). Tìm kiếm bỏ dấu (gõ "quan 1" ra "Quận 1"). | 5.1.2, 5.3.3 (bước 2), 5.3.10 |
 | 9 | `StatusChip` | `status` (str), `type` (`'listing'\|'user'\|'payment'\|'report'\|'comment'\|'review'\|'subscription'\|'verification'`), `size` | Chip trạng thái. Map enum → {màu, nhãn tiếng Việt} theo **bảng 2.1.3** — nguồn sự thật duy nhất, không map lại ở nơi khác. **Luôn có text**, không chỉ màu (mục 1.3). | Khắp nơi: 5.1.3, 5.2.6, 5.2.7, 5.3.2, 5.3.5, 5.3.8, 5.3.9, toàn bộ 5.4 |
-| 10 | `TrustScoreBadge` | `score` (num), `level` (`'NORMAL'\|'RISKY'\|'NEED_REVIEW'`), `variant` `'badge'\|'inline'\|'alert'`, `showWarning` (bool) | Hiển thị điểm uy tín `[§5.8]`. `variant='badge'`: chip số + nhãn ("87 · Tốt"). `variant='alert'`: `<Alert>` cảnh báo nhẹ khi `level ≠ NORMAL` `[§3.8]` *"Tin có cảnh báo uy tín thấp có thể hiển thị nhãn cảnh báo nhẹ"*. **Nhận `level` từ API**, không tự so ngưỡng (không hardcode `trust.threshold.*` — 5.1.3). | 5.1.3, 5.1.4, 5.3.2, 5.3.5, 5.4.4, 5.4.5, 5.4.6, 5.4.7 |
+| 10 | ~~`TrustScoreBadge`~~ | — | **Đã bỏ** — hệ thống không còn điểm uy tín (canonical mục 18). | — |
 | 11 | `SentimentChip` | `label` (`SentimentLabel`), `score` (num), `confidence` (num), `showScore` (bool) | Chip cảm xúc. Map 5 giá trị `SentimentLabel` → {icon, màu, nhãn} (bảng 2.1.3). `confidence < 0.5` → thêm ⚠ + tooltip *"Độ tin cậy thấp"* `[§9.1]`. `PENDING_ANALYSIS` → xám + *"Đang phân tích"*. Có icon **và** text (mục 1.3). | 5.3.5, 5.4.9, 5.4.16 |
 | 12 | `RatingStars` | `value` (num), `onChange` (fn), `readOnly` (bool), `size`, `showValue` (bool), `count` (num), `precision` (num) | Sao đánh giá 1–5 `[§3.12]`. `readOnly` → hiện `4,2/5 (12 đánh giá)`. Editable → `aria-label` từng sao ("1 sao", "2 sao"…) cho screen reader. | 5.1.3, 5.1.4, 5.2.7, 5.4.10 |
 | 13 | `CommentThread` | `comments` (arr), `listingId`, `ownerId`, `currentUser`, `onReply` (fn), `onEdit` (fn), `onDelete` (fn), `onReport` (fn), `loading`, `hasMore`, `onLoadMore` | Bình luận 2 cấp (`ParentCommentId` `[§3.11]` — **không** lồng sâu hơn, tránh vỡ layout mobile). Badge "Chủ trọ" cho `userId === ownerId` `[§2.7]` CMT-03. Nút Sửa/Xóa chỉ hiện với **chính chủ** trong `comment.edit_window_minutes` (nhận `canEdit` từ API). Chủ trọ **không** thấy nút xóa bình luận người khác `[§3.11]` *"Chủ trọ không được xóa bình luận của người thuê, chỉ được báo cáo hoặc phản hồi"*. Nội dung render qua `RichTextViewer`. | 5.1.3 |
@@ -7251,14 +7214,14 @@ vô hạn cho kết quả tìm kiếm.
 | **ADR-04** | **`RichTextViewer` render plain text bằng JSX, cấm `dangerouslySetInnerHTML` toàn codebase + ESLint `react/no-danger: error`** | DOMPurify + `dangerouslySetInnerHTML`; `react-markdown` | Canonical mục 8 nói thẳng: *"escape output ở React (mặc định), **không** dùng `dangerouslySetInnerHTML` ở bất kỳ đâu"*. BE đã strip toàn bộ HTML (*"allowlist rỗng cho mô tả"*) → nội dung tới FE là plain text, **không có nhu cầu** parse HTML. Thêm DOMPurify là thêm dependency ngoài canonical **và** thêm bề mặt tấn công cho thứ không cần. ESLint rule biến quy tắc thành ràng buộc CI, không phụ thuộc trí nhớ người review. |
 | **ADR-05** | **Cảnh báo lệch giá là `Alert` cảnh báo mềm, KHÔNG phải lỗi validation, KHÔNG chặn submit** | Yup rule chặn khi lệch > 35%; disable nút "Gửi duyệt" | Ba nguồn nói cùng một điều: `[§3.3]` *"Tin có giá quá bất thường... không bị chặn tự động"*; `[§9.4]` *"Không chặn đăng tin chỉ vì giá khác dự đoán"*; canonical 10.4 bước 6 *"cảnh báo mềm, **tuyệt đối không chặn đăng tin**"*. Giá thị trường có ngoại lệ thật (phòng cũ, vị trí xấu, chủ muốn cho thuê nhanh). Chặn = từ chối tin hợp lệ. Cờ lệch giá dùng để Moderator **ưu tiên xem**, không để cấm. |
 | **ADR-06** | **Không optimistic update cho mọi thao tác đổi trạng thái tin và thao tác admin — luôn refetch** | Optimistic toàn bộ cho UI mượt | Trạng thái tin do `ListingStateMachine` ở BE quyết (canonical 5.1) với các luật FE không thể biết trước: `LOCKED` chặn `RENEW`/`SUBMIT`/`SOFT_DELETE`; `UNLOCK` → `HIDDEN` (**không** phải `ACTIVE`); `RESUBMIT_AFTER_EDIT` phụ thuộc trường nào bị sửa. Đoán ở FE sẽ hiển thị sai rồi giật về — tệ hơn chờ 200ms. Optimistic **chỉ** dùng cho thao tác đơn giản, có thể đảo ngược: lưu tin, đọc thông báo, theo dõi, gửi tin nhắn (mục 7.2). |
-| **ADR-07** | **`content` của đánh giá là BẮT BUỘC khi `rating ≤ 2`** | Luôn tùy chọn | `[§3.12]` viết *"Nội dung đánh giá **có thể** bắt buộc nếu rating <= 2"* — mơ hồ. Quyết định của Senior Architect: **bắt buộc**. Căn cứ: (a) `[§3.12]` cũng nói *"Đánh giá quá tiêu cực vẫn được hiển thị nếu không vi phạm nội dung, nhưng được AI và Admin theo dõi"* → Moderator cần **lý do** mới xử lý được, 1 sao trống rỗng không hành động được gì; (b) `[§5.8]` cho đánh giá trọng số ×5 trong điểm uy tín — điểm phạt nặng phải kèm giải trình; (c) buộc viết lý do làm giảm đánh giá bốc đồng/phá hoại, đúng tinh thần `[§3.12]` *"giảm đánh giá ảo"*. |
+| **ADR-07** | **`content` của đánh giá là BẮT BUỘC khi `rating ≤ 2`** | Luôn tùy chọn | `[§3.12]` viết *"Nội dung đánh giá **có thể** bắt buộc nếu rating <= 2"* — mơ hồ. Quyết định của Senior Architect: **bắt buộc**. Căn cứ: (a) `[§3.12]` cũng nói *"Đánh giá quá tiêu cực vẫn được hiển thị nếu không vi phạm nội dung, nhưng được AI và Admin theo dõi"* → Moderator cần **lý do** mới xử lý được, 1 sao trống rỗng không hành động được gì; (b) đánh giá thấp kéo giảm số sao trung bình của tin và chủ trọ — phải kèm giải trình; (c) buộc viết lý do làm giảm đánh giá bốc đồng/phá hoại, đúng tinh thần `[§3.12]` *"giảm đánh giá ảo"*. |
 | **ADR-08** | **Menu admin lọc theo permission qua cấu hình khai báo (`ADMIN_MENU` + `filterMenu`), không `if role === 'ADMIN'` rải rác** | Kiểm tra role trực tiếp trong JSX từng mục | Canonical mục 12 yêu cầu *"menu render theo permission — Moderator không thấy mục tài chính/cấu hình"*. Kiểm tra rải rác trong JSX: thêm permission mới phải sửa 10 chỗ, sót một chỗ là rò rỉ. Cấu hình khai báo tập trung → đối chiếu trực tiếp với bảng permission canonical mục 4.2 khi review, và group rỗng tự biến mất (không còn tiêu đề nhóm trống). Vẫn **không** thay thế `@PreAuthorize` ở BE `[§11.2]`. |
 | **ADR-09** | **Form tạo tin auto-save thành `DRAFT` ngay sau bước 1** | Chỉ lưu khi bấm nút; giữ toàn bộ trong local state tới bước 6 | Hai lý do bắt buộc: (a) **kỹ thuật** — endpoint ảnh là `/api/listings/{id}/images` (`[§12.3]`), phải có `listing.id` mới upload được → buộc tạo record trước bước ảnh; (b) **UX** — `[§11.7]` nhấn mạnh form chia bước cho mobile, mà mobile hay bị gián đoạn (cuộc gọi, hết pin, chuyển app). Mất form 6 bước là không chấp nhận được. `DRAFT` đã có sẵn trong state machine (canonical 5.1 `SAVE_DRAFT`) → auto-save **không** thêm trạng thái mới nào. |
 | **ADR-10** | **Chat dùng polling 10s, không WebSocket** | STOMP/SockJS; SSE | `[§13.2]` nói thẳng: *"Chat nội bộ: Chỉ cần nhắn tin cơ bản, **không cần realtime phức tạp** nếu thiếu thời gian"*. Canonical mục 1.2 **không** có dependency WebSocket → thêm là vi phạm hợp đồng kỹ thuật. Polling 10s (chỉ khi tab hiển thị) đủ cho nghiệp vụ hỏi-đáp thuê trọ, không ai cần độ trễ dưới giây. Chi phí: vài request/phút/người dùng đang mở chat — chấp nhận được ở quy mô đồ án. |
 | **ADR-11** | **`AdminLayout` tối ưu cho `md+`; `xs` dùng được nhưng không phải trải nghiệm chính** | Thiết kế mobile-first đầy đủ cho cả 18 trang admin | `[§11.7]` yêu cầu responsive nhưng nêu rõ ưu tiên: *"Mobile ưu tiên **tìm kiếm nhanh, bộ lọc dễ dùng, nút liên hệ rõ**"* và *"Form **đăng tin** cần chia bước"* — toàn bộ là nghiệp vụ **người thuê và chủ trọ**. `[§4.3]` mô tả quy trình Admin là công việc bàn giấy (duyệt tin, xem dashboard, đối soát). Đầu tư 18 trang admin cho mobile là phân bổ công sức sai chỗ. Vẫn đảm bảo: `xs` **không vỡ layout**, bảng → card (mục 9.2), thao tác cốt lõi (duyệt/từ chối) làm được trên điện thoại. |
 | **ADR-12** | **Font `Be Vietnam Pro` self-host qua `@fontsource`, không Google Fonts CDN** | Roboto mặc định MUI; Google Fonts CDN | Roboto có tiếng Việt nhưng dấu mũ + dấu thanh chồng nhau (`ế`, `ộ`, `ữ`) bị chật ở 14px — cỡ chữ chính trên mobile, mà `[§11.7]` ưu tiên mobile. Be Vietnam Pro thiết kế riêng cho tiếng Việt, đủ 134 ký tự có dấu, SIL OFL. Self-host vì canonical 13.5 yêu cầu `docker compose up --build` chạy được toàn hệ thống — phụ thuộc CDN thì máy chấm offline sẽ fallback font xấu. Chi phí: +2 dependency asset (`@fontsource/*`), đã ghi **[BỔ SUNG NGOÀI CANONICAL]** ở mục 2.2. |
 | **ADR-13** | **`RoleRoute` = OR (đủ một role); `PermissionRoute` đã loại bỏ** | Backend role-only, JWT chỉ có `role`; frontend lọc menu/route bằng role để khớp chính sách hiện hành. | Role guard tập trung trong router/menu config; không còn hook/route permission. |
-| **ADR-14** | **Ngưỡng nghiệp vụ (trust, lệch giá, hạn sửa, hạn mức gia hạn) do BE trả kèm response dưới dạng cờ/level, FE KHÔNG tự so sánh** | FE gọi `/api/system-configs/public` rồi tự so ngưỡng | Canonical 13.4: *"Không hardcode ngưỡng — đọc từ `SystemConfig`"*. Nếu FE tự so, logic ngưỡng bị **nhân đôi** ở 2 nơi (FE + BE) → Admin đổi `trust.threshold.risky` mà FE cache config cũ thì hiển thị mâu thuẫn với hành vi BE. Do đó API trả sẵn `trustLevel`, `canEdit`, `editableUntil`, `freeRenewRemaining`, `autoHideRemaining`, `priceDeviationFlag`. FE chỉ đọc config công khai cho **validation form** (`listing.title.min/max`…) — nơi bắt buộc phải biết giới hạn để báo lỗi sớm, và BE vẫn validate lại (canonical 13.2). |
+| **ADR-14** | **Ngưỡng nghiệp vụ (lệch giá, hạn sửa, hạn mức gia hạn) do BE trả kèm response dưới dạng cờ/level, FE KHÔNG tự so sánh** | FE gọi `/api/system-configs/public` rồi tự so ngưỡng | Canonical 13.4: *"Không hardcode ngưỡng — đọc từ `SystemConfig`"*. Nếu FE tự so, logic ngưỡng bị **nhân đôi** ở 2 nơi (FE + BE) → Admin đổi `ai.price.deviation_flag_ratio` mà FE cache config cũ thì hiển thị mâu thuẫn với hành vi BE. Do đó API trả sẵn `canEdit`, `editableUntil`, `freeRenewRemaining`, `autoHideRemaining`, `priceDeviationFlag`. FE chỉ đọc config công khai cho **validation form** (`listing.title.min/max`…) — nơi bắt buộc phải biết giới hạn để báo lỗi sớm, và BE vẫn validate lại (canonical 13.2). |
 | **ADR-15** | **Tin non-public + không có `LISTING_VIEW_ANY` → trả 404, KHÔNG phải 403** | Hiện 403 "Bạn không có quyền xem tin này" | Hiện 403 xác nhận với người lạ rằng **tin đó tồn tại** — rò rỉ thông tin. Kẻ tấn công có thể dò id để đếm tin bị khóa/ẩn, hoặc biết tin của đối thủ đang bị kiểm duyệt. `[§11.1]` *"Không lộ thông tin nhạy cảm trong API response"*. Áp dụng tương tự: hồ sơ user `LOCKED`/`DELETED` → 404 (5.1.4), và "Quên mật khẩu" luôn báo thành công dù email không tồn tại (5.1.7). |
 | **ADR-16** | **Trang chủ hiển thị "Tin đăng nổi bật" thay vì "Gợi ý cho bạn" khi chưa có hồ sơ hành vi** | Luôn gọi là "Gợi ý cho bạn" | `[§9.2]` cold start cho khách mới trả về *"tin mới nhất, tin phổ biến"* — đó **không phải** gợi ý cá nhân hóa. Gắn nhãn "Gợi ý cho bạn" cho danh sách chung là nói dối người dùng, và họ nhận ra ngay (thấy tin ở tỉnh khác). Đổi tiêu đề theo cờ `personalized` do BE trả (BE biết có `UserPreferenceProfile` hay không). Trung thực về năng lực AI cũng đúng tinh thần `[§9.4]` *"Không hiển thị AI như nguồn đảm bảo chính xác tuyệt đối"*. |
 
@@ -7329,7 +7292,6 @@ phải có để hiện thực chức năng đã nêu trong tài liệu nghiệp
 
 | Field | Trong response của | Vì sao |
 |---|---|---|
-| `trustLevel` (`NORMAL`/`RISKY`/`NEED_REVIEW`) | `GET /api/listings/{id}`, listing trong list | FE không tự so `trust.threshold.*` |
 | `canReview`, `canEdit`, `editableUntil` | listing detail, comment, review | FE không tự tính `review.edit_window_hours`, `comment.edit_window_minutes`, `review.require_contact` |
 | `freeRenewRemaining` | `GET /api/listings/my` | FE không tự đếm `listing.renew.free_per_month` |
 | `autoHideRemaining` | admin report list | FE không tự tính `moderation.autohide.*` |

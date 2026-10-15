@@ -88,9 +88,7 @@ const adminApi = {
   getAiConfig: () => unwrap(axiosClient.get('/admin/ai/config')),
   updateAiConfig: (payload) => unwrap(axiosClient.put('/admin/ai/config', payload)),
   getAiLogs: (params) => unwrap(axiosClient.get('/admin/ai/logs', { params })),
-  getAiAlerts: (params) => unwrap(axiosClient.get('/admin/ai/alerts', { params })),
   getPriceDeviations: (params) => unwrap(axiosClient.get('/admin/ai/price-deviations', { params })),
-  reanalyzeSentiment: (payload) => unwrap(axiosClient.post('/admin/ai/sentiment/reanalyze', payload)),
 
   // ----- Nhật ký kiểm toán (AUDIT_LOG_VIEW) -----
   getAuditLogs: (params) => unwrap(axiosClient.get('/admin/audit-logs', { params })),
