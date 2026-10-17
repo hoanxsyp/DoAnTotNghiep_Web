@@ -312,6 +312,9 @@ services:
       DB_NAME: ${CHATBOT_DB_NAME:-roomfinder}
       DB_USER: ${CHATBOT_DB_USER:-root}
       DB_PASSWORD: ${CHATBOT_DB_PASSWORD:-root}
+      # chatbot-mysql là DB riêng của chatbot -> tự tạo bảng + seed phòng demo.
+      # Khi chuyển sang DB của web chính thì PHẢI bỏ dòng này (mặc định never).
+      SQL_INIT_MODE: always
       REDIS_HOST: chatbot-redis
       REDIS_PORT: 6379
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}

@@ -107,6 +107,9 @@ chưa train thì `/health` trả `degraded` và request trả 503, xem `nlu-serv
 
 1. Bật MySQL (tạo DB `roomfinder`) và Redis.
 2. Cấu hình qua biến môi trường (mặc định: `localhost`, user `root`/`root`).
+   Lần đầu với DB riêng `roomfinder`, đặt `SQL_INIT_MODE=always` để tạo bảng + seed
+   59 phòng demo (`schema.sql`, `data.sql`). Mặc định là `never` để không bao giờ
+   ghi bảng/phòng giả vào DB của web chính.
 3. Build & run (ở thư mục gốc repo — nơi có `pom.xml`):
 
 ```bash

@@ -22,9 +22,12 @@ spring:
     # schema.sql/data.sql chạy SAU khi JPA khởi tạo
     defer-datasource-initialization: true
 
+  # schema.sql + data.sql (bảng room + 59 phòng demo) chỉ dành cho DB RIÊNG của
+  # chatbot. Mặc định never: trỏ vào DB của web chính sẽ không tạo bảng / seed
+  # phòng giả. Dựng DB demo riêng thì đặt SQL_INIT_MODE=always.
   sql:
     init:
-      mode: always
+      mode: ${SQL_INIT_MODE:never}
       encoding: UTF-8
 
   data:

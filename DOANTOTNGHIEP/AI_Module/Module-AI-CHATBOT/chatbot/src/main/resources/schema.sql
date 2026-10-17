@@ -1,7 +1,7 @@
 -- =====================================================================
 -- Schema module Chatbot AI tìm phòng — MVP (Giai đoạn 1)
 -- Tương ứng §5.2 (poi), §8 (room + chat_log) của SPEC.
--- Chạy tự động khi khởi động (spring.sql.init.mode=always).
+-- Chạy tự động khi khởi động nếu SQL_INIT_MODE=always (mặc định never).
 -- =====================================================================
 
 -- --- Bảng ROOM ---------------------------------------------------------
