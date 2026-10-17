@@ -2,6 +2,9 @@ package com.webtro.modules.catalog.repository;
 
 import com.webtro.modules.catalog.entity.Ward;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -24,4 +27,12 @@ public interface WardRepository extends JpaRepository<Ward, Long> {
 
     /** Kiểm tra tồn tại theo mã. */
     boolean existsByCode(String code);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = """
+            UPDATE wards
+            SET listing_count = GREATEST(0, CAST(listing_count AS SIGNED) + :delta)
+            WHERE id = :wardId
+            """, nativeQuery = true)
+    int incrementListingCount(@Param("wardId") Long wardId, @Param("delta") int delta);
 }

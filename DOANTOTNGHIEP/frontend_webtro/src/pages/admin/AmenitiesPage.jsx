@@ -63,7 +63,7 @@ const AmenitiesPage = () => {
   };
 
   const toggle = async (row) => {
-    try { await adminApi.toggleAmenity(row.id); reload(); } catch (err) { notify.apiError(err); }
+    try { await adminApi.toggleAmenity(row.id, !(row.active ?? true)); reload(); } catch (err) { notify.apiError(err); }
   };
 
   const handleDelete = async () => {

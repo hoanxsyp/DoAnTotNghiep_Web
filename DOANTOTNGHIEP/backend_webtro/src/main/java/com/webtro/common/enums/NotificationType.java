@@ -37,6 +37,16 @@ public enum NotificationType {
     /** Có đánh giá mới */
     NEW_REVIEW("Có đánh giá mới"),
 
+    RENTAL_REQUEST_CREATED("Có yêu cầu thuê phòng mới"),
+
+    RENTAL_REQUEST_APPROVED("Yêu cầu thuê phòng được duyệt"),
+
+    RENTAL_REQUEST_REJECTED("Yêu cầu thuê phòng bị từ chối"),
+
+    RENTAL_CONFIRMED("Đã xác nhận thuê phòng"),
+
+    RENTAL_CHECKED_OUT("Đã xác nhận trả phòng"),
+
     /** Thanh toán thành công */
     PAYMENT_SUCCESS("Thanh toán thành công"),
 

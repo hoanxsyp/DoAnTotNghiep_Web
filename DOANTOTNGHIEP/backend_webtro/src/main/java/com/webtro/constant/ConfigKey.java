@@ -71,7 +71,6 @@ public final class ConfigKey {
     public static final String VIEW_DEDUP_MINUTES = "view.dedup_minutes";
     public static final String COMMENT_EDIT_WINDOW_MINUTES = "comment.edit_window_minutes";
     public static final String REVIEW_EDIT_WINDOW_HOURS = "review.edit_window_hours";
-    public static final String REVIEW_REQUIRE_CONTACT = "review.require_contact";
     public static final String CHAT_MESSAGE_MAX_LENGTH = "chat.message.max_length";
     public static final String CHATBOT_MESSAGE_MAX_LENGTH = "chatbot.message.max_length";
 

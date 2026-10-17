@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
@@ -51,7 +51,7 @@ const ProfilePage = () => {
     defaultValues: { fullName: '', gender: 'UNKNOWN', dateOfBirth: null, address: '', bio: '' },
   });
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const data = await userApi.getMe();
@@ -69,9 +69,9 @@ const ProfilePage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [reset]);
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
+  useEffect(() => { load(); }, [load]);
 
   const onSubmit = async (values) => {
     try {

@@ -28,6 +28,9 @@ public enum ListingStatus {
     /** Đã đóng */
     CLOSED("Đã đóng"),
 
+    /** Đã cho thuê */
+    RENTED("Đã cho thuê"),
+
     /** Bị khóa */
     LOCKED("Bị khóa"),
 

@@ -12,12 +12,7 @@ const catalogApi = {
   getDistricts: (provinceId) => unwrap(axiosClient.get(`/provinces/${provinceId}/districts`)),
   getWards: (districtId) => unwrap(axiosClient.get(`/districts/${districtId}/wards`)),
   getAmenities: (params) => unwrap(axiosClient.get('/amenities', { params })),
-  // Nội dung tĩnh công khai (trang Giới thiệu / Điều khoản) từ SystemConfig page.about/page.terms.
-  getAboutContent: () => unwrap(axiosClient.get('/content/about')),
-  getTermsContent: () => unwrap(axiosClient.get('/content/terms')),
-  // Backend không expose cấu hình công khai (ngưỡng nghiệp vụ chỉ ở /admin/system-configs cần quyền).
-  // Form đăng tin dùng ràng buộc mặc định phía client; trả null để nơi gọi tự fallback.
-  getPublicConfigs: () => Promise.resolve(null),
+  getPublicConfigs: () => unwrap(axiosClient.get('/content/listing-configs')),
 
   // ----- Quản trị: danh mục -----
   createCategory: (payload) => unwrap(axiosClient.post('/admin/categories', payload)),

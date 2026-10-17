@@ -29,6 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 
@@ -91,9 +92,10 @@ public class HistoryServiceImpl implements HistoryService {
     @Transactional(readOnly = true)
     public PageResponse<ViewHistoryResponse> listViews(Long userId, LocalDate from, LocalDate to,
                                                        Pageable pageable) {
-        // Ghi chú: ViewHistoryRepository (đã chốt) không có finder lọc theo khoảng ngày; tham số
-        // from/to được nhận nhưng không lọc ở tầng DB. Cần bổ sung finder có @Query nếu muốn lọc.
-        Page<ViewHistory> page = viewHistoryRepository.findByUserIdOrderByViewedAtDesc(userId, pageable);
+        Instant fromInstant = from == null ? null : from.atStartOfDay(ZoneOffset.UTC).toInstant();
+        Instant toExclusive = to == null ? null : to.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+        Page<ViewHistory> page = viewHistoryRepository.findByUserIdAndViewedAtRange(
+                userId, fromInstant, toExclusive, pageable);
         List<Long> listingIds = page.getContent().stream().map(ViewHistory::getListingId).toList();
         Map<Long, ListingGateway.ListingBrief> briefs = listingGateway.getBriefs(listingIds);
         return PageResponse.from(page, v -> {

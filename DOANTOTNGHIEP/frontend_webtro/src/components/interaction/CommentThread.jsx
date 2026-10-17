@@ -11,7 +11,6 @@ import {
   Divider,
   Menu,
   MenuItem,
-  Tooltip,
 } from '@mui/material';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import ReplyIcon from '@mui/icons-material/Reply';
@@ -29,7 +28,7 @@ import { fromNow } from '@/utils/format';
  * - Chủ trọ KHÔNG thấy nút xóa bình luận người khác — chỉ báo cáo/phản hồi [§3.11].
  * - Nội dung render qua RichTextViewer (chống XSS).
  *
- * Props: comments (arr), listingId, ownerId, currentUser (obj), onReply(parentId, content),
+ * Props: comments (arr), ownerId, currentUser (obj), onReply(parentId, content),
  *        onEdit(id, content), onDelete(id), onReport(comment), loading, hasMore, onLoadMore
  *
  * Mỗi comment: { id, userId, userName, userAvatar, content, createdAt, editedAt,
@@ -230,7 +229,6 @@ function CommentItem({
 
 export default function CommentThread({
   comments = [],
-  listingId,
   ownerId,
   currentUser,
   onReply,

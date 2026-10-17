@@ -1,17 +1,20 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Box, Grid, Stack, TextField, MenuItem, FormControlLabel, Switch, Pagination, Chip,
+  Box, Grid, Stack, TextField, MenuItem, FormControlLabel, Switch, Pagination, Chip, Button,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
+import HomeWorkOutlinedIcon from '@mui/icons-material/HomeWorkOutlined';
 import favoriteApi from '@/api/favoriteApi';
 import ListingCard from '@/components/listing/ListingCard';
 import PageHeader from '@/components/dashboard/PageHeader';
 import LoadingSkeleton from '@/components/common/LoadingSkeleton';
 import EmptyState from '@/components/common/EmptyState';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
+import RentalRequestDialog from '@/components/rental/RentalRequestDialog';
+import useAuth from '@/hooks/useAuth';
 import notify from '@/utils/toast';
-import { PAGE_SIZE } from '@/constants';
+import { PAGE_SIZE, ROLES } from '@/constants';
 
 const SORTS = [
   { value: 'createdAt,desc', label: 'Lưu gần nhất' },
@@ -21,6 +24,7 @@ const SORTS = [
 
 const SavedListingsPage = () => {
   const navigate = useNavigate();
+  const { role } = useAuth();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
@@ -29,6 +33,7 @@ const SavedListingsPage = () => {
   const [sort, setSort] = useState('createdAt,desc');
   const [availableOnly, setAvailableOnly] = useState(false);
   const [removing, setRemoving] = useState(null);
+  const [renting, setRenting] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -101,6 +106,17 @@ const SavedListingsPage = () => {
                   showFavorite
                   unavailable={!!it.notAvailable}
                   onFavoriteToggle={() => setRemoving(it)}
+                  actions={role === ROLES.TENANT && !it.notAvailable ? (
+                    <Button
+                      size="small"
+                      variant="contained"
+                      startIcon={<HomeWorkOutlinedIcon />}
+                      onClick={() => setRenting(it)}
+                      fullWidth
+                    >
+                      Thuê phòng
+                    </Button>
+                  ) : null}
                 />
               </Grid>
             ))}
@@ -121,6 +137,11 @@ const SavedListingsPage = () => {
         severity="warning"
         onConfirm={handleConfirmRemove}
         onCancel={() => setRemoving(null)}
+      />
+      <RentalRequestDialog
+        open={!!renting}
+        listing={renting}
+        onClose={() => setRenting(null)}
       />
     </Box>
   );

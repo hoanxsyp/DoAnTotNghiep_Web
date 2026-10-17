@@ -163,9 +163,9 @@ public class ContactServiceImpl implements ContactService {
                 throw new ForbiddenException(ErrorCode.LISTING_FORBIDDEN);
             }
         }
-        // Repository (đã chốt) chỉ có finder theo owner + phân trang; lọc listingId/type/ngày áp
-        // dụng ở tầng bộ nhớ trên trang hiện tại. Bổ sung Specification nếu cần lọc ở DB.
-        Page<ContactLog> page = contactLogRepository.findByOwnerIdAndDeletedAtIsNull(ownerId, pageable);
+        ContactType entityType = type == null ? null : type.toEntityType();
+        Page<ContactLog> page = contactLogRepository.findByOwnerWithFilters(
+                ownerId, listingId, entityType, from, to, pageable);
 
         List<Long> tenantIds = page.getContent().stream().map(ContactLog::getUserId).distinct().toList();
         Map<Long, UserGateway.UserBrief> tenants = userGateway.getBriefs(tenantIds);
@@ -183,12 +183,12 @@ public class ContactServiceImpl implements ContactService {
                             lb == null ? null : lb.title(), convId, tenants.get(log.getUserId()));
                 });
 
-        long viewPhone = page.getContent().stream()
-                .filter(l -> l.getContactType() == ContactType.VIEW_PHONE).count();
-        long form = page.getContent().stream()
-                .filter(l -> l.getContactType() == ContactType.FORM).count();
-        long chat = page.getContent().stream()
-                .filter(l -> l.getContactType() == ContactType.CHAT).count();
+        long viewPhone = contactLogRepository.countByOwnerWithFilters(
+                ownerId, listingId, ContactType.VIEW_PHONE, from, to);
+        long form = contactLogRepository.countByOwnerWithFilters(
+                ownerId, listingId, ContactType.FORM, from, to);
+        long chat = contactLogRepository.countByOwnerWithFilters(
+                ownerId, listingId, ContactType.CHAT, from, to);
 
         return LandlordContactPageResponse.builder()
                 .page(mapped)

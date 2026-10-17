@@ -5,7 +5,7 @@
 Tài liệu này tổng hợp các use case thực sự có trong source code của hệ thống Webtro - website quảng cáo, tìm kiếm và quản lý phòng trọ có tích hợp AI hỗ trợ. Việc phân tích dựa trên các nhóm mã nguồn chính:
 
 - Frontend: cấu hình route, menu theo vai trò, các API client và các màn hình chính trong `frontend_webtro/src`.
-- Backend: các controller/service theo nhóm `auth`, `listing`, `search`, `interaction`, `moderation`, `payment`, `ai`, `user`, `admin`, `notification`.
+- Backend: các controller/service theo nhóm `auth`, `listing`, `search`, `interaction`, `rental`, `moderation`, `payment`, `ai`, `user`, `admin`, `notification`.
 - Tài liệu dự án: các file trong thư mục `docs` và `README.md`.
 
 Nguyên tắc liệt kê: không tách các endpoint kỹ thuật nhỏ thành use case độc lập nếu chúng chỉ là bước con của một nghiệp vụ lớn. Ví dụ: đếm thông báo chưa đọc, refresh token, đánh dấu đã đọc, upload ảnh tin đăng... được mô tả trong use case cha thay vì liệt kê thành use case riêng.
@@ -16,7 +16,7 @@ Nguyên tắc liệt kê: không tách các endpoint kỹ thuật nhỏ thành u
 | --- | --- | --- |
 | Khách vãng lai | Truy cập website khi chưa đăng nhập | Có thể xem trang công khai, tìm kiếm, xem chi tiết tin, xem đánh giá/bình luận công khai, sử dụng chatbot và nhận gợi ý công khai. |
 | Người dùng đã xác thực | Actor tổng quát cho các tài khoản đã đăng nhập | Là actor cha của Người thuê, Chủ trọ, Kiểm duyệt viên và Quản trị viên. |
-| Người thuê | Người tìm phòng, tương tác với tin đăng và chủ trọ | Có thể lưu tin, xem lịch sử, liên hệ, chat, bình luận, đánh giá, báo cáo vi phạm, theo dõi chủ trọ. Có thể đăng tin tìm người ở ghép, bị giới hạn ở danh mục `ROOMMATE`. |
+| Người thuê | Người tìm phòng, tương tác với tin đăng và chủ trọ | Có thể lưu tin, xem lịch sử, liên hệ, chat, bình luận, báo cáo vi phạm và theo dõi chủ trọ. Chỉ được đánh giá tin khi đã được xác nhận `RENTED` hoặc `CHECKED_OUT`. Có thể đăng tin tìm người ở ghép, bị giới hạn ở danh mục `ROOMMATE`. |
 | Chủ trọ | Người đăng và quảng cáo phòng trọ | Có thể tạo/quản lý tin đăng, xem lead/liên hệ, nhắn tin, thanh toán gói quảng bá, quản lý hồ sơ chủ trọ và yêu cầu xác minh. |
 | Kiểm duyệt viên | Người kiểm soát chất lượng nội dung | Có thể duyệt tin, xử lý báo cáo, quản lý bình luận/đánh giá vi phạm, xem log/cảnh báo AI và xử lý hồ sơ chủ trọ. Không quản lý tài chính, cấu hình hệ thống, danh mục cốt lõi. |
 | Quản trị viên | Người quản trị toàn bộ nền tảng | Có đầy đủ quyền quản trị người dùng, tin đăng, danh mục, gói dịch vụ, thanh toán, AI, cấu hình hệ thống, thống kê và audit log. |
@@ -45,7 +45,7 @@ flowchart LR
   AI["Dịch vụ AI"]
   PG["Cổng thanh toán VNPAY"]
   Notify["Email/Thông báo"]
-  Scheduler["Bộ lập lịch"]V
+  Scheduler["Bộ lập lịch"]
 
   UC01(("UC-01<br/>Tìm kiếm và xem tin"))
   UC02(("UC-02<br/>Đăng và quản lý tin"))
@@ -57,6 +57,7 @@ flowchart LR
   UC08(("UC-08<br/>Kiểm duyệt"))
   UC09(("UC-09<br/>Quản trị vận hành"))
   UC10(("UC-10<br/>Tác vụ nền"))
+  UC11(("UC-11<br/>Yêu cầu và xác nhận thuê phòng"))
 
   Guest --> UC01
   Guest --> UC04
@@ -65,10 +66,12 @@ flowchart LR
   Tenant --> UC02
   Tenant --> UC05
   Tenant --> UC06
+  Tenant --> UC11
   Landlord --> UC02
   Landlord --> UC03
   Landlord --> UC05
   Landlord --> UC06
+  Landlord --> UC11
   Mod --> UC08
   Admin --> UC08
   Admin --> UC09
@@ -82,6 +85,7 @@ flowchart LR
   UC03 -.->|extend| UC02
   UC05 -.->|extend| UC01
   UC06 -.->|extend| UC01
+  UC11 -.->|extend| UC01
   UC02 -.->|include| UC08
   UC08 -.->|include| UC06
   UC10 -.->|include| UC02
@@ -692,7 +696,7 @@ Main ..> UC07 : <<include>>
 | Mục tiêu | Cho phép người dùng lưu lại tin quan tâm, theo dõi chủ trọ, bình luận, đánh giá và báo cáo nội dung vi phạm. |
 | Actor chính | Người thuê, Chủ trọ, Người dùng đã xác thực. |
 | Actor phụ | Kiểm duyệt viên, Dịch vụ AI. |
-| Tiền điều kiện | Actor đã đăng nhập đối với thao tác tương tác; đối tượng được tương tác phải tồn tại và hợp lệ. |
+| Tiền điều kiện | Actor đã đăng nhập đối với thao tác tương tác; đối tượng phải tồn tại và hợp lệ. Riêng đánh giá yêu cầu quan hệ thuê `RENTED`/`CHECKED_OUT` với tin. |
 | Hậu điều kiện | Tương tác được ghi nhận; nội dung vi phạm có thể tạo report/cảnh báo và được đưa vào luồng kiểm duyệt. |
 
 Hoạt động chính:
@@ -701,7 +705,7 @@ Hoạt động chính:
 2. Xem/xóa lịch sử xem tin và lịch sử tìm kiếm.
 3. Theo dõi/bỏ theo dõi chủ trọ và xem danh sách chủ trọ đang theo dõi.
 4. Tạo, trả lời, sửa, xóa bình luận theo quyền tác giả/kiểm duyệt.
-5. Kiểm tra điều kiện đánh giá, tạo/sửa/xóa đánh giá tin đăng hoặc chủ trọ.
+5. Kiểm tra `rental_requests` có trạng thái `RENTED`/`CHECKED_OUT`, sau đó mới cho tạo đánh giá; mỗi người chỉ đánh giá một tin một lần. Liên hệ, bình luận hoặc lưu tin không cấp quyền đánh giá.
 6. Gửi báo cáo vi phạm đối với tin đăng, bình luận, đánh giá hoặc người dùng; có thể đính kèm bằng chứng.
 7. Hệ thống kiểm tra trùng lặp/rate limit. Khi nhiều tài khoản báo cáo cùng mục tiêu trong thời gian ngắn, hệ thống có thể tự động đánh dấu cần xem xét.
 
@@ -1236,6 +1240,21 @@ Main ..> UC09 : <<include>>
 @enduml
 ```
 
+### UC-11. Yêu cầu và xác nhận thuê phòng (Hòa)
+
+| Mục | Nội dung |
+| --- | --- |
+| Actor chính | Người thuê, Chủ trọ |
+| Tiền điều kiện | Người thuê đã đăng nhập; tin còn public và chưa ở trạng thái `RENTED` |
+| Khởi tạo | Từ chi tiết tin hoặc danh sách tin đã lưu, người thuê chọn ngày xem phòng và xác nhận gửi yêu cầu |
+| Xử lý của chủ trọ | Chủ trọ xem yêu cầu, đồng ý hoặc từ chối; sau khi hai bên gặp và ký hợp đồng ngoài hệ thống, chủ trọ xác nhận đã thuê |
+| Kết quả khi thuê | Yêu cầu chuyển `RENTED`, tin chuyển `RENTED`; các yêu cầu đang mở khác của cùng phòng bị đóng theo nghiệp vụ |
+| Trả phòng | Chủ trọ xác nhận `CHECKED_OUT`; tin có thể quay lại trạng thái cho thuê và người đã thuê vẫn đủ điều kiện đánh giá |
+| Bất biến | Tại một thời điểm, một phòng chỉ có một yêu cầu `RENTED`; một người thuê chỉ có một quan hệ `RENTED` |
+| Quyền đánh giá | Chỉ user có rental request `RENTED` hoặc `CHECKED_OUT` với chính tin đó được chấm sao và nhận xét |
+
+Luồng gặp mặt, xem phòng và ký hợp đồng diễn ra ngoài website; hệ thống chỉ quản lý yêu cầu, thông báo và trạng thái xác nhận.
+
 ## 5. Ma trận quan hệ chính giữa các use case
 
 | Use case nguồn | Quan hệ | Use case đích | Ý nghĩa |
@@ -1252,12 +1271,15 @@ Main ..> UC09 : <<include>>
 | UC-08 Kiểm duyệt | `extend` | UC-04 AI hỗ trợ | AI cung cấp cảnh báo cảm xúc/giá lệch/log để hỗ trợ quyết định kiểm duyệt. |
 | UC-09 Quản trị vận hành | `include` | UC-03, UC-04, UC-08 | Admin quản lý thanh toán/gói, AI và kiểm duyệt ở cấp hệ thống. |
 | UC-10 Tác vụ nền | `include` | UC-02, UC-03, UC-04, UC-07 | Các job nền cập nhật trạng thái tin, gói, AI và thông báo tự động. |
+| UC-11 Thuê phòng | `extend` | UC-01 Tìm kiếm/xem tin | Sau khi xem hoặc lưu tin, người thuê có thể gửi yêu cầu xem và thuê phòng. |
+| UC-11 Thuê phòng | `include` | UC-07 Thông báo | Mỗi quyết định quan trọng gửi thông báo tới bên còn lại. |
 
 ## 6. Lưu ý nghiệp vụ quan trọng
 
 - Hệ thống không cho Người thuê đăng mới mọi loại tin. Source code giới hạn Người thuê chỉ được tạo tin tìm người ở ghép (`ROOMMATE`).
 - Tin đăng không tự động công khai ngay sau khi tạo. Khi gửi đăng, tin được đưa vào hàng đợi kiểm duyệt.
 - Nếu tin đăng đang hoạt động bị sửa các trường nhạy cảm, hệ thống yêu cầu kiểm duyệt lại.
+- Một phòng và một người thuê chỉ có tối đa một quan hệ thuê đang hoạt động; điều kiện này được bảo vệ ở cả service và unique generated-column trong DB.
 - Kiểm duyệt viên có quyền xử lý nội dung và report, nhưng không phải actor quản trị tài chính/hệ thống đầy đủ.
 - Quản trị viên là actor duy nhất quản lý các cấu hình cốt lõi như người dùng, vai trò, danh mục, gói dịch vụ, coupon, cấu hình hệ thống, thống kê doanh thu và audit log.
 - AI trong hệ thống là actor hỗ trợ, không thay thế quyết định nghiệp vụ cuối cùng của người dùng/kiểm duyệt viên/quản trị viên.

@@ -27,7 +27,7 @@ import notify from '@/utils/toast';
 import { formatPrice, formatDate } from '@/utils/format';
 import { LISTING_STATUS_META } from '@/constants';
 
-const STATUS_TABS = ['', 'ACTIVE', 'PENDING', 'DRAFT', 'REJECTED', 'HIDDEN', 'EXPIRED', 'CLOSED', 'LOCKED', 'NEED_REVIEW'];
+const STATUS_TABS = ['', 'ACTIVE', 'PENDING', 'DRAFT', 'REJECTED', 'HIDDEN', 'EXPIRED', 'CLOSED', 'RENTED', 'LOCKED', 'NEED_REVIEW'];
 
 const ACTION_META = {
   EDIT: { label: 'Sửa tin', icon: <EditIcon fontSize="small" /> },

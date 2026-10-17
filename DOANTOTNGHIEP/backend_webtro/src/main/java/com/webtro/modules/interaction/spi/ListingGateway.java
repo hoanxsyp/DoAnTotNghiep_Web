@@ -80,4 +80,8 @@ public interface ListingGateway {
 
     /** Cập nhật {@code listings.average_rating} + {@code listings.review_count} (canonical 4.7.8 quy tắc 5). */
     void updateReviewAggregate(Long listingId, BigDecimal averageRating, int reviewCount);
+
+    void markRented(Long listingId, Long ownerId);
+
+    void markAvailableAfterCheckout(Long listingId, Long ownerId);
 }

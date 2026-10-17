@@ -707,7 +707,7 @@ Validation:
 |---|---|
 | Mục đích | Ghi nhận trải nghiệm người thuê về tin hoặc chủ trọ |
 | Người sử dụng | Người thuê |
-| Điều kiện sử dụng | Đã đăng nhập, có tương tác hợp lệ với tin |
+| Điều kiện sử dụng | Đã đăng nhập và đang thuê hoặc đã trả phòng của chính tin đó (`rental_requests.status = RENTED/CHECKED_OUT`) |
 | Dữ liệu vào | ListingId, số sao, nội dung đánh giá |
 | Dữ liệu ra | Review, điểm trung bình |
 
@@ -727,7 +727,7 @@ Luồng phụ:
 Quy tắc nghiệp vụ:
 
 - Một người dùng chỉ đánh giá một tin một lần.
-- Nên yêu cầu người dùng đã từng liên hệ tin để giảm đánh giá ảo.
+- Chỉ người đã được chủ trọ xác nhận đang thuê hoặc đã trả phòng mới được đánh giá; việc liên hệ, bình luận hoặc lưu tin không cấp quyền đánh giá.
 - Đánh giá quá tiêu cực vẫn được hiển thị nếu không vi phạm nội dung, nhưng được AI và Admin theo dõi.
 
 Validation:

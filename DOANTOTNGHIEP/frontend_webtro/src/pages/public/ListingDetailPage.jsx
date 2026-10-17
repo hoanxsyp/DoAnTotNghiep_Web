@@ -13,6 +13,7 @@ import FlagOutlinedIcon from '@mui/icons-material/FlagOutlined';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import PlaceOutlinedIcon from '@mui/icons-material/PlaceOutlined';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
+import HomeWorkOutlinedIcon from '@mui/icons-material/HomeWorkOutlined';
 import listingApi from '@/api/listingApi';
 import commentApi from '@/api/commentApi';
 import reviewApi from '@/api/reviewApi';
@@ -24,6 +25,7 @@ import RatingStars from '@/components/interaction/RatingStars';
 import RichTextViewer from '@/components/common/RichTextViewer';
 import LoadingSkeleton from '@/components/common/LoadingSkeleton';
 import EmptyState from '@/components/common/EmptyState';
+import RentalRequestDialog from '@/components/rental/RentalRequestDialog';
 import useAuth from '@/hooks/useAuth';
 import { notify } from '@/utils/toast';
 import {
@@ -108,6 +110,8 @@ const ListingDetailPage = () => {
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewContent, setReviewContent] = useState('');
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewEligibility, setReviewEligibility] = useState(null);
+  const [rentalOpen, setRentalOpen] = useState(false);
 
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessage, setChatMessage] = useState('');
@@ -171,6 +175,16 @@ const ListingDetailPage = () => {
       .catch(() => setReviews({ items: [], summary: null }))
       .finally(() => setReviewsLoading(false));
   }, [id, notFound, loadComments]);
+
+  useEffect(() => {
+    if (!id || !isAuthenticated || role !== ROLES.TENANT) {
+      setReviewEligibility(null);
+      return;
+    }
+    reviewApi.getEligibility(id)
+      .then(setReviewEligibility)
+      .catch(() => setReviewEligibility(null));
+  }, [id, isAuthenticated, role]);
 
   const handleToggleFavorite = async () => {
     if (!isAuthenticated) {
@@ -315,6 +329,7 @@ const ListingDetailPage = () => {
       notify.success('Cảm ơn bạn đã đánh giá.');
       setReviewOpen(false);
       setReviewContent('');
+      setReviewEligibility((current) => current ? { ...current, eligible: false, alreadyReviewed: true } : current);
       const data = await reviewApi.getReviews(id, { page: 0, size: 5 });
       setReviews({ items: toItems(data), summary: data?.summary || null });
     } catch (err) {
@@ -355,8 +370,11 @@ const ListingDetailPage = () => {
     viewCount, favoriteCount, commentCount, latitude, longitude, electricityPrice, waterPrice,
     roomCount, toiletCount, currentOccupants, maxOccupants, availableFrom, furnitureStatus,
     curfewType, toiletType, petAllowed, parkingAvailable, genderRequirement, categoryCode,
-    canReview, reviewedByMe, publishedAt,
+    canReview, reviewedByMe, publishedAt, status,
   } = listing;
+
+  const effectiveCanReview = reviewEligibility?.eligible ?? canReview;
+  const effectiveReviewedByMe = reviewEligibility?.alreadyReviewed ?? reviewedByMe;
 
   const gallery = images.length ? images : [];
   const currentImage = gallery[galleryIndex];
@@ -420,7 +438,6 @@ const ListingDetailPage = () => {
             <Stack direction="row" spacing={1} sx={{ mt: 1, overflowX: 'auto', pb: 1 }}>
               {gallery.map((img, i) => (
                 <Box
-                  // eslint-disable-next-line react/no-array-index-key
                   key={img.id ?? i}
                   component="img"
                   src={img.thumbnailUrl || img.url}
@@ -594,17 +611,17 @@ const ListingDetailPage = () => {
           )}
           {isAuthenticated && (
             <Box sx={{ mt: 1 }}>
-              {reviewedByMe ? (
+              {effectiveReviewedByMe ? (
                 <Typography variant="body2" color="text.secondary">
                   Bạn đã đánh giá tin này.
                 </Typography>
-              ) : canReview ? (
+              ) : effectiveCanReview ? (
                 <Button variant="outlined" onClick={() => setReviewOpen(true)}>
                   Viết đánh giá
                 </Button>
               ) : (
                 <Typography variant="body2" color="text.secondary">
-                  Bạn cần liên hệ chủ trọ trước khi đánh giá tin này.
+                  Chỉ người đang thuê hoặc đã trả phòng mới được đánh giá tin này.
                 </Typography>
               )}
             </Box>
@@ -682,6 +699,23 @@ const ListingDetailPage = () => {
 
               {/* Hành động */}
               <Stack spacing={1}>
+                {(role === ROLES.TENANT || !isAuthenticated) && status === 'ACTIVE' && (
+                  <Button
+                    variant="contained"
+                    color="success"
+                    startIcon={<HomeWorkOutlinedIcon />}
+                    fullWidth
+                    onClick={() => {
+                      if (!isAuthenticated) {
+                        requireLogin('Đăng nhập bằng tài khoản người thuê để gửi yêu cầu thuê phòng.');
+                      } else {
+                        setRentalOpen(true);
+                      }
+                    }}
+                  >
+                    Thuê phòng
+                  </Button>
+                )}
                 {phoneToShow && (
                   <Button
                     variant="contained"
@@ -722,6 +756,12 @@ const ListingDetailPage = () => {
           </Box>
         </Grid>
       </Grid>
+
+      <RentalRequestDialog
+        open={rentalOpen}
+        listing={listing}
+        onClose={() => setRentalOpen(false)}
+      />
 
       {/* Dialog yêu cầu đăng nhập */}
       <Dialog open={!!loginPrompt} onClose={() => setLoginPrompt(null)} maxWidth="xs" fullWidth>

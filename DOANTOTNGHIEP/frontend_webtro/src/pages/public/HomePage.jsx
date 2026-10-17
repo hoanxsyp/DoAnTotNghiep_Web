@@ -268,7 +268,6 @@ const HomePage = () => {
           {categories.length === 0 ? (
             <Grid container spacing={2}>
               {Array.from({ length: 7 }).map((_, i) => (
-                // eslint-disable-next-line react/no-array-index-key
                 <Grid item xs={4} sm={3} md={12 / 7} key={i}>
                   <LoadingSkeleton variant="stat-card" />
                 </Grid>

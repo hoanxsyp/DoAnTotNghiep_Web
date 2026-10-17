@@ -24,12 +24,12 @@ import com.webtro.modules.interaction.dto.response.ReviewPageResponse;
 import com.webtro.modules.interaction.dto.response.ReviewResponse;
 import com.webtro.modules.interaction.entity.Review;
 import com.webtro.modules.interaction.mapper.ReviewMapper;
-import com.webtro.modules.interaction.repository.ContactLogRepository;
 import com.webtro.modules.interaction.repository.ReviewRepository;
 import com.webtro.modules.interaction.service.ReviewService;
 import com.webtro.modules.interaction.specification.ReviewSpecifications;
 import com.webtro.modules.interaction.spi.BannedKeywordGateway;
 import com.webtro.modules.interaction.spi.ListingGateway;
+import com.webtro.modules.interaction.spi.RentalEligibilityGateway;
 import com.webtro.modules.interaction.spi.UserGateway;
 import com.webtro.modules.notification.service.NotificationService;
 import com.webtro.security.RateLimitService;
@@ -69,8 +69,8 @@ public class ReviewServiceImpl implements ReviewService {
     private static final int CONTENT_REQUIRED_BELOW = 3;
 
     private final ReviewRepository reviewRepository;
-    private final ContactLogRepository contactLogRepository;
     private final ListingGateway listingGateway;
+    private final RentalEligibilityGateway rentalEligibilityGateway;
     private final UserGateway userGateway;
     private final BannedKeywordGateway bannedKeywordGateway;
     private final ReviewMapper reviewMapper;
@@ -119,9 +119,8 @@ public class ReviewServiceImpl implements ReviewService {
     @Transactional(readOnly = true)
     public ReviewEligibilityResponse checkEligibility(Long listingId, Long userId) {
         ListingGateway.ListingBrief listing = listingGateway.getBrief(listingId);
-        boolean contactRequired = systemConfig.getBoolean(ConfigKey.REVIEW_REQUIRE_CONTACT);
         Review existing = reviewRepository.findByUserIdAndListingIdAndDeletedAtIsNull(userId, listingId).orElse(null);
-        boolean hasContacted = hasEverContacted(listingId, userId);
+        boolean rentalVerified = rentalEligibilityGateway.hasRentalHistory(listingId, userId);
 
         String reason = null;
         boolean eligible = true;
@@ -131,9 +130,9 @@ public class ReviewServiceImpl implements ReviewService {
         } else if (existing != null) {
             eligible = false;
             reason = "ALREADY_REVIEWED";
-        } else if (contactRequired && !hasContacted) {
+        } else if (!rentalVerified) {
             eligible = false;
-            reason = "NOT_CONTACTED";
+            reason = "NOT_RENTER";
         }
 
         return ReviewEligibilityResponse.builder()
@@ -143,8 +142,9 @@ public class ReviewServiceImpl implements ReviewService {
                 .reasonMessage(reasonMessage(reason))
                 .alreadyReviewed(existing != null)
                 .existingReviewId(existing == null ? null : existing.getId())
-                .contactRequired(contactRequired)
-                .hasContacted(hasContacted)
+                .contactRequired(false)
+                .hasContacted(rentalVerified)
+                .rentalVerified(rentalVerified)
                 .contentRequiredWhenRatingBelow(CONTENT_REQUIRED_BELOW)
                 .build();
     }
@@ -155,18 +155,15 @@ public class ReviewServiceImpl implements ReviewService {
         rateLimitService.checkLimit("review", String.valueOf(userId), REVIEW_MAX_PER_DAY, Duration.ofDays(1));
 
         ListingGateway.ListingBrief listing = listingGateway.getBrief(listingId);
-        if (!listing.publiclyVisible()) {
-            throw new BusinessRuleException(ErrorCode.LISTING_NOT_ACTIVE);
-        }
         if (listing.ownerId().equals(userId)) {
             throw new BusinessRuleException(ErrorCode.REVIEW_SELF_FORBIDDEN);
         }
         if (reviewRepository.existsByUserIdAndListingIdAndDeletedAtIsNull(userId, listingId)) {
             throw new ConflictException(ErrorCode.REVIEW_ALREADY_EXISTS);
         }
-        boolean hasContacted = hasEverContacted(listingId, userId);
-        if (systemConfig.getBoolean(ConfigKey.REVIEW_REQUIRE_CONTACT) && !hasContacted) {
-            throw new BusinessRuleException(ErrorCode.REVIEW_NOT_ELIGIBLE);
+        boolean rentalVerified = rentalEligibilityGateway.hasRentalHistory(listingId, userId);
+        if (!rentalVerified) {
+            throw new BusinessRuleException(ErrorCode.REVIEW_RENTAL_REQUIRED);
         }
         String content = validateContent(request.getRating(), request.getContent());
 
@@ -176,7 +173,7 @@ public class ReviewServiceImpl implements ReviewService {
                 .rating(request.getRating())
                 .content(content)
                 .status(ReviewStatus.VISIBLE)
-                .isVerifiedContact(hasContacted)
+                .isVerifiedContact(true)
                 .build();
         review = reviewRepository.save(review);
 
@@ -392,11 +389,6 @@ public class ReviewServiceImpl implements ReviewService {
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.REVIEW_NOT_FOUND));
     }
 
-    private boolean hasEverContacted(Long listingId, Long userId) {
-        return contactLogRepository
-                .existsByListingIdAndUserIdAndCreatedAtAfterAndDeletedAtIsNull(listingId, userId, Instant.EPOCH);
-    }
-
     private String validateContent(int rating, String content) {
         boolean blank = content == null || content.isBlank();
         if (rating <= CONTENT_REQUIRED_BELOW - 1 && blank) {
@@ -546,7 +538,7 @@ public class ReviewServiceImpl implements ReviewService {
         return switch (reason) {
             case "OWN_LISTING" -> "Bạn không thể đánh giá tin đăng của chính mình";
             case "ALREADY_REVIEWED" -> "Bạn đã đánh giá tin đăng này rồi";
-            case "NOT_CONTACTED" -> "Bạn cần liên hệ chủ trọ trước khi đánh giá tin này";
+            case "NOT_RENTER" -> "Chỉ người đang thuê hoặc đã trả phòng mới được đánh giá tin này";
             default -> "Bạn chưa đủ điều kiện đánh giá tin này";
         };
     }

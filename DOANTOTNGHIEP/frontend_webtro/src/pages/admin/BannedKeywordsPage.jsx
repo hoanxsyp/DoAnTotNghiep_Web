@@ -69,7 +69,7 @@ const BannedKeywordsPage = () => {
   };
 
   const toggle = async (row) => {
-    try { await adminApi.toggleBannedKeyword(row.id); reload(); } catch (err) { notify.apiError(err); }
+    try { await adminApi.toggleBannedKeyword(row.id, !(row.active ?? true)); reload(); } catch (err) { notify.apiError(err); }
   };
 
   const handleDelete = async () => {

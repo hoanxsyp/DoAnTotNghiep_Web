@@ -1,7 +1,9 @@
 package com.webtro.modules.listing.adapter;
 
 import com.webtro.constant.ErrorCode;
+import com.webtro.constant.ConfigKey;
 import com.webtro.exception.ResourceNotFoundException;
+import com.webtro.modules.admin.service.SystemConfigService;
 import com.webtro.modules.catalog.entity.District;
 import com.webtro.modules.catalog.entity.Province;
 import com.webtro.modules.catalog.entity.Ward;
@@ -10,8 +12,12 @@ import com.webtro.modules.interaction.spi.ListingGateway;
 import com.webtro.modules.listing.entity.Listing;
 import com.webtro.modules.listing.repository.ListingImageRepository;
 import com.webtro.modules.listing.repository.ListingRepository;
+import com.webtro.modules.listing.service.ListingCategoryCountPublisher;
+import com.webtro.modules.listing.service.ListingOwnerStatsPublisher;
 import com.webtro.modules.listing.service.ListingService;
 import com.webtro.modules.listing.service.ListingVisibilityService;
+import com.webtro.modules.listing.statemachine.ListingEvent;
+import com.webtro.modules.listing.statemachine.ListingStateMachine;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.jpa.domain.Specification;
@@ -19,6 +25,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
@@ -42,6 +50,10 @@ public class ListingGatewayAdapter implements ListingGateway {
     private final WardRepository wardRepository;
     private final ListingVisibilityService visibilityService;
     private final ListingService listingService;
+    private final ListingStateMachine stateMachine;
+    private final ListingCategoryCountPublisher categoryCountPublisher;
+    private final ListingOwnerStatsPublisher ownerStatsPublisher;
+    private final SystemConfigService systemConfigService;
 
     @Override
     @Transactional(readOnly = true)
@@ -117,6 +129,39 @@ public class ListingGatewayAdapter implements ListingGateway {
             l.setReviewCount(Math.max(0, reviewCount));
             listingRepository.save(l);
         });
+    }
+
+    @Override
+    @Transactional
+    public void markRented(Long listingId, Long ownerId) {
+        transitionRentalStatus(listingId, ownerId, ListingEvent.MARK_RENTED);
+    }
+
+    @Override
+    @Transactional
+    public void markAvailableAfterCheckout(Long listingId, Long ownerId) {
+        transitionRentalStatus(listingId, ownerId, ListingEvent.CHECK_OUT);
+    }
+
+    private void transitionRentalStatus(Long listingId, Long ownerId, ListingEvent event) {
+        Listing listing = listingRepository.findAliveById(listingId)
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.LISTING_NOT_FOUND));
+        if (!listing.getOwnerId().equals(ownerId)) {
+            throw new com.webtro.exception.ForbiddenException(ErrorCode.LISTING_FORBIDDEN);
+        }
+        var categoryBefore = categoryCountPublisher.snapshot(listing);
+        var ownerBefore = ownerStatsPublisher.snapshot(listing);
+        listing.setStatus(stateMachine.transition(listing.getStatus(), event));
+        if (event == ListingEvent.CHECK_OUT) {
+            Instant now = Instant.now();
+            listing.setPublishedAt(now);
+            listing.setExpiredAt(now.plus(Duration.ofDays(
+                    systemConfigService.getInt(ConfigKey.LISTING_DISPLAY_DAYS))));
+            listing.setExpiryReminderSentAt(null);
+        }
+        listingRepository.save(listing);
+        categoryCountPublisher.publishIfChanged(categoryBefore, listing);
+        ownerStatsPublisher.publishIfChanged(ownerBefore, listing);
     }
 
     // ==================================================================

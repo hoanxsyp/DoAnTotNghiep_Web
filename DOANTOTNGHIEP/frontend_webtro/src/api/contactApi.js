@@ -13,9 +13,7 @@ const contactApi = {
     unwrap(axiosClient.get(`/conversations/${convId}/messages`, { params })),
   sendMessage: (convId, payload) =>
     unwrap(axiosClient.post(`/conversations/${convId}/messages`, payload)),
-  getConversation: (convId) => unwrap(axiosClient.get(`/conversations/${convId}`)),
   markRead: (convId) => unwrap(axiosClient.post(`/conversations/${convId}/read`)),
-  getContactInfo: (listingId) => unwrap(axiosClient.get(`/listings/${listingId}/contact-info`)),
 };
 
 export default contactApi;

@@ -491,7 +491,7 @@ Danh sách đầy đủ theo module:
 
 **admin (3)** — `audit_logs`, `system_configs`, `ai_configs`
 
-> **Tổng: 46 bảng.** (v1 chốt 45; v2 thêm `notification_preferences`.)
+> **Schema hiện hành: 42 bảng nghiệp vụ** (không tính `flyway_schema_history`). V1 lịch sử tạo 46 bảng; các migration V15/V19/V21/V22 loại các bảng đã bỏ và V23 thêm `rental_requests`.
 >
 > Đặc tả cột/index/FK đầy đủ của từng bảng nằm ở `02_THIET_KE_DATABASE.md`. Khi file đó và file
 > này mâu thuẫn về **danh sách bảng, tên enum, tên config key** thì file này thắng; còn về **chi
@@ -707,7 +707,6 @@ Phân trang (`data` chứa):
 | `view.dedup_minutes` | 30 | `[§3.8]` |
 | `comment.edit_window_minutes` | 30 | `[§3.11]` |
 | `review.edit_window_hours` | 24 | `[§3.12]` |
-| `review.require_contact` | `true` | `[§3.12]` |
 | `promotion.max_priority` | 100 | `[§10.6]` |
 
 **Bổ sung v2 — rate limit (10 key).** Mục 8 chốt *giá trị* nhưng bảng trên chỉ ghi tên rút gọn

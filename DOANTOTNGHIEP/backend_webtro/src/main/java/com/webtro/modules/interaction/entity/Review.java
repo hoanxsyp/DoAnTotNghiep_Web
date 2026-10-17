@@ -66,7 +66,7 @@ public class Review extends AuditableEntity {
     @Column(name = "status", nullable = false, length = 10)
     private ReviewStatus status = ReviewStatus.VISIBLE;
 
-    /** Người đánh giá đã từng liên hệ tin (điều kiện {@code review.require_contact}). */
+    /** Cột legacy; true khi quan hệ thuê đã được xác thực lúc tạo đánh giá. */
     @Builder.Default
     @Column(name = "is_verified_contact", nullable = false)
     private Boolean isVerifiedContact = false;

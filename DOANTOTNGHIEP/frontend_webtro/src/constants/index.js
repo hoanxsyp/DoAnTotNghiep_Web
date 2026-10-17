@@ -17,6 +17,7 @@ export const LISTING_STATUS = {
   HIDDEN: 'HIDDEN',
   EXPIRED: 'EXPIRED',
   CLOSED: 'CLOSED',
+  RENTED: 'RENTED',
   LOCKED: 'LOCKED',
   NEED_REVIEW: 'NEED_REVIEW',
   DELETED: 'DELETED',
@@ -31,9 +32,19 @@ export const LISTING_STATUS_META = {
   HIDDEN: { label: 'Đã ẩn', color: 'default' },
   EXPIRED: { label: 'Hết hạn', color: 'default' },
   CLOSED: { label: 'Đã đóng', color: 'info' },
+  RENTED: { label: 'Đã cho thuê', color: 'info' },
   LOCKED: { label: 'Bị khóa', color: 'error' },
   NEED_REVIEW: { label: 'Cần kiểm tra', color: 'warning' },
   DELETED: { label: 'Đã xóa', color: 'default' },
+};
+
+export const RENTAL_STATUS_META = {
+  PENDING: { label: 'Chờ chủ trọ duyệt', color: 'warning' },
+  APPROVED: { label: 'Đã duyệt lịch xem', color: 'info' },
+  REJECTED: { label: 'Đã từ chối', color: 'error' },
+  CANCELLED: { label: 'Đã hủy', color: 'default' },
+  RENTED: { label: 'Đang thuê', color: 'success' },
+  CHECKED_OUT: { label: 'Đã trả phòng', color: 'default' },
 };
 
 export const CATEGORY_CODES = {

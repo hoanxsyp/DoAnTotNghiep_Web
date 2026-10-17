@@ -21,6 +21,8 @@ public enum ListingEvent {
     LOCK,
     UNLOCK,
     RENEW,
+    MARK_RENTED,
+    CHECK_OUT,
     SOFT_DELETE,
     RESUBMIT_AFTER_EDIT
 }
