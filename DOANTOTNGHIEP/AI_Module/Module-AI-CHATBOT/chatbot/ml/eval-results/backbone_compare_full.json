@@ -1,0 +1,329 @@
+{
+  "config": {
+    "backbones": [
+      "visobert",
+      "phobert"
+    ],
+    "seeds": [
+      42,
+      43,
+      44
+    ],
+    "epochs_intent": 5,
+    "epochs_ner": 8,
+    "lr_intent": 2e-05,
+    "lr_ner": 3e-05,
+    "batch_size": 16,
+    "max_length": 128,
+    "intent_real_repeat": 10,
+    "ner_real_repeat": 1,
+    "max_train": null,
+    "out": "full"
+  },
+  "backbones": {
+    "visobert": {
+      "model_id": "uitnlp/visobert",
+      "prep": {
+        "encode_seconds": 2.1737568378448486,
+        "truncated_sentences": 1,
+        "unique_sentences": 2785,
+        "ner_round_trip_test": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "tp": 133,
+          "fp": 0,
+          "fn": 0
+        },
+        "ner_round_trip_train_real": {
+          "precision": 0.9950248756218906,
+          "recall": 0.9569377990430622,
+          "f1": 0.975609756097561,
+          "tp": 200,
+          "fp": 1,
+          "fn": 9
+        }
+      },
+      "runs": [
+        {
+          "seed": 42,
+          "intent_train_seconds": 288.950092792511,
+          "intent_train_loss": 0.09604500346699135,
+          "intent_gold": {
+            "accuracy": 0.8928571428571429,
+            "macro_f1": 0.847912353347136,
+            "n_correct": 25,
+            "n": 28
+          },
+          "gold_errors": [
+            {
+              "text": "máy giặt dùng chung hay mỗi phòng một máy thế ạ",
+              "gold": "room_detail",
+              "pred": "compare_rooms"
+            },
+            {
+              "text": "nếu phòng chưa có người cọc thì hẹn em chiều mai với",
+              "gold": "book_appointment",
+              "pred": "out_of_scope"
+            },
+            {
+              "text": "1 phòng chung chủ nhưng rẻ, 1 phòng riêng chủ mà đắt hơn 700k",
+              "gold": "compare_rooms",
+              "pred": "search_room"
+            }
+          ],
+          "intent_proxy": {
+            "accuracy": 0.7183098591549296,
+            "macro_f1": 0.7456228426034661,
+            "n_correct": 102,
+            "n": 142
+          },
+          "ner_train_seconds": 279.60680532455444,
+          "ner_train_loss": 0.07604851031418779,
+          "ner_proxy": {
+            "precision": 0.5139664804469274,
+            "recall": 0.6917293233082706,
+            "f1": 0.5897435897435899,
+            "tp": 92,
+            "fp": 87,
+            "fn": 41
+          },
+          "latency_cpu": {
+            "mean_ms": 82.29526934313728,
+            "p95_ms": 100.63110000010056
+          }
+        },
+        {
+          "seed": 43,
+          "intent_train_seconds": 320.11232686042786,
+          "intent_train_loss": 0.09157033906883548,
+          "intent_gold": {
+            "accuracy": 0.8928571428571429,
+            "macro_f1": 0.8770128824476652,
+            "n_correct": 25,
+            "n": 28
+          },
+          "gold_errors": [
+            {
+              "text": "Còn ko em ở luôn ạ",
+              "gold": "room_detail",
+              "pred": "refine_search"
+            },
+            {
+              "text": "máy giặt dùng chung hay mỗi phòng một máy thế ạ",
+              "gold": "room_detail",
+              "pred": "compare_rooms"
+            },
+            {
+              "text": "1 phòng chung chủ nhưng rẻ, 1 phòng riêng chủ mà đắt hơn 700k",
+              "gold": "compare_rooms",
+              "pred": "search_room"
+            }
+          ],
+          "intent_proxy": {
+            "accuracy": 0.6830985915492958,
+            "macro_f1": 0.7362194076752651,
+            "n_correct": 97,
+            "n": 142
+          },
+          "ner_train_seconds": 902.8871445655823,
+          "ner_train_loss": 0.07658251436121429,
+          "ner_proxy": {
+            "precision": 0.5054347826086957,
+            "recall": 0.6992481203007519,
+            "f1": 0.586750788643533,
+            "tp": 93,
+            "fp": 91,
+            "fn": 40
+          }
+        },
+        {
+          "seed": 44,
+          "intent_train_seconds": 324.52383756637573,
+          "intent_train_loss": 0.09032870540192034,
+          "intent_gold": {
+            "accuracy": 0.9285714285714286,
+            "macro_f1": 0.9272774327122152,
+            "n_correct": 26,
+            "n": 28
+          },
+          "gold_errors": [
+            {
+              "text": "máy giặt dùng chung hay mỗi phòng một máy thế ạ",
+              "gold": "room_detail",
+              "pred": "compare_rooms"
+            },
+            {
+              "text": "1 phòng chung chủ nhưng rẻ, 1 phòng riêng chủ mà đắt hơn 700k",
+              "gold": "compare_rooms",
+              "pred": "search_room"
+            }
+          ],
+          "intent_proxy": {
+            "accuracy": 0.7605633802816901,
+            "macro_f1": 0.7858772499901532,
+            "n_correct": 108,
+            "n": 142
+          },
+          "ner_train_seconds": 308.563574552536,
+          "ner_train_loss": 0.07796037322389823,
+          "ner_proxy": {
+            "precision": 0.5375722543352601,
+            "recall": 0.6992481203007519,
+            "f1": 0.6078431372549019,
+            "tp": 93,
+            "fp": 80,
+            "fn": 40
+          }
+        }
+      ]
+    },
+    "phobert": {
+      "model_id": "vinai/phobert-base-v2",
+      "prep": {
+        "encode_seconds": 4.341983079910278,
+        "truncated_sentences": 1,
+        "unique_sentences": 2785,
+        "ner_round_trip_test": {
+          "precision": 0.9774436090225563,
+          "recall": 0.9774436090225563,
+          "f1": 0.9774436090225563,
+          "tp": 130,
+          "fp": 3,
+          "fn": 3
+        },
+        "ner_round_trip_train_real": {
+          "precision": 0.9519230769230769,
+          "recall": 0.9473684210526315,
+          "f1": 0.9496402877697842,
+          "tp": 198,
+          "fp": 10,
+          "fn": 11
+        }
+      },
+      "runs": [
+        {
+          "seed": 42,
+          "intent_train_seconds": 269.433256149292,
+          "intent_train_loss": 0.16998416299903238,
+          "intent_gold": {
+            "accuracy": 0.9285714285714286,
+            "macro_f1": 0.919047619047619,
+            "n_correct": 26,
+            "n": 28
+          },
+          "gold_errors": [
+            {
+              "text": "Còn ko em ở luôn ạ",
+              "gold": "room_detail",
+              "pred": "book_appointment"
+            },
+            {
+              "text": "em cần vào luôn đầu tuần sau nhé mọi người",
+              "gold": "refine_search",
+              "pred": "book_appointment"
+            }
+          ],
+          "intent_proxy": {
+            "accuracy": 0.7394366197183099,
+            "macro_f1": 0.7691484065659477,
+            "n_correct": 105,
+            "n": 142
+          },
+          "ner_train_seconds": 720.7531976699829,
+          "ner_train_loss": 0.2586675152849795,
+          "ner_proxy": {
+            "precision": 0.695364238410596,
+            "recall": 0.7894736842105263,
+            "f1": 0.7394366197183099,
+            "tp": 105,
+            "fp": 46,
+            "fn": 28
+          },
+          "latency_cpu": {
+            "mean_ms": 61.2024751824016,
+            "p95_ms": 76.15859999896202
+          }
+        },
+        {
+          "seed": 43,
+          "intent_train_seconds": 278.4150013923645,
+          "intent_train_loss": 0.17836987805678856,
+          "intent_gold": {
+            "accuracy": 0.9285714285714286,
+            "macro_f1": 0.916005291005291,
+            "n_correct": 26,
+            "n": 28
+          },
+          "gold_errors": [
+            {
+              "text": "Còn ko em ở luôn ạ",
+              "gold": "room_detail",
+              "pred": "refine_search"
+            },
+            {
+              "text": "em cần vào luôn đầu tuần sau nhé mọi người",
+              "gold": "refine_search",
+              "pred": "book_appointment"
+            }
+          ],
+          "intent_proxy": {
+            "accuracy": 0.7816901408450704,
+            "macro_f1": 0.8128562922987284,
+            "n_correct": 111,
+            "n": 142
+          },
+          "ner_train_seconds": 583.5282390117645,
+          "ner_train_loss": 0.26308769087738065,
+          "ner_proxy": {
+            "precision": 0.7,
+            "recall": 0.7894736842105263,
+            "f1": 0.7420494699646643,
+            "tp": 105,
+            "fp": 45,
+            "fn": 28
+          }
+        },
+        {
+          "seed": 44,
+          "intent_train_seconds": 267.18752789497375,
+          "intent_train_loss": 0.1792867526737363,
+          "intent_gold": {
+            "accuracy": 0.9285714285714286,
+            "macro_f1": 0.916005291005291,
+            "n_correct": 26,
+            "n": 28
+          },
+          "gold_errors": [
+            {
+              "text": "Còn ko em ở luôn ạ",
+              "gold": "room_detail",
+              "pred": "refine_search"
+            },
+            {
+              "text": "em cần vào luôn đầu tuần sau nhé mọi người",
+              "gold": "refine_search",
+              "pred": "book_appointment"
+            }
+          ],
+          "intent_proxy": {
+            "accuracy": 0.7887323943661971,
+            "macro_f1": 0.819647225379984,
+            "n_correct": 112,
+            "n": 142
+          },
+          "ner_train_seconds": 579.211311340332,
+          "ner_train_loss": 0.2436344983862407,
+          "ner_proxy": {
+            "precision": 0.7162162162162162,
+            "recall": 0.7969924812030075,
+            "f1": 0.7544483985765124,
+            "tp": 106,
+            "fp": 42,
+            "fn": 27
+          }
+        }
+      ]
+    }
+  }
+}

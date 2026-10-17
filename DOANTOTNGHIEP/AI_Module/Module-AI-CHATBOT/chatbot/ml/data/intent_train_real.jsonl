@@ -72,7 +72,7 @@
 {"text": "nhà này có thang máy không ạ", "intent": "room_detail"}
 {"text": "chỗ để xe có rộng không bác, em có 2 xe", "intent": "room_detail"}
 {"text": "phòng có bị nắng chiều không bạn", "intent": "room_detail"}
-{"text": "ở đây có được nuôi mèo ko ạ", "intent": "policy_inquiry"}
+{"text": "ở đây có được nuôi mèo ko ạ", "intent": "room_detail"}
 {"text": "phòng này 2 người ở có chật lắm không", "intent": "room_detail"}
 {"text": "khu này tối về có vắng không bác", "intent": "room_detail"}
 {"text": "bếp nấu ở trong phòng luôn à bạn", "intent": "room_detail"}

@@ -42,6 +42,14 @@ public class ChatOrchestrator {
     private static final List<String> ADVISORY_CUES = List.of(
             "nên", "tư vấn", "so sánh", "vì sao", "tại sao", "cái nào tốt hơn", "tốt hơn", "gợi ý", "khuyên");
     private static final List<String> CHEAPER_CUES = List.of("rẻ hơn", "giảm giá", "hạ giá", "rẻ nữa");
+    // NLU chỉ còn 6 intent: hỏi chi phí / quy định trả về room_detail (xem Intent).
+    // Tách lại ở đây để giữ handler riêng cho 2 loại câu hỏi này.
+    private static final List<String> COST_CUES = List.of(
+            "chi phí", "chi phi", "tính tiền", "tổng tiền", "hết bao nhiêu", "bao nhiêu 1 tháng",
+            "bao nhiêu một tháng", "điện nước", "dien nuoc", "tiền điện", "tiền nước", "phí dịch vụ");
+    private static final List<String> POLICY_CUES = List.of(
+            "cọc", "dat coc", "hợp đồng", "hop dong", "quy định", "chính sách",
+            "nuôi", "thú cưng", "tạm trú");
     /**
      * Từ khóa mô tả định tính — kích hoạt semantic rerank (§12.1). Câu tìm
      * phòng THUẦN cấu trúc ("dưới 3 triệu ở Thanh Xuân") không có gì để
@@ -123,6 +131,11 @@ public class ChatOrchestrator {
             long reduced = Math.round(af.getPriceMax() * (100.0 - props.getCheaperStepPercent()) / 100.0);
             af.setPriceMax(reduced);
             log.debug("Rule rẻ hơn: price_max → {}", reduced);
+        }
+
+        if (nlu.getIntent() == Intent.ROOM_DETAIL) {
+            if (containsAny(message, COST_CUES)) nlu.setIntent(Intent.CALCULATE_COST);
+            else if (containsAny(message, POLICY_CUES)) nlu.setIntent(Intent.POLICY_INQUIRY);
         }
 
         ChatResponse resp = switch (nlu.getIntent()) {

@@ -1,55 +1,76 @@
 # Báo cáo tiến độ module AI Chatbot tìm phòng trọ
 
-Ngày ghi nhận: 15/10/2026  
-Base model: `uitnlp/visobert`  
-Trạng thái model: đã train chính thức lần 1 trên GPU (RTX 3050 4GB), đã đo (`ml/out-intent`, `ml/out-ner`)
+Ngày ghi nhận: 17/10/2026 (bản trước: 15/10/2026)  
+Base model: `vinai/phobert-base-v2` (PhoBERT) — thay cho `uitnlp/visobert` dùng đến 15/10  
+Trạng thái model: đã train trên GPU (RTX 3050 4GB), đã đo (`ml/out-intent`, `ml/out-ner`)
+
+## Thay đổi so với bản 15/10
+
+1. **Đổi base model ViSoBERT → PhoBERT**, quyết định dựa trên thí nghiệm so sánh (mục bên dưới).
+2. **Gộp intent từ 8 xuống 6 nhãn**: `calculate_cost`, `policy_inquiry` gộp vào `room_detail`.
+3. **Không chọn checkpoint trên bộ test nữa**: model lấy ở epoch cuối. Bản 15/10 chọn
+   checkpoint theo chính GOLD/proxy nên số đo lạc quan hơn thực tế.
+4. Dùng dữ liệu synthetic v2 (sinh theo văn phong người dùng thật) và nhân dữ liệu thật ×10
+   khi train intent.
+
+Kết quả: intent trên GOLD từ `0.750` lên `0.929`, NER Span-F1 từ `0.580` lên `0.743`.
+
+## Vì sao chọn PhoBERT
+
+So sánh hai model trên **cùng dữ liệu, cùng cấu hình, 3 seed**, lấy model ở epoch cuối
+(`ml/compare_backbones.py`, kết quả `ml/eval-results/backbone_compare_full.md`):
+
+| | ViSoBERT | PhoBERT |
+|---|---:|---:|
+| Intent GOLD accuracy | 0.905 ± 0.021 | **0.929 ± 0.000** |
+| Intent GOLD macro-F1 | 0.884 | **0.917** |
+| Intent proxy accuracy | 0.721 | **0.770** |
+| NER Span-F1 (proxy) | 0.595 | **0.745** |
+| Latency CPU / câu | 82 ms | **61 ms** |
+
+PhoBERT tốt hơn ở mọi chỉ số, rõ nhất ở NER. Để kiểm tra chênh lệch NER có phải do cách gán
+nhãn hay không, chạy thêm ViSoBERT gán nhãn theo từ y hệt PhoBERT: chỉ đạt `0.631`. Vậy khoảng
+cách chủ yếu đến từ model.
+
+Bảng trên đo lúc còn 8 intent. Về intent, chênh lệch tương đương khoảng 1 câu trên 28 câu
+GOLD nên chỉ nên kết luận "PhoBERT không kém hơn"; lợi thế chắc chắn của PhoBERT là ở NER.
+
+PhoBERT được pretrain trên văn bản đã tách từ, nên pipeline thêm bước tách từ bằng
+**VnCoreNLP** (thư viện Java). Máy train và máy chạy `nlu-service` đều cần Java; Docker image
+đã cài sẵn.
 
 ## Lệnh đã chạy
 
 ```powershell
 cd "AI_Module\Module-AI-CHATBOT\chatbot\ml"
 
-python data\generate_dataset.py
+python data\generate_dataset_v2.py
 python data\build_proxy_testset.py
 python data\split_real_data.py
 
-python train_intent.py --max-train 40 --epochs 1 --output-dir out-intent-smoke
-python train_ner.py --max-train 40 --epochs 1 --output-dir out-ner-smoke
+python compare_backbones.py          # so sánh ViSoBERT / PhoBERT, 3 seed
 
-python eval_nlu_compare.py --side llm
-python eval_nlu_compare.py --side fc
-python eval_nlu_compare.py --side llm --dataset gold
-python eval_nlu_compare.py --side fc --dataset gold
-python eval_nlu_compare.py --report
-```
+python train_intent.py               # mặc định = cấu hình bên dưới
+python train_ner.py
 
-Smoke test chạy hết, không lỗi. Đây chỉ là bước xác nhận code chạy đúng, chưa phải model dùng được.
-
-Train chính thức và đo ViSoBERT (15/10/2026):
-
-```powershell
-python train_intent.py --epochs 5 --output-dir out-intent
-python train_ner.py --epochs 8 --output-dir out-ner
-
-# nlu-service chạy local ở cổng 8000 để đo phương án ViSoBERT
 cd ..\nlu-service
-uvicorn app:app --host 127.0.0.1 --port 8000
+uvicorn app:app --host 127.0.0.1 --port 8010
 
 cd ..\ml
-python eval_local_intent_gold.py
-python eval_nlu_compare.py --side visobert
+python eval_nlu_compare.py --side phobert --phobert-url http://127.0.0.1:8010
+python eval_nlu_compare.py --side phobert --dataset gold --phobert-url http://127.0.0.1:8010
 python eval_nlu_compare.py --report
 ```
 
-Thời gian train: intent khoảng 3 phút, NER khoảng 15 phút. Bộ model cũ train ngày
-30/09 (`max_length=64`, chưa từng đo) được giữ lại ở `out-intent.0930.bak`, `out-ner.0930.bak`.
+Thời gian train: intent khoảng 4 phút, NER khoảng 4 phút.
 
 ## Dữ liệu train
 
 Intent:
 
-- Synthetic: `2,500` câu (`data/intent_train.jsonl`)
-- Dữ liệu thật dùng train: `115` câu (`data/intent_train_real.jsonl`)
+- Synthetic v2: `2,500` câu (`data/intent_train_v2.jsonl`)
+- Dữ liệu thật dùng train: `115` câu (`data/intent_train_real.jsonl`), nhân `×10`
+  (tổng train: `3,650` câu)
 - Bộ test thật (GOLD): `28` câu (`data/intent_test_gold.jsonl`)
 - Bộ test proxy tự viết tay: `142` câu (`data/intent_test_real.jsonl`)
 
@@ -62,25 +83,34 @@ Tách stratified 80/20, seed `42`, bằng `data/split_real_data.py`.
 
 NER:
 
-- Synthetic: `2,075` câu / `3,635` entity (`data/ner_train.jsonl`)
+- Synthetic v2: `2,075` câu / `6,965` entity (`data/ner_train_v2.jsonl`)
+- Dữ liệu thật đã gán nhãn: `56` câu / `209` entity (`data/ner_data_md_labeled.jsonl`)
+  (tổng train NER: `2,131` câu)
 - Bộ test proxy tự viết tay: `87` câu / `133` entity (`data/ner_test_real.jsonl`)
-- Dữ liệu thật đã gán nhãn: `56` câu / `209` entity (`data/ner_data_md_labeled.jsonl`), đã đưa vào train
-  (tổng train NER: `2,131` câu = `2,075` synthetic + `56` thật)
+
+Synthetic v2 khác v1 ở văn phong: khoảng giá (`2tr5-3tr`), viết tắt ngân sách (`tc`, `tchinh`),
+tên phố/phường, POI viết tắt (`ptit`, `hvnh`), `51` biến thể tiện ích, bỏ dấu lỗ chỗ theo từ,
+emoji. Từ vựng chỉ rút từ `115` câu train thật, không lấy từ bộ test.
 
 ## Nhãn đang dùng
 
-Intent, `8` nhãn:
+Intent, `6` nhãn:
 
-- `search_room`, `refine_search`, `room_detail`, `compare_rooms`
-- `book_appointment`, `calculate_cost`, `policy_inquiry`, `out_of_scope`
+- `search_room`, `refine_search`, `room_detail`
+- `compare_rooms`, `book_appointment`, `out_of_scope`
+
+`calculate_cost` (`0` câu thật) và `policy_inquiry` (`1` câu thật) đã gộp vào `room_detail`:
+không đủ dữ liệu để học và đo riêng, và bản chất đều là hỏi thông tin một phòng. Người dùng
+không mất tính năng: `ChatOrchestrator` tách lại câu `room_detail` theo từ khoá ("chi phí",
+"điện nước" → ước tính chi phí; "cọc", "hợp đồng", "nuôi" → trả lời về quy định).
+
+Bộ test GOLD giờ có đủ cả `6` intent.
 
 Entity, `10` nhãn, gán theo BIO:
 
 - `LOCATION`, `POI`, `RADIUS`
 - `PRICE_MIN`, `PRICE_MAX`, `AREA_MIN`
 - `UTILITY`, `ROOM_TYPE`, `ROOM_REF`, `DATETIME`
-
-Bộ test GOLD hiện chỉ có `6/8` intent (chưa có câu nào cho `calculate_cost`, `policy_inquiry`).
 
 ## Cấu hình huấn luyện
 
@@ -91,69 +121,63 @@ Bộ test GOLD hiện chỉ có `6/8` intent (chưa có câu nào cho `calculate
 | Epochs | 5 | 8 |
 | Batch size | 16 | 16 |
 | Learning rate | 2e-5 | 3e-5 |
-| `max_length` | 64 | 128 |
-| Chọn checkpoint theo | F1 trên GOLD | F1 trên proxy |
-| Checkpoint được chọn | epoch 2 | epoch 7 |
+| `max_length` | 128 | 128 |
+| Nhân dữ liệu thật | ×10 | ×1 |
+| Checkpoint | epoch cuối | epoch cuối |
 
-Base model ViSoBERT: khoảng `97M` tham số, `12` layer, hidden `768`, vocab `15,004`.
+Base model PhoBERT: khoảng `135M` tham số, `12` layer, hidden `768`, vocab `64,001`.
 
-Pipeline encode NER đã kiểm tra: encode rồi decode lại toàn bộ nhãn gold khớp `100%`
-(train `tp=3635 fp=0 fn=0`, proxy `tp=133 fp=0 fn=0`), không câu nào bị cắt ở `max_length=64`.
-
-NER nâng `max_length` từ `64` lên `128` vì câu thật dài hơn câu synthetic. Kiểm tra trên `56` câu thật:
-
-| `max_length` | Câu bị cắt | Entity khớp | Mất | Lệch |
-|---:|---:|---:|---:|---:|
-| 64 | 11/56 | 185/209 | 24 | 5 |
-| 128 | 1/56 | 200/209 | 9 | 1 |
-
-9 entity còn lỗi ở `128`:
-
-- 8 entity nằm cuối một bài đăng dài khoảng `307` token, bị cắt sau token thứ `128`.
-- 1 entity do tokenizer gộp `"5-6tr"` thành một mảnh, nhãn gold chỉ là `"6tr"`.
-
-Sửa lỗi trong `train_ner.py`: learning rate bị ghi cứng `3e-5`, cờ `--learning-rate` không có
-tác dụng. Đã sửa để dùng giá trị truyền vào, mặc định vẫn `3e-5`.
+Nhãn NER gán cho subword đầu của mỗi từ (theo cách tách từ của VnCoreNLP). Encode nhãn gold
+rồi decode lại cho trần Span-F1 `0.977` trên proxy và `0.950` trên `56` câu thật: vài entity
+có ranh giới nằm giữa một từ nên không biểu diễn được. Ở `max_length=128` chỉ `1/2,785` câu bị cắt.
 
 ## So sánh phương án NLU trong `eval_nlu_compare.py`
-
-Hai phương án LLM (Gemini `gemini-3.1-flash-lite`) đã đo để làm mốc so sánh với ViSoBERT.
 
 Intent trên bộ test thật GOLD (`28` câu):
 
 | Phương án | Accuracy | Macro-F1 |
 |---|---:|---:|
-| LLM prompt JSON | 0.893 | 0.757 |
-| LLM Function Calling | 0.821 | 0.674 |
-| ViSoBERT fine-tuned | 0.750 | 0.605 |
+| LLM prompt JSON | 0.929 | 0.915 |
+| **PhoBERT fine-tuned** | **0.929** | **0.916** |
+| LLM Function Calling | 0.857 | 0.800 |
 
 Slot, latency, chi phí trên bộ proxy:
 
 | Phương án | Intent Acc | Slot-F1 | Span-F1 strict | Latency TB | p95 | Chi phí / 1000 tin |
 |---|---:|---:|---:|---:|---:|---:|
-| LLM prompt JSON | 0.923 | 0.921 | — | 850 ms | 1004 ms | ~2,342 đ |
-| LLM Function Calling | 0.908 | 0.950 | — | 669 ms | 803 ms | ~1,163 đ |
-| ViSoBERT fine-tuned | 0.690 | 0.843 | 0.580 | 95 ms | 127 ms | ≈ 0 đ |
+| LLM prompt JSON | 0.965 | 0.921 | — | 850 ms | 1004 ms | ~2,342 đ |
+| LLM Function Calling | 0.958 | 0.950 | — | 669 ms | 803 ms | ~1,163 đ |
+| **PhoBERT fine-tuned** | 0.775 | **0.962** | 0.743 | **87 ms** | **107 ms** | **≈ 0 đ** |
 
-Latency ViSoBERT đo trên CPU local (nlu-service không dùng GPU). Span-F1 strict (khớp đúng
-label + vị trí) chỉ đo được với ViSoBERT vì LLM không trả vị trí.
+Hai phương án LLM (Gemini `gemini-3.1-flash-lite`) được đo lúc còn 8 intent, không gọi lại.
+Khi chấm, nhãn cũ được gộp ở cả đáp án lẫn dự đoán, tương đương chấm trên 6 intent. Vì vậy số
+của LLM cao hơn bản 15/10 (prompt JSON trên GOLD `0.893` → `0.929`): phần lớn lỗi cũ của LLM
+là nhầm giữa `room_detail`, `calculate_cost` và `policy_inquiry`.
+
+Latency PhoBERT đo trên CPU local qua `nlu-service`, đã gồm bước tách từ. Span-F1 strict
+(khớp đúng nhãn + vị trí) chỉ đo được với PhoBERT vì LLM không trả vị trí.
 
 Kết quả chi tiết: `ml/eval-results/REPORT.md`.
 
-### Nhận xét kết quả ViSoBERT
+### Nhận xét kết quả PhoBERT
 
-- Độ chính xác thấp hơn hai phương án LLM: intent trên GOLD thấp hơn LLM prompt JSON 4 câu (21/28 so với 25/28).
-- Bù lại nhanh hơn khoảng 7–9 lần và không tốn phí gọi API.
-- 7 câu sai trên GOLD, chủ yếu nhầm `refine_search` thành `search_room`
-  (ví dụ: "em tăng được lên 3tr5, có đồ cơ bản càng tốt ạ", "em đổi sang tìm quanh Cầu Giấy nhé, bán kính tầm 3km").
-- Nguyên nhân chính là dữ liệu thật quá ít. Intent chỉ có `115` câu thật để train, trong đó
-  `out_of_scope` có `2` câu và `policy_inquiry` có `1` câu. Câu synthetic viết "chuẩn" hơn cách người dùng thật gõ.
+- Intent trên GOLD ngang LLM prompt JSON (`26/28` câu) và hơn Function Calling, đạt ngưỡng
+  DoD-1 (≥ `0.90`).
+- Slot-F1 cao nhất trong 3 phương án.
+- Nhanh hơn khoảng 8–10 lần và không tốn phí gọi API.
+- Accuracy trên bộ proxy (`0.775`) thấp hơn LLM nhiều. Bộ proxy viết tay theo văn phong "sạch",
+  còn model được train cho văn phong người dùng thật; GOLD (data thật) là bộ đánh giá chính.
+- 2 câu sai trên GOLD:
+  - "Còn ko em ở luôn ạ" — đáp án `room_detail`, model đoán `refine_search`. Thực chất đây là
+    câu hỏi phòng còn trống không, chưa có intent riêng.
+  - "em cần vào luôn đầu tuần sau nhé mọi người" — đáp án `refine_search`, model đoán `book_appointment`.
+- NER chưa đạt ngưỡng DoD-2 (Span-F1 `0.743` < `0.85`). Lỗi hay gặp: khoảng giá `1tr5-2tr`
+  ra một span `PRICE_MAX` thay vì tách min/max; bỏ sót tiện ích ở cuối câu.
 
 Hạn chế của số liệu:
 
 - GOLD chỉ `28` câu, sai thêm 1 câu là lệch `3.6` điểm accuracy.
-- Checkpoint được chọn ngay trên bộ test (intent theo GOLD, NER theo proxy), nên số đo đang lạc quan hơn thực tế.
-  Cần tách thêm một tập validation riêng.
+- NER chưa có bộ test thật, mọi số NER đo trên bộ proxy tự viết tay.
 
 ## Kết quả tầng tìm phòng
 
@@ -178,17 +202,18 @@ Luồng một tin nhắn:
 4. Thiếu thông tin thì hỏi lại; đủ thì tìm phòng trong MySQL, lọc theo bán kính nếu có địa điểm.
 5. Trả danh sách phòng và câu trả lời, ghi `chat_log`.
 
-Hiện `chatbot-api` vẫn còn cơ chế dự phòng: `nlu-service` lỗi hoặc chưa có model thì chuyển
-sang Gemini, rồi sang bộ luật. Trước 15/10/2026 model chưa train nên các lần chạy thử đều đi qua
-nhánh dự phòng này. Đã chạy `nlu-service` local với model mới: `/health` trả `ok`,
-`max_length` intent `64`, NER `128`. Sau khi train xong sẽ bỏ dự phòng, để ViSoBERT là NLU duy nhất; hai
-phương án LLM chỉ giữ lại trong phần đánh giá.
+`nlu-service` đã chạy local với model PhoBERT: `/health` trả `ok`, `max_length` intent và NER
+đều `128`. Service làm một lượt "khởi động" ngay khi bật: nếu không, tin nhắn đầu tiên mất khoảng
+`1.4 s` (Java và PyTorch khởi tạo lần đầu), vượt timeout `300 ms` của `chatbot-api` và bị chuyển
+sang Gemini. Sau khi thêm bước này, tin nhắn đầu tiên còn `167 ms`.
+
+`chatbot-api` vẫn giữ cơ chế dự phòng: `nlu-service` lỗi thì chuyển sang Gemini, rồi sang bộ luật.
 
 Cấu hình trong `docker-compose.yml`:
 
 ```yaml
 chatbot-api:  port 8081
-chatbot-nlu:  port 8003   # mount ml/out-intent, ml/out-ner
+chatbot-nlu:  port 8003   # mount ml/out-intent, ml/out-ner; image cài sẵn Java + VnCoreNLP
 NLU_URL=http://chatbot-nlu:8000
 NLU_ENABLED=true
 ```
@@ -198,22 +223,22 @@ bộ luật riêng `RuleBasedChatbotEngine`.
 
 ## Việc tiếp theo
 
-Đã xong (15/10/2026):
+Đã xong (17/10/2026):
 
-- ~~Đưa `209` entity NER thật vào train, nâng `max_length` NER lên `128`.~~
-- ~~Train chính thức intent và NER.~~
-- ~~Đo ViSoBERT và điền vào bảng so sánh.~~
+- ~~So sánh ViSoBERT và PhoBERT trên cùng dữ liệu, chuyển sang PhoBERT.~~
+- ~~Không chọn checkpoint trên bộ test.~~
+- ~~Gộp 2 intent không có dữ liệu thật, GOLD phủ đủ các intent.~~
+- ~~Train lại với dữ liệu thật được nhân trọng số (`×10` cho intent).~~
 
 Còn lại:
 
-1. Thu thập thêm câu thật, ưu tiên:
-   - câu `refine_search` (đang nhầm nhiều nhất)
-   - `calculate_cost`, `policy_inquiry`, `out_of_scope`
-   - câu có entity
-2. Tách tập validation riêng để chọn checkpoint, không chọn trên bộ test.
-3. Train lại với `--real-repeat 3` để tăng trọng số dữ liệu thật, so sánh với lần train này.
-4. Cắt bài đăng dài `307` token trong `ner_data_md_labeled.jsonl` thành các câu ngắn.
-5. Bỏ cơ chế dự phòng LLM/luật trong `chatbot-api`.
+1. Gán nhãn NER cho `87` câu hội thoại trong `data2.md`: có bộ test NER thật và thêm dữ liệu
+   train. Đây là việc chính để đạt DoD-2.
+2. Thu thập thêm câu thật, ưu tiên `out_of_scope` và câu hỏi phòng còn trống; cân nhắc thêm
+   intent riêng cho loại câu này.
+3. Tách khoảng giá `1tr5-2tr` thành `PRICE_MIN` + `PRICE_MAX` ở bộ chuẩn hoá phía Java.
+4. Mở rộng bộ chuẩn hoá tiện ích phía Java (hiện mới `4` nhóm, dữ liệu có `51` biến thể).
+5. Chạy thử `docker compose build chatbot-nlu` với Dockerfile mới (cài Java).
 
 ## Kiểm thử nhanh qua API
 
@@ -229,7 +254,7 @@ Kiểm tra NLU service:
 http://localhost:8003/health
 ```
 
-Chưa có model thì `/health` trả `degraded`. Có model thì trả `ok`.
+Chưa có model hoặc model không phải PhoBERT thì `/health` trả `degraded`. Có model thì trả `ok`.
 
 Gửi tin nhắn:
 
@@ -266,6 +291,7 @@ Gợi ý test, cùng một cuộc trò chuyện:
 3. `Rẻ hơn nữa đi`
 4. `Có phòng nào gần PTIT dưới 3 triệu không?`
 5. `So sánh 2 phòng đó`
+6. `Tính chi phí phòng 1` (kiểm tra nhánh ước tính chi phí sau khi gộp intent)
 
 Bấm `Chi tiết kỹ thuật` dưới mỗi câu trả lời để xem nhánh xử lý (`FAST`/`LLM`/`CLARIFY`),
 độ tin cậy NLU và latency.

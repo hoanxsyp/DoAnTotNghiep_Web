@@ -1,4 +1,4 @@
-# nlu-service — NLU (ViSoBERT) qua FastAPI (SPEC §11 bước 2.3)
+# nlu-service — NLU (PhoBERT) qua FastAPI (SPEC §11 bước 2.3)
 
 Bọc 2 model đã train ở GĐ2 (`ml/out-intent`, `ml/out-ner`) thành HTTP service.
 Spring Boot gọi qua `LocalNluServiceImpl` (bước 2.4, @Primary): RestClient
@@ -9,7 +9,7 @@ Cấu hình phía Spring: khối `roomfinder.nlu` trong `application.yml`
 ## API
 
 ```
-GET  /health   → {"status":"ok", ..., "max_length":{"intent":64,"ner":64}}
+GET  /health   → {"status":"ok", ..., "max_length":{"intent":128,"ner":128}}
 POST /nlu      {"text": "tìm phòng tầm 2tr ở cầu giấy"}
 → {
     "intent": "search_room",
@@ -44,12 +44,14 @@ Dùng chung venv với `ml/` (đã có torch/transformers; cài thêm fastapi+uv
 
 ```bash
 cd nlu-service
-../ml/.venv/Scripts/pip install fastapi uvicorn   # 1 lần
+../ml/.venv/Scripts/pip install fastapi uvicorn py_vncorenlp   # 1 lần
 ../ml/.venv/Scripts/python -m uvicorn app:app --host 127.0.0.1 --port 8000
 ```
 
-**Không cần JDK** — ViSoBERT nhận văn bản thô, pipeline thuần Python. Khởi động
-mất ~20s (nạp 2 model + SBERT). Yêu cầu `ml/out-intent`, `ml/out-ner` đã train
+**Cần Java (JRE/JDK) + `JAVA_HOME`** — PhoBERT cần word-segment bằng VnCoreNLP
+(jar Java, gọi qua pyjnius; jar + model tự tải lần đầu vào `ml/vncorenlp`, hoặc
+`%LOCALAPPDATA%ncorenlp` nếu đường dẫn repo có dấu cách). Khởi động mất ~20s
+(nạp 2 model + SBERT + JVM). Docker image đã cài sẵn JRE và tải sẵn VnCoreNLP. Yêu cầu `ml/out-intent`, `ml/out-ner` đã train
 xong (xem `ml/README.md`).
 
 Trỏ sang thư mục model khác (vd. bản smoke test) bằng biến môi trường:

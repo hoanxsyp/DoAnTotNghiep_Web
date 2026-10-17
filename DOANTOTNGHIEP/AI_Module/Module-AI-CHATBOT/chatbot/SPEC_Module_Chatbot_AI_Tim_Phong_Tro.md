@@ -23,7 +23,7 @@
 **Phần II — Hướng dẫn triển khai**
 9. Chuẩn bị môi trường
 10. Giai đoạn 1 — MVP chạy được
-11. Giai đoạn 2 — Fine-tune ViSoBERT & Fast-path
+11. Giai đoạn 2 — Fine-tune PhoBERT & Fast-path
 12. Giai đoạn 3 — Semantic Search & Recommendation
 13. Xây dựng Dataset
 14. Đánh giá (Evaluation)
@@ -75,7 +75,7 @@ Các mục sau **không** thuộc module chatbot, tránh nhầm lẫn khi bảo 
               └───────────┬───────────────┘
                           ▼
                  ┌─────────────────┐
-                 │  NLU Service    │  ← ViSoBERT (GĐ2) / LLM JSON (GĐ1)
+                 │  NLU Service    │  ← PhoBERT (GĐ2) / LLM JSON (GĐ1)
                  │ Intent + Entity │
                  └────────┬────────┘
                           ▼
@@ -119,31 +119,33 @@ Các mục sau **không** thuộc module chatbot, tránh nhầm lẫn khi bảo 
 
 > Bản báo cáo cũ lập luận "dùng mô hình cục bộ để giảm latency và chi phí LLM". Lập luận này **tự mâu thuẫn** vì tầng NLG vẫn gọi LLM cho mọi lượt. Dưới đây là lập luận đã được sửa.
 
-Dùng ViSoBERT cục bộ cho tầng NLU vì **bốn** lý do:
+Dùng PhoBERT cục bộ cho tầng NLU vì **bốn** lý do:
 
 1. **Kiểm soát định dạng đầu ra.** LLM API đôi khi trả JSON sai schema hoặc kèm markdown fence. Mô hình phân loại cục bộ luôn trả về nhãn thuộc tập đóng đã định nghĩa — không cần retry, không cần parse phòng thủ.
 2. **Quyền riêng tư dữ liệu.** Tin nhắn người dùng không rời khỏi hạ tầng hệ thống ở tầng hiểu ý định.
 3. **Không phụ thuộc nhà cung cấp.** Nếu Gemini đổi giá / đổi API / bị chặn, tầng NLU vẫn sống.
 4. **Kích hoạt fast-path.** Đây mới là chỗ tiết kiệm chi phí thật: khi NLU cục bộ đủ tự tin và truy vấn có kết quả, hệ thống **bỏ hẳn** lời gọi LLM (xem §6.3). Đây là nguồn của con số "giảm X% chi phí" trong báo cáo — không phải việc thay LLM ở tầng NLU.
 
-Ngoài ra, việc tự huấn luyện ViSoBERT là **phần đóng góp học thuật** của đồ án: sinh viên tự xây dataset, tự huấn luyện, tự đo F1, và **so sánh với đường cơ sở LLM function-calling** (§14.4). Chọn ViSoBERT (pretrain trên văn bản mạng xã hội tiếng Việt) vì đầu vào thực tế là câu chat đầy teencode/mất dấu — xem `ml/README.md`.
+Ngoài ra, việc tự huấn luyện mô hình là **phần đóng góp học thuật** của đồ án: sinh viên tự xây dataset, tự huấn luyện, tự đo F1, và **so sánh với đường cơ sở LLM function-calling** (§14.4).
+
+**Chọn backbone bằng thí nghiệm, không bằng giả định.** Ban đầu chọn ViSoBERT (`uitnlp/visobert`, pretrain trên văn bản mạng xã hội) vì đầu vào là câu chat đầy teencode/mất dấu. Khi so sánh với PhoBERT (`vinai/phobert-base-v2`) trên **cùng dữ liệu, cùng cấu hình, 3 seed, không chọn checkpoint trên bộ test**, PhoBERT tốt hơn ở mọi chỉ số: intent GOLD 0.929 vs 0.905, NER Span-F1 0.745 vs 0.595, latency CPU 61 vs 82 ms. Cho ViSoBERT gán nhãn NER theo từ y hệt PhoBERT chỉ lên 0.631 — khoảng cách đến từ model, không từ cách gán nhãn. Vì vậy hệ thống dùng **PhoBERT** — xem `ml/README.md`, `ml/eval-results/backbone_compare_full.md`.
 
 ---
 
 ## 3. Đặc tả tầng NLU
 
-### 3.1 Tập Intent (đóng, 8 nhãn)
+### 3.1 Tập Intent (đóng, 6 nhãn)
 
 | Intent | Mô tả | Slot bắt buộc |
 |---|---|---|
 | `search_room` | Tìm phòng theo tiêu chí | ít nhất 1 trong: `price_max`, `location` |
 | `refine_search` | Lọc thêm trên kết quả trước | — (kế thừa context) |
-| `room_detail` | Hỏi chi tiết 1 phòng | `room_ref` |
+| `room_detail` | Hỏi chi tiết 1 phòng — gồm cả chi phí hàng tháng và hợp đồng/quy định | `room_ref` |
 | `compare_rooms` | So sánh ≥ 2 phòng | `room_ref[]` (≥2) |
 | `book_appointment` | Đặt lịch xem phòng | `room_ref`, `datetime` |
-| `calculate_cost` | Ước tính chi phí hàng tháng | `room_ref` |
-| `policy_inquiry` | Hỏi hợp đồng/quy định | — |
 | `out_of_scope` | Ngoài phạm vi / chào hỏi | — |
+
+> **Gộp `calculate_cost`, `policy_inquiry` vào `room_detail`** (bản đầu có 8 nhãn): trong 143 câu thật thu thập được, `calculate_cost` có 0 câu và `policy_inquiry` có 1 câu — không đủ để học hay đo riêng, và bản chất đều là hỏi thông tin một phòng. Tính năng không mất: `ChatOrchestrator` tách lại câu `room_detail` theo từ khóa ("chi phí", "điện nước" → ước tính chi phí; "cọc", "hợp đồng" → trả lời quy định). Enum `Intent` phía Java vẫn giữ 2 hằng này cho bước tách đó.
 
 > **Thiết kế quan trọng:** tách `refine_search` khỏi `search_room`. Đây là chìa khóa của hội thoại đa lượt. Câu "rẻ hơn nữa đi" là `refine_search`, không phải `search_room` mới.
 
@@ -592,15 +594,14 @@ roomfinder/
 │       └── dto/
 ├── nlu-service/              # Python FastAPI, chỉ dùng từ GĐ2
 │   ├── app.py
-│   ├── models/visobert-intent/
-│   └── models/visobert-ner/
+│   └── (model mount từ ml/out-intent, ml/out-ner)
 ├── ml/                       # notebook train, dataset
 │   ├── data/
 │   └── train_intent.ipynb
 └── docker-compose.yml
 ```
 
-> **Quyết định kiến trúc:** `NluService` là **interface**. GĐ1 cài đặt bằng LLM, GĐ2 thay bằng ViSoBERT mà không sửa dòng nào ở tầng trên. Đây chính là thứ cho phép so sánh hai phương án ở §14.4.
+> **Quyết định kiến trúc:** `NluService` là **interface**. GĐ1 cài đặt bằng LLM, GĐ2 thay bằng PhoBERT mà không sửa dòng nào ở tầng trên. Đây chính là thứ cho phép so sánh hai phương án ở §14.4.
 
 ### 9.2 docker-compose.yml tối thiểu
 
@@ -646,8 +647,7 @@ public class LlmNluServiceImpl implements NluService {
         hãy trả về DUY NHẤT một object JSON, không markdown, không giải thích.
         Schema:
         {"intent": <một trong: search_room|refine_search|room_detail|
-                    compare_rooms|book_appointment|calculate_cost|
-                    policy_inquiry|out_of_scope>,
+                    compare_rooms|book_appointment|out_of_scope>,
          "entities": {"price_min":null,"price_max":null,"location":null,
                       "poi":null,"radius_m":null,"area_min":null,
                       "utilities":[],"room_type":null,"datetime":null,
@@ -725,7 +725,7 @@ Component `<ChatWidget>` với:
 
 ---
 
-## 11. Giai đoạn 2 — Fine-tune ViSoBERT & Fast-path (3–4 tuần)
+## 11. Giai đoạn 2 — Fine-tune PhoBERT & Fast-path (3–4 tuần)
 
 > Cài đặt thực tế: xem `ml/README.md` (dataset + train) và `nlu-service/README.md`
 > (bọc FastAPI). Đoạn code dưới đây là sườn minh hoạ; bản chạy được đã tách thành
@@ -739,9 +739,9 @@ from transformers import (AutoTokenizer, AutoModelForSequenceClassification,
 from datasets import load_dataset
 import numpy as np, evaluate
 
-MODEL = "uitnlp/visobert"
+MODEL = "vinai/phobert-base-v2"
 LABELS = ["search_room","refine_search","room_detail","compare_rooms",
-          "book_appointment","calculate_cost","policy_inquiry","out_of_scope"]
+          "book_appointment","out_of_scope"]
 
 tok = AutoTokenizer.from_pretrained(MODEL)
 model = AutoModelForSequenceClassification.from_pretrained(
@@ -753,7 +753,9 @@ ds = load_dataset("json", data_files={
     "train": "data/intent_train.jsonl",
     "test":  "data/intent_test_real.jsonl"})   # test = dữ liệu THẬT
 
-def prep(b): return tok(b["text"], truncation=True, max_length=64)
+# PhoBERT pretrain trên văn bản ĐÃ word-segment -> tách từ VnCoreNLP trước
+# ("cầu giấy" -> "cầu_giấy"). Bản chạy được: ml/phobert_encoding.py.
+def prep(b): return tok([segment(t) for t in b["text"]], truncation=True, max_length=128)
 ds = ds.map(prep, batched=True)
 
 f1 = evaluate.load("f1"); acc = evaluate.load("accuracy")
@@ -767,27 +769,24 @@ Trainer(
     model=model,
     args=TrainingArguments("./out-intent", num_train_epochs=5,
         per_device_train_batch_size=32, learning_rate=2e-5,
-        eval_strategy="epoch", load_best_model_at_end=True,
-        metric_for_best_model="f1"),
+        eval_strategy="epoch"),   # lấy epoch CUỐI — không chọn checkpoint trên bộ test
     train_dataset=ds["train"], eval_dataset=ds["test"],
     compute_metrics=metrics,
 ).train()
 ```
 
-> **Lưu ý ViSoBERT:** đưa **văn bản THÔ** vào tokenizer — KHÔNG tách từ, không ghép
-> âm tiết bằng dấu `_`. SentencePiece của ViSoBERT tự tách subword; dạng
-> `cầu_giấy` sẽ thành OOV và làm tụt F1.
->
-> Repo `uitnlp/visobert` chỉ ship `sentencepiece.bpe.model` (không có
-> `tokenizer.json`) nên `AutoTokenizer` phải convert slow → fast lúc tải lần đầu:
-> môi trường **bắt buộc** có cả `sentencepiece` lẫn `protobuf`.
+> **Lưu ý PhoBERT:** phải **word-segment** bằng VnCoreNLP trước khi tokenize (PhoBERT
+> pretrain trên văn bản đã segment, âm tiết ghép bằng `_`). VnCoreNLP là jar Java
+> nên máy train và máy chạy `nlu-service` đều cần Java. Tokenizer PhoBERT không có
+> bản "fast" (không có `offset_mapping`) — offset ký tự lấy từ VnCoreNLP
+> (`vncorenlp_util.segment_with_offsets`).
 
 ### Bước 2.2 — Huấn luyện NER
 
 Dùng `AutoModelForTokenClassification`, nhãn BIO:
 `O, B-PRICE_MAX, I-PRICE_MAX, B-LOCATION, I-LOCATION, B-POI, I-POI, B-UTILITY, I-UTILITY, ...`
 
-Chú ý căn chỉnh nhãn với subword token (`word_ids()` của fast tokenizer), gán `-100` cho subword không phải token đầu.
+Nhãn gán theo **từ** của VnCoreNLP: subword đầu mỗi từ mang nhãn BIO (theo overlap offset ký tự với entity), các subword sau gán `-100`. Ranh giới entity vì thế chỉ rơi đúng ranh giới từ — trần Span-F1 của cách encode này là 0.977 trên bộ proxy.
 
 ### Bước 2.3 — Bọc thành FastAPI service
 
@@ -800,7 +799,7 @@ class Req(BaseModel): text: str
 
 @app.post("/nlu")
 def nlu(r: Req):
-    # Văn bản THÔ — ViSoBERT tự tách subword, không tiền xử lý.
+    # Word-segment VnCoreNLP rồi tokenize PhoBERT — y hệt lúc train (ml/phobert_encoding.py).
     intent, conf = intent_clf(r.text)
     entities     = ner_extract(r.text)
     return {"intent": intent, "confidence": conf,
@@ -820,7 +819,7 @@ FROM chat_log GROUP BY path;
 
 Con số này đi thẳng vào slide bảo vệ.
 
-**Checkpoint GĐ2:** có bảng so sánh ViSoBERT vs LLM-NLU về Accuracy / F1 / latency / cost trên **cùng một test set**.
+**Checkpoint GĐ2:** có bảng so sánh PhoBERT vs LLM-NLU về Accuracy / F1 / latency / cost trên **cùng một test set**.
 
 ---
 
@@ -973,13 +972,15 @@ Chạy **cùng một test set** qua hai cài đặt của `NluService`:
 
 | Phương án | Intent Acc | NER F1 | p95 latency | Chi phí/1000 msg |
 |---|---|---|---|---|
-| A. LLM prompt JSON (GĐ1) | ? | ? | ? | ? |
-| B. ViSoBERT fine-tuned (GĐ2) | ? | ? | ? | ? |
-| C. LLM Function Calling | ? | ? | ? | ? |
+| A. LLM prompt JSON (GĐ1) | 0.929 | 0.921 | 1004ms | ~2.342đ |
+| B. PhoBERT fine-tuned (GĐ2) | 0.929 | 0.962 (Span-F1 strict 0.743) | 107ms | ≈0đ |
+| C. LLM Function Calling | 0.857 | 0.950 | 803ms | ~1.163đ |
+
+Số đo 2026-10-17 (`ml/eval-results/REPORT.md`): Intent Acc trên GOLD 28 câu thật (1 câu = 3,6 điểm); NER F1 là Slot-F1 sau chuẩn hoá trên bộ PROXY tay viết (NER chưa có test thật); latency của B đo trên CPU local, của A/C qua mạng tới Gemini flash-lite.
 
 Điền số thật. Kết luận có thể là "B nhanh hơn 8× và rẻ hơn, đổi lại kém A về intent hiếm gặp" — đó là **một kết luận khoa học có giá trị**, dù nó không tuyệt đối ủng hộ mô hình tự huấn luyện. Hội đồng đánh giá cao sự trung thực này hơn là một bảng số liệu hoàn hảo đáng ngờ.
 
-> Phương án C đáng thử nghiệm vì kiến trúc "Intent + Entity" vốn là cách làm thời tiền-LLM (Rasa/Dialogflow). Function calling xử lý multi-turn và intent mới mà không cần dataset. Đưa nó vào **làm đường cơ sở so sánh**, không phải để thay thế ViSoBERT.
+> Phương án C đáng thử nghiệm vì kiến trúc "Intent + Entity" vốn là cách làm thời tiền-LLM (Rasa/Dialogflow). Function calling xử lý multi-turn và intent mới mà không cần dataset. Đưa nó vào **làm đường cơ sở so sánh**, không phải để thay thế PhoBERT.
 
 ---
 
@@ -987,7 +988,8 @@ Chạy **cùng một test set** qua hai cài đặt của `NluService`:
 
 ### Câu hỏi hội đồng sẽ hỏi — và bạn phải trả lời được
 
-- [ ] **"Sao dùng ViSoBERT mà vẫn gọi LLM?"** → §2.2, bốn lý do + fast-path có số liệu.
+- [ ] **"Sao dùng PhoBERT mà vẫn gọi LLM?"** → §2.2, bốn lý do + fast-path có số liệu.
+- [ ] **"Sao chọn PhoBERT chứ không phải ViSoBERT?"** → §2.2, thí nghiệm cùng dữ liệu, 3 seed (`backbone_compare_full.md`).
 - [ ] **"Chatbot có bịa thông tin không?"** → Demo live validator với prompt injection, cho xem log.
 - [ ] **"'Gần PTIT' xử lý thế nào?"** → `ST_Distance_Sphere` / `geo_distance`, bảng `poi`, radius mặc định 1500m.
 - [ ] **"Kafka dùng làm gì?"** → Trả lời trung thực: không dùng trong luồng chat đồng bộ.

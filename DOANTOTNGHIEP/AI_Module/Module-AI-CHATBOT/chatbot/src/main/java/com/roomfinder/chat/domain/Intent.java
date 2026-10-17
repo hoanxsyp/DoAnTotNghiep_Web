@@ -6,8 +6,12 @@ import com.fasterxml.jackson.annotation.JsonValue;
 import java.util.Arrays;
 
 /**
- * Tập intent đóng (8 nhãn) — §3.1 của SPEC.
+ * Tập intent đóng — §3.1 của SPEC.
  * Mã JSON (snake_case) là hợp đồng với LLM/nlu-service.
+ *
+ * NLU (nlu-service, LLM) chỉ trả 6 nhãn: CALCULATE_COST và POLICY_INQUIRY đã gộp
+ * vào ROOM_DETAIL vì gần như không có data thật để học riêng. Hai hằng này vẫn giữ
+ * để ChatOrchestrator tách lại câu ROOM_DETAIL theo từ khóa và gọi handler riêng.
  */
 public enum Intent {
     SEARCH_ROOM("search_room"),

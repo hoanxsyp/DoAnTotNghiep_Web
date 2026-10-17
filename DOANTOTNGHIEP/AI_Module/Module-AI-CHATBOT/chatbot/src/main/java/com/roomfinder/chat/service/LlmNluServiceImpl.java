@@ -28,8 +28,7 @@ public class LlmNluServiceImpl implements NluService {
         KHÔNG markdown, KHÔNG giải thích, KHÔNG code fence.
         Schema:
         {"intent": <một trong: search_room|refine_search|room_detail|
-                    compare_rooms|book_appointment|calculate_cost|
-                    policy_inquiry|out_of_scope>,
+                    compare_rooms|book_appointment|out_of_scope>,
          "confidence": <số 0..1>,
          "entities": {"price_min":null,"price_max":null,"location":null,
                       "poi":null,"radius_m":null,"area_min":null,
@@ -40,6 +39,8 @@ public class LlmNluServiceImpl implements NluService {
         - Giá quy đổi ra số nguyên VND: "3 triệu"->3000000, "3tr5"->3500000, "500k"->500000.
         - utilities dùng key chuẩn: air_conditioner, parking, wifi, washing_machine.
         - "rẻ hơn nữa", "gần hơn", "có ... nữa" là refine_search (không phải search_room mới).
+        - Hỏi chi phí (điện nước, tổng tiền/tháng) hay quy định (cọc, hợp đồng, nuôi thú)
+          của một phòng là room_detail.
         - location là tên quận; poi là địa điểm mốc như "PTIT","Bách Khoa".
 
         Ví dụ:

@@ -56,19 +56,19 @@
 {"text": "đặt hẹn xem phòng đầu tiên vào sáng mai giúp em", "intent": "book_appointment"}
 {"text": "khi nào xem phòng được ạ", "intent": "book_appointment"}
 {"text": "book lịch xem phòng số 3 chiều thứ 4", "intent": "book_appointment"}
-{"text": "ở phòng 1 mỗi tháng hết bao nhiêu tiền tất cả", "intent": "calculate_cost"}
-{"text": "tính giúp em chi phí điện nước phòng số 2", "intent": "calculate_cost"}
-{"text": "tổng chi phí hàng tháng khoảng bao nhiêu vậy", "intent": "calculate_cost"}
-{"text": "thuê phòng đó xong đóng thêm phí gì không", "intent": "calculate_cost"}
-{"text": "giá phòng đã bao gồm điện nước chưa", "intent": "calculate_cost"}
-{"text": "phòng thứ hai tính đủ dịch vụ hết nhiêu tiền", "intent": "calculate_cost"}
-{"text": "hợp đồng ký tối thiểu mấy tháng vậy", "intent": "policy_inquiry"}
-{"text": "đặt cọc bao nhiêu là đủ ạ", "intent": "policy_inquiry"}
-{"text": "lỡ muốn hủy hợp đồng sớm thì sao", "intent": "policy_inquiry"}
-{"text": "cọc có được hoàn lại không nếu trả phòng sớm", "intent": "policy_inquiry"}
-{"text": "gia hạn hợp đồng cần làm thủ tục gì", "intent": "policy_inquiry"}
-{"text": "quy định phạt cọc thế nào vậy ạ", "intent": "policy_inquiry"}
-{"text": "thuê tối thiểu bao lâu vậy shop", "intent": "policy_inquiry"}
+{"text": "ở phòng 1 mỗi tháng hết bao nhiêu tiền tất cả", "intent": "room_detail"}
+{"text": "tính giúp em chi phí điện nước phòng số 2", "intent": "room_detail"}
+{"text": "tổng chi phí hàng tháng khoảng bao nhiêu vậy", "intent": "room_detail"}
+{"text": "thuê phòng đó xong đóng thêm phí gì không", "intent": "room_detail"}
+{"text": "giá phòng đã bao gồm điện nước chưa", "intent": "room_detail"}
+{"text": "phòng thứ hai tính đủ dịch vụ hết nhiêu tiền", "intent": "room_detail"}
+{"text": "hợp đồng ký tối thiểu mấy tháng vậy", "intent": "room_detail"}
+{"text": "đặt cọc bao nhiêu là đủ ạ", "intent": "room_detail"}
+{"text": "lỡ muốn hủy hợp đồng sớm thì sao", "intent": "room_detail"}
+{"text": "cọc có được hoàn lại không nếu trả phòng sớm", "intent": "room_detail"}
+{"text": "gia hạn hợp đồng cần làm thủ tục gì", "intent": "room_detail"}
+{"text": "quy định phạt cọc thế nào vậy ạ", "intent": "room_detail"}
+{"text": "thuê tối thiểu bao lâu vậy shop", "intent": "room_detail"}
 {"text": "chào bạn", "intent": "out_of_scope"}
 {"text": "bạn là ai vậy", "intent": "out_of_scope"}
 {"text": "hôm nay trời đẹp ghê", "intent": "out_of_scope"}
@@ -113,14 +113,14 @@
 {"text": "đặt xem phòng số 1 giúp em vào 8h tối mai", "intent": "book_appointment"}
 {"text": "t rảnh chiều mai qua xem phòng luôn được k", "intent": "book_appointment"}
 {"text": "sắp lịch xem phòng đầu tiên giúp mình với ạ", "intent": "book_appointment"}
-{"text": "tổng tiền phải đóng tháng đầu là bao nhiêu", "intent": "calculate_cost"}
-{"text": "phòng 2 cộng hết điện nước dịch vụ khoảng bao nhiêu", "intent": "calculate_cost"}
-{"text": "có tính phí gửi xe riêng không hay đã gồm trong giá", "intent": "calculate_cost"}
-{"text": "ước tính giúp em chi phí ở phòng số 3", "intent": "calculate_cost"}
-{"text": "nếu ở k đủ 6 tháng có bị phạt không", "intent": "policy_inquiry"}
-{"text": "thủ tục ký hợp đồng cần giấy tờ gì", "intent": "policy_inquiry"}
-{"text": "cho hỏi chính sách khi muốn chuyển phòng khác", "intent": "policy_inquiry"}
-{"text": "phí dịch vụ có được ghi rõ trong hợp đồng không", "intent": "policy_inquiry"}
+{"text": "tổng tiền phải đóng tháng đầu là bao nhiêu", "intent": "room_detail"}
+{"text": "phòng 2 cộng hết điện nước dịch vụ khoảng bao nhiêu", "intent": "room_detail"}
+{"text": "có tính phí gửi xe riêng không hay đã gồm trong giá", "intent": "room_detail"}
+{"text": "ước tính giúp em chi phí ở phòng số 3", "intent": "room_detail"}
+{"text": "nếu ở k đủ 6 tháng có bị phạt không", "intent": "room_detail"}
+{"text": "thủ tục ký hợp đồng cần giấy tờ gì", "intent": "room_detail"}
+{"text": "cho hỏi chính sách khi muốn chuyển phòng khác", "intent": "room_detail"}
+{"text": "phí dịch vụ có được ghi rõ trong hợp đồng không", "intent": "room_detail"}
 {"text": "ê bot ơi", "intent": "out_of_scope"}
 {"text": "bạn thích màu gì", "intent": "out_of_scope"}
 {"text": "có biết đá bóng không", "intent": "out_of_scope"}
@@ -139,4 +139,4 @@
 {"text": "phòng số 1 và phòng số 3 hẹn xem cùng lúc được không, chiều mai nhé", "intent": "book_appointment"}
 {"text": "mình muốn xem cả phòng đầu tiên và phòng thứ hai vào sáng thứ 2", "intent": "compare_rooms"}
 {"text": "phòng số 2 có cho nuôi thú cưng không", "intent": "room_detail"}
-{"text": "giá phòng 1 đã gồm phí quản lý chưa", "intent": "calculate_cost"}
+{"text": "giá phòng 1 đã gồm phí quản lý chưa", "intent": "room_detail"}

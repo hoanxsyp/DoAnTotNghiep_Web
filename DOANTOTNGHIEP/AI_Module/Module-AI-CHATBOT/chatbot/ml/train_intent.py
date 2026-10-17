@@ -1,21 +1,26 @@
-"""Huấn luyện ViSoBERT intent classifier — SPEC §11 bước 2.1.
+"""Huấn luyện PhoBERT intent classifier — SPEC §11 bước 2.1.
 
-Base model `uitnlp/visobert` — pretrain trên văn bản mạng xã hội nên chịu được
-teencode/mất dấu trong câu chat, và nhận văn bản THÔ (không word-segment).
+Base model `vinai/phobert-base-v2`. Câu được word-segment bằng VnCoreNLP trước
+khi tokenize (xem `phobert_encoding.py`) — PhoBERT được pretrain trên văn bản
+đã segment. Chọn PhoBERT thay ViSoBERT theo `eval-results/backbone_compare_full.md`.
 
-Dữ liệu train = synthetic (`data/intent_train.jsonl`) + DỮ LIỆU THẬT đã đánh nhãn
-(`data/intent_train_real.jsonl`, sinh bởi `data/split_real_data.py`).
+Dữ liệu train = synthetic (`data/intent_train_v2.jsonl`) + DỮ LIỆU THẬT đã đánh
+nhãn (`data/intent_train_real.jsonl`, sinh bởi `data/split_real_data.py`) nhân
+`--real-repeat` lần.
 
 Đánh giá trên 2 bộ, in riêng để so sánh:
   - GOLD  (`data/intent_test_gold.jsonl`): data THẬT held-out — tín hiệu chính.
   - PROXY (`data/intent_test_real.jsonl`): bộ tay viết cũ (xem cảnh báo "PROXY"
     trong `data/build_proxy_testset.py`, chưa phải dữ liệu thật thu thập).
-Model dùng GOLD để chọn best checkpoint (metric_for_best_model=f1).
+Lấy model ở epoch CUỐI — KHÔNG chọn checkpoint theo GOLD (chọn trên bộ test làm
+số đo lạc quan hơn thực tế). GOLD chỉ được xem mỗi epoch để theo dõi.
 
-Lưu ý độ phủ tập GOLD: không có calculate_cost (0 câu thật) và rất ít
-policy_inquiry/out_of_scope -> các lớp này vẫn chủ yếu dựa vào PROXY. GOLD chỉ
-28 câu nên 1 câu = 3,6 điểm accuracy — chênh lệch 1-2 câu giữa 2 lần train là
-NHIỄU, không phải cải thiện.
+6 intent: calculate_cost / policy_inquiry đã gộp vào room_detail (0 và 1 câu
+thật, không đủ học riêng — xem MERGED_INTENTS trong data/generate_dataset_v2.py).
+
+Lưu ý độ phủ tập GOLD: rất ít out_of_scope (1 câu) -> lớp này vẫn chủ yếu dựa
+vào PROXY. GOLD chỉ 28 câu nên 1 câu = 3,6 điểm accuracy — chênh lệch 1-2 câu
+giữa 2 lần train là NHIỄU, không phải cải thiện.
 
 Chạy:
     python data/split_real_data.py                # (chạy trước) tách train/test thật
@@ -32,20 +37,20 @@ import numpy as np
 from datasets import Dataset
 from transformers import (
     AutoModelForSequenceClassification,
-    AutoTokenizer,
     DataCollatorWithPadding,
     Trainer,
     TrainingArguments,
 )
 
 from nlu_encoding import CONFIG_MAX_LEN, DEFAULT_BASE_MODEL, MAX_LENGTH
+from phobert_encoding import CONFIG_ENCODING, ENCODING_NAME, PhoBertEncoder
 
 ROOT = Path(__file__).parent
 DATA_DIR = ROOT / "data"
 
 LABELS = [
     "search_room", "refine_search", "room_detail", "compare_rooms",
-    "book_appointment", "calculate_cost", "policy_inquiry", "out_of_scope",
+    "book_appointment", "out_of_scope",
 ]
 LABEL2ID = {l: i for i, l in enumerate(LABELS)}
 ID2LABEL = {i: l for i, l in enumerate(LABELS)}
@@ -65,25 +70,28 @@ def load_jsonl_optional(path: Path, what: str):
     return load_jsonl(path)
 
 
-def to_dataset(rows):
-    """Văn bản THÔ — ViSoBERT tự tách subword, không tiền xử lý gì thêm."""
-    texts = [r["text"] for r in rows]
-    labels = [LABEL2ID[r["intent"]] for r in rows]
-    return Dataset.from_dict({"text": texts, "label": labels})
+def to_dataset(encoder, rows, max_length):
+    cols = {"input_ids": [], "attention_mask": [], "label": []}
+    for r in rows:
+        ids, mask = encoder.intent(r["text"], max_length)
+        cols["input_ids"].append(ids)
+        cols["attention_mask"].append(mask)
+        cols["label"].append(LABEL2ID[r["intent"]])
+    return Dataset.from_dict(cols)
 
 
-def make_training_args(output_dir, num_epochs, batch_size):
+def make_training_args(output_dir, num_epochs, batch_size, learning_rate, seed):
     common = dict(
         output_dir=output_dir,
         num_train_epochs=num_epochs,
         per_device_train_batch_size=batch_size,
         per_device_eval_batch_size=batch_size * 2,
-        learning_rate=2e-5,
-        save_strategy="epoch",
-        load_best_model_at_end=True,
-        metric_for_best_model="f1",
+        learning_rate=learning_rate,
+        # Không lưu checkpoint: mỗi cái ~1.6GB và ta chỉ cần model cuối.
+        save_strategy="no",
         logging_steps=20,
         report_to=[],
+        seed=seed,
     )
     try:
         return TrainingArguments(eval_strategy="epoch", **common)
@@ -91,14 +99,18 @@ def make_training_args(output_dir, num_epochs, batch_size):
         return TrainingArguments(evaluation_strategy="epoch", **common)
 
 
-def main(max_train, num_epochs, output_dir, batch_size, base_model, max_length):
-    print(f"Base model: {base_model} | max_length: {max_length}")
+def main(max_train, num_epochs, output_dir, batch_size, base_model, max_length,
+         learning_rate, real_repeat, synth_file, seed):
+    print(f"Base model: {base_model} | max_length: {max_length} | lr: {learning_rate} "
+          f"| real_repeat: {real_repeat} | synth: {synth_file} | seed: {seed}")
 
     # Train = synthetic + data thật (nếu có). Data thật để ở file riêng nên
-    # generate_dataset.py chạy lại KHONG ghi de len no.
-    synth_rows = load_jsonl(DATA_DIR / "intent_train.jsonl")
+    # generate_dataset*.py chạy lại KHONG ghi de len no.
+    synth_rows = load_jsonl(DATA_DIR / synth_file)
     real_train_rows = load_jsonl_optional(DATA_DIR / "intent_train_real.jsonl", "data that train")
-    train_rows = synth_rows + real_train_rows
+    # Data that it hon synthetic ~22 lan nen chim mat trong loss; --real-repeat
+    # nhan ban len de no co trong so thuc su.
+    train_rows = synth_rows + real_train_rows * real_repeat
     if max_train:
         train_rows = train_rows[:max_train]
 
@@ -106,26 +118,23 @@ def main(max_train, num_epochs, output_dir, batch_size, base_model, max_length):
     proxy_rows = load_jsonl(DATA_DIR / "intent_test_real.jsonl")
     # GOLD (data thật) là bộ đánh giá chính; nếu chưa có thì tạm dùng PROXY.
     eval_rows = gold_rows if gold_rows else proxy_rows
-    print(f"Train: {len(train_rows)} cau (synthetic {len(synth_rows)} + that {len(real_train_rows)}) "
-          f"| eval chinh: {'GOLD' if gold_rows else 'PROXY'} {len(eval_rows)} cau")
+    print(f"Train: {len(train_rows)} cau (synthetic {len(synth_rows)} + that {len(real_train_rows)}"
+          f"x{real_repeat}) | eval chinh: {'GOLD' if gold_rows else 'PROXY'} {len(eval_rows)} cau")
 
-    train_ds = to_dataset(train_rows)
-    test_ds = to_dataset(eval_rows)
-    proxy_ds = to_dataset(proxy_rows)
-
-    tokenizer = AutoTokenizer.from_pretrained(base_model)
+    encoder = PhoBertEncoder.from_pretrained(base_model)
+    tokenizer = encoder.tok
     model = AutoModelForSequenceClassification.from_pretrained(
         base_model, num_labels=len(LABELS), id2label=ID2LABEL, label2id=LABEL2ID
     )
-    # nlu-service đọc khoá này từ config.json để encode y hệt lúc train.
+    # nlu-service đọc 2 khoá này từ config.json để encode y hệt lúc train.
     setattr(model.config, CONFIG_MAX_LEN, max_length)
+    setattr(model.config, CONFIG_ENCODING, ENCODING_NAME)
 
-    def prep(batch):
-        return tokenizer(batch["text"], truncation=True, max_length=max_length)
-
-    train_ds = train_ds.map(prep, batched=True)
-    test_ds = test_ds.map(prep, batched=True)
-    proxy_ds = proxy_ds.map(prep, batched=True)
+    train_ds = to_dataset(encoder, train_rows, max_length)
+    test_ds = to_dataset(encoder, eval_rows, max_length)
+    proxy_ds = to_dataset(encoder, proxy_rows, max_length)
+    if encoder.fallbacks:
+        print(f"[CANH BAO] {encoder.fallbacks} cau VnCoreNLP khong do lai duoc offset -> tach theo khoang trang")
 
     acc_metric = evaluate.load("accuracy")
     f1_metric = evaluate.load("f1")
@@ -139,7 +148,7 @@ def main(max_train, num_epochs, output_dir, batch_size, base_model, max_length):
 
     trainer = Trainer(
         model=model,
-        args=make_training_args(output_dir, num_epochs, batch_size),
+        args=make_training_args(output_dir, num_epochs, batch_size, learning_rate, seed),
         train_dataset=train_ds,
         eval_dataset=test_ds,
         data_collator=DataCollatorWithPadding(tokenizer),
@@ -151,6 +160,10 @@ def main(max_train, num_epochs, output_dir, batch_size, base_model, max_length):
     metrics = trainer.evaluate()
     print(f"=== Ket qua tren {eval_name} — bo danh gia CHINH ===")
     print(metrics)
+    preds = np.argmax(trainer.predict(test_ds).predictions, axis=1)
+    for r, p in zip(eval_rows, preds):
+        if LABELS[p] != r["intent"]:
+            print(f"   SAI: {r['text'][:70]!r} | dung={r['intent']} doan={LABELS[p]}")
 
     # Luon bao cao them tren PROXY de so sanh (bo cu tay viet).
     proxy_metrics = trainer.evaluate(proxy_ds, metric_key_prefix="proxy")
@@ -175,8 +188,13 @@ if __name__ == "__main__":
     parser.add_argument("--output-dir", default=str(ROOT / "out-intent"))
     parser.add_argument("--base-model", default=DEFAULT_BASE_MODEL,
                         help=f"mac dinh {DEFAULT_BASE_MODEL}")
-    parser.add_argument("--max-length", type=int, default=MAX_LENGTH,
-                        help=f"mac dinh {MAX_LENGTH}; nang len 128/256 khi train tren data that dai")
+    parser.add_argument("--max-length", type=int, default=MAX_LENGTH)
+    parser.add_argument("--learning-rate", type=float, default=2e-5)
+    parser.add_argument("--synth-file", default="intent_train_v2.jsonl",
+                        help="file synthetic (intent_train.jsonl = bo v1 van phong sach)")
+    parser.add_argument("--real-repeat", type=int, default=10,
+                        help="nhan ban data that N lan de tang trong so (mac dinh 10)")
+    parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
     main(args.max_train, args.epochs, args.output_dir, args.batch_size, args.base_model,
-         args.max_length)
+         args.max_length, args.learning_rate, args.real_repeat, args.synth_file, args.seed)

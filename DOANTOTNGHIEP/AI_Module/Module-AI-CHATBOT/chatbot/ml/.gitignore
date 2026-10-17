@@ -3,3 +3,6 @@ __pycache__/
 out-intent/
 out-ner/
 out-*-smoke/
+# Ban sao luu model cu (ViSoBERT, PhoBERT thang 7-8) — moi thu muc vai GB
+out-*.bak/
+cmp-runs/

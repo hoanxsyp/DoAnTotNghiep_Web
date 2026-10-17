@@ -20,7 +20,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * NLU bằng ViSoBERT qua nlu-service (FastAPI) — GĐ2, §11 bước 2.4.
+ * NLU bằng PhoBERT qua nlu-service (FastAPI) — GĐ2, §11 bước 2.4.
  * Class này KHÔNG phụ thuộc base model: hợp đồng JSON của nlu-service là span thô
  * + intent, nên thay model bên Python không phải sửa gì ở tầng Java.
  * @Primary thay cho LlmNluServiceImpl; chuỗi fallback 2 tầng:
