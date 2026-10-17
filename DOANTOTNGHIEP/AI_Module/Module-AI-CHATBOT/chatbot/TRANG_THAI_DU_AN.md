@@ -2,7 +2,7 @@
 
 > Tài liệu tổng hợp: dự án đã làm đến giai đoạn nào, mỗi giai đoạn còn thiếu gì.
 > Đối chiếu với `SPEC_Module_Chatbot_AI_Tim_Phong_Tro.md` (bản chuẩn hóa v2.0).
-> Cập nhật: 2026-09-29 (đổi tầng NLU sang ViSoBERT — xem mục 2).
+> Cập nhật: 2026-10-17 (chuyển tầng NLU về PhoBERT, gộp còn 6 intent, đã train + đo — xem mục 2).
 
 ---
 
@@ -10,8 +10,8 @@
 
 | Giai đoạn | Phạm vi | Trạng thái | Ghi chú |
 |---|---|---|---|
-| **GĐ1 — MVP** | NLU(LLM)→Normalizer→Context→Retrieval→NLG+Guardrail, multi-turn, geo | ✅ **Xong** | Chạy e2e, đủ 8 intent, đủ demo §15 |
-| **GĐ2 — NLU ViSoBERT + Fast-path** | Train intent/NER, FastAPI service, nối Spring, fast-path, so sánh các phương án NLU | 🟠 **Code xong, chưa train** | Toàn bộ pipeline + service + eval harness đã sẵn sàng, nhưng `ml/out-*` còn trống nên **chưa có số liệu model nào** |
+| **GĐ1 — MVP** | NLU(LLM)→Normalizer→Context→Retrieval→NLG+Guardrail, multi-turn, geo | ✅ **Xong** | Chạy e2e, đủ intent (6 nhãn NLU, 8 nhánh xử lý), đủ demo §15 |
+| **GĐ2 — NLU PhoBERT + Fast-path** | Train intent/NER, FastAPI service, nối Spring, fast-path, so sánh các phương án NLU | 🟢 **Đã train + đo** | Intent GOLD 0.929 (đạt DoD-1); NER Span-F1 0.743 (chưa đạt DoD-2, chưa có test NER thật) |
 | **GĐ3 — Semantic + Recommendation** | Semantic rerank (embedding), Content-Based+KNN recommend | ✅ **Xong** | Không dùng Elasticsearch (có chủ đích, catalog ~60 phòng) |
 | **Phụ — Geocoding fallback** | POI miss → Nominatim → cache | ✅ **Xong** | Tầng 2 hybrid geo |
 
@@ -36,79 +36,84 @@
 | Fast-path (bỏ LLM) | `ChatOrchestrator.canFastPath` | §6.3 |
 | API `POST /api/v1/chat`, `/reset`, `meta` | `ChatController` | §7 |
 | Schema `room`+`poi`+`chat_log`, seed 59 phòng | `schema.sql`, `data.sql` | §8 |
-| **8/8 intent được xử lý** | `ChatOrchestrator.handle` switch | §3.1 |
+| **Đủ intent được xử lý** (6 nhãn NLU; `room_detail` tách tiếp ra chi phí / quy định) | `ChatOrchestrator.handle` switch | §3.1 |
 | Frontend React chat widget + RoomCard + filter chips | `frontend/` | §10.5 |
 | Rule "rẻ hơn nữa đi" (giảm 20% giá) | `ChatOrchestrator` | §4.2 |
 
-Đủ 8 intent: `search_room`, `refine_search`, `room_detail`, `compare_rooms`, `book_appointment` (chỉ thu thập tham số, không ghi DB — §1.2), `calculate_cost`, `policy_inquiry`, `out_of_scope`.
+6 intent NLU: `search_room`, `refine_search`, `room_detail`, `compare_rooms`, `book_appointment` (chỉ thu thập tham số, không ghi DB — §1.2), `out_of_scope`. Câu `room_detail` hỏi chi phí / quy định được `ChatOrchestrator` chuyển sang handler riêng (`CALCULATE_COST`, `POLICY_INQUIRY` vẫn còn trong enum Java).
 
 ### Còn thiếu / khác SPEC (có chủ đích) ⚠️
 
 - **Location dùng `room.district` (VARCHAR) + fuzzy** thay cho bảng `district` riêng — đơn giản hóa MVP (README §8).
 - **POI alias match ở Java** thay vì `JSON_CONTAINS` — dễ port, tránh phụ thuộc cú pháp MySQL.
 - **`book_appointment` chưa ghi DB thật** — đúng phạm vi §1.2 (chatbot không ghi dữ liệu), nhưng khi ghép vào hệ thống nghiệp vụ cần nối API đặt lịch tại `ChatOrchestrator.handleBooking`.
-- **`calculate_cost` dùng điện/nước/dịch vụ mặc định cứng** (100k/100k/150k) — nếu muốn chính xác cần lấy đơn giá thật từ tin đăng.
+- **Ước tính chi phí (`handleCalculateCost`) dùng điện/nước/dịch vụ mặc định cứng** (100k/100k/150k) — nếu muốn chính xác cần lấy đơn giá thật từ tin đăng.
 
 ---
 
-## 2. GĐ2 — Fine-tune ViSoBERT & Fast-path (SPEC §11)
+## 2. GĐ2 — Fine-tune PhoBERT & Fast-path (SPEC §11)
 
-> ⚠️ **Chưa train model.** Code, service và eval harness đã xong nhưng
-> `ml/out-intent` / `ml/out-ner` còn trống, nên mọi ô số liệu trong mục này là
-> "chưa đo". Xem `ml/README.md` để biết cách train và điền.
+> ✅ **Đã train (2026-10-17).** Model PhoBERT ở `ml/out-intent/`, `ml/out-ner/`,
+> `nlu-service` chạy được và đã đo lại toàn bộ. Lịch sử: PhoBERT (7-8) → ViSoBERT
+> (09-29) → so sánh 2 model trên cùng dữ liệu (10-15) → **quay về PhoBERT** vì tốt
+> hơn ở mọi chỉ số; đồng thời gộp 8 intent còn 6.
 
 ### Đã làm ✅
 
 | Hạng mục | Vị trí | SPEC |
 |---|---|---|
-| Sinh dataset synthetic (2500 intent, 2075 NER) | `ml/data/generate_dataset.py` | §13.2 |
-| Train intent classifier (ViSoBERT, 8 nhãn) | `ml/train_intent.py` → `ml/out-intent/` | §11 bước 2.1 |
-| Train NER (token classification, BIO) | `ml/train_ner.py` → `ml/out-ner/` | §11 bước 2.2 |
-| Encode văn bản thô + gán BIO theo `offset_mapping` (trần Span-F1 = 1.0000) | `ml/nlu_encoding.py` | §11 lưu ý |
-| Bọc FastAPI service `/nlu` + `/embed` + `/health` | `nlu-service/app.py` | §11 bước 2.3 |
+| Sinh dataset synthetic v2 theo văn phong thật (2500 intent, 2075 NER / 6965 entity) | `ml/data/generate_dataset_v2.py` | §13.2 |
+| **So sánh PhoBERT vs ViSoBERT** (cùng data, 3 seed, không chọn checkpoint trên test) | `ml/compare_backbones.py` → `ml/eval-results/backbone_compare_full.md` | §2.2 |
+| Train intent classifier (PhoBERT, **6 nhãn**) | `ml/train_intent.py` → `ml/out-intent/` | §11 bước 2.1 |
+| Train NER (BIO, nhãn theo từ VnCoreNLP) | `ml/train_ner.py` → `ml/out-ner/` | §11 bước 2.2 |
+| Word-segment VnCoreNLP kèm offset ký tự, encode dùng chung train + service | `ml/phobert_encoding.py`, `ml/vncorenlp_util.py` | §11 lưu ý |
+| Bọc FastAPI service `/nlu` + `/embed` + `/health` (JRE trong Docker, warm-up lúc startup) | `nlu-service/app.py`, `nlu-service/Dockerfile` | §11 bước 2.3 |
 | Nối Spring qua `LocalNluServiceImpl` (@Primary, timeout 300ms, fallback LLM→rule) | `service/LocalNluServiceImpl` | §11 bước 2.4 |
 | Fast-path bật + ghi `path` vào `chat_log` | `ChatOrchestrator` | §6.3 |
 | **So sánh 3 phương án NLU (A/B/C)** | `ml/eval_nlu_compare.py`, `ml/eval-results/REPORT.md` | §14.4 |
 
-### Kết quả đo được — CHƯA CÓ
+**Gộp intent:** `calculate_cost` (0 câu thật) và `policy_inquiry` (1 câu thật) gộp
+vào `room_detail`. `ChatOrchestrator` tách lại theo từ khóa nên người dùng vẫn được
+ước tính chi phí / trả lời quy định như trước (SPEC §3.1).
 
-Model chưa được train nên chưa có ô nào điền được. Dataset đã sẵn sàng: intent
-train trên 2615 câu (2500 synthetic + **143 câu THẬT** từ data.md 56 + data2.md 87),
-eval chính = GOLD 28 câu thật held-out.
+### Kết quả đo được (2026-10-17)
+
+Train: intent 3650 câu (2500 synthetic v2 + 115 câu thật ×10); NER 2131 câu
+(2075 synthetic v2 + 56 câu thật). Model lấy ở epoch cuối.
 
 | Model | Metric | Giá trị | Ngưỡng DoD |
 |---|---|---|---|
-| Intent | Accuracy (GOLD thật, 28 câu) | *chưa đo* | DoD-1 ≥ 0.90 |
-| Intent | Macro-F1 (GOLD thật) | *chưa đo* | — |
-| Intent | Accuracy (PROXY tay viết, 142 câu) | *chưa đo* | — |
-| NER | Span-F1 strict (bộ PROXY, 87 câu) | *chưa đo* | DoD-2 ≥ 0.85 |
+| Intent | Accuracy (GOLD thật, 28 câu) | **0.929** (26/28) | DoD-1 ≥ 0.90 ✅ |
+| Intent | Macro-F1 (GOLD thật) | 0.916 | — |
+| Intent | Accuracy (PROXY tay viết, 142 câu) | 0.775 | — |
+| NER | Span-F1 strict (PROXY, 87 câu) | **0.743** (P 0.690 / R 0.805) | DoD-2 ≥ 0.85 ❌ |
+| NER | Slot-F1 sau chuẩn hoá (PROXY) | 0.962 | — |
 
-Lưu ý khi điền: **Macro-F1 trên GOLD sẽ thấp giả tạo** vì GOLD chỉ có 6/8 intent
-(thiếu hẳn `calculate_cost` và `policy_inquiry`, 0 mẫu test), macro-F1 chia trung
-bình trên đủ 8 nhãn nên bị 2 nhãn không có mẫu kéo xuống — **accuracy là số dẫn**.
-NER cũng chưa có bộ test THẬT (data2 là câu hội thoại, không sinh nhãn NER), nên
-số NER đo được sẽ vẫn là trên proxy.
+GOLD giờ phủ đủ cả 6 intent. 2 câu GOLD còn sai: *"Còn ko em ở luôn ạ"* (thiếu
+intent kiểu hỏi tình trạng phòng — `TODO.md`) và *"em cần vào luôn đầu tuần sau nhé
+mọi người"*. NER vẫn **chưa có bộ test THẬT** nên số NER là trên proxy.
 
-**So sánh 3 phương án (§14.4) — cập nhật 2026-08-01, `ml/eval-results/REPORT.md`:**
+**So sánh 3 phương án (§14.4) — `ml/eval-results/REPORT.md`:**
 
-Intent đo trên **GOLD thật** (28 câu held-out); Slot-F1/Latency/Chi phí vẫn trên **PROXY** (NER chưa có data thật):
-
-| Phương án | Intent Acc (GOLD) | Slot-F1 (proxy) | Latency TB | Chi phí/1000 msg |
+| Phương án | Intent Acc (GOLD) | Slot-F1 (proxy) | Latency TB / p95 | Chi phí/1000 msg |
 |---|---|---|---|---|
-| A. LLM prompt JSON | 0.893 | 0.921 | 850ms | ~2.342đ |
-| B. ViSoBERT fine-tuned | *chưa đo* | *chưa đo* | *chưa đo* | **≈0đ** |
-| C. LLM Function Calling | 0.821 | 0.950 | 669ms | ~1.163đ |
+| A. LLM prompt JSON | 0.929 | 0.921 | 850 / 1004ms | ~2.342đ |
+| **B. PhoBERT fine-tuned** | **0.929** | **0.962** | **87 / 107ms** | **≈0đ** |
+| C. LLM Function Calling | 0.857 | 0.950 | 669 / 803ms | ~1.163đ |
 
-Số của A và C đã đo thật trên GOLD/PROXY. **Dòng B chưa có số** — cần train 2 model ViSoBERT rồi chạy `eval_nlu_compare.py --side visobert`. Lưu ý khi kết luận: GOLD chỉ 28 câu nên 1 câu = 3,6 điểm accuracy; lợi thế chắc chắn của B là **latency và chi phí ≈0**, còn hơn/kém về accuracy thì phải đo mới biết.
+A và C được đo lúc còn 8 intent; khi chấm, nhãn được gộp ở cả gold lẫn dự đoán
+nên tương đương chấm trên 6 intent (không gọi lại LLM). Kết luận: B **ngang A về
+intent, hơn cả A lẫn C về slot**, nhanh hơn ~10× và chi phí ≈0. GOLD chỉ 28 câu
+(1 câu = 3,6 điểm) nên "ngang nhau" là kết luận đúng mức, không phải "hơn".
 
 ### Còn thiếu ❌ (quan trọng cho bảo vệ)
 
-1. **DỮ LIỆU THẬT (§13.3)** — đã cải thiện một phần cho intent, NER còn nguyên:
-   - **Intent: đã có 143 câu thật** (data.md 56 + data2.md 87 câu hội thoại) → tách GOLD 28 câu thật held-out làm bộ đánh giá chính. Bộ này hợp lệ để trình (eval trên data thật, không phải proxy) nhưng còn nhỏ (28 câu → 1 câu = 3,6 điểm acc) và thiếu 2 intent (`calculate_cost`, `policy_inquiry`).
-   - **NER: vẫn chỉ có bộ PROXY** (`ner_test_real.jsonl`, 87 câu tay viết) — data2 là câu hội thoại nên không sinh nhãn NER. Cần thu thập + gán nhãn NER thật; `ner_data_md_labeled.jsonl` (56 câu thật, 209 entity) đã có nhãn nhưng hiện chưa được `train_ner.py` dùng.
-   - Nên tiếp tục thu thập thêm câu thật (đặc biệt `calculate_cost`, `policy_inquiry`) để GOLD đủ phủ 8 intent và đủ lớn.
-2. **Chưa có số cho DoD-1 và DoD-2** vì model chưa train — đây là việc chặn đầu tiên.
+1. **DoD-2 chưa đạt (Span-F1 0.743 < 0.85)** và NER **chưa có bộ test thật** — gán
+   nhãn NER cho `data2.md` (87 câu chat) vừa có bộ test thật vừa thêm data train.
+2. **Data thật còn ít**: 143 câu intent / 56 câu NER; GOLD 28 câu, `out_of_scope` chỉ 1 câu.
 3. **Chưa đo tỉ lệ fast-path trên log thật** — SPEC §11 bước 2.4 muốn chạy thật ≥1 tuần rồi `SELECT path, COUNT(*), AVG(latency_ms) FROM chat_log GROUP BY path`. Query đã sẵn (README §7), chỉ thiếu **dữ liệu chạy thật đủ lâu**.
+4. Khoảng giá "1tr5-2tr" ra 1 span `PRICE_MAX` — normalizer Java cần tách min/max;
+   `UtilityNormalizer` mới map 4 nhóm trong khi data v2 có 51 biến thể tiện ích.
 
 ---
 
@@ -147,8 +152,8 @@ Số của A và C đã đo thật trên GOLD/PROXY. **Dòng B chưa có số** 
 
 | DoD | Tiêu chí | Ngưỡng | Trạng thái | Việc còn thiếu |
 |---|---|---|---|---|
-| DoD-1 | Intent Accuracy (test thật) | ≥0.90 | ❌ **chưa đo** — model chưa train | Train `train_intent.py`, đo trên GOLD 28 câu thật; thu thập thêm câu thật (nhất là `calculate_cost`/`policy_inquiry`) |
-| DoD-2 | Entity F1 macro (test thật) | ≥0.85 | ❌ **chưa đo** — model chưa train | Train `train_ner.py`; và NER vẫn chưa có bộ test THẬT (data2 không có nhãn NER) nên số đầu tiên sẽ là trên proxy |
+| DoD-1 | Intent Accuracy (test thật) | ≥0.90 | ✅ **ĐẠT — 0.929** (GOLD 28 câu thật, 26/28) | GOLD còn nhỏ (1 câu = 3,6 điểm) — thu thêm câu thật để con số vững hơn |
+| DoD-2 | Entity F1 macro (test thật) | ≥0.85 | ❌ **0.743** Span-F1 strict trên PROXY (chưa có test thật) | Gán nhãn NER thật (`data2.md`) để có test thật + thêm data train |
 | DoD-3 | **Recall@5 của retrieval** | ≥0.80 | ✅ **ĐẠT — Recall@5 = 1.000** (30 câu) | Harness JUnit `RetrievalRecallEvalTest` + bộ vàng `retrieval_eval.jsonl`; báo cáo `ml/eval-results/retrieval_recall.md`. (Mở rộng lên ~50 câu + thêm data thật nếu muốn) |
 | DoD-4 | Hallucination rate | =0 sau guardrail | ✅ Validator đã cài + có `hallucination_flag` | Chỉ cần chạy query báo cáo trên log thật |
 | DoD-5 | Latency p95 | ≤2.5s LLM / ≤400ms fast | ⚠️ Đo được từ `chat_log`, chưa tổng hợp trên log thật đủ lớn | Chạy thật rồi query p50/p95 |
@@ -184,9 +189,9 @@ Số của A và C đã đo thật trên GOLD/PROXY. **Dòng B chưa có số** 
 
 Xếp theo mức độ ảnh hưởng tới điểm số:
 
-1. 🔴 **Thu thập + gán nhãn data thật (§13.3)** → train lại → đo lại DoD-1/DoD-2. *(Ảnh hưởng lớn nhất — hiện mọi số model đều trên proxy. Đổi encoder KHÔNG giải quyết việc này: GOLD chỉ 28 câu, 1 câu = 3,6 điểm acc.)*
-2. 🔴 **Train intent + NER (ViSoBERT)** rồi chạy `eval_nlu_compare.py --side visobert` để điền dòng B.
-3. 🔴 **Xây harness Recall@5/MRR (§14.3)** cho DoD-3 — hiện đang trống hoàn toàn.
+1. 🔴 **Gán nhãn NER thật (§13.3)** → có bộ test NER thật + thêm data train → train lại → đo lại DoD-2 (hiện 0.743 trên proxy).
+2. 🟠 **Thu thêm câu intent thật** cho GOLD (28 câu, 1 câu = 3,6 điểm acc), nhất là `out_of_scope` và câu hỏi tình trạng phòng.
+3. ~~Train intent + NER~~ — **xong 2026-10-17** (PhoBERT). ~~Harness Recall@5/MRR~~ — **xong** (DoD-3).
 4. 🟠 **Chạy hệ thống thật đủ lâu** (bạn bè gõ thử) để có log → tính fast-path %, latency p50/p95, hallucination rate. Đây cũng là nguồn câu thật cho mục 1.
 5. 🟠 **Bộ 100 cặp Normalizer** cho §14.1 (ngưỡng ≥0.95).
 6. 🟢 (Tùy chọn) Geo Tầng 3, metric NDCG cho semantic rerank.
@@ -200,8 +205,10 @@ Xếp theo mức độ ảnh hưởng tới điểm số:
 | `SPEC_Module_Chatbot_AI_Tim_Phong_Tro.md` | Đặc tả chuẩn + hướng dẫn 3 giai đoạn (nguồn chân lý) |
 | `README.md` | Kiến trúc backend, ánh xạ SPEC, cách chạy, khác biệt có chủ đích |
 | `TODO.md` | Việc để sau (geo tầng 3, data thật) + nhật ký "đã xong" |
-| `ml/README.md` | Dataset + train ViSoBERT + cảnh báo bộ proxy |
+| `ml/README.md` | Dataset + train PhoBERT + kết quả + cảnh báo bộ proxy |
+| `ml/eval-results/backbone_compare_full.md` | So sánh PhoBERT vs ViSoBERT (lý do chọn PhoBERT) |
+| `ml/TRANG_THAI_VISOBERT.md` | Lịch sử giai đoạn ViSoBERT (đã thay thế) |
 | `ml/eval-results/REPORT.md` | Bảng so sánh 3 phương án NLU (§14.4) |
-| `nlu-service/README.md` | FastAPI NLU service (ViSoBERT) |
+| `nlu-service/README.md` | FastAPI NLU service (PhoBERT, cần Java cho VnCoreNLP) |
 | `de_cuong_do_an.md` | Đề cương gốc (toàn hệ thống, không chỉ chatbot) |
 | **`TRANG_THAI_DU_AN.md`** | **← File này: tổng hợp trạng thái theo giai đoạn** |

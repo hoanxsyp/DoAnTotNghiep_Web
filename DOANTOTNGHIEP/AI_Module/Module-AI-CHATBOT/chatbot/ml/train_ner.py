@@ -1,15 +1,17 @@
-"""Huấn luyện ViSoBERT NER (BIO) — SPEC §11 bước 2.2.
+"""Huấn luyện PhoBERT NER (BIO) — SPEC §11 bước 2.2.
 
-Base model `uitnlp/visobert`. Cách encode (xem `nlu_encoding.py`): đưa văn bản
-THÔ vào fast tokenizer với `offset_mapping`, rồi gán nhãn BIO trực tiếp lên từng
-subword theo overlap offset. Không cần word-segment.
+Base model `vinai/phobert-base-v2`. Cách encode (xem `phobert_encoding.py`):
+word-segment bằng VnCoreNLP, mỗi từ tách BPE, nhãn BIO gán cho subword ĐẦU của
+mỗi từ theo overlap offset ký tự với entity.
 
 Dữ liệu nguồn (`data/*.jsonl`) lưu entity theo OFFSET KÝ TỰ trên văn bản gốc
-(xem `generate_dataset.py`) — độc lập với cách tokenize.
+(xem `generate_dataset_v2.py`) — độc lập với cách tokenize.
 
-LƯU Ý khi đọc số: F1 seqeval in ra dưới đây tính theo ĐƠN VỊ SUBWORD, không phải
-theo entity trên văn bản gốc. Số dùng để báo cáo là **Span-F1 strict** (khớp đúng
-label+start+end trên offset ký tự) do `eval_nlu_compare.py` đo.
+Lấy model ở epoch CUỐI (không chọn checkpoint trên bộ test — bộ test chỉ để
+xem). Cấu hình mặc định = cấu hình đã so sánh trong `compare_backbones.py`.
+
+Số báo cáo là **Span-F1 strict** (khớp label+start+end trên văn bản gốc) in ở
+cuối. F1 seqeval in mỗi epoch tính theo TỪ, chỉ để theo dõi.
 
 Chạy:
     python train_ner.py
@@ -25,7 +27,6 @@ import numpy as np
 from datasets import Dataset
 from transformers import (
     AutoModelForTokenClassification,
-    AutoTokenizer,
     DataCollatorForTokenClassification,
     Trainer,
     TrainingArguments,
@@ -36,8 +37,10 @@ from nlu_encoding import (
     DEFAULT_BASE_MODEL,
     MAX_LENGTH,
     bio_labels_from_offsets,
-    encode_with_offsets,
+    decode_bio_offsets,
+    span_prf,
 )
+from phobert_encoding import CONFIG_ENCODING, ENCODING_NAME, PhoBertEncoder
 
 ROOT = Path(__file__).parent
 DATA_DIR = ROOT / "data"
@@ -56,29 +59,39 @@ def load_jsonl(path: Path):
         return [json.loads(line) for line in f]
 
 
-def build_dataset(tokenizer, rows, max_length=MAX_LENGTH):
-    """Encode + gán nhãn trong CÙNG một bước (cần `text` để co span khoảng trắng)."""
+def load_jsonl_optional(path: Path, what: str):
+    """Data that co the chua ton tai -> canh bao thay vi chet."""
+    if not path.exists():
+        print(f"[CANH BAO] Khong thay {path.name} ({what}) -> train KHONG co data that.")
+        return []
+    return load_jsonl(path)
+
+
+def build_dataset(encoder, rows, max_length=MAX_LENGTH):
+    """Encode + gán nhãn; trả kèm `spans` từng câu để decode lại ra span ký tự."""
     cols = {"input_ids": [], "attention_mask": [], "labels": []}
+    all_spans = []
     for r in rows:
-        enc, spans = encode_with_offsets(tokenizer, r["text"], max_length)
-        cols["input_ids"].append(enc["input_ids"])
-        cols["attention_mask"].append(enc["attention_mask"])
+        ids, mask, spans = encoder.ner(r["text"], max_length)
+        cols["input_ids"].append(ids)
+        cols["attention_mask"].append(mask)
         cols["labels"].append(bio_labels_from_offsets(spans, r["entities"], LABEL2ID))
-    return Dataset.from_dict(cols)
+        all_spans.append(spans)
+    return Dataset.from_dict(cols), all_spans
 
 
-def make_training_args(output_dir, num_epochs, batch_size):
+def make_training_args(output_dir, num_epochs, batch_size, learning_rate, seed):
     common = dict(
         output_dir=output_dir,
         num_train_epochs=num_epochs,
         per_device_train_batch_size=batch_size,
         per_device_eval_batch_size=batch_size * 2,
-        learning_rate=3e-5,
-        save_strategy="epoch",
-        load_best_model_at_end=True,
-        metric_for_best_model="f1",
+        learning_rate=learning_rate,
+        # Không lưu checkpoint: mỗi cái ~1.6GB và ta chỉ cần model cuối.
+        save_strategy="no",
         logging_steps=20,
         report_to=[],
+        seed=seed,
     )
     try:
         return TrainingArguments(eval_strategy="epoch", **common)
@@ -86,30 +99,36 @@ def make_training_args(output_dir, num_epochs, batch_size):
         return TrainingArguments(evaluation_strategy="epoch", **common)
 
 
-def main(max_train, num_epochs, output_dir, batch_size, base_model, max_length):
-    print(f"Base model: {base_model} | max_length: {max_length}")
+def main(max_train, num_epochs, output_dir, batch_size, base_model, max_length,
+         learning_rate, real_repeat, synth_file, seed):
+    print(f"Base model: {base_model} | max_length: {max_length} | lr: {learning_rate} "
+          f"| real_repeat: {real_repeat} | synth: {synth_file} | seed: {seed}")
 
-    train_rows = load_jsonl(DATA_DIR / "ner_train.jsonl")
+    # Train = synthetic + DU LIEU THAT da gan nhan (ner_data_md_labeled.jsonl).
+    synth_rows = load_jsonl(DATA_DIR / synth_file)
+    real_rows = load_jsonl_optional(DATA_DIR / "ner_data_md_labeled.jsonl", "data that NER")
+    train_rows = synth_rows + real_rows * real_repeat
     test_rows = load_jsonl(DATA_DIR / "ner_test_real.jsonl")
+    n_ent_synth = sum(len(r["entities"]) for r in synth_rows)
+    n_ent_real = sum(len(r["entities"]) for r in real_rows)
+    print(f"Train: {len(train_rows)} cau (synthetic {len(synth_rows)} + that {len(real_rows)}"
+          f"x{real_repeat}) | entity: synthetic {n_ent_synth} + that {n_ent_real}x{real_repeat}")
     if max_train:
         train_rows = train_rows[:max_train]
 
-    tokenizer = AutoTokenizer.from_pretrained(base_model)
-    if not tokenizer.is_fast:
-        raise RuntimeError(
-            f"{base_model} khong co fast tokenizer nen khong lay duoc "
-            "offset_mapping. Voi ViSoBERT, fast tokenizer duoc convert tu "
-            "sentencepiece.bpe.model nen can ca 'sentencepiece' lan 'protobuf' "
-            "(xem requirements.txt)."
-        )
+    encoder = PhoBertEncoder.from_pretrained(base_model)
+    tokenizer = encoder.tok
     model = AutoModelForTokenClassification.from_pretrained(
         base_model, num_labels=len(BIO_LABELS), id2label=ID2LABEL, label2id=LABEL2ID
     )
-    # nlu-service đọc khoá này từ config.json để encode y hệt lúc train.
+    # nlu-service đọc 2 khoá này từ config.json để encode y hệt lúc train.
     setattr(model.config, CONFIG_MAX_LEN, max_length)
+    setattr(model.config, CONFIG_ENCODING, ENCODING_NAME)
 
-    train_ds = build_dataset(tokenizer, train_rows, max_length)
-    test_ds = build_dataset(tokenizer, test_rows, max_length)
+    train_ds, _ = build_dataset(encoder, train_rows, max_length)
+    test_ds, test_spans = build_dataset(encoder, test_rows, max_length)
+    if encoder.fallbacks:
+        print(f"[CANH BAO] {encoder.fallbacks} cau VnCoreNLP khong do lai duoc offset -> tach theo khoang trang")
 
     seqeval = evaluate.load("seqeval")
 
@@ -135,20 +154,26 @@ def main(max_train, num_epochs, output_dir, batch_size, base_model, max_length):
 
     trainer = Trainer(
         model=model,
-        args=make_training_args(output_dir, num_epochs, batch_size),
+        args=make_training_args(output_dir, num_epochs, batch_size, learning_rate, seed),
         train_dataset=train_ds,
         eval_dataset=test_ds,
         data_collator=DataCollatorForTokenClassification(tokenizer),
         compute_metrics=compute_metrics,
     )
     trainer.train()
-    metrics = trainer.evaluate()
-    print("=== Ket qua tren ner_test_real.jsonl (PROXY, xem canh bao trong build_proxy_testset.py) ===")
-    print("(F1 theo don vi SUBWORD — so de bao cao la Span-F1 cua eval_nlu_compare.py)")
-    print(metrics)
+
+    logits = trainer.predict(test_ds).predictions
+    preds = []
+    for r, spans, lg in zip(test_rows, test_spans, logits):
+        labels = [ID2LABEL[int(i)] for i in np.argmax(lg[: len(spans)], axis=-1)]
+        preds.append(decode_bio_offsets(r["text"], spans, labels))
+    span = span_prf(test_rows, preds)
+    print("=== Span-F1 strict tren ner_test_real.jsonl (PROXY, xem build_proxy_testset.py) ===")
+    print({k: round(v, 4) if isinstance(v, float) else v for k, v in span.items()})
+
     trainer.save_model(output_dir)
     tokenizer.save_pretrained(output_dir)
-    return metrics
+    return span
 
 
 if __name__ == "__main__":
@@ -163,9 +188,14 @@ if __name__ == "__main__":
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--output-dir", default=str(ROOT / "out-ner"))
     parser.add_argument("--base-model", default=DEFAULT_BASE_MODEL,
-                        help=f"mac dinh {DEFAULT_BASE_MODEL}; model khac phai co fast tokenizer")
-    parser.add_argument("--max-length", type=int, default=MAX_LENGTH,
-                        help=f"mac dinh {MAX_LENGTH}; nang len 128/256 khi train tren data that dai")
+                        help=f"mac dinh {DEFAULT_BASE_MODEL}")
+    parser.add_argument("--learning-rate", type=float, default=3e-5)
+    parser.add_argument("--synth-file", default="ner_train_v2.jsonl",
+                        help="file synthetic (ner_train.jsonl = bo v1 van phong sach)")
+    parser.add_argument("--real-repeat", type=int, default=1,
+                        help="nhan ban data that N lan de tang trong so (mac dinh 1 = khong nhan)")
+    parser.add_argument("--max-length", type=int, default=MAX_LENGTH)
+    parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
     main(args.max_train, args.epochs, args.output_dir, args.batch_size, args.base_model,
-         args.max_length)
+         args.max_length, args.learning_rate, args.real_repeat, args.synth_file, args.seed)

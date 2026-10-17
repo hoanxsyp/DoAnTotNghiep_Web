@@ -1,0 +1,90 @@
+{
+  "config": {
+    "backbones": [
+      "visobert_word"
+    ],
+    "seeds": [
+      42,
+      43,
+      44
+    ],
+    "epochs_intent": 5,
+    "epochs_ner": 8,
+    "lr_intent": 2e-05,
+    "lr_ner": 3e-05,
+    "batch_size": 16,
+    "max_length": 128,
+    "intent_real_repeat": 10,
+    "ner_real_repeat": 1,
+    "max_train": null,
+    "ner_only": true,
+    "out": "visobert_word"
+  },
+  "backbones": {
+    "visobert_word": {
+      "model_id": "uitnlp/visobert",
+      "prep": {
+        "encode_seconds": 4.581029653549194,
+        "truncated_sentences": 1,
+        "unique_sentences": 2785,
+        "ner_round_trip_test": {
+          "precision": 0.9774436090225563,
+          "recall": 0.9774436090225563,
+          "f1": 0.9774436090225563,
+          "tp": 130,
+          "fp": 3,
+          "fn": 3
+        },
+        "ner_round_trip_train_real": {
+          "precision": 0.9502487562189055,
+          "recall": 0.9138755980861244,
+          "f1": 0.9317073170731708,
+          "tp": 191,
+          "fp": 10,
+          "fn": 18
+        }
+      },
+      "runs": [
+        {
+          "seed": 42,
+          "ner_train_seconds": 260.899316072464,
+          "ner_train_loss": 0.06751085149207667,
+          "ner_proxy": {
+            "precision": 0.5764705882352941,
+            "recall": 0.7368421052631579,
+            "f1": 0.6468646864686468,
+            "tp": 98,
+            "fp": 72,
+            "fn": 35
+          }
+        },
+        {
+          "seed": 43,
+          "ner_train_seconds": 281.9821050167084,
+          "ner_train_loss": 0.0694377932840013,
+          "ner_proxy": {
+            "precision": 0.5433526011560693,
+            "recall": 0.706766917293233,
+            "f1": 0.6143790849673203,
+            "tp": 94,
+            "fp": 79,
+            "fn": 39
+          }
+        },
+        {
+          "seed": 44,
+          "ner_train_seconds": 285.102707862854,
+          "ner_train_loss": 0.06824070214356448,
+          "ner_proxy": {
+            "precision": 0.5536723163841808,
+            "recall": 0.7368421052631579,
+            "f1": 0.632258064516129,
+            "tp": 98,
+            "fp": 79,
+            "fn": 35
+          }
+        }
+      ]
+    }
+  }
+}

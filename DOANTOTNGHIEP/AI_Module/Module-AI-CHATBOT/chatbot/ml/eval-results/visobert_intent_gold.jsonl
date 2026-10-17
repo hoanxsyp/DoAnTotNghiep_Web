@@ -1,0 +1,28 @@
+{"text": "em tăng được lên 3tr5, có đồ cơ bản càng tốt ạ", "intent": "search_room", "slots": [], "latency_ms": 1619.7415000001456, "tokens_in": 0, "tokens_out": 0, "gold_intent": "refine_search"}
+{"text": "Em muốn tìm phòng trọ khoảng 3tr2 quay đầu 1/8 chuyển vào ở luôn ạ", "intent": "search_room", "slots": [], "latency_ms": 41.008400000009715, "tokens_in": 0, "tokens_out": 0, "gold_intent": "search_room"}
+{"text": "em tìm trọ 2ng khvuc Yên Hoà , Trần Duy Hưng , Nguyễn Chí Thanh đầu t8 chuyển vào ạ", "intent": "search_room", "slots": [], "latency_ms": 43.04099999990285, "tokens_in": 0, "tokens_out": 0, "gold_intent": "search_room"}
+{"text": "giờ giấc không cần tự do hẳn đâu, trước 12h là được", "intent": "refine_search", "slots": [], "latency_ms": 38.1680000000415, "tokens_in": 0, "tokens_out": 0, "gold_intent": "refine_search"}
+{"text": "Tìm trọ 2tr5-3tr/1thang , gần Dh thuỷ lợi", "intent": "search_room", "slots": [], "latency_ms": 37.253899999996065, "tokens_in": 0, "tokens_out": 0, "gold_intent": "search_room"}
+{"text": "em đổi sang tìm quanh Cầu Giấy nhé, bán kính tầm 3km", "intent": "search_room", "slots": [], "latency_ms": 39.669299999786745, "tokens_in": 0, "tokens_out": 0, "gold_intent": "refine_search"}
+{"text": "E tìm phòng ở đoạn Thái thịnh, Tc 3tr5-4tr", "intent": "search_room", "slots": [], "latency_ms": 37.050299999918934, "tokens_in": 0, "tokens_out": 0, "gold_intent": "search_room"}
+{"text": "tìm trọ 3 nữ giá 3tr5 quay đầu qua tháng ở luôn có chỗ để xe, nóng lạnh khu vực thanh xuân", "intent": "search_room", "slots": [], "latency_ms": 42.09629999968456, "tokens_in": 0, "tokens_out": 0, "gold_intent": "search_room"}
+{"text": "theo các bác thêm 500k lấy phòng có ban công đáng không", "intent": "search_room", "slots": [], "latency_ms": 36.75650000013775, "tokens_in": 0, "tokens_out": 0, "gold_intent": "compare_rooms"}
+{"text": "Mình cần phòng 2n1k quanh Thanh Xuân, ngã tư sở đổ lại, ưu tiên mặt đường hoặc ngõ to đỗ đc oto tài chính 9tr, đầu t8 vào ở,", "intent": "search_room", "slots": [], "latency_ms": 54.26259999967442, "tokens_in": 0, "tokens_out": 0, "gold_intent": "search_room"}
+{"text": "Còn ko em ở luôn ạ", "intent": "out_of_scope", "slots": [], "latency_ms": 29.746700000032433, "tokens_in": 0, "tokens_out": 0, "gold_intent": "room_detail"}
+{"text": "máy giặt dùng chung hay mỗi phòng một máy thế ạ", "intent": "room_detail", "slots": [], "latency_ms": 34.690299999965646, "tokens_in": 0, "tokens_out": 0, "gold_intent": "room_detail"}
+{"text": "nếu phòng chưa có người cọc thì hẹn em chiều mai với", "intent": "refine_search", "slots": [], "latency_ms": 38.137600000027305, "tokens_in": 0, "tokens_out": 0, "gold_intent": "book_appointment"}
+{"text": "Cần tìm phòng 2 người ở Nguyễn Chí Thanh - Trần Duy Hưng. Budget 5tr/ tháng quay đầu ạ.", "intent": "search_room", "slots": [], "latency_ms": 46.832500000164146, "tokens_in": 0, "tokens_out": 0, "gold_intent": "search_room"}
+{"text": "em cần vào luôn đầu tuần sau nhé mọi người", "intent": "book_appointment", "slots": [], "latency_ms": 32.241700000213314, "tokens_in": 0, "tokens_out": 0, "gold_intent": "refine_search"}
+{"text": "phòng còn thì cho em hẹn xem tối nay với", "intent": "book_appointment", "slots": [], "latency_ms": 34.28119999989576, "tokens_in": 0, "tokens_out": 0, "gold_intent": "book_appointment"}
+{"text": "trưa mai em tranh thủ chạy qua được không bạn", "intent": "book_appointment", "slots": [], "latency_ms": 36.11000000000786, "tokens_in": 0, "tokens_out": 0, "gold_intent": "book_appointment"}
+{"text": "em muốn tìm phòng 2 người ở Khương Đình ạ gần đường Vũ Tông Phan thì càng tốt ạ", "intent": "search_room", "slots": [], "latency_ms": 42.47290000012072, "tokens_in": 0, "tokens_out": 0, "gold_intent": "search_room"}
+{"text": "E muốn tìm phòng quanh kv thanh xuân loanh quanh 4-4.5", "intent": "search_room", "slots": [], "latency_ms": 38.00790000013876, "tokens_in": 0, "tokens_out": 0, "gold_intent": "search_room"}
+{"text": "bác gửi em định vị với, lát em chạy qua", "intent": "book_appointment", "slots": [], "latency_ms": 33.35109999989072, "tokens_in": 0, "tokens_out": 0, "gold_intent": "book_appointment"}
+{"text": "căn đầu gần nhưng không có thang máy, căn sau xa hơn mà đủ đồ", "intent": "compare_rooms", "slots": [], "latency_ms": 38.33910000003016, "tokens_in": 0, "tokens_out": 0, "gold_intent": "compare_rooms"}
+{"text": "Mình cần tìm trọ khu vực Tây Sơn, Đống đa.", "intent": "search_room", "slots": [], "latency_ms": 38.219800000206305, "tokens_in": 0, "tokens_out": 0, "gold_intent": "search_room"}
+{"text": "Xuất hiện muộn tí ngon r. Mình vẫn còn hợp đồng nhà tí", "intent": "refine_search", "slots": [], "latency_ms": 37.207999999736785, "tokens_in": 0, "tokens_out": 0, "gold_intent": "out_of_scope"}
+{"text": "1 phòng chung chủ nhưng rẻ, 1 phòng riêng chủ mà đắt hơn 700k", "intent": "compare_rooms", "slots": [], "latency_ms": 40.90700000006109, "tokens_in": 0, "tokens_out": 0, "gold_intent": "compare_rooms"}
+{"text": "phòng khoảng bao nhiêu mét thế ạ", "intent": "room_detail", "slots": [], "latency_ms": 34.2651000000842, "tokens_in": 0, "tokens_out": 0, "gold_intent": "room_detail"}
+{"text": "phòng A mới hơn, phòng B rộng hơn, khó chọn ghê", "intent": "compare_rooms", "slots": [], "latency_ms": 32.00680000009015, "tokens_in": 0, "tokens_out": 0, "gold_intent": "compare_rooms"}
+{"text": "phòng này còn không bác ơi", "intent": "room_detail", "slots": [], "latency_ms": 30.726699999831908, "tokens_in": 0, "tokens_out": 0, "gold_intent": "room_detail"}
+{"text": "tìm ccmn 4tr3 quay đầu ở khương đình hoặc triều khúc", "intent": "search_room", "slots": [], "latency_ms": 38.09850000016013, "tokens_in": 0, "tokens_out": 0, "gold_intent": "search_room"}

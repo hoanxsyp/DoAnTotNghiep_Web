@@ -1,7 +1,13 @@
 """Encode/decode dùng chung cho intent + NER — dùng bởi cả `train_*.py` lẫn `nlu-service`.
 
-Base model là **ViSoBERT** (`uitnlp/visobert`) — XLM-R + SentencePiece, có fast
-tokenizer. Hai điểm quyết định cách encode:
+Base model hiện tại là **PhoBERT** (`vinai/phobert-base-v2`): word-segment bằng
+VnCoreNLP rồi gán nhãn theo từ — phần encode nằm ở `phobert_encoding.py`. File
+này giữ phần KHÔNG phụ thuộc model: gán/gộp nhãn BIO theo offset ký tự
+(`bio_labels_from_offsets`, `decode_bio_offsets`), `span_prf`, `max_length`.
+
+`encode_with_offsets` bên dưới là cách encode của **ViSoBERT** (`uitnlp/visobert`,
+dùng trước 2026-10) — chỉ còn `compare_backbones.py` dùng để đối chứng. ViSoBERT
+là XLM-R + SentencePiece, có fast tokenizer. Hai điểm quyết định cách encode:
 
   1. **Đưa văn bản THÔ vào tokenizer.** SentencePiece tự tách subword; KHÔNG
      word-segment, không ghép âm tiết bằng dấu "_" (dạng "cầu_giấy" là OOV với
@@ -17,15 +23,13 @@ tokenizer. Hai điểm quyết định cách encode:
 
 import os
 
-DEFAULT_BASE_MODEL = os.environ.get("NLU_BASE_MODEL", "uitnlp/visobert")
+DEFAULT_BASE_MODEL = os.environ.get("NLU_BASE_MODEL", "vinai/phobert-base-v2")
 
-# Giữ 64 vì toàn bộ data synthetic/proxy đều dưới ngưỡng này (dài nhất 36 token).
-# CẢNH BÁO nếu train trên dữ liệu THẬT: post Facebook dài hơn nhiều — đo trên
-# repo này, 9,6% câu của `intent_train_real.jsonl` và 19,6% câu của
-# `ner_data_md_labeled.jsonl` vượt 64 token (dài nhất 307), tức bị CẮT MẤT phần
-# cuối. ViSoBERT cho tối đa 514 vị trí nên nâng `--max-length 128/256` là khả
-# thi, và gần như miễn phí vì collator padding động theo câu dài nhất mỗi batch.
-MAX_LENGTH = 64
+# 128 cho cả intent lẫn NER: 64 cắt mất phần cuối của ~10-20% câu THẬT (post
+# Facebook dài, dài nhất ~300 token). Ở 128 chỉ còn 1/2785 câu bị cắt (đo bởi
+# compare_backbones.py). PhoBERT cho tối đa 256 vị trí; padding động theo batch
+# nên câu ngắn không tốn thêm.
+MAX_LENGTH = 128
 
 CONFIG_MAX_LEN = "nlu_max_length"  # khoá trong config.json — train và inference PHẢI khớp
 
@@ -182,3 +186,22 @@ def decode_bio_offsets(text: str, spans, labels, scores=None):
             cur = {"label": ent_type, "start": span[0], "end": span[1], "scores": [score]}
     flush()
     return out
+
+
+def span_prf(rows, pred_entities):
+    """Span-F1 STRICT: entity đúng khi khớp cả label, start, end trên văn bản gốc.
+
+    Độc lập với cách tokenize nên so được mọi model. `rows[i]["entities"]` là nhãn
+    gold, `pred_entities[i]` là output của `decode_bio_offsets`.
+    """
+    tp = fp = fn = 0
+    for r, pred in zip(rows, pred_entities):
+        gold = {(e["label"], e["start"], e["end"]) for e in r["entities"]}
+        got = {(e["label"], e["start"], e["end"]) for e in pred}
+        tp += len(gold & got)
+        fp += len(got - gold)
+        fn += len(gold - got)
+    p = tp / (tp + fp) if tp + fp else 0.0
+    rc = tp / (tp + fn) if tp + fn else 0.0
+    return {"precision": p, "recall": rc, "f1": 2 * p * rc / (p + rc) if p + rc else 0.0,
+            "tp": tp, "fp": fp, "fn": fn}

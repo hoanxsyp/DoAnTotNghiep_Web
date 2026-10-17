@@ -269,6 +269,12 @@ def main():
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
     intent_rows, ner_rows = build()
+    # calculate_cost / policy_inquiry đã gộp vào room_detail (xem MERGED_INTENTS
+    # trong generate_dataset_v2.py). Giữ nhãn gốc trong ITEMS để còn biết câu nào
+    # vốn là hỏi chi phí/quy định, chỉ đổi lúc ghi ra.
+    for r in intent_rows:
+        if r["intent"] in ("calculate_cost", "policy_inquiry"):
+            r["intent"] = "room_detail"
     write_jsonl(OUT_DIR / "intent_test_real.jsonl", intent_rows)
     write_jsonl(OUT_DIR / "ner_test_real.jsonl", ner_rows)
     print(f"intent_test_real.jsonl: {len(intent_rows)} cau")

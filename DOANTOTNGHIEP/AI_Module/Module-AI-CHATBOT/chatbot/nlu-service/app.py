@@ -1,6 +1,6 @@
 """NLU service (FastAPI) — SPEC §11 bước 2.3.
 
-Bọc 2 model ViSoBERT đã train ở GĐ2 (`ml/out-intent`, `ml/out-ner`) thành HTTP
+Bọc 2 model PhoBERT đã train ở GĐ2 (`ml/out-intent`, `ml/out-ner`) thành HTTP
 service cho Spring Boot gọi qua `LocalNluServiceImpl` (bước 2.4). Hợp đồng:
 
     POST /nlu  {"text": "tìm phòng tầm 2tr ở cầu giấy"}
@@ -13,10 +13,12 @@ giá trị ở đây. Việc quy "2tr" → 2_000_000, "cầu giấy" → "Cầu 
 `EntityNormalizer` phía Java (§3.3) — giữ 1 nơi duy nhất biết luật chuẩn hóa,
 service này chỉ làm đúng phần mô hình.
 
-Suy luận phải LẶP LẠI đúng cách encode lúc train (xem `ml/nlu_encoding.py`):
-văn bản THÔ → fast tokenizer với `offset_mapping` → nhãn NER nằm trên TỪNG
-subword → gộp BIO thành span. `max_length` đọc từ `config.json` của model
-(khoá `nlu_max_length`, do `train_*.py` ghi) nên không cần cấu hình tay.
+Suy luận phải LẶP LẠI đúng cách encode lúc train (xem `ml/phobert_encoding.py`):
+word-segment bằng VnCoreNLP (cần Java) → mỗi từ tách BPE → nhãn NER đọc ở
+subword ĐẦU mỗi từ → gộp BIO thành span theo offset ký tự. `max_length` và cách
+encode đọc từ `config.json` của model (khoá `nlu_max_length`, `nlu_encoding`, do
+`train_*.py` ghi) — model không khớp `nlu_encoding` (vd. ViSoBERT cũ) bị từ chối
+lúc startup thay vì âm thầm ra kết quả rác.
 
 Nếu nạp model lỗi (vd. `ml/out-*` còn trống vì chưa train), service vẫn LÊN nhưng
 `GET /health` trả `status: "degraded"` kèm `startup_error`, và `/nlu` + `/embed` trả
@@ -29,6 +31,8 @@ Biến môi trường (mặc định chạy được ngay từ repo):
     NLU_INTENT_MODEL   (mặc định $NLU_ML_DIR/out-intent)
     NLU_NER_MODEL      (mặc định $NLU_ML_DIR/out-ner)
     NLU_MAX_LENGTH     ghi đè max_length cho CẢ 2 model
+    VNCORENLP_DIR      nơi có VnCoreNLP-1.2.jar + models/ (mặc định $NLU_ML_DIR/vncorenlp;
+                       thiếu thì tự tải). Đường dẫn KHÔNG được có dấu cách.
 """
 
 import os
@@ -49,11 +53,8 @@ NER_DIR = os.environ.get("NLU_NER_MODEL", str(ML_DIR / "out-ner"))
 EMBED_MODEL = os.environ.get("NLU_EMBED_MODEL", "keepitreal/vietnamese-sbert")
 
 sys.path.insert(0, str(ML_DIR))
-from nlu_encoding import (  # noqa: E402
-    decode_bio_offsets,
-    encode_with_offsets,
-    resolve_max_length,
-)
+from nlu_encoding import decode_bio_offsets, resolve_max_length  # noqa: E402
+from phobert_encoding import CONFIG_ENCODING, ENCODING_NAME, PhoBertEncoder  # noqa: E402
 
 _M = {}  # models, nạp 1 lần lúc startup
 
@@ -61,30 +62,34 @@ _M = {}  # models, nạp 1 lần lúc startup
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     from sentence_transformers import SentenceTransformer
-    from transformers import (
-        AutoModelForSequenceClassification,
-        AutoModelForTokenClassification,
-        AutoTokenizer,
-    )
+    from transformers import AutoModelForSequenceClassification, AutoModelForTokenClassification
 
     # Nạp trong try/except: thiếu/hỏng model thì service vẫn LÊN nhưng ở trạng
     # thái "degraded" (mọi request trả 503 kèm lý do) thay vì chết lúc startup.
     # Quan trọng vì `ml/out-*` có thể còn trống khi chưa train.
     try:
         torch.set_num_threads(max(1, (os.cpu_count() or 4) // 2))
-        _M["intent_tok"] = AutoTokenizer.from_pretrained(INTENT_DIR)
         _M["intent_model"] = AutoModelForSequenceClassification.from_pretrained(INTENT_DIR).eval()
-        _M["ner_tok"] = AutoTokenizer.from_pretrained(NER_DIR)
         _M["ner_model"] = AutoModelForTokenClassification.from_pretrained(NER_DIR).eval()
+        for path, model in ((INTENT_DIR, _M["intent_model"]), (NER_DIR, _M["ner_model"])):
+            got = getattr(model.config, CONFIG_ENCODING, None)
+            if got != ENCODING_NAME:
+                raise RuntimeError(
+                    f"{path}: config.json co {CONFIG_ENCODING}={got!r}, can {ENCODING_NAME!r}. "
+                    "Model khong phai PhoBERT train boi ml/train_*.py hien tai — train lai."
+                )
         # max_length phải khớp lúc train, nếu không sẽ cắt câu mà không báo lỗi.
         _M["intent_len"] = resolve_max_length(_M["intent_model"].config)
         _M["ner_len"] = resolve_max_length(_M["ner_model"].config)
-        if not _M["ner_tok"].is_fast:
-            raise RuntimeError(
-                f"{NER_DIR}: can fast tokenizer de lay offset_mapping. Thu muc model "
-                "phai co tokenizer.json (tokenizer.save_pretrained() luc train ghi ra)."
-            )
+        # 2 encoder dùng chung 1 VnCoreNLP (singleton, 1 JVM). Tắt cache: câu
+        # người dùng gần như không lặp, cache chỉ làm bộ nhớ phình dần.
+        _M["intent_enc"] = PhoBertEncoder.from_pretrained(INTENT_DIR, cache=False)
+        _M["ner_enc"] = PhoBertEncoder.from_pretrained(NER_DIR, cache=False)
         _M["embed_model"] = SentenceTransformer(EMBED_MODEL)
+        # Warm-up: request đầu tiên mất ~1.5s (JVM của VnCoreNLP + PyTorch khởi
+        # tạo lười), vượt timeout 300ms phía Spring -> làm 1 lượt ngay lúc startup.
+        classify_intent("tìm phòng tầm 2tr ở cầu giấy")
+        extract_entities("tìm phòng tầm 2tr ở cầu giấy")
         _M["ready"] = True
         print(f"[NLU] san sang | max_length: intent={_M['intent_len']} ner={_M['ner_len']}")
     except Exception as exc:
@@ -95,7 +100,7 @@ async def lifespan(app: FastAPI):
     _M.clear()
 
 
-app = FastAPI(title="RoomFinder NLU (ViSoBERT)", lifespan=lifespan)
+app = FastAPI(title="RoomFinder NLU (PhoBERT)", lifespan=lifespan)
 
 
 class NluRequest(BaseModel):
@@ -166,21 +171,19 @@ def ensure_ready():
 
 
 def classify_intent(text: str) -> tuple[str, float]:
-    enc = _M["intent_tok"](text, truncation=True, max_length=_M["intent_len"], return_tensors="pt")
+    ids, mask = _M["intent_enc"].intent(text, _M["intent_len"])
     with torch.no_grad():
-        logits = _M["intent_model"](**enc).logits[0]
+        logits = _M["intent_model"](input_ids=torch.tensor([ids]),
+                                    attention_mask=torch.tensor([mask])).logits[0]
     probs = torch.softmax(logits, dim=-1)
     idx = int(probs.argmax())
     return _M["intent_model"].config.id2label[idx], float(probs[idx])
 
 
 def extract_entities(text: str) -> list[EntitySpan]:
-    """Nhãn nằm trên TỪNG subword; gộp BIO theo offset ký tự thành span."""
-    enc, spans = encode_with_offsets(_M["ner_tok"], text, _M["ner_len"])
-    inputs = {
-        "input_ids": torch.tensor([enc["input_ids"]]),
-        "attention_mask": torch.tensor([enc["attention_mask"]]),
-    }
+    """Nhãn đọc ở subword ĐẦU mỗi từ (span None = bỏ qua); gộp BIO thành span ký tự."""
+    ids, mask, spans = _M["ner_enc"].ner(text, _M["ner_len"])
+    inputs = {"input_ids": torch.tensor([ids]), "attention_mask": torch.tensor([mask])}
     with torch.no_grad():
         logits = _M["ner_model"](**inputs).logits[0]
     probs = torch.softmax(logits, dim=-1)

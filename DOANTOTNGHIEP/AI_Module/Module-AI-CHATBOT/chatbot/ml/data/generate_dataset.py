@@ -297,6 +297,12 @@ def generate_intent_and_ner():
                 text = strip_diacritics(text)
             intent_rows.append({"text": text, "intent": label})
 
+    # calculate_cost / policy_inquiry đã gộp vào room_detail (xem MERGED_INTENTS
+    # trong generate_dataset_v2.py). Đổi nhãn SAU khi sinh để RNG/văn bản không đổi.
+    for r in intent_rows:
+        if r["intent"] in ("calculate_cost", "policy_inquiry"):
+            r["intent"] = "room_detail"
+
     random.shuffle(intent_rows)
     random.shuffle(ner_rows)
     return intent_rows, ner_rows
