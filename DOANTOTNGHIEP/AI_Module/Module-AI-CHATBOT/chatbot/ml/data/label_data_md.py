@@ -57,19 +57,39 @@ UTILITIES = [
 RE_AREA = re.compile(r"\d+\s?(?:m²|m2|mét vuông|mét)", re.IGNORECASE)
 # unit + \d? tuỳ chọn, rồi negative-lookahead chặn chữ cái theo sau
 # -> tránh khớp nhầm "1 mình" (=1 m), "3 mét"... nhưng vẫn nhận "4m", "5m5".
+_MONEY = r"\d+(?:[.,]\d+)?\s?(?:triệu|tr\d?|củ|[mM]\d?)(?![A-Za-zÀ-ỹ])"
+# Quy ước span giá khớp bộ synthetic v2 (ner_train_v2.jsonl) mà model học:
+#   - khoảng "2tr5-3tr", "6-8tr", "4tr đến 4tr5" -> MỘT span PRICE_MAX cả khoảng
+#     (normalizer phía Java tách min/max), số đầu được phép thiếu đơn vị;
+#   - đuôi "/tháng" dính liền giá nằm TRONG span ("4tr-4tr5/tháng").
 RE_MONEY = re.compile(
-    r"\d+(?:[.,]\d+)?\s?(?:triệu|tr\d?|củ|[mM]\d?)(?![A-Za-zÀ-ỹ])", re.IGNORECASE)
+    r"(?:\d+(?:[.,]\d+)?\s?(?:triệu|tr\d?|củ|[mM]\d?)?\s*(?:[-–—~]|đến)\s*)?"
+    + _MONEY + r"(?:\s*/\s*(?:1\s*)?th[áa]ng)?", re.IGNORECASE)
 RE_DATE = [
     re.compile(r"m?\d{1,2}\s*/\s*\d{1,2}"),
     re.compile(r"đầu t\d{1,2}", re.IGNORECASE),
     re.compile(r"đầu tháng \d{1,2}", re.IGNORECASE),
     re.compile(r"sang tháng \d{1,2}", re.IGNORECASE),
     re.compile(r"qua tháng", re.IGNORECASE),
+    # Như v2: "quay đầu", "ở luôn" luôn là DATETIME; ghép với mốc theo sau
+    # ("quay đầu 1/8", "quay đầu qua tháng") thành 1 span.
+    re.compile(r"quay đầu(?:\s+(?:m?\d{1,2}\s*/\s*\d{1,2}|qua tháng))?", re.IGNORECASE),
+    re.compile(r"(?:vào\s+)?ở luôn", re.IGNORECASE),
+    re.compile(r"(?:đầu|cuối|giữa) tháng (?:sau|này|\d{1,2})", re.IGNORECASE),
+    re.compile(r"cuối tháng|tuần sau|cuối tuần(?: này)?", re.IGNORECASE),
 ]
-RANGE_SEP = re.compile(r"^\s*(?:[-–—]|đến)\s*$")
+
+# ROOM_TYPE theo quy ước v2: loại phòng không mơ hồ gán ở mọi vị trí; cụm bắt đầu
+# bằng "phòng" chỉ gán khi đứng sau động từ tìm/thuê ("tìm phòng" -> ROOM_TYPE,
+# còn "xem phòng"/"giá phòng" thì không) — đúng như phân bố trong ner_train_v2.
+ROOM_TYPES = [
+    "chung cư mini", "ccmn", "studio", "2n1k", "1n1k", "nhà nguyên căn", "nhà trọ", "trọ",
+]
+ROOM_TYPES_PHONG = ["phòng khép kín", "phòng trọ", "phòng đơn", "phòng"]
+SEARCH_VERBS = {"tìm", "thuê", "kiếm", "cần", "muốn", "có", "tim", "thue", "kiem", "can"}
 
 PRIORITY = {"AREA_MIN": 0, "PRICE_MAX": 1, "DATETIME": 2,
-            "POI": 3, "LOCATION": 4, "UTILITY": 5}
+            "POI": 3, "LOCATION": 4, "ROOM_TYPE": 5, "UTILITY": 6}
 
 
 def gaz_spans(text, phrases, label):
@@ -81,13 +101,8 @@ def gaz_spans(text, phrases, label):
 
 
 def price_spans(text):
-    ms = list(RE_MONEY.finditer(text))
-    keep = [True] * len(ms)
-    for i in range(len(ms) - 1):
-        gap = text[ms[i].end():ms[i + 1].start()]
-        if RANGE_SEP.match(gap):        # "A-B" -> chỉ giữ B (cận trên = PRICE_MAX)
-            keep[i] = False
-    return [(m.start(), m.end(), "PRICE_MAX") for m, k in zip(ms, keep) if k]
+    # Khoảng "A-B" đã nằm gọn trong 1 match của RE_MONEY (xem quy ước ở trên).
+    return [(m.start(), m.end(), "PRICE_MAX") for m in RE_MONEY.finditer(text)]
 
 
 def date_spans(text):
@@ -98,6 +113,15 @@ def date_spans(text):
     return out
 
 
+def room_type_spans(text):
+    out = gaz_spans(text, ROOM_TYPES, "ROOM_TYPE")
+    for s, e, lab in gaz_spans(text, ROOM_TYPES_PHONG, "ROOM_TYPE"):
+        prev = text[:s].split()[-1:]
+        if prev and prev[0].lower() in SEARCH_VERBS:
+            out.append((s, e, lab))
+    return out
+
+
 def label_post(text):
     cands = []
     cands += [(m.start(), m.end(), "AREA_MIN") for m in RE_AREA.finditer(text)]
@@ -105,6 +129,7 @@ def label_post(text):
     cands += date_spans(text)
     cands += gaz_spans(text, POIS, "POI")
     cands += gaz_spans(text, LOCATIONS, "LOCATION")
+    cands += room_type_spans(text)
     cands += gaz_spans(text, UTILITIES, "UTILITY")
 
     # greedy: leftmost, dài nhất, rồi priority; bỏ span chồng lấn

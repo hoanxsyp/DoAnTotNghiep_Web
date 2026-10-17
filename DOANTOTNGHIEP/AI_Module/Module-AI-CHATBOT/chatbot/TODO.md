@@ -142,16 +142,16 @@ Bổ sung dữ liệu THẬT (thu thập từ post/chat, khác synthetic) vào p
 
 ### Việc CÒN LẠI (ưu tiên từ trên xuống)
 
-1. **[NER] Nối data thật vào `train_ner.py`** — hiện `train_ner.py:143-144` vẫn CHỈ
-   đọc `ner_train.jsonl` (synthetic) + `ner_test_real.jsonl` (proxy). File
-   `ner_data_md_labeled.jsonl` (209 entity, đã có) CHƯA được dùng. Cần làm tương tự
-   intent: mở rộng `split_real_data.py` (hoặc script NER riêng) tách NER thật
-   train/gold, rồi sửa `train_ner.py` đọc synthetic + real và eval GOLD + PROXY.
-   → Đây là bất đối xứng lớn nhất: intent đã dùng data thật, NER thì chưa.
+1. ~~**[NER] Nối data thật vào `train_ner.py`**~~ — **XONG 2026-10-17.**
+   `split_real_data.py` tách NER thật theo CÙNG tập câu GOLD với intent →
+   `ner_train_real.jsonl` (115 câu) + `ner_test_gold.jsonl` (28 câu / 69 entity);
+   `train_ner.py` train synthetic + thật, đo GOLD (chính) + PROXY, in F1 theo nhãn.
 
-2. **[NER] Trích entity cho `data2.md`** — nhiều câu chat có `ROOM_REF`
-   ("phòng này", "căn A/B", "phòng đầu"), `DATETIME` (khối book_appointment:
-   "chiều nay", "9h sáng mai"), `LOCATION` (Cầu Giấy, Mỹ Đình). Hiện bỏ trống.
+2. ~~**[NER] Trích entity cho `data2.md`**~~ — **XONG 2026-10-17.** Gán tay 87 câu
+   (`data/label_data2_ner.py` → `ner_data2_labeled.jsonl`, 80 entity). Đồng thời
+   sửa `label_data_md.py` cho khớp quy ước v2 (khoảng giá 1 span, thêm ROOM_TYPE,
+   DATETIME "quay đầu"/"ở luôn"). Retrain: **NER GOLD Span-F1 0.935 → đạt DoD-2**
+   (model cũ trên cùng GOLD: 0.720). Còn: nhờ người thứ hai rà nhãn; GOLD nhỏ.
 
 3. **[Intent] Thu thêm data thật cho 3 lớp thiếu**:
    - `calculate_cost`: **0 câu thật** → không có trong GOLD test, không đo được.

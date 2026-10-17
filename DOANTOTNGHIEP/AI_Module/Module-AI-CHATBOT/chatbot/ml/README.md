@@ -42,7 +42,10 @@ cầu. Xem cảnh báo trong `data/build_proxy_testset.py`.
 Bộ GOLD (`data/intent_test_gold.jsonl`) là data thật nhưng chỉ **28 câu** → 1 câu
 = 3,6 điểm accuracy. Chênh lệch 1–2 câu giữa các lần train là **nhiễu**.
 
-**NER chưa có bộ test thật** — mọi số NER đo trên proxy.
+NER có bộ GOLD thật từ 2026-10-17 (`data/ner_test_gold.jsonl`): **cùng 28 câu**
+với GOLD intent, **69 entity** → 1 entity ≈ 1,4 điểm F1. Nhãn: 11 câu bài đăng gán
+bằng luật (`label_data_md.py`), 17 câu chat gán tay (`label_data2_ner.py`) — chưa
+có người thứ hai rà độc lập.
 
 ## Cấu trúc
 
@@ -57,7 +60,9 @@ ml/
 │   ├── generate_dataset_v2.py   # synthetic văn phong thật → intent_train_v2 / ner_train_v2 (đang dùng)
 │   ├── generate_dataset.py      # synthetic v1 (văn phong sạch, giữ để đối chứng)
 │   ├── build_proxy_testset.py   # bộ PROXY tay viết
-│   └── split_real_data.py       # tách data thật → intent_train_real + intent_test_gold
+│   ├── label_data_md.py         # gán nhãn luật cho data.md (bài đăng) → *_data_md_labeled
+│   ├── label_data2_ner.py       # gán nhãn NER TAY cho data2.md (câu chat) → ner_data2_labeled
+│   └── split_real_data.py       # tách data thật → {intent,ner}_train_real + {intent,ner}_test_gold
 ├── train_intent.py           # sequence classification (SPEC §11 bước 2.1)
 ├── train_ner.py              # token classification / BIO (SPEC §11 bước 2.2)
 ├── compare_backbones.py      # so sánh PhoBERT / ViSoBERT (nhiều seed)
@@ -111,8 +116,9 @@ python train_ner.py         # 8 epoch, lr 3e-5, ner_train_v2 + thật ×1,  ~10 
 | GOLD (data thật, 28 câu) | Accuracy | **0.929** (26/28) | DoD-1 ≥ 0.90 ✅ |
 | GOLD | Macro-F1 | 0.916 | — |
 | PROXY (tay viết, 142 câu) | Accuracy | 0.775 | — |
-| NER PROXY (87 câu) | Span-F1 strict | **0.743** (P 0.690 / R 0.805) | DoD-2 ≥ 0.85 ❌ |
-| NER PROXY | Slot-F1 (sau chuẩn hoá) | 0.962 | — |
+| NER GOLD (data thật, 28 câu / 69 entity) | Span-F1 strict | **0.935** (P 0.929 / R 0.942) | DoD-2 ≥ 0.85 ✅ |
+| NER PROXY (87 câu) | Span-F1 strict | 0.759 (P 0.701 / R 0.827) | — |
+| NER PROXY | Slot-F1 (sau chuẩn hoá) | 0.962 (đo với model NER trước) | — |
 | Latency CPU qua nlu-service | TB / p95 | 87 ms / 107 ms | — |
 
 2 câu GOLD còn sai: *"Còn ko em ở luôn ạ"* (gold `room_detail`, đoán
@@ -120,7 +126,18 @@ python train_ner.py         # 8 epoch, lr 3e-5, ner_train_v2 + thật ×1,  ~10 
 cần vào luôn đầu tuần sau nhé mọi người"* (gold `refine_search`, đoán
 `book_appointment`).
 
-Log: `train-intent-phobert.log`, `train-ner-phobert.log`. So với LLM: xem
+NER GOLD theo nhãn: LOCATION/POI/RADIUS/ROOM_TYPE 1.00, PRICE_MAX 0.95, ROOM_REF
+0.91, UTILITY 0.89, DATETIME 0.82. Model NER trước (chưa có data2, nhãn data.md
+lệch quy ước) đo trên **cùng GOLD** chỉ được **0.720** — dù nó đã thấy 11/28 câu
+GOLD lúc train.
+
+**Đã sửa quy ước nhãn `label_data_md.py` cho khớp bộ synthetic v2** (thứ model
+học): khoảng giá "2tr5-3tr" là 1 span (trước chỉ giữ "3tr"), đuôi "/tháng" nằm
+trong span, thêm ROOM_TYPE (trước không có nhãn này) và DATETIME "quay đầu"/"ở
+luôn". Lỗi do lệch quy ước được phát hiện khi xem lỗi trên GOLD, nhưng cách sửa là
+luật áp cho TOÀN BỘ data.md theo phân bố của v2, không chỉnh tay từng câu.
+
+Log: `train-intent-phobert.log`, `train-ner-v3.log`. So với LLM: xem
 `eval-results/REPORT.md`.
 
 ## Quyết định kỹ thuật đáng chú ý
@@ -135,7 +152,7 @@ Log: `train-intent-phobert.log`, `train-ner-phobert.log`. So với LLM: xem
   khoảng trắng thay vì chết.
 - **Nhãn NER chỉ ở subword đầu mỗi từ** (cách chuẩn của PhoBERT NER). Ranh giới
   entity vì thế chỉ rơi đúng ranh giới từ: trần round-trip Span-F1 là 0.977
-  (proxy) / 0.950 (56 câu thật). Phần còn lại tới 0.743 là do model.
+  (proxy) / 0.950 (56 câu thật). Phần còn lại là do model.
 - **`max_length=128`** cho cả 2 model: 64 cắt mất phần cuối 10–20% câu thật
   (post Facebook dài); ở 128 còn 1/2785 câu bị cắt.
 - **Interface `NluService` ở backend không đổi** (§9.1): `POST /nlu` trả span
@@ -143,8 +160,10 @@ Log: `train-intent-phobert.log`, `train-ner-phobert.log`. So với LLM: xem
 
 ## Việc còn lại
 
-1. **NER chưa đạt DoD-2 (0.743 < 0.85)** và chưa có bộ test thật — gán nhãn NER
-   cho `data2.md` (87 câu chat).
+1. **GOLD NER nhỏ** (69 entity) và nhãn chưa được người thứ hai rà — nên nhờ
+   một người khác rà `ner_data2_labeled.jsonl` + `ner_test_gold.jsonl`.
+   Lỗi còn lại: DATETIME ("ở luôn" vs "vào ở luôn", "trước 12h"), UTILITY hiếm
+   ("đủ đồ", "giờ giấc").
 2. **Khoảng giá bị gộp 1 span**: "1tr5-2tr" ra 1 span `PRICE_MAX` — normalizer
    Java cần tách min/max.
 3. **`UtilityNormalizer`** phía Java chỉ map 4 nhóm, data v2 có 51 biến thể tiện ích.
