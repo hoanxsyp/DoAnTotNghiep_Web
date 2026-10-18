@@ -158,6 +158,12 @@ services:
       RENTAL_API_BASE_URL:        ${RENTAL_API_BASE_URL:-http://rental-api:8000}
       RENTAL_API_CONNECT_TIMEOUT: ${RENTAL_API_CONNECT_TIMEOUT:-PT2S}
       RENTAL_API_REQUEST_TIMEOUT: ${RENTAL_API_REQUEST_TIMEOUT:-PT3S}
+      # --- AI chatbot (Spring backend -> chatbot-api: PhoBERT + tin that + Gemini) ---
+      # false = quay ve chatbot theo luat cu hoan toan. Khong khai depends_on: chatbot-api
+      # goi nguoc API tim kiem cua backend (tranh phu thuoc vong); AI chua len -> bao loi.
+      CHATBOT_AI_ENABLED:          ${CHATBOT_AI_ENABLED:-true}
+      CHATBOT_API_BASE_URL:        http://chatbot-api:8080
+      CHATBOT_API_REQUEST_TIMEOUT: ${CHATBOT_API_REQUEST_TIMEOUT:-PT12S}
 
       # --- Tai khoan quan tri khoi tao ---
       ADMIN_SEED_ENABLED: ${ADMIN_SEED_ENABLED:-true}
@@ -312,14 +318,21 @@ services:
       DB_NAME: ${CHATBOT_DB_NAME:-roomfinder}
       DB_USER: ${CHATBOT_DB_USER:-root}
       DB_PASSWORD: ${CHATBOT_DB_PASSWORD:-root}
-      # chatbot-mysql là DB riêng của chatbot -> tự tạo bảng + seed phòng demo.
-      # Khi chuyển sang DB của web chính thì PHẢI bỏ dòng này (mặc định never).
+      # chatbot-mysql là DB riêng của chatbot -> tự tạo bảng (poi, chat_log, room_view,
+      # listing_embedding) + seed poi/phòng demo. KHÔNG bao giờ trỏ DB này sang DB của web.
       SQL_INIT_MODE: always
+      # Tìm trên tin đăng THẬT của web qua API công khai của backend (mạng nội bộ).
+      # Không khai depends_on backend: danh mục nạp lười ở lượt chat đầu, và GĐ2 backend sẽ
+      # gọi ngược chatbot-api (tránh phụ thuộc vòng).
+      LISTING_SOURCE: ${CHATBOT_LISTING_SOURCE:-backend}
+      BACKEND_URL: http://backend:8080
       REDIS_HOST: chatbot-redis
       REDIS_PORT: 6379
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       NLU_ENABLED: ${CHATBOT_NLU_ENABLED:-true}
       NLU_URL: http://chatbot-nlu:8000
+      # Chờ PhoBERT tối đa bao lâu trước khi rơi xuống LLM/rule-based (đo thật p95 ~107ms).
+      NLU_TIMEOUT_MS: ${CHATBOT_NLU_TIMEOUT_MS:-800}
       GEOCODING_ENABLED: ${CHATBOT_GEOCODING_ENABLED:-true}
       TZ: UTC
     ports:

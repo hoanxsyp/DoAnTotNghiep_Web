@@ -14,6 +14,7 @@
 | **GĐ2 — NLU PhoBERT + Fast-path** | Train intent/NER, FastAPI service, nối Spring, fast-path, so sánh các phương án NLU | 🟢 **Đã train + đo** | Intent GOLD 0.929 (đạt DoD-1); NER GOLD Span-F1 0.935 (đạt DoD-2) |
 | **GĐ3 — Semantic + Recommendation** | Semantic rerank (embedding), Content-Based+KNN recommend | ✅ **Xong** | Không dùng Elasticsearch (có chủ đích, catalog ~60 phòng) |
 | **Phụ — Geocoding fallback** | POI miss → Nominatim → cache | ✅ **Xong** | Tầng 2 hybrid geo |
+| **Tích hợp web** (2026-10-18) | Widget của web → `backend_webtro` → `chatbot-api`; tìm trên **tin đăng thật** qua API công khai của backend | ✅ **Chạy e2e** | Luật cũ chỉ còn nhạy cảm / thuật ngữ / câu mẫu; AI sập → báo lỗi. Recall@5 trên tin thật **chưa đo lại** (bộ vàng hiện gán trên 59 phòng demo) |
 
 **Kết luận:** Cả 3 giai đoạn code đã hoàn thành và chạy được đầu-cuối. **Việc còn thiếu chủ yếu KHÔNG phải code, mà là phần ĐÁNH GIÁ (§14) và DỮ LIỆU THẬT (§13.3)** — đây mới là chỗ quyết định điểm khi bảo vệ.
 
@@ -115,8 +116,10 @@ intent, hơn cả A lẫn C về slot**, nhanh hơn ~10× và chi phí ≈0. GOL
    NER thật, Span-F1 0.935. Còn: GOLD nhỏ (69 entity), nhãn chưa có người thứ hai rà.
 2. **Data thật còn ít**: 143 câu intent / 56 câu NER; GOLD 28 câu, `out_of_scope` chỉ 1 câu.
 3. **Chưa đo tỉ lệ fast-path trên log thật** — SPEC §11 bước 2.4 muốn chạy thật ≥1 tuần rồi `SELECT path, COUNT(*), AVG(latency_ms) FROM chat_log GROUP BY path`. Query đã sẵn (README §7), chỉ thiếu **dữ liệu chạy thật đủ lâu**.
-4. Khoảng giá "1tr5-2tr" ra 1 span `PRICE_MAX` — normalizer Java cần tách min/max;
-   `UtilityNormalizer` mới map 4 nhóm trong khi data v2 có 51 biến thể tiện ích.
+4. Khoảng giá "1tr5-2tr" ra 1 span `PRICE_MAX` — normalizer Java cần tách min/max.
+   ~~`UtilityNormalizer` mới map 4 nhóm~~ — **xong 2026-10-18**: 28 key theo danh mục tiện ích
+   của web, nhận diện **91%** span UTILITY thật (trước 20%; phần còn lại cố ý không map), có
+   xử lý phủ định ("không cần X", "có X thì tốt, không có cũng được").
 
 ---
 

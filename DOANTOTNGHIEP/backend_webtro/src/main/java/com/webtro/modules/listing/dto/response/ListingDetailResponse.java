@@ -50,6 +50,8 @@ public class ListingDetailResponse {
     private String fullAddress;
     private BigDecimal latitude;
     private BigDecimal longitude;
+    /** {@code OWNER} = vị trí chính xác; {@code WARD} = tâm phường (gần đúng). Che cùng tọa độ. */
+    private String locationSource;
 
     private Integer roomCount;
     private Integer toiletCount;

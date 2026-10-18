@@ -166,5 +166,5 @@ Log: `train-intent-phobert.log`, `train-ner-v3.log`. So với LLM: xem
    ("đủ đồ", "giờ giấc").
 2. **Khoảng giá bị gộp 1 span**: "1tr5-2tr" ra 1 span `PRICE_MAX` — normalizer
    Java cần tách min/max.
-3. **`UtilityNormalizer`** phía Java chỉ map 4 nhóm, data v2 có 51 biến thể tiện ích.
+3. ~~`UtilityNormalizer` chỉ map 4 nhóm~~ — xong 2026-10-18 (28 key, 91% span UTILITY thật).
 4. Thu thêm data thật, nhất là `out_of_scope` và câu hỏi tình trạng phòng.

@@ -3,6 +3,7 @@ package com.webtro.modules.listing.service.impl;
 import com.webtro.common.PageResponse;
 import com.webtro.common.enums.CategoryCode;
 import com.webtro.common.enums.ListingStatus;
+import com.webtro.common.enums.LocationSource;
 import com.webtro.constant.ConfigKey;
 import com.webtro.constant.ErrorCode;
 import com.webtro.constant.RoleCode;
@@ -132,7 +133,7 @@ public class ListingServiceImpl implements ListingService {
 
         Category category = requireActiveCategory(req.getCategoryId());
         validateCategoryAllowedForCurrentRole(category.getCode());
-        validateLocation(req.getProvinceId(), req.getDistrictId(), req.getWardId());
+        Ward ward = validateLocation(req.getProvinceId(), req.getDistrictId(), req.getWardId());
         validateAmenities(req.getAmenityIds());
         validateTextLengths(req.getTitle(), req.getDescription());
         validateAvailableFrom(req.getAvailableFrom());
@@ -159,8 +160,6 @@ public class ListingServiceImpl implements ListingService {
                 .waterPrice(req.getWaterPrice())
                 .wardId(req.getWardId())
                 .addressDetail(addressDetail)
-                .latitude(req.getLatitude())
-                .longitude(req.getLongitude())
                 .roomCount(req.getRoomCount())
                 .toiletCount(req.getToiletCount())
                 .toiletType(req.getToiletType())
@@ -178,6 +177,7 @@ public class ListingServiceImpl implements ListingService {
                 .floorCount(req.getFloorCount())
                 .status(ListingStatus.DRAFT)
                 .build();
+        applyCoordinates(listing, req.getLatitude(), req.getLongitude(), ward);
         listing = listingRepository.save(listing);
         ownerStatsPublisher.publishIfChanged(null, listing);
 
@@ -226,7 +226,7 @@ public class ListingServiceImpl implements ListingService {
 
         Category category = requireActiveCategory(req.getCategoryId());
         validateCategoryAllowedForCurrentRole(category.getCode());
-        validateLocation(req.getProvinceId(), req.getDistrictId(), req.getWardId());
+        Ward ward = validateLocation(req.getProvinceId(), req.getDistrictId(), req.getWardId());
         validateAmenities(req.getAmenityIds());
         validateTextLengths(req.getTitle(), req.getDescription());
         validateAvailableFrom(req.getAvailableFrom());
@@ -268,8 +268,7 @@ public class ListingServiceImpl implements ListingService {
         listing.setWaterPrice(req.getWaterPrice());
         listing.setWardId(req.getWardId());
         listing.setAddressDetail(newAddress);
-        listing.setLatitude(req.getLatitude());
-        listing.setLongitude(req.getLongitude());
+        applyCoordinates(listing, req.getLatitude(), req.getLongitude(), ward);
         listing.setRoomCount(req.getRoomCount());
         listing.setToiletCount(req.getToiletCount());
         listing.setToiletType(req.getToiletType());
@@ -919,7 +918,28 @@ public class ListingServiceImpl implements ListingService {
         return category;
     }
 
-    private void validateLocation(Long provinceId, Long districtId, Long wardId) {
+    /**
+     * Gán tọa độ cho tin. Chủ trọ gửi đủ cặp lat/lng thì dùng nguyên ({@code OWNER}); thiếu thì lấy
+     * tâm phường ({@code WARD}) để lọc theo bán kính (tìm kiếm, chatbot) vẫn hoạt động — form đăng
+     * tin hiện chưa có ô chọn vị trí. Phường chưa có tọa độ thì để trống.
+     */
+    private void applyCoordinates(Listing listing, BigDecimal latitude, BigDecimal longitude, Ward ward) {
+        if (latitude != null && longitude != null) {
+            listing.setLatitude(latitude);
+            listing.setLongitude(longitude);
+            listing.setLocationSource(LocationSource.OWNER);
+        } else if (ward.getLatitude() != null && ward.getLongitude() != null) {
+            listing.setLatitude(ward.getLatitude());
+            listing.setLongitude(ward.getLongitude());
+            listing.setLocationSource(LocationSource.WARD);
+        } else {
+            listing.setLatitude(null);
+            listing.setLongitude(null);
+            listing.setLocationSource(null);
+        }
+    }
+
+    private Ward validateLocation(Long provinceId, Long districtId, Long wardId) {
         Province province = provinceRepository.findById(provinceId)
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.PROVINCE_NOT_FOUND));
         if (!Boolean.TRUE.equals(province.getIsActive())) {
@@ -935,6 +955,7 @@ public class ListingServiceImpl implements ListingService {
         if (ward.getDistrict() == null || !Objects.equals(ward.getDistrict().getId(), districtId)) {
             throw new BusinessRuleException(ErrorCode.ADDRESS_HIERARCHY_MISMATCH);
         }
+        return ward;
     }
 
     private LocationParts locationOf(Long wardId) {

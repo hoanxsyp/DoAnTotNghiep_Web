@@ -5,6 +5,7 @@ import com.webtro.common.enums.CurfewType;
 import com.webtro.common.enums.FurnitureStatus;
 import com.webtro.common.enums.GenderRequirement;
 import com.webtro.common.enums.ListingStatus;
+import com.webtro.common.enums.LocationSource;
 import com.webtro.common.enums.ReportSeverity;
 import com.webtro.common.enums.ToiletType;
 import jakarta.persistence.Column;
@@ -97,6 +98,11 @@ public class Listing extends AuditableEntity {
 
     @Column(name = "longitude", precision = 10, scale = 7)
     private BigDecimal longitude;
+
+    /** Nguồn gốc tọa độ; {@code null} khi tin chưa có tọa độ. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "location_source", length = 10)
+    private LocationSource locationSource;
 
     // ----- Đặc điểm phòng -----
 

@@ -169,7 +169,9 @@ Bổ sung dữ liệu THẬT (thu thập từ post/chat, khác synthetic) vào p
    tại (`ml/eval-results/REPORT.md`) đo trên PROXY. Xóa `ml/eval-results/*.jsonl`
    rồi chạy lại 3 phương án + `--report`.
 
-6. **[Backend] Mở rộng `UtilityNormalizer` SYNONYMS** — data thật có tiện ích ngoài
+6. ~~**[Backend] Mở rộng `UtilityNormalizer` SYNONYMS**~~ — **XONG 2026-10-18**: 28 key bám
+   danh mục 29 tiện ích của web + cột riêng (để xe, thú cưng, vskk, giờ giấc, full nội thất);
+   nhận diện 91% span UTILITY thật (trước 20%); thêm phát hiện phủ định. Nội dung cũ: data thật có tiện ích ngoài
    4 nhóm hiện tại (air_conditioner/parking/wifi/washing_machine): tủ lạnh, thang
    máy, ban công, cửa sổ, gác xép, nóng lạnh, vskk (vệ sinh khép kín), xe điện,
    máy sấy... NER nhận ra span UTILITY nhưng normalizer chưa map được → nên bổ sung

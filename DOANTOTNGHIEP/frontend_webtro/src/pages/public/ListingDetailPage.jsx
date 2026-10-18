@@ -352,7 +352,7 @@ const ListingDetailPage = () => {
     title, price, depositAmount, area, description, fullAddress, shortAddress,
     provinceName, districtName, wardName, addressDetail, images = [], amenities = [],
     landlord, contactName, contactPhone,
-    viewCount, favoriteCount, commentCount, latitude, longitude, electricityPrice, waterPrice,
+    viewCount, favoriteCount, commentCount, latitude, longitude, locationSource, electricityPrice, waterPrice,
     roomCount, toiletCount, currentOccupants, maxOccupants, availableFrom, furnitureStatus,
     curfewType, toiletType, petAllowed, parkingAvailable, genderRequirement, categoryCode,
     canReview, reviewedByMe, publishedAt,
@@ -519,10 +519,18 @@ const ListingDetailPage = () => {
               <Typography variant="h6" component="h2" sx={{ fontWeight: 700, mt: 3, mb: 1 }}>
                 Vị trí
               </Typography>
+              {/* WARD = tọa độ tâm phường: chỉ hiện khu vực, không cắm ghim như vị trí thật */}
+              {locationSource === 'WARD' && (
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                  Vị trí gần đúng theo khu vực {wardName ? `phường ${wardName}` : 'phường'} — liên hệ chủ trọ để biết địa chỉ chính xác.
+                </Typography>
+              )}
               <Box
                 component="iframe"
                 title="Bản đồ vị trí"
-                src={`https://www.openstreetmap.org/export/embed.html?bbox=${longitude - 0.008}%2C${latitude - 0.006}%2C${longitude + 0.008}%2C${latitude + 0.006}&layer=mapnik&marker=${latitude}%2C${longitude}`}
+                src={locationSource === 'WARD'
+                  ? `https://www.openstreetmap.org/export/embed.html?bbox=${longitude - 0.016}%2C${latitude - 0.012}%2C${longitude + 0.016}%2C${latitude + 0.012}&layer=mapnik`
+                  : `https://www.openstreetmap.org/export/embed.html?bbox=${longitude - 0.008}%2C${latitude - 0.006}%2C${longitude + 0.008}%2C${latitude + 0.006}&layer=mapnik&marker=${latitude}%2C${longitude}`}
                 sx={{ width: '100%', height: 300, border: 0, borderRadius: 2 }}
                 loading="lazy"
               />

@@ -616,6 +616,7 @@ erDiagram
         varchar address_detail
         decimal latitude
         decimal longitude
+        varchar location_source
         int room_count
         int toilet_count
         varchar toilet_type
@@ -2487,6 +2488,7 @@ các cột bắt buộc để thỏa `[§3.3][§3.7][§5.8][§9.1][§9.4][§10.4
 | `address_detail` | `VARCHAR(255)` | N | — | | Số nhà, tên đường | `[§3.3]` `AddressDetail` |
 | `latitude` | `DECIMAL(10,7)` | Y | `NULL` | IDX | | `[§3.3]` *"Latitude/Longitude nếu có bản đồ"* |
 | `longitude` | `DECIMAL(10,7)` | Y | `NULL` | IDX | | `[§3.3]` |
+| `location_source` | `VARCHAR(10)` | Y | `NULL` | CHECK | `OWNER` = chủ trọ cung cấp (chính xác); `WARD` = tâm phường, gán khi tin thiếu tọa độ (gần đúng — trang chi tiết không cắm ghim). Thêm ở `V23` | `[§3.3]` |
 | `room_count` | `TINYINT UNSIGNED` | Y | `NULL` | | Số phòng — bắt buộc với `WHOLE_HOUSE` `[§0.3]` | `[§6.3]`, đầu vào `[§9.4]` |
 | `toilet_count` | `TINYINT UNSIGNED` | Y | `NULL` | | Số toilet | `[§6.3]`, đầu vào `[§9.4]` |
 | `toilet_type` | `VARCHAR(10)` | Y | `NULL` | IDX | `ToiletType` — bộ lọc *"Nhà vệ sinh riêng/chung"* | `[§3.7]` + canonical 5 |

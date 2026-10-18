@@ -11,6 +11,38 @@ import SmartToyIcon from '@mui/icons-material/SmartToy';
 import chatbotApi from '@/api/chatbotApi';
 import { formatPrice } from '@/utils/format';
 
+const SESSION_KEY = 'webtro.chatbot.sessionId';
+
+/** UUID v4 — crypto.randomUUID chỉ có trên HTTPS/localhost, nên có phương án dự phòng. */
+const newUuid = () => {
+  if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+  const b = window.crypto?.getRandomValues ? window.crypto.getRandomValues(new Uint8Array(16))
+    : Uint8Array.from({ length: 16 }, () => Math.floor(Math.random() * 256));
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  const h = [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+};
+
+/**
+ * Định danh phiên chat của khách — backend BẮT BUỘC khi chưa đăng nhập (thiếu thì mọi tin
+ * nhắn của khách bị từ chối). Giữ qua các lần tải trang; storage bị chặn thì dùng tạm trong bộ nhớ.
+ */
+let memorySessionId = null;
+const getChatSessionId = () => {
+  try {
+    let id = window.localStorage.getItem(SESSION_KEY);
+    if (!id) {
+      id = newUuid();
+      window.localStorage.setItem(SESSION_KEY, id);
+    }
+    return id;
+  } catch {
+    memorySessionId = memorySessionId || newUuid();
+    return memorySessionId;
+  }
+};
+
 /**
  * Widget chatbot nổi ở góc phải [§9.3]. Gửi câu hỏi tự nhiên, nhận trả lời + danh sách tin gợi ý
  * (chỉ tin Active — backend đảm bảo, không bịa dữ liệu). Giữ conversationId để duy trì ngữ cảnh.
@@ -37,7 +69,7 @@ const ChatbotWidget = () => {
     setMessages((m) => [...m, { sender: 'USER', text }]);
     setLoading(true);
     try {
-      const res = await chatbotApi.sendMessage({ conversationId, message: text });
+      const res = await chatbotApi.sendMessage({ conversationId, sessionId: getChatSessionId(), message: text });
       setConversationId(res.conversationId ?? conversationId);
       setMessages((m) => [
         ...m,

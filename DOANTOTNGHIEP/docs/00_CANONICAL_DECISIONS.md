@@ -897,6 +897,16 @@ phòng, không tư vấn pháp lý, không đặt cọc/thương lượng thay n
 Không kết quả → đề xuất nới giá/khu vực/diện tích. Nội dung nhạy cảm → từ chối lịch sự và
 hướng về chức năng tìm trọ. Ghi log câu hỏi phổ biến để cải thiện FAQ.
 
+**Cập nhật 2026-10-18 — câu hỏi tìm phòng do module AI chatbot trả lời.** `ChatbotServiceImpl`
+gọi `chatbot-api` (`AiChatbotClient`): PhoBERT hiểu câu → tìm trên tin thật qua
+`GET /api/search/listings` + `GET /api/listings/{id}?countView=false` (vẫn qua `publicStatuses()`,
+không cộng lượt xem; module **không đọc DB web**) → câu mẫu hoặc Gemini có guardrail chống bịa.
+`RuleBasedChatbotEngine` còn lo: **nhạy cảm** (luôn chặn trước, không gửi sang AI), **thuật ngữ**
+khi câu hỏi nghĩa ("là gì"), và câu mẫu chào hỏi / đăng tin / FAQ khi AI không có gì cụ thể để
+trả lời. AI sập/timeout → báo lỗi, **không** tìm phòng bằng luật. Công tắc kỹ thuật
+`app.ai.chatbot-api.enabled=false` (`CHATBOT_AI_ENABLED`) → chatbot theo luật như cũ. Lịch sử
+vẫn ở `chatbot_conversations`/`chatbot_messages` (lượt AI: `extracted_slots.engine = "AI"`).
+
 ### 10.4. Price Prediction `[§9.4]`
 
 `PriceEstimator` → `ComparableHedonicPriceEstimator`.

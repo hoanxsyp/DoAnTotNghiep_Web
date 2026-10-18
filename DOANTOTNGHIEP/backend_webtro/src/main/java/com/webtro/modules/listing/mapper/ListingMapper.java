@@ -140,6 +140,8 @@ public class ListingMapper {
                 .fullAddress(fullAddress(l, location.province(), location.district(), location.ward()))
                 .latitude(revealSensitive ? l.getLatitude() : null)
                 .longitude(revealSensitive ? l.getLongitude() : null)
+                .locationSource(revealSensitive && l.getLocationSource() != null
+                        ? l.getLocationSource().name() : null)
                 .roomCount(l.getRoomCount())
                 .toiletCount(l.getToiletCount())
                 .floorCount(l.getFloorCount())
