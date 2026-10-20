@@ -61,10 +61,10 @@ const MyReviewsPage = () => {
     const normalizedContent = normalizeReviewContent(editForm.content);
     setSaving(true);
     try {
-      await reviewApi.update(editing.id, { rating: editForm.rating, content: normalizedContent });
+      const updated = await reviewApi.update(editing.id, { rating: editForm.rating, content: normalizedContent });
       notify.success('Đã cập nhật đánh giá');
       setItems((prev) => prev.map((i) => (i.id === editing.id
-        ? { ...i, ...editForm, content: normalizedContent }
+        ? { ...i, ...updated }
         : i)));
       setEditing(null);
     } catch (e) {
@@ -82,8 +82,12 @@ const MyReviewsPage = () => {
     if (!r) return;
     try {
       await reviewApi.remove(r.id);
-      notify.success('Đã xóa đánh giá');
-      setItems((prev) => prev.filter((i) => i.id !== r.id));
+      notify.success('Đã xóa đánh giá. Bạn có thể đánh giá lại tin này.');
+      if (items.length === 1 && page > 0) {
+        setPage((current) => current - 1);
+      } else {
+        await load();
+      }
     } catch (e) {
       notify.apiError(e, 'Xóa đánh giá thất bại');
     }
@@ -207,7 +211,7 @@ const MyReviewsPage = () => {
       <ConfirmDialog
         open={!!deleting}
         title="Xóa đánh giá"
-        message="Bạn chắc chắn muốn xóa đánh giá này?"
+        message="Bạn chắc chắn muốn xóa đánh giá này? Sau khi xóa, bạn có thể gửi đánh giá mới cho tin này."
         confirmText="Xóa"
         severity="error"
         onConfirm={handleDelete}

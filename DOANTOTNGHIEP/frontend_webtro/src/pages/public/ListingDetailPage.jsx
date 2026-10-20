@@ -3,7 +3,7 @@ import { useParams, useNavigate, useLocation, Link as RouterLink } from 'react-r
 import {
   Container, Grid, Box, Typography, Stack, Chip, Button, Paper, Divider, Avatar, Breadcrumbs,
   Link, IconButton, Alert, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
-  MenuItem, Rating, LinearProgress, Tooltip,
+  Menu, MenuItem, ListItemIcon, Rating, LinearProgress, Tooltip,
 } from '@mui/material';
 import PhoneIcon from '@mui/icons-material/Phone';
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
@@ -14,6 +14,9 @@ import VerifiedIcon from '@mui/icons-material/Verified';
 import PlaceOutlinedIcon from '@mui/icons-material/PlaceOutlined';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import HomeWorkOutlinedIcon from '@mui/icons-material/HomeWorkOutlined';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import listingApi from '@/api/listingApi';
 import commentApi from '@/api/commentApi';
 import reviewApi from '@/api/reviewApi';
@@ -25,6 +28,7 @@ import RatingStars from '@/components/interaction/RatingStars';
 import RichTextViewer from '@/components/common/RichTextViewer';
 import LoadingSkeleton from '@/components/common/LoadingSkeleton';
 import EmptyState from '@/components/common/EmptyState';
+import ConfirmDialog from '@/components/common/ConfirmDialog';
 import RentalRequestDialog from '@/components/rental/RentalRequestDialog';
 import useAuth from '@/hooks/useAuth';
 import { notify } from '@/utils/toast';
@@ -113,6 +117,11 @@ const ListingDetailPage = () => {
   const [reviewContentServerError, setReviewContentServerError] = useState('');
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewEligibility, setReviewEligibility] = useState(null);
+  const [editingReview, setEditingReview] = useState(null);
+  const [reviewMenuAnchor, setReviewMenuAnchor] = useState(null);
+  const [reviewMenuReview, setReviewMenuReview] = useState(null);
+  const [deletingReview, setDeletingReview] = useState(null);
+  const [reviewDeleting, setReviewDeleting] = useState(false);
   const [rentalOpen, setRentalOpen] = useState(false);
 
   const [chatOpen, setChatOpen] = useState(false);
@@ -166,17 +175,20 @@ const ListingDetailPage = () => {
       .finally(() => setCommentsLoading(false));
   }, [id]);
 
+  const loadReviews = useCallback(async () => {
+    const data = await reviewApi.getReviews(id, { page: 0, size: 5 });
+    setReviews({ items: toItems(data), summary: data?.summary || null });
+  }, [id]);
+
   useEffect(() => {
     if (!id || notFound) return;
     loadComments();
 
     setReviewsLoading(true);
-    reviewApi
-      .getReviews(id, { page: 0, size: 5 })
-      .then((data) => setReviews({ items: toItems(data), summary: data?.summary || null }))
+    loadReviews()
       .catch(() => setReviews({ items: [], summary: null }))
       .finally(() => setReviewsLoading(false));
-  }, [id, notFound, loadComments]);
+  }, [id, notFound, loadComments, loadReviews]);
 
   useEffect(() => {
     if (!id || !isAuthenticated || role !== ROLES.TENANT) {
@@ -324,6 +336,36 @@ const ListingDetailPage = () => {
     }
   };
 
+  const openCreateReview = () => {
+    setEditingReview(null);
+    setReviewRating(5);
+    setReviewContent('');
+    setReviewContentServerError('');
+    setReviewOpen(true);
+  };
+
+  const closeReviewMenu = () => {
+    setReviewMenuAnchor(null);
+    setReviewMenuReview(null);
+  };
+
+  const openEditReview = () => {
+    const review = reviewMenuReview;
+    closeReviewMenu();
+    if (!review) return;
+    setEditingReview(review);
+    setReviewRating(review.rating);
+    setReviewContent(review.content || '');
+    setReviewContentServerError('');
+    setReviewOpen(true);
+  };
+
+  const openDeleteReview = () => {
+    const review = reviewMenuReview;
+    closeReviewMenu();
+    if (review) setDeletingReview(review);
+  };
+
   const submitReview = async () => {
     const validationError = getReviewContentError(reviewRating, reviewContent);
     if (validationError) {
@@ -332,23 +374,60 @@ const ListingDetailPage = () => {
     }
     setReviewSubmitting(true);
     try {
-      await reviewApi.create(id, {
+      const payload = {
         rating: reviewRating,
         content: normalizeReviewContent(reviewContent),
-      });
-      notify.success('Cảm ơn bạn đã đánh giá.');
+      };
+      if (editingReview) {
+        await reviewApi.update(editingReview.id, payload);
+        notify.success('Đã cập nhật đánh giá.');
+      } else {
+        await reviewApi.create(id, payload);
+        notify.success('Cảm ơn bạn đã đánh giá.');
+        setReviewEligibility((current) => current
+          ? { ...current, eligible: false, alreadyReviewed: true }
+          : current);
+        setListing((current) => current
+          ? { ...current, canReview: false, reviewedByMe: true }
+          : current);
+      }
       setReviewOpen(false);
+      setEditingReview(null);
       setReviewContent('');
       setReviewContentServerError('');
-      setReviewEligibility((current) => current ? { ...current, eligible: false, alreadyReviewed: true } : current);
-      const data = await reviewApi.getReviews(id, { page: 0, size: 5 });
-      setReviews({ items: toItems(data), summary: data?.summary || null });
+      await loadReviews();
     } catch (err) {
       const contentError = err.fieldErrors?.find((item) => item.field === 'content')?.message;
       setReviewContentServerError(contentError || '');
       notify.apiError(contentError ? { ...err, message: contentError } : err);
     } finally {
       setReviewSubmitting(false);
+    }
+  };
+
+  const deleteOwnReview = async () => {
+    const review = deletingReview;
+    if (!review) return;
+    setReviewDeleting(true);
+    try {
+      await reviewApi.remove(review.id);
+      notify.success('Đã xóa đánh giá. Bạn có thể đánh giá lại tin này.');
+      setDeletingReview(null);
+      setListing((current) => current
+        ? { ...current, canReview: true, reviewedByMe: false }
+        : current);
+      if (role === ROLES.TENANT) {
+        try {
+          setReviewEligibility(await reviewApi.getEligibility(id));
+        } catch {
+          setReviewEligibility(null);
+        }
+      }
+      await loadReviews();
+    } catch (err) {
+      notify.apiError(err, 'Xóa đánh giá thất bại');
+    } finally {
+      setReviewDeleting(false);
     }
   };
 
@@ -604,7 +683,7 @@ const ListingDetailPage = () => {
                       <Avatar src={r.author?.avatarUrl} sx={{ width: 36, height: 36 }}>
                         {r.author?.fullName?.charAt(0)}
                       </Avatar>
-                      <Box sx={{ flex: 1 }}>
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
                         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
                           <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
                             {r.author?.fullName}
@@ -616,25 +695,52 @@ const ListingDetailPage = () => {
                         </Stack>
                         {r.content && <RichTextViewer content={r.content} variant="body2" />}
                       </Box>
+                      {isAuthenticated && String(r.author?.id) === String(user?.id) && (
+                        <IconButton
+                          size="small"
+                          aria-label="Tùy chọn đánh giá"
+                          aria-haspopup="menu"
+                          onClick={(event) => {
+                            setReviewMenuAnchor(event.currentTarget);
+                            setReviewMenuReview(r);
+                          }}
+                          sx={{ alignSelf: 'flex-start' }}
+                        >
+                          <MoreVertIcon fontSize="small" />
+                        </IconButton>
+                      )}
                     </Stack>
                   </Box>
                 ))}
               </Stack>
+              <Menu
+                anchorEl={reviewMenuAnchor}
+                open={Boolean(reviewMenuAnchor)}
+                onClose={closeReviewMenu}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+              >
+                <MenuItem onClick={openEditReview}>
+                  <ListItemIcon><EditOutlinedIcon fontSize="small" /></ListItemIcon>
+                  Sửa
+                </MenuItem>
+                <MenuItem onClick={openDeleteReview} sx={{ color: 'error.main' }}>
+                  <ListItemIcon><DeleteOutlineIcon color="error" fontSize="small" /></ListItemIcon>
+                  Xóa
+                </MenuItem>
+              </Menu>
             </Box>
           )}
           {isAuthenticated && (
             <Box sx={{ mt: 1 }}>
               {effectiveReviewedByMe ? (
                 <Typography variant="body2" color="text.secondary">
-                  Bạn đã đánh giá tin này.
+                  Bạn đã đánh giá tin này. Dùng nút ba chấm bên cạnh đánh giá của bạn để sửa hoặc xóa.
                 </Typography>
               ) : effectiveCanReview ? (
                 <Button
                   variant="outlined"
-                  onClick={() => {
-                    setReviewContentServerError('');
-                    setReviewOpen(true);
-                  }}
+                  onClick={openCreateReview}
                 >
                   Viết đánh giá
                 </Button>
@@ -841,17 +947,19 @@ const ListingDetailPage = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Dialog viết đánh giá */}
+      {/* Dialog viết/sửa đánh giá */}
       <Dialog
         open={reviewOpen}
         onClose={() => {
+          if (reviewSubmitting) return;
           setReviewContentServerError('');
+          setEditingReview(null);
           setReviewOpen(false);
         }}
         maxWidth="xs"
         fullWidth
       >
-        <DialogTitle>Viết đánh giá</DialogTitle>
+        <DialogTitle>{editingReview ? 'Sửa đánh giá' : 'Viết đánh giá'}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }} alignItems="flex-start">
             <RatingStars value={reviewRating} onChange={(v) => setReviewRating(v || 1)} showValue={false} />
@@ -880,8 +988,10 @@ const ListingDetailPage = () => {
             color="inherit"
             onClick={() => {
               setReviewContentServerError('');
+              setEditingReview(null);
               setReviewOpen(false);
             }}
+            disabled={reviewSubmitting}
           >
             Hủy
           </Button>
@@ -890,10 +1000,21 @@ const ListingDetailPage = () => {
             onClick={submitReview}
             disabled={reviewSubmitting || !!getReviewContentError(reviewRating, reviewContent)}
           >
-            {reviewSubmitting ? 'Đang gửi…' : 'Gửi đánh giá'}
+            {reviewSubmitting ? 'Đang lưu…' : editingReview ? 'Lưu thay đổi' : 'Gửi đánh giá'}
           </Button>
         </DialogActions>
       </Dialog>
+
+      <ConfirmDialog
+        open={!!deletingReview}
+        title="Xóa đánh giá"
+        message="Bạn chắc chắn muốn xóa đánh giá này? Sau khi xóa, bạn có thể gửi đánh giá mới cho tin này."
+        confirmText="Xóa"
+        severity="error"
+        loading={reviewDeleting}
+        onConfirm={deleteOwnReview}
+        onCancel={() => !reviewDeleting && setDeletingReview(null)}
+      />
 
       {/* Dialog tin nhắn đầu tiên gửi chủ trọ */}
       <Dialog open={chatOpen} onClose={() => !chatSubmitting && setChatOpen(false)} maxWidth="xs" fullWidth>
