@@ -15,6 +15,7 @@ import RatingStars from '@/components/interaction/RatingStars';
 import StatusChip from '@/components/common/StatusChip';
 import notify from '@/utils/toast';
 import { formatDateTime } from '@/utils/format';
+import { getReviewContentError, normalizeReviewContent } from '@/utils/reviewValidation';
 
 const SIZE = 20;
 
@@ -25,6 +26,7 @@ const MyReviewsPage = () => {
   const [totalPages, setTotalPages] = useState(0);
   const [editing, setEditing] = useState(null);
   const [editForm, setEditForm] = useState({ rating: 5, content: '' });
+  const [editContentServerError, setEditContentServerError] = useState('');
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(null);
 
@@ -46,19 +48,29 @@ const MyReviewsPage = () => {
   const openEdit = (r) => {
     setEditing(r);
     setEditForm({ rating: r.rating, content: r.content || '' });
+    setEditContentServerError('');
   };
 
   const saveEdit = async () => {
     if (!editForm.rating) { notify.warning('Vui lòng chọn số sao'); return; }
-    if (!editForm.content.trim()) { notify.warning('Vui lòng nhập nội dung đánh giá'); return; }
+    const validationError = getReviewContentError(editForm.rating, editForm.content);
+    if (validationError) {
+      setEditContentServerError(validationError);
+      return;
+    }
+    const normalizedContent = normalizeReviewContent(editForm.content);
     setSaving(true);
     try {
-      await reviewApi.update(editing.id, { rating: editForm.rating, content: editForm.content.trim() });
+      await reviewApi.update(editing.id, { rating: editForm.rating, content: normalizedContent });
       notify.success('Đã cập nhật đánh giá');
-      setItems((prev) => prev.map((i) => (i.id === editing.id ? { ...i, ...editForm, content: editForm.content.trim() } : i)));
+      setItems((prev) => prev.map((i) => (i.id === editing.id
+        ? { ...i, ...editForm, content: normalizedContent }
+        : i)));
       setEditing(null);
     } catch (e) {
-      notify.apiError(e, 'Cập nhật đánh giá thất bại');
+      const contentError = e.fieldErrors?.find((item) => item.field === 'content')?.message;
+      setEditContentServerError(contentError || '');
+      notify.apiError(contentError ? { ...e, message: contentError } : e, 'Cập nhật đánh giá thất bại');
     } finally {
       setSaving(false);
     }
@@ -139,7 +151,17 @@ const MyReviewsPage = () => {
         </Stack>
       )}
 
-      <Dialog open={!!editing} onClose={() => !saving && setEditing(null)} maxWidth="sm" fullWidth>
+      <Dialog
+        open={!!editing}
+        onClose={() => {
+          if (!saving) {
+            setEditContentServerError('');
+            setEditing(null);
+          }
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
         <DialogTitle>Sửa đánh giá</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
@@ -147,13 +169,38 @@ const MyReviewsPage = () => {
             <TextField
               label="Nội dung" multiline minRows={3} fullWidth
               value={editForm.content}
-              onChange={(e) => setEditForm((f) => ({ ...f, content: e.target.value }))}
+              onChange={(e) => {
+                setEditForm((f) => ({ ...f, content: e.target.value }));
+                setEditContentServerError('');
+              }}
+              inputProps={{ maxLength: 2000 }}
+              error={!!(editContentServerError || getReviewContentError(editForm.rating, editForm.content))}
+              helperText={editContentServerError
+                || getReviewContentError(editForm.rating, editForm.content)
+                || (editForm.rating <= 2
+                  ? 'Với đánh giá thấp, vui lòng nêu rõ lý do (ít nhất 10 ký tự).'
+                  : 'Không bắt buộc. Nếu nhập, nội dung cần từ 10 đến 2000 ký tự.')}
             />
           </Stack>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setEditing(null)} disabled={saving} color="inherit">Hủy</Button>
-          <Button onClick={saveEdit} variant="contained" disabled={saving}>{saving ? 'Đang lưu…' : 'Lưu'}</Button>
+          <Button
+            onClick={() => {
+              setEditContentServerError('');
+              setEditing(null);
+            }}
+            disabled={saving}
+            color="inherit"
+          >
+            Hủy
+          </Button>
+          <Button
+            onClick={saveEdit}
+            variant="contained"
+            disabled={saving || !!getReviewContentError(editForm.rating, editForm.content)}
+          >
+            {saving ? 'Đang lưu…' : 'Lưu'}
+          </Button>
         </DialogActions>
       </Dialog>
 

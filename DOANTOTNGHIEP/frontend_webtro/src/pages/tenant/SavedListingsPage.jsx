@@ -111,7 +111,7 @@ const SavedListingsPage = () => {
                       size="small"
                       variant="contained"
                       startIcon={<HomeWorkOutlinedIcon />}
-                      onClick={() => setRenting(it)}
+                      onClick={() => setRenting({ ...it, id: it.listingId })}
                       fullWidth
                     >
                       Thuê phòng

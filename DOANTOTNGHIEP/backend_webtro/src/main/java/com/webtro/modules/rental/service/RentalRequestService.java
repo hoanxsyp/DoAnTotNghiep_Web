@@ -4,6 +4,7 @@ import com.webtro.common.PageResponse;
 import com.webtro.common.enums.RentalRequestStatus;
 import com.webtro.modules.rental.dto.request.CreateRentalRequest;
 import com.webtro.modules.rental.dto.request.RentalDecisionRequest;
+import com.webtro.modules.rental.dto.request.UpdateViewingDateRequest;
 import com.webtro.modules.rental.dto.response.RentalRequestResponse;
 import org.springframework.data.domain.Pageable;
 
@@ -13,6 +14,8 @@ public interface RentalRequestService {
     PageResponse<RentalRequestResponse> listMine(Long tenantId, RentalRequestStatus status, Pageable pageable);
 
     RentalRequestResponse cancel(Long requestId, Long tenantId);
+
+    RentalRequestResponse updateViewingDate(Long requestId, Long tenantId, UpdateViewingDateRequest request);
 
     PageResponse<RentalRequestResponse> listForLandlord(Long ownerId, RentalRequestStatus status, Pageable pageable);
 

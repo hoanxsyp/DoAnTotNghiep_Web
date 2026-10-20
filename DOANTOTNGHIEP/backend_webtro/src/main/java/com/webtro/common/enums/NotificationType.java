@@ -43,6 +43,8 @@ public enum NotificationType {
 
     RENTAL_REQUEST_REJECTED("Yêu cầu thuê phòng bị từ chối"),
 
+    RENTAL_REQUEST_CANCELLED("Yêu cầu thuê phòng bị hủy"),
+
     RENTAL_CONFIRMED("Đã xác nhận thuê phòng"),
 
     RENTAL_CHECKED_OUT("Đã xác nhận trả phòng"),

@@ -28,6 +28,7 @@ import EmptyState from '@/components/common/EmptyState';
 import RentalRequestDialog from '@/components/rental/RentalRequestDialog';
 import useAuth from '@/hooks/useAuth';
 import { notify } from '@/utils/toast';
+import { getReviewContentError, normalizeReviewContent } from '@/utils/reviewValidation';
 import {
   formatPrice, formatCurrency, formatArea, formatDate, fromNow, compactNumber,
 } from '@/utils/format';
@@ -109,6 +110,7 @@ const ListingDetailPage = () => {
   const [reviewOpen, setReviewOpen] = useState(false);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewContent, setReviewContent] = useState('');
+  const [reviewContentServerError, setReviewContentServerError] = useState('');
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewEligibility, setReviewEligibility] = useState(null);
   const [rentalOpen, setRentalOpen] = useState(false);
@@ -323,17 +325,28 @@ const ListingDetailPage = () => {
   };
 
   const submitReview = async () => {
+    const validationError = getReviewContentError(reviewRating, reviewContent);
+    if (validationError) {
+      setReviewContentServerError(validationError);
+      return;
+    }
     setReviewSubmitting(true);
     try {
-      await reviewApi.create(id, { rating: reviewRating, content: reviewContent.trim() });
+      await reviewApi.create(id, {
+        rating: reviewRating,
+        content: normalizeReviewContent(reviewContent),
+      });
       notify.success('Cảm ơn bạn đã đánh giá.');
       setReviewOpen(false);
       setReviewContent('');
+      setReviewContentServerError('');
       setReviewEligibility((current) => current ? { ...current, eligible: false, alreadyReviewed: true } : current);
       const data = await reviewApi.getReviews(id, { page: 0, size: 5 });
       setReviews({ items: toItems(data), summary: data?.summary || null });
     } catch (err) {
-      notify.apiError(err);
+      const contentError = err.fieldErrors?.find((item) => item.field === 'content')?.message;
+      setReviewContentServerError(contentError || '');
+      notify.apiError(contentError ? { ...err, message: contentError } : err);
     } finally {
       setReviewSubmitting(false);
     }
@@ -616,7 +629,13 @@ const ListingDetailPage = () => {
                   Bạn đã đánh giá tin này.
                 </Typography>
               ) : effectiveCanReview ? (
-                <Button variant="outlined" onClick={() => setReviewOpen(true)}>
+                <Button
+                  variant="outlined"
+                  onClick={() => {
+                    setReviewContentServerError('');
+                    setReviewOpen(true);
+                  }}
+                >
                   Viết đánh giá
                 </Button>
               ) : (
@@ -823,7 +842,15 @@ const ListingDetailPage = () => {
       </Dialog>
 
       {/* Dialog viết đánh giá */}
-      <Dialog open={reviewOpen} onClose={() => setReviewOpen(false)} maxWidth="xs" fullWidth>
+      <Dialog
+        open={reviewOpen}
+        onClose={() => {
+          setReviewContentServerError('');
+          setReviewOpen(false);
+        }}
+        maxWidth="xs"
+        fullWidth
+      >
         <DialogTitle>Viết đánh giá</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }} alignItems="flex-start">
@@ -831,23 +858,37 @@ const ListingDetailPage = () => {
             <TextField
               label="Chia sẻ trải nghiệm của bạn"
               value={reviewContent}
-              onChange={(e) => setReviewContent(e.target.value)}
+              onChange={(e) => {
+                setReviewContent(e.target.value);
+                setReviewContentServerError('');
+              }}
               multiline
               minRows={3}
               fullWidth
-              inputProps={{ maxLength: 1000 }}
-              helperText={reviewRating <= 2 ? 'Với đánh giá thấp, vui lòng nêu rõ lý do.' : ''}
+              inputProps={{ maxLength: 2000 }}
+              error={!!(reviewContentServerError || getReviewContentError(reviewRating, reviewContent))}
+              helperText={reviewContentServerError
+                || getReviewContentError(reviewRating, reviewContent)
+                || (reviewRating <= 2
+                  ? 'Với đánh giá thấp, vui lòng nêu rõ lý do (ít nhất 10 ký tự).'
+                  : 'Không bắt buộc. Nếu nhập, nội dung cần từ 10 đến 2000 ký tự.')}
             />
           </Stack>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button color="inherit" onClick={() => setReviewOpen(false)}>
+          <Button
+            color="inherit"
+            onClick={() => {
+              setReviewContentServerError('');
+              setReviewOpen(false);
+            }}
+          >
             Hủy
           </Button>
           <Button
             variant="contained"
             onClick={submitReview}
-            disabled={reviewSubmitting || (reviewRating <= 2 && !reviewContent.trim())}
+            disabled={reviewSubmitting || !!getReviewContentError(reviewRating, reviewContent)}
           >
             {reviewSubmitting ? 'Đang gửi…' : 'Gửi đánh giá'}
           </Button>

@@ -164,6 +164,8 @@ public enum ErrorCode {
     RENTAL_REQUEST_FORBIDDEN(HttpStatus.FORBIDDEN, "Bạn không có quyền xử lý yêu cầu thuê phòng này"),
     RENTAL_REQUEST_INVALID_STATUS(HttpStatus.UNPROCESSABLE_ENTITY, "Không thể thực hiện thao tác với trạng thái yêu cầu hiện tại"),
     RENTAL_VIEWING_DATE_INVALID(HttpStatus.BAD_REQUEST, "Ngày xem phòng không được ở quá khứ"),
+    RENTAL_CANCELLATION_DEADLINE_PASSED(HttpStatus.UNPROCESSABLE_ENTITY,
+            "Chỉ có thể hủy yêu cầu đã duyệt trước ngày xem ít nhất 2 ngày"),
     RENTAL_LISTING_UNAVAILABLE(HttpStatus.CONFLICT, "Phòng này hiện không còn khả dụng để thuê"),
     RENTAL_LISTING_OCCUPIED(HttpStatus.CONFLICT, "Phòng này đã có người thuê"),
     RENTAL_TENANT_ALREADY_RENTING(HttpStatus.CONFLICT, "Bạn đang thuê một phòng khác"),

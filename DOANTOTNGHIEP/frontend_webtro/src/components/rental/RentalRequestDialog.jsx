@@ -15,10 +15,11 @@ export default function RentalRequestDialog({ open, listing, onClose, onSuccess 
   }, [open]);
 
   const submit = async () => {
-    if (!viewingDate) return;
+    const listingId = listing?.listingId ?? listing?.id;
+    if (!viewingDate || !listingId) return;
     setSubmitting(true);
     try {
-      const data = await rentalApi.create(listing.id || listing.listingId, viewingDate);
+      const data = await rentalApi.create(listingId, viewingDate);
       notify.success('Đã gửi yêu cầu thuê phòng tới chủ trọ.');
       onSuccess?.(data);
       onClose?.();

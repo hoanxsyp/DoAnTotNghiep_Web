@@ -4,6 +4,7 @@ import com.webtro.common.ApiResponse;
 import com.webtro.common.PageResponse;
 import com.webtro.common.enums.RentalRequestStatus;
 import com.webtro.modules.rental.dto.request.CreateRentalRequest;
+import com.webtro.modules.rental.dto.request.UpdateViewingDateRequest;
 import com.webtro.modules.rental.dto.response.RentalRequestResponse;
 import com.webtro.modules.rental.service.RentalRequestService;
 import com.webtro.security.CustomUserDetails;
@@ -59,5 +60,15 @@ public class RentalRequestController {
             @AuthenticationPrincipal CustomUserDetails user) {
         return ResponseEntity.ok(ApiResponse.success(
                 rentalRequestService.cancel(id, user.getId()), "Đã hủy yêu cầu thuê phòng"));
+    }
+
+    @PutMapping("/{id}/viewing-date")
+    public ResponseEntity<ApiResponse<RentalRequestResponse>> updateViewingDate(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateViewingDateRequest request,
+            @AuthenticationPrincipal CustomUserDetails user) {
+        return ResponseEntity.ok(ApiResponse.success(
+                rentalRequestService.updateViewingDate(id, user.getId(), request),
+                "Đã cập nhật ngày muốn xem phòng"));
     }
 }

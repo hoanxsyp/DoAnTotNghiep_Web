@@ -14,6 +14,7 @@ import com.webtro.modules.interaction.spi.UserGateway;
 import com.webtro.modules.notification.service.NotificationService;
 import com.webtro.modules.rental.dto.request.CreateRentalRequest;
 import com.webtro.modules.rental.dto.request.RentalDecisionRequest;
+import com.webtro.modules.rental.dto.request.UpdateViewingDateRequest;
 import com.webtro.modules.rental.dto.response.RentalRequestResponse;
 import com.webtro.modules.rental.entity.RentalRequest;
 import com.webtro.modules.rental.repository.RentalRequestRepository;
@@ -28,6 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -35,6 +37,8 @@ import java.util.Map;
 @Service
 @RequiredArgsConstructor
 public class RentalRequestServiceImpl implements RentalRequestService {
+
+    private static final ZoneId BUSINESS_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
 
     private static final List<RentalRequestStatus> OPEN_STATUSES = List.of(
             RentalRequestStatus.PENDING, RentalRequestStatus.APPROVED, RentalRequestStatus.RENTED);
@@ -58,7 +62,7 @@ public class RentalRequestServiceImpl implements RentalRequestService {
         if (listing.status() != ListingStatus.ACTIVE || !listing.publiclyVisible()) {
             throw new ConflictException(ErrorCode.RENTAL_LISTING_UNAVAILABLE);
         }
-        if (request.getDesiredViewingDate().isBefore(LocalDate.now())) {
+        if (request.getDesiredViewingDate().isBefore(businessToday())) {
             throw new BusinessRuleException(ErrorCode.RENTAL_VIEWING_DATE_INVALID);
         }
         if (rentalRequestRepository.existsByListingIdAndTenantIdAndStatusInAndDeletedAtIsNull(
@@ -104,8 +108,36 @@ public class RentalRequestServiceImpl implements RentalRequestService {
             throw new ForbiddenException(ErrorCode.RENTAL_REQUEST_FORBIDDEN);
         }
         requireStatus(rental, RentalRequestStatus.PENDING, RentalRequestStatus.APPROVED);
+        if (rental.getStatus() == RentalRequestStatus.APPROVED
+                && !rental.getDesiredViewingDate().isAfter(businessToday().plusDays(1))) {
+            throw new BusinessRuleException(ErrorCode.RENTAL_CANCELLATION_DEADLINE_PASSED);
+        }
+        ListingGateway.ListingBrief listing = listingGateway.getBrief(rental.getListingId());
+        UserGateway.UserBrief tenant = userGateway.getBrief(tenantId);
         rental.setStatus(RentalRequestStatus.CANCELLED);
         rental.setCancelledAt(Instant.now());
+        rental = rentalRequestRepository.save(rental);
+        notificationService.notifyUser(listing.ownerId(), NotificationType.RENTAL_REQUEST_CANCELLED,
+                "Người thuê đã hủy yêu cầu",
+                tenant.fullName() + " đã hủy yêu cầu xem phòng \"" + listing.title() + "\" vào ngày "
+                        + rental.getDesiredViewingDate(),
+                "/quan-ly/yeu-cau-thue", null);
+        return toResponse(rental, listing, tenant);
+    }
+
+    @Override
+    @Transactional
+    public RentalRequestResponse updateViewingDate(
+            Long requestId, Long tenantId, UpdateViewingDateRequest request) {
+        RentalRequest rental = locked(requestId);
+        if (!rental.getTenantId().equals(tenantId)) {
+            throw new ForbiddenException(ErrorCode.RENTAL_REQUEST_FORBIDDEN);
+        }
+        requireStatus(rental, RentalRequestStatus.PENDING);
+        if (request.getDesiredViewingDate().isBefore(businessToday())) {
+            throw new BusinessRuleException(ErrorCode.RENTAL_VIEWING_DATE_INVALID);
+        }
+        rental.setDesiredViewingDate(request.getDesiredViewingDate());
         rental = rentalRequestRepository.save(rental);
         return toResponse(rental);
     }
@@ -256,6 +288,10 @@ public class RentalRequestServiceImpl implements RentalRequestService {
 
     private String cleanNote(RentalDecisionRequest request) {
         return request == null ? null : HtmlSanitizer.stripAllHtml(request.getNote());
+    }
+
+    private LocalDate businessToday() {
+        return LocalDate.now(BUSINESS_ZONE);
     }
 
     private PageResponse<RentalRequestResponse> mapPage(Page<RentalRequest> page) {

@@ -2,15 +2,18 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import {
   Box, Button, Card, Chip, MenuItem, Stack, Table, TableBody, TableCell, TableContainer,
-  TableHead, TablePagination, TableRow, TextField, Typography,
+  TableHead, TablePagination, TableRow, TextField, Tooltip, Typography,
 } from '@mui/material';
 import HomeWorkOutlinedIcon from '@mui/icons-material/HomeWorkOutlined';
 import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
+import EditCalendarOutlinedIcon from '@mui/icons-material/EditCalendarOutlined';
+import dayjs from 'dayjs';
 import rentalApi from '@/api/rentalApi';
 import PageHeader from '@/components/dashboard/PageHeader';
 import LoadingSkeleton from '@/components/common/LoadingSkeleton';
 import EmptyState from '@/components/common/EmptyState';
 import ConfirmDialog from '@/components/common/ConfirmDialog';
+import RentalViewingDateDialog from '@/components/rental/RentalViewingDateDialog';
 import notify from '@/utils/toast';
 import { formatDate, formatPrice } from '@/utils/format';
 import { RENTAL_STATUS_META } from '@/constants';
@@ -23,6 +26,7 @@ const RentalRequestsPage = () => {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [cancelling, setCancelling] = useState(null);
+  const [editing, setEditing] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -98,6 +102,8 @@ const RentalRequestsPage = () => {
               ) : items.map((item) => {
                 const meta = RENTAL_STATUS_META[item.status] || { label: item.status, color: 'default' };
                 const detailUrl = `/tin/${item.listingSlug ? `${item.listingSlug}-` : ''}${item.listingId}`;
+                const approvedCancellationAllowed = item.status !== 'APPROVED'
+                  || dayjs(item.desiredViewingDate).isAfter(dayjs().add(1, 'day'), 'day');
                 return (
                   <TableRow key={item.id} hover>
                     <TableCell>
@@ -111,8 +117,32 @@ const RentalRequestsPage = () => {
                     <TableCell>{item.landlordNote || '—'}</TableCell>
                     <TableCell align="right">
                       <Stack direction="row" spacing={1} justifyContent="flex-end">
+                        {item.status === 'PENDING' && (
+                          <Button
+                            size="small"
+                            startIcon={<EditCalendarOutlinedIcon />}
+                            onClick={() => setEditing(item)}
+                          >
+                            Đổi ngày
+                          </Button>
+                        )}
                         {['PENDING', 'APPROVED'].includes(item.status) && (
-                          <Button size="small" color="error" onClick={() => setCancelling(item)}>Hủy</Button>
+                          <Tooltip
+                            title={approvedCancellationAllowed
+                              ? ''
+                              : 'Yêu cầu đã duyệt chỉ được hủy trước ngày xem ít nhất 2 ngày.'}
+                          >
+                            <span>
+                              <Button
+                                size="small"
+                                color="error"
+                                disabled={!approvedCancellationAllowed}
+                                onClick={() => setCancelling(item)}
+                              >
+                                Hủy
+                              </Button>
+                            </span>
+                          </Tooltip>
                         )}
                         {['RENTED', 'CHECKED_OUT'].includes(item.status) && (
                           <Button size="small" startIcon={<RateReviewOutlinedIcon />} component={RouterLink} to={detailUrl}>
@@ -137,11 +167,18 @@ const RentalRequestsPage = () => {
       <ConfirmDialog
         open={!!cancelling}
         title="Hủy yêu cầu thuê phòng"
-        message={`Bạn có chắc muốn hủy yêu cầu thuê “${cancelling?.listingTitle || ''}”?`}
+        message={`Bạn có chắc muốn hủy yêu cầu thuê “${cancelling?.listingTitle || ''}”? Chủ trọ sẽ nhận được thông báo về việc hủy này.`}
         confirmText="Hủy yêu cầu"
         severity="error"
         onConfirm={cancel}
         onCancel={() => setCancelling(null)}
+      />
+
+      <RentalViewingDateDialog
+        open={!!editing}
+        request={editing}
+        onClose={() => setEditing(null)}
+        onSuccess={load}
       />
     </Box>
   );
