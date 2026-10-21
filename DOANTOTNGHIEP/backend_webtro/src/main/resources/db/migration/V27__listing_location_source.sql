@@ -1,5 +1,5 @@
 -- =====================================================================================
--- V23 — Nguồn gốc tọa độ tin đăng + điền tọa độ tâm phường cho tin chưa có tọa độ
+-- V27 — Nguồn gốc tọa độ tin đăng + điền tọa độ tâm phường cho tin chưa có tọa độ
 -- =====================================================================================
 -- Form đăng tin chưa có ô chọn vị trí nên mọi tin đều thiếu latitude/longitude, khiến lọc theo
 -- bán kính (tìm kiếm, chatbot "gần trường X") luôn rỗng. Từ nay tin thiếu tọa độ được gán tạm
