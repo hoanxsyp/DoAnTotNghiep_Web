@@ -12,7 +12,9 @@ import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
 import java.util.Collection;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -59,6 +61,17 @@ public interface ListingRepository
     @Query("SELECT l.status, COUNT(l) FROM Listing l WHERE l.ownerId = :ownerId "
             + "AND l.deletedAt IS NULL GROUP BY l.status")
     List<Object[]> countByStatusForOwner(@Param("ownerId") Long ownerId);
+
+    /** Shared status aggregation for owner-facing listing views. */
+    default Map<ListingStatus, Long> countMapByStatusForOwner(Long ownerId) {
+        Map<ListingStatus, Long> counts = new EnumMap<>(ListingStatus.class);
+        for (Object[] row : countByStatusForOwner(ownerId)) {
+            if (row[0] instanceof ListingStatus status) {
+                counts.put(status, ((Number) row[1]).longValue());
+            }
+        }
+        return counts;
+    }
 
     /** Tổng số tin của một chủ trọ (bỏ tin đã xóa mềm). */
     @Query("SELECT COUNT(l) FROM Listing l WHERE l.ownerId = :ownerId AND l.deletedAt IS NULL")

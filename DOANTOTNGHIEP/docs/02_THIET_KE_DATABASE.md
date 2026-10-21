@@ -83,6 +83,8 @@ các cột đếm sẵn sau.
 | `landlord_profiles` | `total_listings`, `total_active_listings`, `average_rating`, `review_count`, `locked_listing_count`, `warning_count` | tổng hợp từ `listings`/`reviews`/`violation_warnings` | Listing events cập nhật `total_listings`/`total_active_listings`, V18 backfill dữ liệu cũ; review cập nhật trong transaction tạo/sửa/ẩn review | `[§10.3]` |
 | `landlord_profiles` | `response_rate_percent`, `avg_response_minutes`, `response_conversation_count` | `conversations` (`created_at`, `first_response_at`) trong cửa sổ 30 ngày | **Chưa có tiến trình ghi** — job tính trước đây (`TrustScoreRecalcJob`) đã bị xóa cùng điểm uy tín (§9.8). Cửa sổ trượt nên chỉ job định kỳ mới duy trì được | `[§5.7]` *"Chủ trọ phản hồi người thuê nhanh và đầy đủ nếu có module chat"* |
 | `conversations` | `last_message_at`, `last_message_preview`, `tenant_unread_count`, `landlord_unread_count` | `messages` | Cập nhật trong transaction gửi/đọc tin nhắn | `[§2.6]` |
+| `categories` | `listing_count` | tin public theo `category_id` | `ListingCategoryCountChangedEvent` cập nhật sau commit; V17 backfill dữ liệu cũ | Trang chủ/ quản trị danh mục |
+| `wards`, `districts`, `provinces` | `listing_count` | tin public theo `ward_id` và cây địa giới | `LocationListingCountListener` tăng/giảm đồng thời cả 3 cấp; V24 backfill dữ liệu cũ | Trang chủ/ quản trị khu vực |
 | `reports` | `listing_id` | suy ra từ `target_type` + `target_id` | Gán khi tạo report (kể cả report bình luận thì lấy `comment.listing_id`) | `[§3.13]` *"gom nhóm để xử lý"* |
 | `comments` | `sentiment_label`, `sentiment_score` | `sentiment_results` (bản mới nhất) | Ghi đè khi có kết quả mới | `[§6.3]` (Comment có `SentimentLabel`, `SentimentScore`) |
 | `promotion_packages` | `purchase_count` | `COUNT(promotion_subscriptions)` | Tăng khi kích hoạt gói | `[§10.6]` *"Xem số lượt mua"* |
@@ -910,7 +912,7 @@ erDiagram
     }
 ```
 
-#### 2.3.3. Bình luận và đánh giá
+#### 2.3.3. Bình luận, đánh giá và thuê phòng
 
 ```mermaid
 erDiagram
@@ -919,6 +921,8 @@ erDiagram
     comments ||--o{ comments : "1 comment cha co 0..n reply"
     listings ||--o{ reviews : "1 listing co 0..n review"
     users ||--o{ reviews : "user_id: 1 tenant co the viet 0..n review"
+    listings ||--o{ rental_requests : "1 phong co 0..n yeu cau; toi da 1 ban ghi RENTED"
+    users ||--o{ rental_requests : "1 tenant gui 0..n yeu cau; toi da 1 ban ghi RENTED"
 
     users {
         bigint id PK
@@ -1028,6 +1032,23 @@ erDiagram
         bigint hidden_by
         datetime hidden_at
         datetime edited_at
+    }
+    rental_requests {
+        bigint id PK
+        bigint listing_id FK
+        bigint tenant_id FK
+        date desired_viewing_date
+        varchar status
+        varchar landlord_note
+        datetime approved_at
+        datetime rejected_at
+        datetime cancelled_at
+        datetime rented_at
+        datetime checked_out_at
+        bigint open_listing_id UK
+        bigint open_tenant_id UK
+        bigint active_listing_id UK
+        bigint active_tenant_id UK
     }
 ```
 
@@ -1843,6 +1864,8 @@ erDiagram
 | 36 | `comments ||--o{ comments` | 1 comment cha co 0..n reply |
 | 37 | `listings ||--o{ reviews` | 1 listing co 0..n review |
 | 38 | `users ||--o{ reviews` | user_id: 1 tenant co the viet 0..n review |
+| 38A | `listings ||--o{ rental_requests` | 1 phong co 0..n yeu cau; toi da 1 quan he RENTED tai mot thoi diem |
+| 38B | `users ||--o{ rental_requests` | 1 tenant gui 0..n yeu cau; toi da dang thue 1 phong tai mot thoi diem |
 | 40 | `users ||--o{ reports` | reporter_id: 1 user tao 0..n report |
 | 41 | `users ||--o{ reports` | resolved_by: 1 moderator xu ly 0..n report; co the null |
 | 42 | `listings ||--o{ reports` | 1 listing co 0..n report; listing_id co the null |
@@ -1904,6 +1927,7 @@ erDiagram
 | `messages` | Tin nhắn trong cuộc hội thoại chat. |
 | `comments` | Bình luận của user trên tin đăng. |
 | `reviews` | Đánh giá sao và nội dung review sau khi thuê. |
+| `rental_requests` | Yêu cầu xem phòng và lịch sử quan hệ thuê/trả phòng. |
 | `reports` | Báo cáo sai phạm hoặc nội dung nghi ngờ trên hệ thống. |
 | `moderation_actions` | Hành động xử lý report của moderator. |
 | `violation_warnings` | Cảnh báo vi phạm gửi cho user/listing. |
@@ -2700,7 +2724,7 @@ trùng một tiện ích.
 | `fk_listing_amenities_listings` | `listing_id → listings(id)` | `CASCADE` | `RESTRICT` | Bảng nối sở hữu bởi tin. |
 | `fk_listing_amenities_amenities` | `amenity_id → amenities(id)` | `RESTRICT` | `RESTRICT` | **Không** cho xóa tiện ích đang được tin dùng — sẽ làm tin mất thuộc tính đã kiểm duyệt và làm sai kết quả lọc `[§3.7]`. `[§10.5]` chỉ yêu cầu *"ẩn"* (`is_active=FALSE`). |
 
-### Nhóm interaction — 8 bảng
+### Nhóm interaction — 9 bảng
 
 #### 3.21. `favorites`
 
@@ -2824,7 +2848,7 @@ danh mục `[§3.7]` luồng phụ.
 | Tên | Cột | Lý do |
 |---|---|---|
 | `idx_contact_logs_listing_id_created_at` | `(listing_id, created_at)` | Thống kê tin LIST-10 `[§7.3]` |
-| `idx_contact_logs_dedup` | `(listing_id, user_id, created_at)` | Khử trùng lặp `contact.dedup_minutes` `[§3.10]`; đồng thời phục vụ điều kiện đánh giá `review.require_contact` `[§3.12]` |
+| `idx_contact_logs_dedup` | `(listing_id, user_id, created_at)` | Khử trùng lặp `contact.dedup_minutes` `[§3.10]` |
 | `idx_contact_logs_user_id_created_at` | `(user_id, created_at)` | Hồ sơ nhu cầu w=5 (canonical 10.2) |
 
 **Unique** không có — cùng người liên hệ lại là hợp lệ (`is_counted` quyết định có đếm không).
@@ -2833,7 +2857,7 @@ danh mục `[§3.7]` luồng phụ.
 | Tên | Cột → đích | ON DELETE | ON UPDATE | Lý do |
 |---|---|---|---|---|
 | `fk_contact_logs_listings` | `listing_id → listings(id)` | `CASCADE` | `RESTRICT` | Sở hữu bởi tin. |
-| `fk_contact_logs_users` | `user_id → users(id)` | `RESTRICT` | `RESTRICT` | **RESTRICT, không CASCADE** — khác `view_histories`. `contact_logs` là **bằng chứng nghiệp vụ**: nó là điều kiện cho phép đánh giá (`review.require_contact = true` `[§3.12]`) và là dữ liệu chủ trọ đang dùng để liên lạc `[§2.6]` CONT-04. Xóa nó theo user sẽ **vô hiệu hóa review đã tồn tại**. `[§10.2]` cũng cấm xóa cứng user có dữ liệu nghiệp vụ. |
+| `fk_contact_logs_users` | `user_id → users(id)` | `RESTRICT` | `RESTRICT` | **RESTRICT, không CASCADE** — khác `view_histories`. `contact_logs` là lịch sử liên hệ và dữ liệu chủ trọ đang dùng để liên lạc `[§2.6]` CONT-04; nó không còn là điều kiện đánh giá từ V23. `[§10.2]` cũng cấm xóa cứng user có dữ liệu nghiệp vụ. |
 
 **Check** `ck_contact_logs_type CHECK (contact_type IN ('VIEW_PHONE','FORM','CHAT'))`.
 Quy tắc chủ trọ không tự liên hệ tin của mình được ép ở service bằng `listing.owner_id`.
@@ -3011,7 +3035,7 @@ CONSTRAINT ck_comments_not_self_parent CHECK (parent_id IS NULL OR parent_id <> 
 | `rating` | `TINYINT UNSIGNED` | N | — | IDX | 1–5 sao | `[§3.12]` *"Rating từ 1 đến 5"* |
 | `content` | `VARCHAR(1000)` | Y | `NULL` | | *"Nội dung đánh giá có thể bắt buộc nếu rating <= 2"* → ép bằng CHECK | `[§3.12]` |
 | `status` | `VARCHAR(10)` | N | `'VISIBLE'` | IDX | `ReviewStatus` | canonical 5 |
-| `is_verified_contact` | `BOOLEAN` | N | `FALSE` | IDX | Đã từng có `contact_logs` với tin → nhãn "Đã liên hệ", giảm đánh giá ảo | `[§3.12]` *"Nên yêu cầu người dùng đã từng liên hệ tin"*, config `review.require_contact` |
+| `is_verified_contact` | `BOOLEAN` | N | `FALSE` | IDX | Tên cột lịch sử; logic hiện tại đặt `TRUE` khi người đánh giá có quan hệ thuê `RENTED`/`CHECKED_OUT` với tin | Luồng rental V23 |
 | `hidden_reason` | `VARCHAR(500)` | Y | `NULL` | | Bắt buộc khi `HIDDEN` — *"Cần lưu lý do kiểm duyệt"* | `[§10.9]` |
 | `hidden_by` | `BIGINT UNSIGNED` | Y | `NULL` | | | `[§2.7]` REV-03 |
 | `hidden_at` | `DATETIME(6)` | Y | `NULL` | | | |
@@ -3050,6 +3074,31 @@ CONSTRAINT ck_reviews_hidden_reason CHECK (status <> 'HIDDEN' OR hidden_reason I
 > rating <= 2"*. Tài liệu gốc dùng chữ *"có thể"* → **quyết định của Senior Architect: chốt
 > BẮT BUỘC**. Lý do: đánh giá 1–2 sao kéo số sao trung bình của tin và chủ trọ xuống và là đầu vào để Moderator xử lý `[§10.9]`; một sao trần trụi không có nội dung thì
 > Moderator **không thể** xác minh, và nó là công cụ dìm hàng rẻ tiền nhất. Ghi vào ADR-08 (§11).
+
+#### 3.28A. `rental_requests`
+
+Bảng lưu toàn bộ vòng đời yêu cầu xem và thuê phòng. Gặp mặt, xem phòng và ký hợp đồng diễn ra
+ngoài hệ thống; website chỉ lưu trạng thái xác nhận của hai bên.
+
+| Cột | Kiểu | Null | Mặc định | Khóa | Mô tả nghiệp vụ |
+|---|---|---|---|---|---|
+| `id` | `BIGINT UNSIGNED` | N | `AUTO_INCREMENT` | PK | |
+| `listing_id` | `BIGINT UNSIGNED` | N | — | FK, IDX | Phòng được yêu cầu thuê |
+| `tenant_id` | `BIGINT UNSIGNED` | N | — | FK, IDX | Người gửi yêu cầu |
+| `desired_viewing_date` | `DATE` | N | — | | Ngày người thuê muốn xem phòng |
+| `status` | `VARCHAR(20)` | N | `PENDING` | IDX | `PENDING`, `APPROVED`, `REJECTED`, `CANCELLED`, `RENTED`, `CHECKED_OUT` |
+| `landlord_note` | `VARCHAR(500)` | Y | `NULL` | | Phản hồi tùy chọn của chủ trọ |
+| `approved_at`, `rejected_at`, `cancelled_at` | `DATETIME(6)` | Y | `NULL` | | Mốc xử lý yêu cầu |
+| `rented_at`, `checked_out_at` | `DATETIME(6)` | Y | `NULL` | | Mốc bắt đầu/kết thúc quan hệ thuê |
+| `open_listing_id`, `open_tenant_id` | generated | Y | — | UK ghép | Chặn một người gửi trùng yêu cầu đang mở cho cùng phòng |
+| `active_listing_id` | generated | Y | — | UK | Chỉ một bản ghi `RENTED` cho một phòng tại một thời điểm |
+| `active_tenant_id` | generated | Y | — | UK | Chỉ một bản ghi `RENTED` cho một người tại một thời điểm |
+| `created_at` … `deleted_at` | | | | | Audit chuẩn |
+
+Hai unique key trên cột generated là lớp bảo vệ cuối cùng trước race condition khi hai transaction
+cùng xác nhận thuê. Khi chuyển sang `CHECKED_OUT`, giá trị generated trở thành `NULL`, nên phòng và
+người thuê có thể tham gia một lượt thuê mới. Chỉ quan hệ `RENTED` hoặc `CHECKED_OUT` mới cấp quyền
+viết đánh giá sao; `comments` vẫn độc lập và không cần quan hệ thuê.
 
 ---
 
@@ -4248,7 +4297,7 @@ hằng số canonical mục 5. Đã ghi tại từng bảng ở §3. Đây là t
 | 7 | **Tỷ lệ bình luận tiêu cực ≥ 40% với ≥5 bình luận** → `NEED_REVIEW` | Cross-row + tỷ lệ | `SentimentServiceImpl` đọc `ai.sentiment.min_comments_l1`, `negative_ratio_l1`… | `[§9.1]` |
 | 9 | **`publiclyVisible`** = `ACTIVE` hoặc (`NEED_REVIEW` và config bật) | Phụ thuộc config runtime | `ListingVisibilityService.publicStatuses()` — **method duy nhất**, mọi truy vấn công khai dùng nó | canonical 5.2, `[§5.1]` |
 | 10 | **Cửa sổ sửa**: bình luận 30 phút, đánh giá 24 giờ | Phụ thuộc config + thời điểm request | `CommentServiceImpl.update()` / `ReviewServiceImpl.update()` đọc `comment.edit_window_minutes`, `review.edit_window_hours` | `[§3.11][§3.12]` |
-| 11 | **Đánh giá yêu cầu đã liên hệ** (`review.require_contact = true`) | Cross-table (`contact_logs`) + config | `ReviewServiceImpl.create()` kiểm tra `contact_logs` tồn tại | `[§3.12]` |
+| 11 | **Đánh giá yêu cầu quan hệ thuê đã xác thực** | Cross-table (`rental_requests`) | `ReviewServiceImpl.create()` kiểm tra trạng thái `RENTED`/`CHECKED_OUT`; key liên hệ cũ đã bị V24 xóa | Luồng rental V23 |
 | 12 | **Khử trùng lặp lượt xem / liên hệ** (`view.dedup_minutes`=30, `contact.dedup_minutes`=60) | Cross-row + cửa sổ + config | `ViewHistoryServiceImpl` / `ContactLogServiceImpl` quyết định `is_counted` | `[§3.8][§3.10]` |
 | 13 | **Rate limit** (đăng nhập 5/15', đăng tin 10/ngày, bình luận 5/phút, report 10/ngày, tin nhắn 30/phút, chatbot 30/phút) | Đếm theo thời gian thực — thuộc về Redis, không phải DB | `RateLimitFilter` (Redis `INCR`+`EXPIRE`, canonical 1.1/8) | `[§11.10]` + canonical 8 |
 | 15 | `V15__drop_permission_tables.sql` | Drop `role_permissions` và `permissions`; chuyển schema sang role-only | ✔ Bắt buộc sau V14 |
@@ -4951,6 +5000,12 @@ spring:
 | 16 | `V16__drop_user_profile_area_columns.sql` | Drop FK/index/cột `province_id`, `district_id` khỏi `user_profiles`; DB mới từ V1 đã không tạo hai cột này, migration no-op an toàn | ✔ Bắt buộc sau V15 |
 | 17 | `V17__backfill_category_listing_counts.sql` | Tính lại `categories.listing_count` từ các listing public hiện có để "Danh mục phổ biến" không lệch dữ liệu | ✔ Bắt buộc sau V16 |
 | 18 | `V18__backfill_landlord_listing_stats.sql` | Tính lại `landlord_profiles.total_listings` và `total_active_listings` từ listing hiện có để hồ sơ chủ trọ hiển thị đúng số tin | ✔ Bắt buộc sau V17 |
+| 19 | `V19__drop_listing_edit_histories.sql` | Xóa bảng lịch sử sửa tin không còn được đọc bởi hệ thống | ✔ Bắt buộc sau V18 |
+| 20 | `V20__normalize_transitive_foreign_keys.sql` | Bỏ các FK bắc cầu có thể suy ra từ quan hệ chuẩn hóa | ✔ Bắt buộc sau V19 |
+| 21 | `V21__drop_sentiment_module.sql` | Gỡ module sentiment và các cột/index phụ thuộc | ✔ Bắt buộc sau V20 |
+| 22 | `V22__drop_trust_score.sql` | Gỡ điểm uy tín và cấu hình liên quan | ✔ Bắt buộc sau V21 |
+| 23 | `V23__add_rental_requests.sql` | Thêm vòng đời yêu cầu thuê, trạng thái listing `RENTED`, thông báo và unique chống thuê trùng phòng/người | ✔ Bắt buộc sau V22 |
+| 24 | `V24__sync_location_counts_and_remove_legacy_review_config.sql` | Backfill bộ đếm tin public cho ward/district/province và xóa key `review.require_contact` đã được thay bằng quan hệ thuê | ✔ Bắt buộc sau V23 |
 
 **Tóm tắt "dữ liệu seed nào bắt buộc để hệ thống chạy được ngay sau `docker compose up --build`"**
 (canonical mục 13.5): **V1, V2, V3, V4, V5, V8, V9, V10 là bắt buộc**; V6 và V7 là seed nghiệp vụ
@@ -5247,7 +5302,6 @@ Tổng: 9 + 5 + 8 + 7 = **29 amenity**.
 | `view.dedup_minutes` | `30` | `INT` | `INTERACTION` | `[§3.8]` |
 | `comment.edit_window_minutes` | `30` | `INT` | `INTERACTION` | `[§3.11]` |
 | `review.edit_window_hours` | `24` | `INT` | `INTERACTION` | `[§3.12]` |
-| `review.require_contact` | `true` | `BOOLEAN` | `INTERACTION` | `[§3.12]` |
 | `promotion.max_priority` | `100` | `INT` | `PROMOTION` | `[§10.6]` |
 
 Ngoài ra seed **6 key bổ sung cho các quy tắc nghiệp vụ mà canonical mục 9 không có key tương ứng**
@@ -5302,7 +5356,7 @@ Mỗi dòng có `normalized_keyword` (đã bỏ dấu, lowercase), `severity`, `
 | `SCAM` | `SEVERE` | `BOTH` | lừa đảo, cọc trước, chuyển khoản gấp, cò mồi, môi giới ảo, tiền cọc giữ chỗ | `[§3.13]` (`SCAM`), `[§5.4]` |
 | `OFFENSIVE` | `SEVERE` | `BOTH` | (bộ từ tục tĩu tiếng Việt phổ biến + biến thể teencode) | `[§3.13]` (`OFFENSIVE`), `[§3.11]` |
 | `POLITICAL` | `SEVERE` | `BOTH` | (bộ từ khóa nhạy cảm chính trị) | `[§11.10]` |
-| `CONTACT_BYPASS` | `MILD` | `LISTING` | zalo, telegram, fb me, ib riêng, kết bạn zalo | `[§3.10]` (né hệ thống liên hệ → mất `contact_logs` → hỏng `review.require_contact`) |
+| `CONTACT_BYPASS` | `MILD` | `LISTING` | zalo, telegram, fb me, ib riêng, kết bạn zalo | `[§3.10]` (phát hiện hành vi né kênh liên hệ của hệ thống) |
 | `SPAM` | `MILD` | `BOTH` | click ngay, kiếm tiền online, việc nhẹ lương cao, vay nhanh | `[§3.13]` (`SPAM`), `[§11.10]` |
 | `SCAM` | `MILD` | `LISTING` | giá siêu rẻ, rẻ nhất thị trường, không cần đặt cọc | `[§9.4]` (*"Nếu giá thấp bất thường, có thể đánh dấu cần kiểm duyệt để tránh tin giả"*) |
 
@@ -5967,7 +6021,7 @@ LIMIT 100;
 Khi dòng `listings` bị xóa, các bảng con `CASCADE` (§3.18–3.22) tự dọn: `listing_images`,
 `listing_amenities`, `favorites`, `view_histories`, `contact_logs`?
 — **không**, `contact_logs` là `RESTRICT` (§3.24) nên nó cũng chặn purge. Đây là **đúng**:
-`contact_logs` là bằng chứng cho `review.require_contact` `[§3.12]`.
+`contact_logs` là lịch sử nghiệp vụ phục vụ thống kê và tra cứu liên hệ; từ V23, quyền đánh giá được xác định bằng `rental_requests`, không dùng bảng này.
 
 Thực tế: hầu như không tin nào đủ điều kiện purge (tin nào cũng có ít nhất một lượt xem/liên hệ).
 **Đó là kết quả mong muốn** — `[§3.6]` và `[§11.5]` ưu tiên giữ dữ liệu hơn tiết kiệm đĩa. Câu lệnh
@@ -5985,7 +6039,7 @@ Không xóa cứng dữ liệu nghiệp vụ quan trọng"*.
 | **Lưu giữ backup** | 7 bản hằng ngày + 4 bản hằng tuần (Chủ nhật) + 12 bản hằng tháng (ngày 1). Xóa bản cũ hơn tự động |
 | **Binlog** | Bật `log_bin` + `binlog_expire_logs_seconds = 604800` (7 ngày) ⇒ **point-in-time recovery**: khôi phục bản dump đêm qua rồi replay binlog tới đúng giây trước sự cố. Đây là điều biến *"kế hoạch khôi phục"* `[§11.5]` thành khả thi thật — không có binlog thì mất tối đa 24 giờ dữ liệu |
 | **Ảnh** | `[§11.5]` *"Lưu ảnh ở thư mục/cloud riêng"* — thư mục `./uploads` là volume **riêng biệt**, backup bằng `rsync`/`tar` theo lịch riêng. Ảnh **không** nằm trong DB (chỉ lưu `url`, §3.18) nên hai đường backup độc lập |
-| **Kiểm chứng khôi phục** | Backup không được kiểm chứng thì không phải backup. Script `restore-test.sh` khôi phục bản dump mới nhất vào một container MySQL tạm và chạy `SELECT COUNT(*)` trên 46 bảng + `flyway validate`. Chạy hằng tuần |
+| **Kiểm chứng khôi phục** | Backup không được kiểm chứng thì không phải backup. Script `restore-test.sh` khôi phục bản dump mới nhất vào một container MySQL tạm, kiểm tra 42 bảng nghiệp vụ + `flyway validate`. Chạy hằng tuần |
 | **Thứ tự khôi phục** | (1) dựng container MySQL rỗng → (2) `zcat dump.sql.gz \| mysql` → (3) replay binlog nếu cần PITR → (4) khôi phục `./uploads` → (5) khởi động backend: Flyway thấy `flyway_schema_history` đã đủ, Hibernate `validate` pass ⇒ hệ thống lên |
 
 **Điều tuyệt đối không làm:** không dùng `--add-drop-database`/`--add-drop-table` trong dump dùng cho

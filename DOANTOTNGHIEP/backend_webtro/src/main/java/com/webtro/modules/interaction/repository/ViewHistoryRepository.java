@@ -26,6 +26,17 @@ public interface ViewHistoryRepository extends JpaRepository<ViewHistory, Long> 
     /** Lịch sử xem gần đây của một người dùng (phân trang). */
     Page<ViewHistory> findByUserIdOrderByViewedAtDesc(Long userId, Pageable pageable);
 
+    @Query("""
+            SELECT v FROM ViewHistory v
+            WHERE v.userId = :userId
+              AND (:from IS NULL OR v.viewedAt >= :from)
+              AND (:to IS NULL OR v.viewedAt < :to)
+            """)
+    Page<ViewHistory> findByUserIdAndViewedAtRange(@Param("userId") Long userId,
+                                                   @Param("from") Instant from,
+                                                   @Param("to") Instant to,
+                                                   Pageable pageable);
+
     /** Lượt xem mới nhất của một người kể từ {@code since} (giới hạn qua {@code Pageable}) — tín hiệu hành vi cho AI. */
     List<ViewHistory> findByUserIdAndViewedAtAfterOrderByViewedAtDesc(Long userId, Instant since, Pageable pageable);
 

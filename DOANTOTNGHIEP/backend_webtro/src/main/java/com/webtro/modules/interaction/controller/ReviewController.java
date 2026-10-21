@@ -74,7 +74,7 @@ public class ReviewController {
 
     @PutMapping("/reviews/{id}")
     @PreAuthorize("hasAnyRole('TENANT','LANDLORD','ADMIN')")
-    @Operation(summary = "Sửa đánh giá (trong cửa sổ cho phép)")
+    @Operation(summary = "Sửa nội dung và số sao của đánh giá (chỉ tác giả)")
     public ResponseEntity<ApiResponse<ReviewResponse>> update(
             @PathVariable Long id, @Valid @RequestBody CreateReviewRequest request,
             @AuthenticationPrincipal CustomUserDetails user) {

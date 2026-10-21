@@ -1,8 +1,10 @@
 package com.webtro.storage;
 
 import com.webtro.config.properties.StorageProperties;
+import com.webtro.constant.ConfigKey;
 import com.webtro.constant.ErrorCode;
 import com.webtro.exception.BusinessException;
+import com.webtro.modules.admin.service.SystemConfigService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -34,24 +36,26 @@ import java.util.UUID;
  *   <li>Sinh 3 kích thước: original (≤1920), medium (800), thumb (200).</li>
  * </ul>
  *
- * <p>Ngưỡng {@code upload.max_pixels} vốn nằm ở {@code system_configs}; ở đây dùng hằng phòng thủ
- * cứng làm mức trần tuyệt đối để tránh phụ thuộc vòng vào SystemConfigService trong tầng hạ tầng.
+ * <p>Ngưỡng hiệu lực lấy từ {@code upload.max_pixels}; trần cứng 50MP ngăn cấu hình sai
+ * làm suy yếu lớp bảo vệ decompression bomb.
  */
 @Slf4j
 @Service
 public class LocalFileStorage implements FileStorage {
 
-    private static final long MAX_PIXELS = 50_000_000L;   // trần cứng ~50MP (canonical upload.max_pixels)
+    private static final long HARD_MAX_PIXELS = 50_000_000L;
     private static final int ORIGINAL_MAX = 1920;
     private static final int MEDIUM_MAX = 800;
     private static final int THUMB_MAX = 200;
 
     private final Path root;
     private final String publicBaseUrl;
+    private final SystemConfigService systemConfig;
 
-    public LocalFileStorage(StorageProperties props) {
+    public LocalFileStorage(StorageProperties props, SystemConfigService systemConfig) {
         this.root = Paths.get(props.getRoot()).toAbsolutePath().normalize();
         this.publicBaseUrl = props.getPublicBaseUrl().replaceAll("/+$", "");
+        this.systemConfig = systemConfig;
         try {
             Files.createDirectories(root);
         } catch (IOException e) {
@@ -172,7 +176,9 @@ public class LocalFileStorage implements FileStorage {
             long width = reader.getWidth(0);
             long height = reader.getHeight(0);
             reader.dispose();
-            if (width * height > MAX_PIXELS) {
+            long configuredMax = Math.max(1L, systemConfig.getLong(ConfigKey.UPLOAD_MAX_PIXELS));
+            long maxPixels = Math.min(HARD_MAX_PIXELS, configuredMax);
+            if (width * height > maxPixels) {
                 throw new BusinessException(ErrorCode.VALIDATION_FAILED,
                         "Ảnh có kích thước pixel quá lớn (" + width + "x" + height + ")");
             }

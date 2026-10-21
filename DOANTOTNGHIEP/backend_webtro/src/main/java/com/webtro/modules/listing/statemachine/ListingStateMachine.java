@@ -19,6 +19,7 @@ import static com.webtro.common.enums.ListingStatus.LOCKED;
 import static com.webtro.common.enums.ListingStatus.NEED_REVIEW;
 import static com.webtro.common.enums.ListingStatus.PENDING;
 import static com.webtro.common.enums.ListingStatus.REJECTED;
+import static com.webtro.common.enums.ListingStatus.RENTED;
 
 /**
  * Máy trạng thái tin đăng (canonical mục 5.1) — <b>cổng DUY NHẤT</b> để đổi {@link ListingStatus}.
@@ -54,10 +55,12 @@ public class ListingStateMachine {
         rules.put(ListingEvent.LOCK, new Rule(EnumSet.of(ACTIVE, NEED_REVIEW, HIDDEN, PENDING), LOCKED));
         rules.put(ListingEvent.UNLOCK, new Rule(EnumSet.of(LOCKED), HIDDEN));
         rules.put(ListingEvent.RENEW, new Rule(EnumSet.of(ACTIVE, EXPIRED), ACTIVE));
+        rules.put(ListingEvent.MARK_RENTED, new Rule(EnumSet.of(ACTIVE), RENTED));
+        rules.put(ListingEvent.CHECK_OUT, new Rule(EnumSet.of(RENTED), ACTIVE));
         rules.put(ListingEvent.RESUBMIT_AFTER_EDIT, new Rule(EnumSet.of(ACTIVE), PENDING));
         // SOFT_DELETE: mọi trạng thái TRỪ LOCKED (canonical mục 5.1).
         rules.put(ListingEvent.SOFT_DELETE, new Rule(
-                EnumSet.complementOf(EnumSet.of(LOCKED, DELETED)), DELETED));
+                EnumSet.complementOf(EnumSet.of(LOCKED, RENTED, DELETED)), DELETED));
     }
 
     /**

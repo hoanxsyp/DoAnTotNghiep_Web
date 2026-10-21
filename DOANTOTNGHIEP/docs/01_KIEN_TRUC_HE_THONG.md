@@ -84,7 +84,7 @@ mindmap
       Hạn hiển thị + job hết hạn
       publiclyVisible qua 1 method duy nhất
     Trục 2 — Niềm tin giữa người thuê và chủ trọ
-      Đánh giá cần tương tác hợp lệ
+      Đánh giá cần quan hệ thuê RENTED/CHECKED_OUT đã xác thực
       Report + ngưỡng tự động ẩn
       Xác thực chủ trọ thủ công
       Che số điện thoại với khách
@@ -184,7 +184,7 @@ graph TB
 |---|---|---|---|---|---|
 | `frontend` | build từ `node:20-alpine` → `nginx:alpine` | HTTP | 80 | `${FRONTEND_PORT}` = 8080 | Phục vụ SPA + reverse proxy `/api`, `/uploads` |
 | `backend` | build từ `eclipse-temurin:21-jdk` → `eclipse-temurin:21-jre` | HTTP | 8080 | `${BACKEND_PORT}` = 8080 | REST API, Swagger, scheduler, AI |
-| `mysql` | `mysql:8.4` | MySQL protocol / TCP | 3306 | `${MYSQL_PORT}` = 3307 | Lưu trữ 46 bảng |
+| `mysql` | `mysql:8.4` | MySQL protocol / TCP | 3306 | `${MYSQL_EXPOSED_PORT}` = 3307 | Lưu trữ 42 bảng nghiệp vụ (không tính `flyway_schema_history`) |
 | `redis` | `redis:7.4-alpine` | RESP / TCP | 6379 | `${REDIS_PORT}` = 6380 | Cache, rate limit, JWT blacklist |
 | `mailhog` | `mailhog/mailhog:latest` | SMTP / HTTP | 1025 / 8025 | `${MAILHOG_UI_PORT}` = 8025 | Bắt email dev `[§13.2]` |
 
@@ -354,7 +354,7 @@ sequenceDiagram
 | 3 | **catalog** | Dữ liệu tra cứu ít đổi, dùng chung: loại tin `[§0.3]`, cây hành chính tỉnh/huyện/xã, tiện ích theo nhóm. Là module bị phụ thuộc nhiều nhất, **không phụ thuộc ai**. | `categories`, `provinces`, `districts`, `wards`, `amenities` | `ADM-05` quản lý danh mục, `ADM-06` quản lý khu vực, `ADM-07` quản lý tiện ích `[§2.12]`; `[§10.5]` |
 | 4 | **listing** | Vòng đời tin đăng (state machine), CRUD tin, ảnh, tiện ích của tin, gia hạn, thống kê tin, quy tắc hiển thị công khai. **Chủ sở hữu `ListingStateMachine` và `ListingVisibilityService`.** | `listings`, `listing_images`, `listing_amenities` | `LIST-01` tạo nháp, `LIST-02` đăng tin, `LIST-03` sửa tin, `LIST-04` gửi duyệt, `LIST-05` duyệt/từ chối (thực thi state), `LIST-06` ẩn, `LIST-07` đóng, `LIST-08` xóa mềm, `LIST-09` gia hạn, `LIST-10` thống kê tin, `LIST-11` quản lý ảnh, `LIST-12` quản lý tiện ích `[§2.3]` |
 | 5 | **search** | Truy vấn tìm kiếm + lọc + sắp xếp + phân trang, tin liên quan, gợi ý mở rộng khi ít kết quả, ghi lịch sử tìm kiếm, xen tin được đẩy mà vẫn giữ tính liên quan `[§3.7]`. **Chỉ đọc**, không sở hữu entity nghiệp vụ. | *(không sở hữu entity riêng; đọc `listings` qua `ListingQueryService`; ghi `search_histories` qua module `interaction`)* | `SRCH-01` từ khóa, `SRCH-02` khu vực, `SRCH-03` giá, `SRCH-04` diện tích, `SRCH-05` loại tin, `SRCH-06` tiện ích, `SRCH-07` lọc ở ghép theo giới tính/số người, `SRCH-08` sắp xếp, `SRCH-09` tin liên quan `[§2.4]` |
-| 6 | **interaction** | Lưu tin, lịch sử xem, lịch sử tìm kiếm, ghi nhận liên hệ, chat nội bộ, bình luận, đánh giá. Là **nguồn dữ liệu hành vi** cho recommendation `[§9.2]`. | `favorites`, `view_histories`, `search_histories`, `contact_logs`, `conversations`, `messages`, `comments`, `reviews` | `FAV-01..03` `[§2.5]`; `HIST-01` ghi lịch sử xem, `HIST-02` xem lịch sử `[§2.5]`; `CONT-01..05` `[§2.6]`; `CMT-01..04`, `REV-01..03` `[§2.7]` |
+| 6 | **interaction** | Lưu tin, lịch sử xem, lịch sử tìm kiếm, ghi nhận liên hệ, chat nội bộ, bình luận, đánh giá. Quyền đánh giá đọc quan hệ thuê `RENTED`/`CHECKED_OUT` qua `RentalEligibilityGateway`, không dựa trên `ContactLog`. Là **nguồn dữ liệu hành vi** cho recommendation `[§9.2]`. | `favorites`, `view_histories`, `search_histories`, `contact_logs`, `conversations`, `messages`, `comments`, `reviews` | `FAV-01..03` `[§2.5]`; `HIST-01` ghi lịch sử xem, `HIST-02` xem lịch sử `[§2.5]`; `CONT-01..05` `[§2.6]`; `CMT-01..04`, `REV-01..03` `[§2.7]` |
 | 7 | **moderation** | Báo cáo vi phạm, xử lý report, hành động kiểm duyệt, cảnh báo vi phạm, từ khóa cấm, ngưỡng tự động ẩn `[§5.3]`, ngưỡng khóa `[§5.4]`. | `reports`, `moderation_actions`, `violation_warnings`, `banned_keywords` | `RPT-01` báo cáo tin, `RPT-02` báo cáo bình luận, `RPT-03` báo cáo người dùng, `RPT-04` xử lý báo cáo, `RPT-05` gửi cảnh báo vi phạm, `RPT-06` khóa tin/tài khoản `[§2.8]`; `CMT-04`, `REV-03` (quyết định kiểm duyệt) `[§2.7]` |
 | 8 | **payment** | Gói dịch vụ, tạo giao dịch, callback cổng thanh toán, kích hoạt gói, lịch sử thanh toán, đẩy tin, nhãn nổi bật, coupon. | `promotion_packages`, `payments`, `promotion_subscriptions`, `coupons` | `PAY-01` xem gói, `PAY-02` mua gói đẩy tin, `PAY-03` tạo giao dịch, `PAY-04` xác nhận thanh toán, `PAY-05` kích hoạt gói, `PAY-06` lịch sử thanh toán; `PROMO-01` đẩy tin lên đầu, `PROMO-02` gắn nhãn nổi bật `[§2.9]` |
 | 9 | **notification** | Thông báo in-app, gửi email qua template Thymeleaf, đánh dấu đã đọc, digest. Là module **hạ nguồn** — ai cũng gọi được, nó không gọi ngược lên. | `notifications` | `NOTI-01` thông báo trong hệ thống, `NOTI-02` email xác thực, `NOTI-03` email cảnh báo, `NOTI-04` có người liên hệ, `NOTI-05` tin sắp hết hạn, `NOTI-06` kết quả duyệt tin `[§2.10]` |
@@ -723,6 +723,14 @@ backend_webtro/
     │   │       │   └── mapper/        PromotionPackageMapper · PaymentMapper
     │   │       │                      PromotionSubscriptionMapper · CouponMapper
     │   │       │
+    │   │       ├── rental/
+    │   │       │   ├── controller/    RentalRequestController · LandlordRentalRequestController
+    │   │       │   ├── service/       RentalRequestService · RentalEligibilityGateway
+    │   │       │   ├── service/impl/  RentalRequestServiceImpl
+    │   │       │   ├── repository/    RentalRequestRepository
+    │   │       │   ├── entity/        RentalRequest
+    │   │       │   └── dto/           CreateRentalRequest · RentalDecisionRequest · RentalRequestResponse
+    │   │       │
     │   │       ├── notification/
     │   │       │   ├── controller/    NotificationController
     │   │       │   ├── service/       NotificationService · EmailService · NotificationTemplateService
@@ -882,6 +890,7 @@ frontend_webtro/
     │   ├── commentApi.js · reviewApi.js
     │   ├── reportApi.js
     │   ├── paymentApi.js              # packages, createPayment, myPayments, promote
+    │   ├── rentalApi.js               # gửi/hủy/duyệt/từ chối/xác nhận thuê-trả phòng
     │   ├── notificationApi.js
     │   ├── aiApi.js                   # recommendations, chatbotMessage, pricePrediction
     │   └── adminApi.js                # dashboard, users, listings, reports, configs, auditLogs, statistics
@@ -917,10 +926,10 @@ frontend_webtro/
     │   │                              # AboutPage · TermsPage · NotFoundPage
     │   ├── auth/                      # LoginPage · RegisterPage · ForgotPasswordPage
     │   │                              # ResetPasswordPage · VerifyEmailPage
-    │   ├── account/                   # ProfilePage · SavedListingsPage · ViewHistoryPage · MessagesPage
+    │   ├── account/                   # ProfilePage · SavedListingsPage · RentalRequestsPage · ViewHistoryPage · MessagesPage
     │   │                              # NotificationsPage · MyReportsPage · MyReviewsPage
     │   │                              # FollowingPage · ChangePasswordPage
-    │   ├── landlord/                  # DashboardPage · MyListingsPage · CreateListingPage · EditListingPage
+    │   ├── landlord/                  # DashboardPage · MyListingsPage · RentalRequestsPage · CreateListingPage · EditListingPage
     │   │                              # ListingStatsPage · ContactsPage · MessagesPage
     │   │                              # PackagesPage · PaymentsPage · LandlordProfilePage
     │   └── admin/                     # DashboardPage · UsersPage · LandlordsPage · ListingsPage
@@ -2461,7 +2470,7 @@ graph LR
 
 | Đối tượng | Backup? | Lý do |
 |---|---|---|
-| **MySQL** (46 bảng) | ✔ **Bắt buộc** | Nguồn sự thật duy nhất. Mất = mất tất cả |
+| **MySQL** (42 bảng nghiệp vụ) | ✔ **Bắt buộc** | Nguồn sự thật duy nhất. Mất = mất tất cả |
 | **Volume `upload_data`** (ảnh tin đăng) | ✔ **Bắt buộc** | `[§11.5]` *"Lưu ảnh ở thư mục/cloud riêng"*. Ảnh **không** nằm trong DB → `mysqldump` **không** cứu được. Một tin không ảnh là tin vô dụng `[§3.3]` *"Tin phải có tối thiểu 1 ảnh"* |
 | **Redis** | ✘ **Không cần** | Toàn bộ nội dung **tái tạo được** từ DB: cache (mục 8), rate limit counter (mất → cùng lắm cho thêm vài lần thử), JWT blacklist (mất → token đã logout sống lại tối đa 15 phút — đã cân nhắc và chấp nhận). Redis là **trạng thái phái sinh**, không phải nguồn sự thật |
 | **File `.env`** | ✔ **Bắt buộc**, lưu **riêng và an toàn** | Chứa mật khẩu DB, `JWT_SECRET`. Mất `JWT_SECRET` → mọi token hiện hành vô hiệu. **Không** commit vào git (chỉ commit `.env.example`) |

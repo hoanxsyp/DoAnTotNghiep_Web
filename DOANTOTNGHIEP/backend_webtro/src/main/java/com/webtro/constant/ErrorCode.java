@@ -120,6 +120,7 @@ public enum ErrorCode {
     LISTING_INVALID_STATE_TRANSITION(HttpStatus.UNPROCESSABLE_ENTITY, "Không thể chuyển tin từ trạng thái {from} sang {to}"),
     LISTING_LOCKED_CANNOT_RENEW(HttpStatus.UNPROCESSABLE_ENTITY, "Tin đang bị khóa nên không thể gia hạn"),
     LISTING_LOCKED_CANNOT_EDIT(HttpStatus.UNPROCESSABLE_ENTITY, "Tin đang bị khóa nên không thể chỉnh sửa"),
+    LISTING_RENTED_CANNOT_EDIT(HttpStatus.UNPROCESSABLE_ENTITY, "Tin đang có người thuê nên không thể chỉnh sửa"),
     LISTING_LOCKED_CANNOT_SUBMIT(HttpStatus.UNPROCESSABLE_ENTITY, "Tin đang bị khóa nên không thể gửi duyệt"),
     LISTING_LOCKED_CANNOT_DELETE(HttpStatus.UNPROCESSABLE_ENTITY, "Tin đang bị khóa nên không thể xóa"),
     LISTING_LOCKED_CANNOT_PROMOTE(HttpStatus.UNPROCESSABLE_ENTITY, "Tin đang bị khóa nên không thể mua gói đẩy tin"),
@@ -157,6 +158,20 @@ public enum ErrorCode {
     MESSAGE_TOO_LONG(HttpStatus.BAD_REQUEST, "Tin nhắn tối đa 2000 ký tự"),
     MESSAGE_RATE_LIMIT(HttpStatus.TOO_MANY_REQUESTS, "Bạn gửi tin nhắn quá nhanh, vui lòng chậm lại"),
 
+    // ===== Nhóm: Thuê phòng =====
+    RENTAL_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy yêu cầu thuê phòng"),
+    RENTAL_REQUEST_ALREADY_OPEN(HttpStatus.CONFLICT, "Bạn đã có yêu cầu đang xử lý cho phòng này"),
+    RENTAL_REQUEST_FORBIDDEN(HttpStatus.FORBIDDEN, "Bạn không có quyền xử lý yêu cầu thuê phòng này"),
+    RENTAL_REQUEST_INVALID_STATUS(HttpStatus.UNPROCESSABLE_ENTITY, "Không thể thực hiện thao tác với trạng thái yêu cầu hiện tại"),
+    RENTAL_VIEWING_DATE_INVALID(HttpStatus.BAD_REQUEST, "Ngày xem phòng không được ở quá khứ"),
+    RENTAL_CANCELLATION_DEADLINE_PASSED(HttpStatus.UNPROCESSABLE_ENTITY,
+            "Chỉ có thể hủy yêu cầu đã duyệt trước ngày xem ít nhất 2 ngày"),
+    RENTAL_LISTING_UNAVAILABLE(HttpStatus.CONFLICT, "Phòng này hiện không còn khả dụng để thuê"),
+    RENTAL_LISTING_OCCUPIED(HttpStatus.CONFLICT, "Phòng này đã có người thuê"),
+    RENTAL_TENANT_ALREADY_RENTING(HttpStatus.CONFLICT, "Bạn đang thuê một phòng khác"),
+    RENTAL_CONCURRENCY_CONFLICT(HttpStatus.CONFLICT, "Phòng hoặc người thuê vừa được xác nhận ở một giao dịch khác"),
+    REVIEW_RENTAL_REQUIRED(HttpStatus.UNPROCESSABLE_ENTITY, "Chỉ người đang thuê hoặc đã trả phòng mới được đánh giá tin này"),
+
     // ===== Nhóm: Interaction - Bình luận & đánh giá =====
     COMMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy bình luận"),
     COMMENT_FORBIDDEN(HttpStatus.FORBIDDEN, "Bạn chỉ có thể sửa hoặc xóa bình luận của mình"),
@@ -172,7 +187,6 @@ public enum ErrorCode {
     REVIEW_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy đánh giá"),
     REVIEW_FORBIDDEN(HttpStatus.FORBIDDEN, "Bạn chỉ có thể sửa đánh giá của mình"),
     REVIEW_ALREADY_EXISTS(HttpStatus.CONFLICT, "Bạn đã đánh giá tin đăng này rồi"),
-    REVIEW_NOT_ELIGIBLE(HttpStatus.UNPROCESSABLE_ENTITY, "Bạn cần liên hệ chủ trọ trước khi đánh giá tin này"),
     REVIEW_SELF_FORBIDDEN(HttpStatus.UNPROCESSABLE_ENTITY, "Bạn không thể đánh giá tin đăng của chính mình"),
     REVIEW_RATING_INVALID(HttpStatus.BAD_REQUEST, "Số sao phải từ 1 đến 5"),
     REVIEW_CONTENT_REQUIRED(HttpStatus.BAD_REQUEST, "Vui lòng nhập nội dung đánh giá khi chấm từ 2 sao trở xuống"),

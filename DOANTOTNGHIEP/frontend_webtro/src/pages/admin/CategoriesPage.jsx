@@ -4,7 +4,7 @@ import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
 import {
   Box, Stack, Chip, IconButton, Button, Switch, Dialog, DialogTitle,
-  DialogContent, DialogActions, TextField, CircularProgress, Tooltip,
+  DialogContent, DialogActions, TextField, MenuItem, CircularProgress, Tooltip,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
@@ -18,8 +18,8 @@ import AdminDataTable from '@/components/admin/AdminDataTable';
 import ConfirmDialog from '@/components/admin/ConfirmDialog';
 
 const schema = yup.object({
-  name: yup.string().trim().required('Vui lòng nhập tên danh mục').max(100, 'Tối đa 100 ký tự'),
-  code: yup.string().trim().required('Vui lòng nhập mã').max(50, 'Tối đa 50 ký tự'),
+  name: yup.string().trim().required('Vui lòng nhập tên danh mục').max(50, 'Tối đa 50 ký tự'),
+  code: yup.string().oneOf(Object.keys(CATEGORY_CODES), 'Chọn mã danh mục').required('Vui lòng chọn mã'),
   displayOrder: yup.number().typeError('Phải là số').min(0, 'Không âm').required('Nhập thứ tự'),
   iconUrl: yup.string().trim().max(255).nullable(),
 });
@@ -71,7 +71,7 @@ const CategoriesPage = () => {
 
   const toggle = async (row) => {
     try {
-      await adminApi.toggleCategory(row.id);
+      await adminApi.toggleCategory(row.id, !(row.active ?? true));
       reload();
     } catch (err) {
       notify.apiError(err);
@@ -143,7 +143,11 @@ const CategoriesPage = () => {
                 <TextField {...field} label="Tên danh mục" fullWidth error={!!errors.name} helperText={errors.name?.message} />
               )} />
               <Controller name="code" control={control} render={({ field }) => (
-                <TextField {...field} label="Mã (CategoryCode)" fullWidth error={!!errors.code} helperText={errors.code?.message || 'Ví dụ: BOARDING_HOUSE'} placeholder={Object.keys(CATEGORY_CODES)[0]} />
+                <TextField {...field} select label="Mã danh mục" fullWidth disabled={Boolean(editing)} error={!!errors.code} helperText={errors.code?.message}>
+                  {Object.entries(CATEGORY_CODES).map(([value, label]) => (
+                    <MenuItem key={value} value={value}>{label} ({value})</MenuItem>
+                  ))}
+                </TextField>
               )} />
               <Controller name="displayOrder" control={control} render={({ field }) => (
                 <TextField {...field} type="number" label="Thứ tự hiển thị" fullWidth error={!!errors.displayOrder} helperText={errors.displayOrder?.message} />

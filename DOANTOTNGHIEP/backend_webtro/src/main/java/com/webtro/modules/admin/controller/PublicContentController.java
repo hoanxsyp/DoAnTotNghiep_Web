@@ -14,6 +14,9 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 /**
  * Nội dung tĩnh công khai (trang Giới thiệu / Điều khoản, docs/04 mục 5.1.12). Đọc từ
  * {@code system_configs} qua {@link SystemConfigService} (khóa {@code page.about} / {@code page.terms},
@@ -44,6 +47,24 @@ public class PublicContentController {
     public ResponseEntity<ApiResponse<StaticPageResponse>> getTerms() {
         return ResponseEntity.ok(ApiResponse.success(load(ConfigKey.PAGE_TERMS),
                 "Lấy nội dung trang Điều khoản thành công"));
+    }
+
+    @GetMapping("/listing-configs")
+    @Operation(summary = "Ràng buộc form đăng tin công khai")
+    public ResponseEntity<ApiResponse<Map<String, Map<String, Integer>>>> getListingConfigs() {
+        Map<String, Integer> configs = new LinkedHashMap<>();
+        configs.put(ConfigKey.LISTING_TITLE_MIN, systemConfigService.getInt(ConfigKey.LISTING_TITLE_MIN));
+        configs.put(ConfigKey.LISTING_TITLE_MAX, systemConfigService.getInt(ConfigKey.LISTING_TITLE_MAX));
+        configs.put(ConfigKey.LISTING_DESCRIPTION_MIN,
+                systemConfigService.getInt(ConfigKey.LISTING_DESCRIPTION_MIN));
+        configs.put(ConfigKey.LISTING_DESCRIPTION_MAX,
+                systemConfigService.getInt(ConfigKey.LISTING_DESCRIPTION_MAX));
+        configs.put(ConfigKey.LISTING_IMAGE_MIN, systemConfigService.getInt(ConfigKey.LISTING_IMAGE_MIN));
+        configs.put(ConfigKey.LISTING_IMAGE_MAX, systemConfigService.getInt(ConfigKey.LISTING_IMAGE_MAX));
+        configs.put(ConfigKey.LISTING_IMAGE_MAX_SIZE_MB,
+                systemConfigService.getInt(ConfigKey.LISTING_IMAGE_MAX_SIZE_MB));
+        return ResponseEntity.ok(ApiResponse.success(Map.of("configs", configs),
+                "Lấy ràng buộc đăng tin thành công"));
     }
 
     private StaticPageResponse load(String key) {

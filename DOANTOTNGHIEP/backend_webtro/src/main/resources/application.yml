@@ -38,7 +38,6 @@ spring:
     open-in-view: false
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.MySQLDialect
         format_sql: false
         jdbc:
           batch_size: 50
@@ -72,6 +71,8 @@ spring:
       password: ${REDIS_PASSWORD:}
       timeout: 3000ms
       connect-timeout: 3000ms
+      repositories:
+        enabled: false
       lettuce:
         pool:
           enabled: true

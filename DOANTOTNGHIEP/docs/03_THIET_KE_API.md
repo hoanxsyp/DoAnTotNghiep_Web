@@ -495,7 +495,7 @@ Cấu hình trong `CorsConfig`, origin đọc từ biến môi trường `APP_CO
 | `REVIEW_NOT_FOUND` | 404 | Không tìm thấy đánh giá | Id lạ / `DELETED` | `[§3.12]` |
 | `REVIEW_FORBIDDEN` | 403 | Bạn chỉ có thể sửa đánh giá của mình | Không phải tác giả | `[§11.2]` |
 | `REVIEW_ALREADY_EXISTS` | 409 | Bạn đã đánh giá tin đăng này rồi | `reviews` đã có `(user_id, listing_id)` | `[§3.12]` "Một người dùng chỉ đánh giá một tin một lần" |
-| `REVIEW_NOT_ELIGIBLE` | 422 | Bạn cần liên hệ chủ trọ trước khi đánh giá tin này | `review.require_contact = true` và không có `ContactLog` | `[§3.12]` "Nên yêu cầu người dùng đã từng liên hệ tin" |
+| `REVIEW_RENTAL_REQUIRED` | 422 | Chỉ người đang thuê hoặc đã trả phòng mới được đánh giá tin này | Không có `rental_requests` trạng thái `RENTED`/`CHECKED_OUT` | Luồng rental V23 |
 | `REVIEW_SELF_FORBIDDEN` | 422 | Bạn không thể đánh giá tin đăng của chính mình | `listing.ownerId == currentUserId` | `[§3.12]` |
 | `REVIEW_RATING_INVALID` | 400 | Số sao phải từ 1 đến 5 | `rating < 1 \|\| rating > 5` | `[§3.12]` "Rating từ 1 đến 5" |
 | `REVIEW_CONTENT_REQUIRED` | 400 | Vui lòng nhập nội dung đánh giá khi chấm từ 2 sao trở xuống | `rating <= 2` và `content` rỗng | `[§3.12]` "Nội dung đánh giá có thể bắt buộc nếu rating <= 2" |
@@ -2476,8 +2476,8 @@ xuất hiện ≥ 5 lần để không lộ truy vấn cá nhân `[§11.11]` *"K
    `phoneMasked = true`. Đã đăng nhập → số đầy đủ, `phoneMasked = false`. `MaskUtil.maskPhone()`
    giữ 4 số đầu + 3 số cuối.
 6. *(Đã bỏ — nhãn cảnh báo uy tín `lowTrustWarning` không còn, `V22`.)*
-7. **`canReview`**: `true` khi user đăng nhập, chưa đánh giá, không phải chủ tin, và (nếu
-   `review.require_contact = true`) đã có `ContactLog` `[§3.12]`.
+7. **`canReview`**: `true` khi user đăng nhập, chưa đánh giá, không phải chủ tin và có quan hệ thuê
+   `RENTED` hoặc `CHECKED_OUT` trong `rental_requests`. Liên hệ không cấp quyền đánh giá.
 8. **`canComment`**: `true` khi đăng nhập, có `COMMENT_CREATE`, chưa bị `COMMENT_SUSPENDED` `[§5.4]`.
 9. **Tin tương tự** (bước 6) **không** nhúng trong response này — FE gọi riêng
    `GET /api/listings/{id}/related` (mục 4.4.5) để chi tiết tin load nhanh `[§11.3]`.
@@ -3934,8 +3934,8 @@ Controller: `ContactController`, `ConversationController`. Tag Swagger: `06. Con
 4. Dedup `contact.dedup_minutes` (60) như 4.6.1 → `deduplicated = true`, không tăng `contact_count`.
    Riêng `SEND_FORM`/`START_CHAT` **luôn** ghi `ContactLog` (mỗi tin nhắn là một tương tác thật)
    nhưng chỉ tăng `contact_count` khi ngoài cửa sổ dedup.
-5. **`ContactLog` là điều kiện đánh giá** `[§3.12]` *"Nên yêu cầu người dùng đã từng liên hệ tin"* →
-   `review.require_contact = true` (canonical §9) kiểm tra bảng này.
+5. `ContactLog` **không phải điều kiện đánh giá** từ V23; quyền đánh giá lấy từ quan hệ thuê
+   `RENTED`/`CHECKED_OUT` trong `rental_requests`.
 6. Là input **`w = 5`** (cao nhất) cho `UserPreferenceProfile` (canonical §10.2).
 7. Thông báo chủ trọ `NotificationType = NEW_CONTACT` `[§5.6]`.
 
@@ -4573,7 +4573,7 @@ giả và `REVIEW_MODERATE`. **Đánh giá tiêu cực vẫn hiển thị** nế
   "data": {
     "listingId": 1024, "eligible": true, "reason": null,
     "alreadyReviewed": false, "existingReviewId": null,
-    "contactRequired": true, "hasContacted": true,
+    "contactRequired": false, "hasContacted": true, "rentalVerified": true,
     "contentRequiredWhenRatingBelow": 3
   },
   "timestamp": "2026-07-17T10:00:00Z"
@@ -4585,12 +4585,12 @@ giả và `REVIEW_MODERATE`. **Đánh giá tiêu cực vẫn hiển thị** nế
 ```json
 {
   "success": true,
-  "message": "Bạn cần liên hệ chủ trọ trước khi đánh giá tin này",
+  "message": "Chỉ người đang thuê hoặc đã trả phòng mới được đánh giá tin này",
   "data": {
-    "listingId": 1024, "eligible": false, "reason": "NOT_CONTACTED",
-    "reasonMessage": "Bạn cần liên hệ chủ trọ trước khi đánh giá tin này",
+    "listingId": 1024, "eligible": false, "reason": "NOT_RENTER",
+    "reasonMessage": "Chỉ người đang thuê hoặc đã trả phòng mới được đánh giá tin này",
     "alreadyReviewed": false, "existingReviewId": null,
-    "contactRequired": true, "hasContacted": false,
+    "contactRequired": false, "hasContacted": false, "rentalVerified": false,
     "contentRequiredWhenRatingBelow": 3
   },
   "timestamp": "2026-07-17T10:00:00Z"
@@ -4599,7 +4599,9 @@ giả và `REVIEW_MODERATE`. **Đánh giá tiêu cực vẫn hiển thị** nế
 
 **Mã lỗi:** `UNAUTHORIZED`, `LISTING_NOT_FOUND`.
 
-**Quy tắc:** `reason` ∈ {`NOT_CONTACTED`, `ALREADY_REVIEWED`, `OWN_LISTING`, `NOT_AUTHENTICATED`}.
+**Quy tắc:** `reason` ∈ {`NOT_RENTER`, `ALREADY_REVIEWED`, `OWN_LISTING`, `NOT_AUTHENTICATED`}.
+`contactRequired` và `hasContacted` chỉ được giữ để tương thích client cũ: `contactRequired` luôn `false`,
+`hasContacted` phản ánh cùng giá trị với `rentalVerified`. Client mới phải dùng `rentalVerified`.
 **Luôn trả 200** (đây là truy vấn trạng thái, không phải lỗi) — FE dùng để bật/tắt nút "Đánh giá"
 `[§8.6]` bước *"Kiểm tra đã liên hệ hoặc đủ điều kiện"*.
 
@@ -4646,17 +4648,16 @@ giả và `REVIEW_MODERATE`. **Đánh giá tiêu cực vẫn hiển thị** nế
 ```
 
 **Mã lỗi:** `UNAUTHORIZED`, `FORBIDDEN`, `LISTING_NOT_FOUND`, `LISTING_NOT_ACTIVE`,
-**`REVIEW_ALREADY_EXISTS`**, **`REVIEW_NOT_ELIGIBLE`**, `REVIEW_SELF_FORBIDDEN`,
+**`REVIEW_ALREADY_EXISTS`**, **`REVIEW_RENTAL_REQUIRED`**, `REVIEW_SELF_FORBIDDEN`,
 `REVIEW_RATING_INVALID`, `REVIEW_CONTENT_REQUIRED`, `BANNED_KEYWORD_DETECTED`,
 `DANGEROUS_HTML_DETECTED`, `VALIDATION_FAILED`, `RATE_LIMIT_EXCEEDED`.
 
 **Quy tắc nghiệp vụ `[§3.12]` (sequence đầy đủ ở mục 8.6):**
 1. **Một người dùng chỉ đánh giá một tin một lần** `[§3.12]` → `uk_reviews_user_listing (user_id, listing_id)`
    → trùng → `409 REVIEW_ALREADY_EXISTS` (bước 3 *"Kiểm tra chưa đánh giá trước đó"*).
-2. **Yêu cầu đã liên hệ** `[§3.12]` *"Nên yêu cầu người dùng đã từng liên hệ tin để giảm đánh giá ảo"*:
-   `review.require_contact = true` (canonical §9) → phải tồn tại `ContactLog(user_id, listing_id)`
-   → không có → `422 REVIEW_NOT_ELIGIBLE` (bước 3 *"Kiểm tra đã liên hệ"*, `[§8.6]`).
-   Admin tắt config → bỏ qua kiểm tra này.
+2. **Yêu cầu quan hệ thuê đã xác thực**: phải tồn tại `rental_requests(tenant_id, listing_id)` ở trạng thái
+   `RENTED` hoặc `CHECKED_OUT`. Chỉ liên hệ, bình luận hoặc lưu tin không cấp quyền đánh giá.
+   → không có → `422 REVIEW_RENTAL_REQUIRED`. Không có cấu hình bỏ qua điều kiện này.
 3. **Nội dung bắt buộc khi `rating <= 2`** `[§3.12]` *"Nội dung đánh giá có thể bắt buộc nếu rating <= 2"*
    → thiếu → `400 REVIEW_CONTENT_REQUIRED`.
 4. Không đánh giá tin của chính mình → `422 REVIEW_SELF_FORBIDDEN`.
@@ -7300,7 +7301,7 @@ Toàn bộ **[BỔ SUNG NGOÀI `[§12]`]** — bắt buộc bởi `[§2.12]` **A
         "author": { "id": 95, "fullName": "Phạm Thu Hà",
                     "avatarUrl": "https://cdn.webtro.vn/avatars/f6a7b8c9.webp",
                     "accountAgeDays": 210 },
-        "hasContactLog": true,
+        "isVerifiedContact": true,
         "reportCount": 1,
         "moderationReason": null,
         "editedAt": null,
@@ -7316,7 +7317,8 @@ Toàn bộ **[BỔ SUNG NGOÀI `[§12]`]** — bắt buộc bởi `[§2.12]` **A
 
 **Mã lỗi:** `UNAUTHORIZED`, `FORBIDDEN`, `INVALID_SORT_FIELD`, `VALIDATION_FAILED`.
 
-**Quy tắc:** `hasContactLog` cho biết đánh giá có "thật" không (`[§3.12]` *"giảm đánh giá ảo"*).
+**Quy tắc:** `isVerifiedContact` là tên field legacy; giá trị `true` hiện biểu thị người đánh giá có quan hệ
+thuê `RENTED`/`CHECKED_OUT` đã được xác thực, không còn biểu thị việc từng liên hệ.
 **Không** có endpoint sửa nội dung đánh giá — `[§10.9]` *"Không sửa nội dung đánh giá của người dùng.
 Chỉ ẩn hoặc khôi phục"*.
 
@@ -9243,9 +9245,7 @@ Tag Swagger: `20. Admin - System`.
           { "key": "comment.edit_window_minutes", "value": 30, "type": "INT", "defaultValue": 30,
             "min": 0, "max": 1440, "label": "Thời gian được sửa bình luận (phút)", "source": "[§3.11]" },
           { "key": "review.edit_window_hours", "value": 24, "type": "INT", "defaultValue": 24,
-            "min": 0, "max": 720, "label": "Thời gian được sửa đánh giá (giờ)", "source": "[§3.12]" },
-          { "key": "review.require_contact", "value": true, "type": "BOOLEAN", "defaultValue": true,
-            "label": "Bắt buộc đã liên hệ mới được đánh giá", "source": "[§3.12]" }
+            "min": 0, "max": 720, "label": "Thời gian được sửa đánh giá (giờ)", "source": "[§3.12]" }
         ]
       },
       {
@@ -9680,6 +9680,23 @@ phân tách hàng nghìn, đơn vị VNĐ.
    thêm dependency ngoài danh sách"*, và quy mô đồ án không cần.
 
 ---
+### 4.11. Module Rental Request (8 endpoint)
+
+| Method | Endpoint | Role | Ý nghĩa |
+|---|---|---|---|
+| `POST` | `/api/rental-requests` | `TENANT` | Gửi yêu cầu thuê kèm `listingId`, `desiredViewingDate` |
+| `GET` | `/api/rental-requests/my` | `TENANT` | Danh sách yêu cầu của người thuê; lọc tùy chọn theo `status` |
+| `PUT` | `/api/rental-requests/{id}/cancel` | `TENANT` | Hủy yêu cầu `PENDING`/`APPROVED` |
+| `GET` | `/api/landlord/rental-requests` | `LANDLORD`, `ADMIN` | Danh sách yêu cầu thuộc các tin của chủ trọ |
+| `PUT` | `/api/landlord/rental-requests/{id}/approve` | `LANDLORD`, `ADMIN` | Duyệt lịch xem phòng |
+| `PUT` | `/api/landlord/rental-requests/{id}/reject` | `LANDLORD`, `ADMIN` | Từ chối yêu cầu |
+| `PUT` | `/api/landlord/rental-requests/{id}/confirm-rented` | `LANDLORD`, `ADMIN` | Xác nhận đã thuê; listing chuyển `RENTED` |
+| `PUT` | `/api/landlord/rental-requests/{id}/confirm-checked-out` | `LANDLORD`, `ADMIN` | Xác nhận trả phòng; listing trở lại `ACTIVE` |
+
+Một tenant được gửi nhiều yêu cầu cho các listing khác nhau. Chỉ bước `confirm-rented` áp dụng hai
+ràng buộc đồng thời: một listing chỉ có một tenant đang thuê và một tenant chỉ đang thuê một listing.
+Các unique key generated trong V23 bảo vệ quy tắc này cả khi hai request chạy đồng thời.
+
 ## 5. Chuẩn hóa DTO
 
 ### 5.1. Nguyên tắc
@@ -11526,12 +11543,12 @@ sequenceDiagram
     participant NS as NotificationService
     actor L as Chủ trọ
 
-    T->>FE: Mở tin đã liên hệ
+    T->>FE: Mở tin đang thuê hoặc đã trả phòng
     FE->>API: GET /api/listings/{id}/reviews/eligibility
-    API->>DB: Kiểm tra ContactLog + Review đã có
-    alt Chưa liên hệ VÀ review.require_contact = true
-        API-->>FE: 200 {eligible: false, reason: "NOT_CONTACTED"}
-        FE-->>T: Nút "Đánh giá" bị vô hiệu hóa + gợi ý liên hệ trước
+    API->>DB: Kiểm tra RentalRequest(RENTED/CHECKED_OUT) + Review đã có
+    alt Chưa từng thuê phòng này
+        API-->>FE: 200 {eligible: false, reason: "NOT_RENTER"}
+        FE-->>T: Nút "Đánh giá" bị vô hiệu hóa
     else Đã đánh giá rồi
         API-->>FE: 200 {eligible: false, reason: "ALREADY_REVIEWED", existingReviewId}
         FE-->>T: Hiện nút "Sửa đánh giá"
@@ -11543,10 +11560,10 @@ sequenceDiagram
         FE->>API: POST /api/listings/{id}/reviews {rating: 5, content}
         API->>RS: create(request)
 
-        RS->>DB: Kiểm tra đã liên hệ hoặc đủ điều kiện [§8.6]
-        alt Không có ContactLog và review.require_contact = true
-            RS-->>FE: 422 REVIEW_NOT_ELIGIBLE<br/>[§3.12] "Nên yêu cầu người dùng đã từng liên hệ tin để giảm đánh giá ảo"
-        else Đã có ContactLog
+        RS->>DB: Kiểm tra quan hệ thuê RENTED/CHECKED_OUT
+        alt Không có quan hệ thuê đã xác thực
+            RS-->>FE: 422 REVIEW_RENTAL_REQUIRED
+        else Đang thuê hoặc đã trả phòng
             RS->>DB: Kiểm tra chưa đánh giá trước đó [§8.6]
             alt uk_reviews_user_listing đã tồn tại
                 RS-->>FE: 409 REVIEW_ALREADY_EXISTS<br/>[§3.12] "Một người dùng chỉ đánh giá một tin một lần"
@@ -12282,7 +12299,7 @@ export const ERROR_ACTIONS = {
   // Hiển thị đặc biệt
   RENEW_FREE_QUOTA_EXCEEDED:  { modal: 'BUY_RENEW_PACKAGE' },
   LISTING_POSTING_SUSPENDED:  { modal: 'POSTING_SUSPENDED' },
-  REVIEW_NOT_ELIGIBLE:        { toast: 'info' },
+  REVIEW_RENTAL_REQUIRED:     { toast: 'info' },
   AI_INSUFFICIENT_DATA:       { silent: true },   // ẩn khối gợi ý giá, không toast [§9.4]
   AI_MODULE_DISABLED:         { silent: true },   // ẩn tính năng AI [§10.10]
   AI_SERVICE_UNAVAILABLE:     { silent: true },
@@ -12466,7 +12483,7 @@ canonical §5.
 
 | # | Key | Mặc định | Bắt buộc vì |
 |---|---|---|---|
-| 1 | `chat.message.max_length` | 2000 | `[§13.2]` chat cơ bản — hiện đang hardcode ở validation (mục 4.6.8) |
+| 1 | `chat.message.max_length` | 2000 | `[§13.2]` chat cơ bản — kiểm tra tại điểm ghi chung cho tin đầu tiên và tin nhắn tiếp theo; DB vẫn đặt trần 2000 ký tự |
 | 2 | `chatbot.message.max_length` | 500 | `[§3.15]` — mục 7.3.1 |
 | 3 | `report.abuse.rejected_count` | 5 | **`[§3.13]`** *"Nếu report sai nhiều lần, tài khoản báo cáo có thể bị hạn chế"* — canonical §9 thiếu ngưỡng này, mà canonical §13.4 cấm hardcode |
 | 4 | `report.abuse.window_days` | 30 | như trên |

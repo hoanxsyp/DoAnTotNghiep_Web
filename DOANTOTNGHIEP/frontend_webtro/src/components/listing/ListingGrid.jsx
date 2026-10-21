@@ -46,7 +46,6 @@ export default function ListingGrid({
     return (
       <Grid container spacing={2}>
         {Array.from({ length: skeletonCount }).map((_, i) => (
-          // eslint-disable-next-line react/no-array-index-key
           <Grid item {...itemGridProps} key={i}>
             <LoadingSkeleton variant="listing-card" />
           </Grid>

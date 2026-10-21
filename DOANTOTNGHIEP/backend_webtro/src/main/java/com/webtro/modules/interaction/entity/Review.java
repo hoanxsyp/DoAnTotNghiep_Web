@@ -21,7 +21,8 @@ import java.time.Instant;
 /**
  * Đánh giá (sao + nội dung) của người thuê cho tin/chủ trọ — bảng {@code reviews}.
  *
- * <p>Mỗi người chỉ đánh giá một tin một lần ({@code uk_reviews_user_listing}). FK chéo module
+ * <p>Mỗi người chỉ có một đánh giá chưa xóa mềm cho một tin. {@code activeMarker = null} với bản
+ * đã xóa giúp giải phóng khóa duy nhất để người dùng có thể đánh giá lại. FK chéo module
  * ({@code listingId}, {@code userId}, {@code hiddenBy}) giữ {@code Long}; landlord suy ra từ listing.
  * Theo doc 02, {@code rating} (TINYINT UNSIGNED) map sang {@code Integer}.
  */
@@ -29,8 +30,8 @@ import java.time.Instant;
 @Table(
         name = "reviews",
         uniqueConstraints = @UniqueConstraint(
-                name = "uk_reviews_user_listing",
-                columnNames = {"user_id", "listing_id"}),
+                name = "uk_reviews_active_user_listing",
+                columnNames = {"user_id", "listing_id", "active_marker"}),
         indexes = {
                 @Index(name = "idx_reviews_listing_id_status_created_at", columnList = "listing_id, status, created_at"),
                 @Index(name = "idx_reviews_rating_status", columnList = "rating, status"),
@@ -58,15 +59,20 @@ public class Review extends AuditableEntity {
     private Integer rating;
 
     /** Nội dung — bắt buộc (≥3 ký tự) khi rating ≤ 2 (ck_reviews_content_required). */
-    @Column(name = "content", length = 1000)
+    @Column(name = "content", length = 2000)
     private String content;
+
+    /** 1 với đánh giá còn hiệu lực; null sau khi xóa mềm để cho phép đánh giá lại cùng tin. */
+    @Builder.Default
+    @Column(name = "active_marker")
+    private Byte activeMarker = 1;
 
     @Enumerated(EnumType.STRING)
     @Builder.Default
     @Column(name = "status", nullable = false, length = 10)
     private ReviewStatus status = ReviewStatus.VISIBLE;
 
-    /** Người đánh giá đã từng liên hệ tin (điều kiện {@code review.require_contact}). */
+    /** Cột legacy; true khi quan hệ thuê đã được xác thực lúc tạo đánh giá. */
     @Builder.Default
     @Column(name = "is_verified_contact", nullable = false)
     private Boolean isVerifiedContact = false;
@@ -82,7 +88,7 @@ public class Review extends AuditableEntity {
     @Column(name = "hidden_at")
     private Instant hiddenAt;
 
-    /** Mốc chỉnh sửa gần nhất (trong cửa sổ {@code review.edit_window_hours}). */
+    /** Mốc chỉnh sửa gần nhất. */
     @Column(name = "edited_at")
     private Instant editedAt;
 }

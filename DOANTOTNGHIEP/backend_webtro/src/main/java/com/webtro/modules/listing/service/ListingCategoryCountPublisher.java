@@ -21,22 +21,28 @@ public class ListingCategoryCountPublisher {
     public Snapshot snapshot(Listing listing) {
         return new Snapshot(
                 listing == null ? null : listing.getCategoryId(),
+                listing == null ? null : listing.getWardId(),
                 visibilityService.publiclyVisible(listing));
     }
 
     public void publishIfChanged(Snapshot before, Listing after) {
         Long oldCategoryId = before == null ? null : before.categoryId();
+        Long oldWardId = before == null ? null : before.wardId();
         boolean oldVisible = before != null && before.publiclyVisible();
         Long newCategoryId = after == null ? null : after.getCategoryId();
+        Long newWardId = after == null ? null : after.getWardId();
         boolean newVisible = visibilityService.publiclyVisible(after);
 
-        if (Objects.equals(oldCategoryId, newCategoryId) && oldVisible == newVisible) {
+        if (Objects.equals(oldCategoryId, newCategoryId)
+                && Objects.equals(oldWardId, newWardId)
+                && oldVisible == newVisible) {
             return;
         }
         eventPublisher.publishEvent(new ListingCategoryCountChangedEvent(
-                oldCategoryId, oldVisible, newCategoryId, newVisible));
+                oldCategoryId, oldWardId, oldVisible,
+                newCategoryId, newWardId, newVisible));
     }
 
-    public record Snapshot(Long categoryId, boolean publiclyVisible) {
+    public record Snapshot(Long categoryId, Long wardId, boolean publiclyVisible) {
     }
 }

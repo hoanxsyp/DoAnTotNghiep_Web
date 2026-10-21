@@ -1,7 +1,6 @@
 package com.webtro.modules.listing.controller;
 
 import com.webtro.common.ApiResponse;
-import com.webtro.common.PageResponse;
 import com.webtro.common.enums.ListingStatus;
 import com.webtro.modules.listing.dto.request.AmenityUpdateRequest;
 import com.webtro.modules.listing.dto.request.CloseListingRequest;
@@ -15,7 +14,7 @@ import com.webtro.modules.listing.dto.response.ListingAmenityResponse;
 import com.webtro.modules.listing.dto.response.ListingCreateResponse;
 import com.webtro.modules.listing.dto.response.ListingDetailResponse;
 import com.webtro.modules.listing.dto.response.ListingStatsResponse;
-import com.webtro.modules.listing.dto.response.ListingSummaryResponse;
+import com.webtro.modules.listing.dto.response.MyListingsResponse;
 import com.webtro.modules.listing.dto.response.ModerationImpactResponse;
 import com.webtro.modules.listing.dto.response.RenewResponse;
 import com.webtro.modules.listing.service.ListingService;
@@ -147,14 +146,14 @@ public class ListingController {
     @GetMapping("/my")
     @PreAuthorize("hasAnyRole('TENANT','LANDLORD','ADMIN')")
     @Operation(summary = "Danh sách tin của tôi", description = "Lọc theo trạng thái, từ khóa, danh mục.")
-    public ResponseEntity<ApiResponse<PageResponse<ListingSummaryResponse>>> getMyListings(
+    public ResponseEntity<ApiResponse<MyListingsResponse>> getMyListings(
             @RequestParam(name = "status", required = false) List<ListingStatus> statuses,
             @RequestParam(name = "keyword", required = false) String keyword,
             @RequestParam(name = "categoryId", required = false) Long categoryId,
             @RequestParam(name = "expiringWithinDays", required = false) Integer expiringWithinDays,
             @PageableDefault(size = 20, sort = "updatedAt", direction = Sort.Direction.DESC)
             Pageable pageable) {
-        PageResponse<ListingSummaryResponse> data = listingService.getMyListings(
+        MyListingsResponse data = listingService.getMyListings(
                 statuses, keyword, categoryId, expiringWithinDays, pageable);
         return ResponseEntity.ok(ApiResponse.success(data, "Lấy danh sách tin của bạn thành công"));
     }

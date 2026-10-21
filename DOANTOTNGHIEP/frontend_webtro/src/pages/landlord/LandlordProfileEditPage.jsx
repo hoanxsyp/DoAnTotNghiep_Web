@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
@@ -40,7 +40,7 @@ const LandlordProfileEditPage = () => {
     defaultValues: { contactName: '', contactPhone: '', contactZalo: '', businessName: '', businessAddress: '', description: '', chatEnabled: true },
   });
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
       const data = await userApi.getLandlordProfile();
@@ -59,9 +59,9 @@ const LandlordProfileEditPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [reset]);
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
+  useEffect(() => { load(); }, [load]);
 
   const onSubmit = async (values) => {
     try {

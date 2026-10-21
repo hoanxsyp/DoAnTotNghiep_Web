@@ -4,7 +4,7 @@ import { useSelector } from 'react-redux';
 import dayjs from 'dayjs';
 import {
   Box, Card, CardContent, Stepper, Step, StepLabel, Grid, TextField, MenuItem, Button, Stack,
-  Typography, Chip, FormControlLabel, Checkbox, Switch, Alert, InputAdornment, Divider, CircularProgress,
+  Typography, Chip, FormControlLabel, Switch, Alert, InputAdornment, Divider, CircularProgress,
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
@@ -50,7 +50,7 @@ export default function ListingWizard({ mode = 'create', listingId, initialData,
   const [submitting, setSubmitting] = useState(false);
 
   const {
-    control, handleSubmit, trigger, watch, getValues, formState: { errors },
+    control, trigger, watch, getValues, formState: { errors },
   } = useForm({ defaultValues: { ...DEFAULTS, ...(initialData?.values || {}) }, mode: 'onTouched' });
 
   const categoryId = watch('categoryId');
@@ -402,7 +402,7 @@ export default function ListingWizard({ mode = 'create', listingId, initialData,
                     {predicting ? (
                       <Typography variant="body2" color="text.secondary">Đang phân tích thị trường…</Typography>
                     ) : !price ? (
-                      <Typography variant="body2" color="text.secondary">Nhập giá & diện tích rồi bấm "Tính lại" để xem gợi ý.</Typography>
+                      <Typography variant="body2" color="text.secondary">Nhập giá & diện tích rồi bấm &quot;Tính lại&quot; để xem gợi ý.</Typography>
                     ) : !price.available ? (
                       <Alert severity="info">{price.message || 'Chưa đủ dữ liệu thị trường để dự đoán giá cho khu vực này.'}</Alert>
                     ) : (

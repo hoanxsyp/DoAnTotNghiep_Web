@@ -26,7 +26,7 @@ public interface ReviewService {
     /** Tạo đánh giá; cập nhật trung bình của tin + chủ trọ. */
     ReviewResponse createReview(Long listingId, CreateReviewRequest request, Long userId);
 
-    /** Sửa đánh giá trong cửa sổ {@code review.edit_window_hours} (chỉ tác giả). */
+    /** Sửa nội dung và số sao của đánh giá đang hiển thị (chỉ tác giả). */
     ReviewResponse updateReview(Long reviewId, CreateReviewRequest request, Long userId);
 
     /** Xóa (tác giả) hoặc ẩn (REVIEW_MODERATE, kèm lý do) đánh giá; cập nhật lại trung bình. */

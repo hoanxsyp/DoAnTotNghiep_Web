@@ -19,11 +19,14 @@ import java.util.Optional;
 @Repository
 public interface ReviewRepository extends JpaRepository<Review, Long>, JpaSpecificationExecutor<Review> {
 
-    /** Đánh giá còn hiệu lực của một người cho một tin (chống đánh giá trùng — {@code uk_reviews_user_listing}). */
+    /** Đánh giá còn hiệu lực của một người cho một tin (chống đánh giá trùng khi chưa xóa mềm). */
     Optional<Review> findByUserIdAndListingIdAndDeletedAtIsNull(Long userId, Long listingId);
 
     /** Người dùng đã đánh giá tin này chưa (409 CONFLICT nếu đã có). */
     boolean existsByUserIdAndListingIdAndDeletedAtIsNull(Long userId, Long listingId);
+
+    /** Các đánh giá chưa xóa mềm do chính người dùng gửi. */
+    Page<Review> findByUserIdAndDeletedAtIsNull(Long userId, Pageable pageable);
 
     /** Danh sách đánh giá hiển thị của một tin, mới nhất trước. */
     Page<Review> findByListingIdAndStatusAndDeletedAtIsNull(Long listingId, ReviewStatus status, Pageable pageable);

@@ -1,6 +1,5 @@
 package com.webtro.modules.listing.service;
 
-import com.webtro.common.PageResponse;
 import com.webtro.common.enums.ListingStatus;
 import com.webtro.modules.listing.dto.request.AmenityUpdateRequest;
 import com.webtro.modules.listing.dto.request.CloseListingRequest;
@@ -14,7 +13,7 @@ import com.webtro.modules.listing.dto.response.ListingAmenityResponse;
 import com.webtro.modules.listing.dto.response.ListingCreateResponse;
 import com.webtro.modules.listing.dto.response.ListingDetailResponse;
 import com.webtro.modules.listing.dto.response.ListingStatsResponse;
-import com.webtro.modules.listing.dto.response.ListingSummaryResponse;
+import com.webtro.modules.listing.dto.response.MyListingsResponse;
 import com.webtro.modules.listing.dto.response.ModerationImpactResponse;
 import com.webtro.modules.listing.entity.Listing;
 import org.springframework.data.domain.Pageable;
@@ -54,9 +53,9 @@ public interface ListingService {
 
     ListingDetailResponse getDetail(Long id, boolean countView, String clientIp);
 
-    PageResponse<ListingSummaryResponse> getMyListings(List<ListingStatus> statuses, String keyword,
-                                                       Long categoryId, Integer expiringWithinDays,
-                                                       Pageable pageable);
+    MyListingsResponse getMyListings(List<ListingStatus> statuses, String keyword,
+                                     Long categoryId, Integer expiringWithinDays,
+                                     Pageable pageable);
 
     ListingStatsResponse getStats(Long id, LocalDate from, LocalDate to);
 

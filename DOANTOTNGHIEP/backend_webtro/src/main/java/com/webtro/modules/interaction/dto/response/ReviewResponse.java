@@ -32,10 +32,10 @@ public class ReviewResponse {
     private String status;
     private AuthorResponse author;
 
-    @Schema(description = "Người xem hiện tại có sửa được không (tác giả + trong cửa sổ)")
+    @Schema(description = "Người xem hiện tại có sửa được không (tác giả của đánh giá đang hiển thị)")
     private Boolean editable;
 
-    @Schema(description = "Thời điểm hết hạn sửa")
+    @Schema(description = "Thời điểm hết hạn sửa; null khi không giới hạn thời gian")
     private Instant editableUntil;
 
     private Instant editedAt;

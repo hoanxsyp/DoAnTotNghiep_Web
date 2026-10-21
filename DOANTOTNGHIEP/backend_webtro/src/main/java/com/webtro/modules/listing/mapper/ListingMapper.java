@@ -326,7 +326,7 @@ public class ListingMapper {
     private List<String> availableActions(Listing l) {
         ListingStatus s = l.getStatus();
         List<String> actions = new ArrayList<>();
-        if (s != ListingStatus.LOCKED && s != ListingStatus.DELETED) {
+        if (s != ListingStatus.LOCKED && s != ListingStatus.RENTED && s != ListingStatus.DELETED) {
             actions.add("EDIT");
         }
         if (stateMachine.canTransition(s, ListingEvent.SUBMIT)) {

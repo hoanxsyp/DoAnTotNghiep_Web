@@ -56,7 +56,7 @@ const AreasPage = () => {
   }, [selectedDistrict]);
 
   const toggle = async (row) => {
-    try { await adminApi.toggleProvince(row.id); reload(); } catch (err) { notify.apiError(err); }
+    try { await adminApi.toggleProvince(row.id, !(row.active ?? true)); reload(); } catch (err) { notify.apiError(err); }
   };
 
   const saveEdit = async () => {
@@ -77,9 +77,8 @@ const AreasPage = () => {
     if (!file) return;
     setSubmitting(true);
     try {
-      const fd = new FormData();
-      fd.append('file', file);
-      await adminApi.importAreas(fd);
+      const payload = JSON.parse(await file.text());
+      await adminApi.importAreas(payload);
       notify.success('Đã nhập dữ liệu khu vực');
       setImportOpen(false);
       setFile(null);
@@ -116,7 +115,7 @@ const AreasPage = () => {
       <AdminPageHeader
         title="Quản lý khu vực"
         subtitle={`${total} tỉnh/thành`}
-        actions={<Button variant="contained" startIcon={<UploadFileIcon />} onClick={() => setImportOpen(true)}>Nhập từ file</Button>}
+        actions={<Button variant="contained" startIcon={<UploadFileIcon />} onClick={() => setImportOpen(true)}>Nhập JSON</Button>}
       />
 
       <Stack direction="row" spacing={1.5} sx={{ mb: 2 }}>
@@ -206,14 +205,14 @@ const AreasPage = () => {
       </Dialog>
 
       <Dialog open={importOpen} onClose={() => !submitting && setImportOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Nhập khu vực từ file</DialogTitle>
+        <DialogTitle>Nhập khu vực từ JSON</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Chọn file danh sách tỉnh/quận/phường (định dạng theo chuẩn hệ thống).
+            Chọn file JSON có trường provinces và cây districts/wards tương ứng.
           </Typography>
           <Button variant="outlined" component="label" startIcon={<UploadFileIcon />} fullWidth>
             {file ? file.name : 'Chọn file'}
-            <input hidden type="file" accept=".csv,.json,.xlsx" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+            <input hidden type="file" accept="application/json,.json" onChange={(e) => setFile(e.target.files?.[0] || null)} />
           </Button>
         </DialogContent>
         <DialogActions>

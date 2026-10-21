@@ -20,23 +20,48 @@ public interface ContactLogRepository extends JpaRepository<ContactLog, Long> {
     /** Có liên hệ trùng của cùng user cho cùng tin sau mốc thời gian ({@code contact.dedup_minutes}). */
     boolean existsByListingIdAndUserIdAndCreatedAtAfterAndDeletedAtIsNull(Long listingId, Long userId, Instant since);
 
-    /** Danh sách liên hệ mà một chủ tin nhận được (phân trang). */
     @Query(value = """
-            SELECT c
-            FROM ContactLog c, Listing l
+            SELECT c FROM ContactLog c, Listing l
             WHERE l.id = c.listingId
               AND l.ownerId = :ownerId
               AND c.deletedAt IS NULL
-            ORDER BY c.createdAt DESC
+              AND (:listingId IS NULL OR c.listingId = :listingId)
+              AND (:type IS NULL OR c.contactType = :type)
+              AND (:from IS NULL OR c.createdAt >= :from)
+              AND (:to IS NULL OR c.createdAt < :to)
             """,
             countQuery = """
-            SELECT COUNT(c)
-            FROM ContactLog c, Listing l
+            SELECT COUNT(c) FROM ContactLog c, Listing l
             WHERE l.id = c.listingId
               AND l.ownerId = :ownerId
               AND c.deletedAt IS NULL
+              AND (:listingId IS NULL OR c.listingId = :listingId)
+              AND (:type IS NULL OR c.contactType = :type)
+              AND (:from IS NULL OR c.createdAt >= :from)
+              AND (:to IS NULL OR c.createdAt < :to)
             """)
-    Page<ContactLog> findByOwnerIdAndDeletedAtIsNull(@Param("ownerId") Long ownerId, Pageable pageable);
+    Page<ContactLog> findByOwnerWithFilters(@Param("ownerId") Long ownerId,
+                                            @Param("listingId") Long listingId,
+                                            @Param("type") com.webtro.common.enums.ContactType type,
+                                            @Param("from") Instant from,
+                                            @Param("to") Instant to,
+                                            Pageable pageable);
+
+    @Query("""
+            SELECT COUNT(c) FROM ContactLog c, Listing l
+            WHERE l.id = c.listingId
+              AND l.ownerId = :ownerId
+              AND c.deletedAt IS NULL
+              AND (:listingId IS NULL OR c.listingId = :listingId)
+              AND c.contactType = :type
+              AND (:from IS NULL OR c.createdAt >= :from)
+              AND (:to IS NULL OR c.createdAt < :to)
+            """)
+    long countByOwnerWithFilters(@Param("ownerId") Long ownerId,
+                                 @Param("listingId") Long listingId,
+                                 @Param("type") com.webtro.common.enums.ContactType type,
+                                 @Param("from") Instant from,
+                                 @Param("to") Instant to);
 
     /** Đếm liên hệ chủ tin chưa đọc. */
     @Query("""

@@ -1474,10 +1474,10 @@ number/array/boolean).
 | Moderator / Admin | Hiện đủ | — | ✔ | — | ✔ | ✔ `LISTING_VIEW_ANY` + banner trạng thái + nút hành động kiểm duyệt |
 
 **Điều kiện hiện nút "Viết đánh giá"** `[§3.12]`:
-`review.require_contact = true` (mặc định) → chỉ hiện khi API trả `canReview: true` (BE tự
-kiểm: đã có `ContactLog` với tin này **và** chưa từng đánh giá tin này). Nếu `canReview: false`
-vì chưa liên hệ → hiện text mờ *"Bạn cần liên hệ chủ trọ trước khi đánh giá tin này."* — giải
-thích lý do thay vì ẩn im lặng. Nếu đã đánh giá rồi → nút đổi thành "Sửa đánh giá của bạn"
+Chỉ hiện khi API eligibility trả `rentalVerified: true` và người dùng chưa từng đánh giá tin này.
+Backend xác thực người dùng đang thuê hoặc đã trả phòng qua `rental_requests.status = RENTED/CHECKED_OUT`.
+Nếu chưa từng thuê → hiện text mờ *"Chỉ người đang thuê hoặc đã trả phòng mới được đánh giá tin này."*
+thay vì ẩn im lặng. Nếu đã đánh giá rồi → nút đổi thành "Sửa đánh giá của bạn"
 (trong `review.edit_window_hours` = 24, hết hạn thì disable + tooltip).
 
 **Trạng thái**
@@ -5544,7 +5544,7 @@ react-chartjs-2 (canonical mục 1.2), `maintainAspectRatio: false`, màu lấy 
 |---|---|
 | Tin đăng | `listing.display_days`, `listing.image.min/max`, `listing.image.max_size_mb`, `listing.title.min/max`, `listing.description.min/max`, `listing.expiry.reminder_days`, `listing.renew.free_per_month`, `listing.need_review.publicly_visible`, `listing.auto_approve.trusted_landlord` |
 | Kiểm duyệt | `moderation.autohide.report_count`, `moderation.autohide.distinct_reporters`, `moderation.autohide.window_hours`, `moderation.threshold.warning_count`, `moderation.threshold.warning_window_days`, `moderation.threshold.locked_listing_count`, `moderation.threshold.locked_listing_window_days`, `moderation.threshold.spam_comment_count`, `moderation.threshold.spam_comment_window_hours` |
-| Tương tác | `contact.dedup_minutes`, `view.dedup_minutes`, `comment.edit_window_minutes`, `review.edit_window_hours`, `review.require_contact`, `promotion.max_priority` |
+| Tương tác | `contact.dedup_minutes`, `view.dedup_minutes`, `comment.edit_window_minutes`, `review.edit_window_hours`, `promotion.max_priority`; quyền đánh giá dựa trên quan hệ thuê `RENTED/CHECKED_OUT` |
 | Chống spam | `security.login.*`, `security.register.rate`, `spam.listing.new_account_daily`, `spam.listing.daily`, `spam.comment.per_minute`, `spam.report.daily`, `spam.message.per_minute`, `spam.chatbot.per_minute` + quản lý **`BannedKeyword`** (canonical mục 6) |
 | Nội dung tĩnh | `page.about`, `page.terms` **[BỔ SUNG NGOÀI CANONICAL]** (mục 5.1.12) |
 | Email | cấu hình template/người gửi — đọc từ biến môi trường, **chỉ hiển thị trạng thái**, không sửa |
@@ -6599,7 +6599,7 @@ export const ERROR_MESSAGES = {
   IMAGE_REQUIRED:          'Tin đăng cần có ít nhất một ảnh.',                    // [§3.3]
 
   // === Interaction ===
-  REVIEW_REQUIRES_CONTACT: 'Bạn cần liên hệ chủ trọ trước khi đánh giá tin này.', // [§3.12]
+  REVIEW_RENTAL_REQUIRED:  'Chỉ người đang thuê hoặc đã trả phòng mới được đánh giá tin này.', // rental V23
   REVIEW_EDIT_WINDOW_EXPIRED: 'Đã quá thời gian cho phép sửa đánh giá.',          // [§3.12]
   COMMENT_EDIT_WINDOW_EXPIRED:'Đã quá thời gian cho phép sửa bình luận.',         // [§3.11]
   COMMENT_NOT_OWNED:       'Bạn chỉ có thể sửa hoặc xóa bình luận của mình.',     // [§3.11]
@@ -7292,7 +7292,7 @@ phải có để hiện thực chức năng đã nêu trong tài liệu nghiệp
 
 | Field | Trong response của | Vì sao |
 |---|---|---|
-| `canReview`, `canEdit`, `editableUntil` | listing detail, comment, review | FE không tự tính `review.edit_window_hours`, `comment.edit_window_minutes`, `review.require_contact` |
+| `canReview`, `rentalVerified`, `canEdit`, `editableUntil` | listing detail, comment, review | FE không tự suy ra quan hệ thuê hoặc các cửa sổ `review.edit_window_hours`, `comment.edit_window_minutes` |
 | `freeRenewRemaining` | `GET /api/listings/my` | FE không tự đếm `listing.renew.free_per_month` |
 | `autoHideRemaining` | admin report list | FE không tự tính `moderation.autohide.*` |
 | `priceReference` | `GET /api/listings/{id}` | Giá tham khảo ở màn công khai (không gọi endpoint dự đoán của chủ trọ) |

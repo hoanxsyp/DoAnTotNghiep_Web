@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { lazy, Suspense } from 'react';
 import { createBrowserRouter } from 'react-router-dom';
 import { useSelector } from 'react-redux';
@@ -12,7 +13,7 @@ import RoleRoute from '@/routes/RoleRoute';
 import PageLoader from '@/components/common/PageLoader';
 import { ROLES } from '@/constants';
 import { selectRole } from '@/redux/authSlice';
-import { tenantMenu, buildAdminMenu, buildListingManagementMenu } from '@/config/menus';
+import { tenantMenu, filterMenuByRole, buildAdminMenu, buildListingManagementMenu } from '@/config/menus';
 
 /**
  * File định tuyến trung tâm (canonical mục 12 — sitemap). Dùng createBrowserRouter (React Router v6).
@@ -91,6 +92,7 @@ const VerifyEmailPage = () => import('@/pages/auth/VerifyEmailPage');
 // ================= TENANT =================
 const ProfilePage = () => import('@/pages/tenant/ProfilePage');
 const SavedListingsPage = () => import('@/pages/tenant/SavedListingsPage');
+const TenantRentalRequestsPage = () => import('@/pages/tenant/RentalRequestsPage');
 const ViewHistoryPage = () => import('@/pages/tenant/ViewHistoryPage');
 const MessagesPage = () => import('@/pages/tenant/MessagesPage');
 const NotificationsPage = () => import('@/pages/tenant/NotificationsPage');
@@ -106,6 +108,7 @@ const CreateListingPage = () => import('@/pages/landlord/CreateListingPage');
 const EditListingPage = () => import('@/pages/landlord/EditListingPage');
 const ListingStatsPage = () => import('@/pages/landlord/ListingStatsPage');
 const ContactsPage = () => import('@/pages/landlord/ContactsPage');
+const LandlordRentalRequestsPage = () => import('@/pages/landlord/RentalRequestsPage');
 const LandlordPackagesPage = () => import('@/pages/landlord/PackagesPage');
 const LandlordPaymentsPage = () => import('@/pages/landlord/PaymentsPage');
 const PaymentResultPage = () => import('@/pages/landlord/PaymentResultPage');
@@ -146,6 +149,11 @@ const ListingManagementLayout = () => {
   return <DashboardLayout menu={buildListingManagementMenu(role)} title="Quản lý" />;
 };
 
+const TenantDashboardLayout = () => {
+  const role = useSelector(selectRole);
+  return <DashboardLayout menu={filterMenuByRole(tenantMenu, role)} title="Tài khoản" />;
+};
+
 const router = createBrowserRouter([
   // ---------- PUBLIC ----------
   {
@@ -176,12 +184,13 @@ const router = createBrowserRouter([
   {
     element: (
       <ProtectedRoute>
-        <DashboardLayout menu={tenantMenu} title="Tài khoản" />
+        <TenantDashboardLayout />
       </ProtectedRoute>
     ),
     children: [
       { path: '/tai-khoan/ho-so', element: load(ProfilePage) },
       { path: '/tai-khoan/tin-da-luu', element: load(SavedListingsPage) },
+      { path: '/tai-khoan/yeu-cau-thue', element: loadForRoles([ROLES.TENANT], TenantRentalRequestsPage) },
       { path: '/tai-khoan/lich-su-xem', element: load(ViewHistoryPage) },
       { path: '/tai-khoan/tin-nhan', element: load(MessagesPage) },
       { path: '/tai-khoan/thong-bao', element: load(NotificationsPage) },
@@ -206,6 +215,7 @@ const router = createBrowserRouter([
       { path: '/quan-ly/tin-dang/:id/sua', element: load(EditListingPage) },
       { path: '/quan-ly/tin-dang/:id/thong-ke', element: load(ListingStatsPage) },
       { path: '/quan-ly/nguoi-lien-he', element: load(ContactsPage) },
+      { path: '/quan-ly/yeu-cau-thue', element: loadForRoles([ROLES.LANDLORD, ROLES.ADMIN], LandlordRentalRequestsPage) },
       // Cùng trang với /tai-khoan/tin-nhan; API trả myRole nên dùng chung được cho chủ trọ.
       { path: '/quan-ly/tin-nhan', element: load(MessagesPage) },
       { path: '/quan-ly/goi-dich-vu', element: loadForRoles([ROLES.LANDLORD, ROLES.ADMIN], LandlordPackagesPage) },

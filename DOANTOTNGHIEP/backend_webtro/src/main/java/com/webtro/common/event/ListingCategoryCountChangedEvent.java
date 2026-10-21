@@ -6,8 +6,10 @@ package com.webtro.common.event;
  */
 public record ListingCategoryCountChangedEvent(
         Long oldCategoryId,
+        Long oldWardId,
         boolean oldPubliclyVisible,
         Long newCategoryId,
+        Long newWardId,
         boolean newPubliclyVisible
 ) {
 }

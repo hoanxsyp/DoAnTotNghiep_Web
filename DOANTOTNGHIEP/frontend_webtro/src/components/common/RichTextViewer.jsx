@@ -52,12 +52,10 @@ export default function RichTextViewer({
         }
       >
         {paragraphs.map((parts, i) => (
-          // eslint-disable-next-line react/no-array-index-key
           <Typography key={i} variant={variant} sx={{ minHeight: '1.6em', wordBreak: 'break-word' }}>
             {parts.map((part, j) =>
               URL_REGEX.test(part) ? (
                 <Link
-                  // eslint-disable-next-line react/no-array-index-key
                   key={j}
                   href={part}
                   target="_blank"

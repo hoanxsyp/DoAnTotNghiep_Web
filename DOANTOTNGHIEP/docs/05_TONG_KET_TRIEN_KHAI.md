@@ -74,7 +74,6 @@ Sau khi các container `healthy`:
 ## 5. Giới hạn phạm vi đã biết (đúng chủ đích đề án)
 
 - Thanh toán ở chế độ **SANDBOX** (mô phỏng có ký HMAC), không tích hợp cổng thật (đúng §13.2).
-- Một số thao tác admin nâng cao chưa có endpoint (hàng loạt/bulk, import khu vực CSV, một vài thao tác
-  hạn chế chủ trọ) — frontend đánh dấu `TODO-BE`, không ảnh hưởng luồng chính.
+- Import khu vực của Admin nhận tệp JSON đúng schema API; frontend không còn luồng giả lập hay marker `TODO-BE`.
 - AI dùng rule-based/thống kê trong Java (đúng §13.2: "không cần thuật toán phức tạp"), có thể nâng cấp
   lên mô hình ML thật vì đã tách sau interface.

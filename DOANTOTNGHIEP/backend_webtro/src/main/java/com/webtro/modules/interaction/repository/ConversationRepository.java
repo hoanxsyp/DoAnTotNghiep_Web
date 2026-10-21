@@ -19,25 +19,53 @@ public interface ConversationRepository extends JpaRepository<Conversation, Long
     /** Tìm hội thoại đang tồn tại theo tin + tenant (tránh tạo trùng — {@code uk_conversations_listing_tenant}). */
     Optional<Conversation> findByListingIdAndTenantIdAndDeletedAtIsNull(Long listingId, Long tenantId);
 
-    /** Danh sách hội thoại của người thuê, mới nhất trước. */
-    Page<Conversation> findByTenantIdAndDeletedAtIsNullOrderByLastMessageAtDesc(Long tenantId, Pageable pageable);
-
-    /** Danh sách hội thoại của chủ trọ, mới nhất trước. */
+    /** Apply membership and optional filters before pagination. */
     @Query(value = """
-            SELECT c
-            FROM Conversation c, Listing l
-            WHERE l.id = c.listingId
-              AND l.ownerId = :landlordId
-              AND c.deletedAt IS NULL
-            ORDER BY c.lastMessageAt DESC
+            SELECT c FROM Conversation c, Listing l
+            WHERE l.id = c.listingId AND c.deletedAt IS NULL
+              AND ((:role = 'AS_TENANT' AND c.tenantId = :userId)
+                OR (:role = 'AS_LANDLORD' AND l.ownerId = :userId)
+                OR (:role = 'ALL' AND (c.tenantId = :userId OR l.ownerId = :userId)))
+              AND (:listingId IS NULL OR c.listingId = :listingId)
+              AND (:unreadOnly = false
+                OR (c.tenantId = :userId AND c.tenantUnreadCount > 0)
+                OR (l.ownerId = :userId AND c.landlordUnreadCount > 0))
             """,
             countQuery = """
-            SELECT COUNT(c)
-            FROM Conversation c, Listing l
-            WHERE l.id = c.listingId
-              AND l.ownerId = :landlordId
-              AND c.deletedAt IS NULL
+            SELECT COUNT(c) FROM Conversation c, Listing l
+            WHERE l.id = c.listingId AND c.deletedAt IS NULL
+              AND ((:role = 'AS_TENANT' AND c.tenantId = :userId)
+                OR (:role = 'AS_LANDLORD' AND l.ownerId = :userId)
+                OR (:role = 'ALL' AND (c.tenantId = :userId OR l.ownerId = :userId)))
+              AND (:listingId IS NULL OR c.listingId = :listingId)
+              AND (:unreadOnly = false
+                OR (c.tenantId = :userId AND c.tenantUnreadCount > 0)
+                OR (l.ownerId = :userId AND c.landlordUnreadCount > 0))
             """)
-    Page<Conversation> findByLandlordIdAndDeletedAtIsNullOrderByLastMessageAtDesc(
-            @Param("landlordId") Long landlordId, Pageable pageable);
+    Page<Conversation> findAccessible(@Param("userId") Long userId,
+                                      @Param("role") String role,
+                                      @Param("unreadOnly") boolean unreadOnly,
+                                      @Param("listingId") Long listingId,
+                                      Pageable pageable);
+
+    /** Number of accessible conversations containing unread messages. */
+    @Query("""
+            SELECT COUNT(c) FROM Conversation c, Listing l
+            WHERE l.id = c.listingId AND c.deletedAt IS NULL
+              AND ((c.tenantId = :userId AND c.tenantUnreadCount > 0)
+                OR (l.ownerId = :userId AND c.landlordUnreadCount > 0))
+            """)
+    long countUnreadConversations(@Param("userId") Long userId);
+
+    /** Total unread messages across every conversation visible to the user. */
+    @Query("""
+            SELECT COALESCE(SUM(
+                CASE WHEN c.tenantId = :userId THEN c.tenantUnreadCount ELSE 0 END
+                + CASE WHEN l.ownerId = :userId THEN c.landlordUnreadCount ELSE 0 END
+            ), 0)
+            FROM Conversation c, Listing l
+            WHERE l.id = c.listingId AND c.deletedAt IS NULL
+              AND (c.tenantId = :userId OR l.ownerId = :userId)
+            """)
+    long sumUnreadMessages(@Param("userId") Long userId);
 }

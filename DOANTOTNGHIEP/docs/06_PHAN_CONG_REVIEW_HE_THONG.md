@@ -1263,7 +1263,7 @@ Vai trò: biến hàng chục tham số lọc (khu vực, giá, diện tích, ti
 
 **Business logic — tính điểm "tin liên quan" (`related()`)**: lấy ứng viên cùng tỉnh, còn hạn, public, khác chính nó, giá trong dải ±30% (query DB thô để giảm tập ứng viên, tối đa `min(size*5, 24*5=... )` giới hạn `RELATED_CANDIDATE_CAP=60`), sau đó tính điểm khớp **tại tầng ứng dụng** (Java, không phải SQL) theo trọng số cộng dồn: cùng quận/huyện +0.40 (khác quận nhưng cùng tỉnh +0.10), cùng loại tin +0.35, giá lệch ≤10% +0.25 (≤20% +0.15, còn lại +0.05), diện tích lệch ≤20% +0.05 — rồi sắp giảm dần theo `matchScore`, cắt còn `size` (mặc định 12, tối đa 24).
 
-**Event**: sau mỗi lần tìm kiếm **có đăng nhập**, service publish `SearchPerformedEvent(userId, keyword, criteriaJson, resultCount, null)` (JSON hóa toàn bộ `ListingSearchRequest` bằng Jackson) — theo comment trong code là để "lưu lịch sử tìm kiếm phi đồng bộ, không chặn response" (xem mục 10 — **hiện KHÔNG có listener nào xử lý sự kiện này**).
+**Event**: sau mỗi lần tìm kiếm **có đăng nhập**, service publish `SearchPerformedEvent(userId, keyword, criteriaJson, resultCount, null)` (JSON hóa toàn bộ `ListingSearchRequest` bằng Jackson); `SearchHistoryListener` ghi sự kiện vào `search_histories` sau commit.
 
 **Cache**: không có cache riêng cho kết quả tìm kiếm (mỗi request query DB trực tiếp).
 
@@ -1326,7 +1326,7 @@ Module này **không sở hữu bảng riêng** — chỉ đọc bảng `listing
 
 Bảng `listing_amenities` được dùng trong 2 dạng `EXISTS` subquery: `hasAllAmenityIds` (khớp TẤT CẢ id trong danh sách — ngữ nghĩa AND) và `hasAmenityCode` (khớp theo mã tiện ích cố định: `BALCONY`, `AIR_CONDITIONER`, `WASHING_MACHINE`, `ELEVATOR` — nối thêm với bảng `amenities` để lấy `code`).
 
-Bảng `search_histories` (định nghĩa ở `V1__baseline_schema.sql`, migration 23) là đích lý thuyết của `SearchPerformedEvent` nhưng **thực tế không có dòng nào được ghi qua module này** — xem mục 10.
+Bảng `search_histories` (định nghĩa ở `V1__baseline_schema.sql`) là đích lưu của `SearchPerformedEvent` qua `SearchHistoryListener`.
 
 > **Note quan trọng**: bảng `listings` có `FULLTEXT INDEX ft_listings_title_description (title, description) WITH PARSER ngram` được tạo riêng ở `V10__fulltext_index.sql` (parser `ngram`, `ngram_token_size=2`, tối ưu cho tiếng Việt không dấu/tìm cụm ký tự con) — **nhưng `ListingSpecifications.keyword()` lại dùng `LIKE '%keyword%'` chứ không dùng `MATCH ... AGAINST`**. Index FULLTEXT tốn chi phí ghi (mỗi INSERT/UPDATE `title`/`description` phải cập nhật bảng từ) nhưng hiện không được tận dụng ở truy vấn thực tế — xem mục 11.
 
@@ -1369,8 +1369,8 @@ Bảng `search_histories` (định nghĩa ở `V1__baseline_schema.sql`, migrati
 
 ### 10. Các lỗi dễ gặp
 
-- **[Nghi vấn NGHIÊM TRỌNG] `sort` mặc định của FE không khớp whitelist của BE**: `SearchPage.jsx` định nghĩa `SORTS = [{ value: 'relevance,desc', label: 'Liên quan nhất' }, ...]` và `sort = searchParams.get('sort') || 'relevance,desc'` — tức là **mọi lần tải trang tìm kiếm** (kể cả không đổi gì) đều gửi `sort=relevance,desc` lên BE. Trong khi đó `ListingSortOption.RELEVANCE` có `param = "RELEVANCE"` (chữ hoa, không có `,desc`), và `ListingSortOption.from()` so khớp bằng `param.equalsIgnoreCase(normalized)` — `"RELEVANCE".equalsIgnoreCase("relevance,desc")` là **false**. Nếu đúng như vậy, **toàn bộ trang tìm kiếm sẽ luôn nhận lỗi 400 `INVALID_SORT_FIELD` ngay từ lần tải đầu tiên** trừ khi có tầng map nào đó ở `searchApi.js` (đã đọc — KHÔNG có map, gửi thẳng `params.sort`). Đây là điểm **phải verify bằng test API thật đầu tiên** khi bắt đầu review module này.
-- **`SearchPerformedEvent` không có listener**: đã grep toàn bộ backend, xác nhận `SearchHistoryRepository` (module `interaction`) không hề có lệnh `.save(...)` nào được gọi ở bất kỳ đâu — bảng `search_histories` **không bao giờ có dữ liệu** dù service có publish event kèm comment "lưu lịch sử tìm kiếm phi đồng bộ". Hệ quả dây chuyền sang Module 4: tín hiệu "tìm kiếm gần đây" (`InteractionSignalGateway.recentSearchSignals`) dùng để cá nhân hóa gợi ý luôn trả về danh sách rỗng — phần "search behavior" trong công thức gợi ý nội dung (content-based) không bao giờ có tác dụng trong thực tế.
+- **Đã xử lý:** FE gửi sort mặc định `RELEVANCE`, khớp `ListingSortOption.RELEVANCE`; request mặc định không còn bị `INVALID_SORT_FIELD`.
+- **Đã xử lý:** `SearchHistoryListener` nhận `SearchPerformedEvent` sau commit và ghi `search_histories`; tín hiệu tìm kiếm gần đây đã có nguồn dữ liệu thật.
 - **FULLTEXT index không được dùng**: `V10__fulltext_index.sql` tạo `ft_listings_title_description` nhưng `keyword()` specification dùng `LIKE '%...%'` (2 lần LIKE OR trên `title`/`description`) — với `%` ở đầu chuỗi, MySQL **không dùng được index B-Tree hay FULLTEXT**, luôn quét toàn bảng (`LIKE` scan). Trên tập dữ liệu lớn, đây là truy vấn chậm nhất trong toàn bộ API tìm kiếm.
 - **Không có facet count**: FE hiển thị `Chip` cho từng filter đang bật nhưng không có số lượng tin theo từng lựa chọn (vd không biết "Chung cư mini" còn bao nhiêu tin trước khi bấm) — không phải bug nhưng dễ bị hỏi trong review UX.
 - **`radiusKm` bounding-box là hình chữ nhật, không phải hình tròn**: tin ở góc hộp bao (xa tâm hơn bán kính thật theo đường chim bay) vẫn lọt qua bộ lọc "trong bán kính X km" — sai lệch tăng dần khi `radiusKm` lớn.
@@ -1434,7 +1434,7 @@ Vai trò: (1) cung cấp API công khai đọc nhanh, có cache Redis, cho form 
 **Business logic đáng chú ý**:
 - `CategoryServiceImpl.hide()` chặn ẩn danh mục nếu `listingCount > 0` (`CATEGORY_IN_USE`) — đây là "soft-hide có điều kiện", khác với `toggle()` (bật/tắt tự do, không kiểm tra `listingCount`, chỉ ghi log + trả về `affectedListingCount` mang tính thông báo).
 - Không có endpoint xóa cứng (`DELETE`) cho khu vực hành chính — chỉ có `toggle` (bật/tắt hỗ trợ đăng tin) vì dữ liệu hành chính là dữ liệu tham chiếu lâu dài, xóa sẽ vỡ FK ở `listings`/`prediction_histories`.
-- `listing_count` trên `categories/provinces/districts/wards` là cột đếm sẵn (denormalized) — **không thấy job/trigger nào cập nhật lại cột này trong các file đã đọc** (cần xác nhận thêm — xem mục 11).
+- `listing_count` trên `categories/provinces/districts/wards` là cột đếm sẵn (denormalized): event sau commit cập nhật khi listing đổi public state/category/ward; V17 và V24 backfill dữ liệu cũ.
 
 ### 4. Luồng hoạt động
 
@@ -1545,15 +1545,14 @@ flowchart TD
 
 ### 10. Các lỗi dễ gặp
 
-- **[Nghi vấn NGHIÊM TRỌNG] `toggle*` — FE gửi PUT không có body, BE bắt buộc `active` @NotNull**: `adminApi.js` định nghĩa `toggleCategory: (id) => unwrap(axiosClient.put(...toggle))`, `toggleAmenity`, `toggleProvince` — **không truyền `payload`/body nào cả**. Trong khi `AdminCategoryController.toggle/AdminAmenityController.toggle/AdminLocationController.toggleProvince/toggleDistrict/toggleWard` đều khai `@Valid @RequestBody ToggleRequest request`, và `ToggleRequest.active` có `@NotNull`. Gửi PUT không có body cho một tham số `@RequestBody` bắt buộc thường khiến Spring trả lỗi 400 (`HttpMessageNotReadableException: Required request body is missing`) TRƯỚC KHI chạy tới Bean Validation. Nếu đúng vậy, **nút "Hiển thị/Ẩn" (Switch) trên cả 3 trang `CategoriesPage`, `AmenitiesPage`, `AreasPage` đều không hoạt động** — đây là điểm phải kiểm tra API thật đầu tiên khi review Module 3.
-- **[Nghi vấn NGHIÊM TRỌNG] Import khu vực: FE gửi file multipart, BE chỉ nhận JSON body**: `AreasPage.jsx` xây `FormData` (`fd.append('file', file)`, input `accept=".csv,.json,.xlsx"`) và gọi `adminApi.importAreas(fd)` → `axiosClient.post('/admin/areas/import', payload)`. Trong khi `AdminLocationController.importAreas` khai rõ trong Javadoc "**Không dùng CSV/Excel**" và nhận `@Valid @RequestBody AreaImportRequest request` — một object JSON có cấu trúc cây `provinces[].districts[].wards[]` với từng field `code/name/type/supported/latitude/longitude`, **không phải một file upload**. Gửi `FormData` (Content-Type `multipart/form-data`) tới một endpoint mong đợi `application/json` sẽ không deserialize được — tính năng "Nhập từ file" trên UI gần như chắc chắn không hoạt động như thiết kế của BE (BE không có cơ chế parse CSV/Excel nào cả, đúng như Javadoc đã tự nhận).
-- **Ngưỡng validate lệch giữa FE và BE cho danh mục**: `CategoriesPage.jsx` dùng `yup` cho phép `name` tối đa **100** ký tự, nhưng `CreateCategoryRequest.name` (`@Size(min=2, max=50)`) và cột DB `categories.name VARCHAR(50)` chỉ cho **50** ký tự — nhập tên 51–100 ký tự sẽ pass validate ở FE nhưng bị BE trả 400 khi submit, gây trải nghiệm "form hợp lệ nhưng submit vẫn lỗi".
-- **`code` là ô nhập text tự do ở FE nhưng là enum cố định ở BE**: `CategoriesPage.jsx` chỉ gợi ý qua `placeholder={Object.keys(CATEGORY_CODES)[0]}`, không phải dropdown — người dùng gõ sai chính tả (vd `Boarding_House` thay vì `BOARDING_HOUSE`) sẽ nhận lỗi JSON parse chung chung thay vì message field-level rõ ràng.
-- **`catalogApi.getPublicConfigs()` luôn trả `Promise.resolve(null)`** (tự nhận trong comment: "Backend không expose cấu hình công khai") — `ListingWizard.jsx` dựa vào API này để lấy `listing.title.max`, `listing.image.min/max`... nhưng thực tế luôn dùng **giá trị mặc định hardcode ở FE** (`{ 'listing.title.min': 10, ... }`). Nếu Admin đổi các ngưỡng này trong `SystemConfigPage`, form đăng tin ở FE **không bao giờ cập nhật theo** — chỉ BE (nguồn sự thật thật sự) áp dụng ngưỡng mới, gây lệch UX giữa "FE cho phép nhập" và "BE từ chối khi submit" (hoặc ngược lại).
+- **Đã xử lý:** mọi switch category/amenity/province/banned-keyword gửi body `{ active }` đúng DTO backend.
+- **Đã xử lý:** UI import khu vực chỉ nhận `.json`, parse nội dung rồi gửi JSON đúng `AreaImportRequest`.
+- **Đã xử lý:** tên danh mục giới hạn 50 ký tự ở cả FE/BE; `CategoryCode` dùng select từ `CATEGORY_CODES`, không còn nhập tự do.
+- **Đã xử lý:** `GET /api/content/listing-configs` công khai đúng nhóm ràng buộc an toàn; `ListingWizard` đọc cấu hình thật và vẫn có fallback khi API lỗi.
 
 ### 11. Các điểm cần review
 
-- **Business**: `categories/provinces/districts/wards.listing_count` là cột đếm sẵn — cần xác nhận có job/trigger/service nào cập nhật khi tin được tạo/xóa/đổi khu vực hay không; nếu không, đây là cột "chết", các UI hiển thị "Số tin" trên `CategoriesPage`/`AreasPage` sẽ luôn sai theo thời gian.
+- **Đã xử lý:** category dùng `CategoryListingCountListener`; ward/district/province dùng `LocationListingCountListener`; V17/V24 backfill dữ liệu cũ theo cùng quy tắc public visibility.
 - **DB/Kiến trúc**: `ListingServiceImpl` tiêm thẳng `CategoryRepository/ProvinceRepository/DistrictRepository/WardRepository/AmenityRepository` (repository của module `catalog`) thay vì gọi qua `CategoryService/ProvinceService/AmenityService` (service interface, giống cách `PriceEstimationServiceImpl` đang làm đúng) — vi phạm nguyên tắc "gọi chéo module qua interface/gateway", tạo phụ thuộc chặt (tight coupling) giữa `listing` và tầng persistence của `catalog`. Nên đối chiếu với "luật 4" mà comment code trong `CategoryServiceImpl` có nhắc tới ("tránh chạm repository của module listing").
 - **Validation**: đồng bộ lại ngưỡng `name`/`description`/`code` giữa `yup` (FE) và Bean Validation/cột DB (BE) cho cả 3 trang Admin catalog.
 - **Security**: endpoint `/api/admin/areas/import` chấp nhận `latitude/longitude` tự do cho từng node — không thấy ràng buộc biên tọa độ (khác với `ListingCreateRequest` có `@DecimalMin/@DecimalMax` theo lãnh thổ VN) — nên bổ sung để tránh Admin nhập nhầm tọa độ vô nghĩa lan ra toàn bộ tin thuộc khu vực đó (ảnh hưởng tính bán kính ở Module 2).
@@ -2049,7 +2048,7 @@ Module này không sở hữu bảng riêng — chỉ đọc:
 - □ Test UI — thao tác trực tiếp trên FE (không chỉ đọc code) cho: `ListingWizard` (đủ 6 bước, cả nhánh lỗi validate từng bước), `SearchPage` (đủ tổ hợp filter + sort), `ModerationQueuePage` (2 tab, duyệt/từ chối/ẩn/gỡ cờ), `AreasPage`/`CategoriesPage`/`AmenitiesPage` (toggle + import), `OverviewPage` (đổi khoảng ngày).
 - □ Kiểm tra DB — sau mỗi hành động UI, đối chiếu trực tiếp bảng `listings`, `moderation_actions`, `audit_logs`, `recommendation_logs`, `prediction_histories`, `search_histories` để chắc chắn dữ liệu ghi đúng, đủ.
 - □ So sánh Business — đối chiếu hành vi thực tế với các quy tắc đã tài liệu hóa ở mục 4/5 mỗi module (đặc biệt bảng luật `ListingStateMachine`, công thức Recommendation, mở rộng phạm vi Price WARD→DISTRICT→PROVINCE).
-- □ Ghi Bug — ưu tiên báo cáo theo thứ tự mức độ nghiêm trọng đã đánh dấu trong tài liệu này: (1) mismatch `LandlordDashboardResponse` (Module 6), (2) mismatch `AdminListingResponse` ở hàng đợi kiểm duyệt (Module 5), (3) nghi vấn `sort` mặc định Search (Module 2), (4) nghi vấn `toggle`/`import` Catalog (Module 3), (5) `SearchPerformedEvent` không có listener (Module 2 & 4).
+- □ Ghi Bug — các lỗi dashboard, sort Search, toggle/import Catalog và listener lịch sử tìm kiếm trong bản review ban đầu đã được xử lý; tiếp tục kiểm tra mismatch `AdminListingResponse` ở hàng đợi kiểm duyệt.
 - □ Ghi Improvement — các điểm ở mục 11 mỗi module không phải bug chặn nhưng đáng cải thiện (đồng bộ ngưỡng validate FE/BE, đưa trọng số Recommendation vào SystemConfig, bổ sung field còn thiếu, dọn cột DB chết `clicked_at`/`is_applied`...).
 - □ Tổng hợp báo cáo — gộp toàn bộ finding theo mẫu chung của nhóm, kèm mức độ ưu tiên và module ảnh hưởng, gửi lại cho Technical Lead trước khi merge.
 
@@ -2224,7 +2223,7 @@ flowchart TD
 ### 8. Dependency
 
 - **Phụ thuộc vào**: `ListingGateway` (module listing — lấy brief tin, cập nhật `favorite_count`), `SystemConfigService` (đọc `view.dedup_minutes`), Redis gián tiếp qua `RateLimitService`.
-- **Được phụ thuộc bởi**: `ReviewServiceImpl.hasEverContacted` KHÔNG dùng favorite nhưng `HistoryService` cung cấp dữ liệu nền cho **AI Recommendation** (content-based dựa trên hành vi xem/lưu — xem `modules/ai/spi/InteractionSignalGateway`), và **Chatbot** gián tiếp qua tìm kiếm tương tự.
+- **Được phụ thuộc bởi**: `HistoryService` cung cấp dữ liệu nền cho **AI Recommendation** (content-based dựa trên hành vi xem/lưu — xem `modules/ai/spi/InteractionSignalGateway`) và **Chatbot** gián tiếp qua tìm kiếm tương tự. `ReviewServiceImpl` không phụ thuộc Favorite/History để xét quyền đánh giá.
 - Frontend `SavedListingsPage`/`ViewHistoryPage` phụ thuộc `favoriteApi.js`/`historyApi.js`.
 
 ### 9. Các trường hợp cần kiểm tra
@@ -2255,7 +2254,7 @@ flowchart TD
 
 ### 11. Các điểm cần review
 
-- **Business**: filter `from/to` trên lịch sử xem không hoạt động — cần quyết định: (a) bổ sung `@Query` lọc ngày ở repository, hay (b) bỏ tham số khỏi API/FE để tránh gây hiểu nhầm.
+- **Đã xử lý:** filter `from/to` của lịch sử xem được áp tại DB trước phân trang.
 - **Performance**: `HistoryServiceImpl.listViews` gọi `favoriteRepository.existsByUserIdAndListingIdAndDeletedAtIsNull` **cho từng item trong trang** (N+1 query nhỏ, N ≤ 20/trang nên chấp nhận được nhưng nên `IN` batch nếu tăng page size).
 - **DB**: thiếu cơ chế đối soát định kỳ cho `favorite_count` (không có job); nếu có lỗi runtime giữa bước INSERT và bước gọi gateway cập nhật đếm (transaction rollback khác nhau giữa 2 module) có thể lệch số — kiểm tra `@Transactional` bao trọn cả 2 bước chưa (có, cùng 1 transaction).
 - **API naming**: `HistoryController` gộp cả view và search dưới `/api` gốc (`/api/history/views`, `/api/search/histories`) — không nhất quán prefix (`history/` vs `search/`), nên thống nhất `/api/history/*` nếu refactor.
@@ -2274,9 +2273,9 @@ flowchart TD
 
 ### 1. Module này dùng để làm gì?
 
-Cho phép người thuê liên hệ chủ trọ theo 3 kênh: **xem số điện thoại** (`VIEW_PHONE`), **gửi form liên hệ** (`FORM`, có nội dung + SĐT callback), và **bắt đầu chat nội bộ** (`START_CHAT` → tạo `Conversation` + tin nhắn đầu tiên). Đây là module cầu nối giữa nhu cầu thuê trọ thực tế và chủ nhà — vai trò tương đương "cổng giao tiếp" chính của toàn nền tảng, đồng thời ghi `contact_logs` để (a) tính `listings.contact_count`, (b) làm điều kiện cho tính năng đánh giá (`review.require_contact`), (c) chống spam liên hệ.
+Cho phép người thuê liên hệ chủ trọ theo 3 kênh: **xem số điện thoại** (`VIEW_PHONE`), **gửi form liên hệ** (`FORM`, có nội dung + SĐT callback), và **bắt đầu chat nội bộ** (`START_CHAT` → tạo `Conversation` + tin nhắn đầu tiên). Đây là module cầu nối giữa nhu cầu thuê trọ thực tế và chủ nhà, đồng thời ghi `contact_logs` để tính `listings.contact_count`, phục vụ thống kê và chống spam liên hệ. Từ V23, module này không quyết định quyền đánh giá.
 
-**Nếu hỏng**: người thuê không thể liên hệ chủ trọ (chức năng lõi của một sàn cho thuê trọ ngưng hoạt động), chủ trọ không biết ai quan tâm tin của mình, tính năng chat nội bộ (thay thế Zalo/gọi điện) mất tác dụng, hệ thống đánh giá bị khóa (vì yêu cầu đã từng liên hệ).
+**Nếu hỏng**: người thuê không thể liên hệ chủ trọ, chủ trọ không biết ai quan tâm tin của mình và tính năng chat nội bộ (thay thế Zalo/gọi điện) mất tác dụng. Quyền đánh giá không phụ thuộc module này.
 
 ### 2. Chức năng Frontend
 
@@ -2388,7 +2387,7 @@ flowchart TD
 ### 8. Dependency
 
 - **Phụ thuộc**: `ListingGateway`, `UserGateway`, `BannedKeywordGateway` (module moderation), `SystemConfigService` (`contact.dedup_minutes`, `spam.message_per_minute`), `NotificationService` (module notification, chỉ gọi không sửa), Redis (`RateLimitService`).
-- **Được phụ thuộc bởi**: `ReviewServiceImpl.hasEverContacted` dùng `ContactLogRepository` để kiểm tra điều kiện đánh giá (`review.require_contact`); FE `ListingDetailPage` (Người 2 sở hữu phần còn lại của trang).
+- **Được phụ thuộc bởi**: FE `ListingDetailPage` dùng API liên hệ. `ReviewServiceImpl` không còn phụ thuộc `ContactLogRepository`; quyền đánh giá do `RentalEligibilityGateway` xác định.
 
 ### 9. Các trường hợp cần kiểm tra
 
@@ -2410,7 +2409,7 @@ flowchart TD
 
 ### 10. Các lỗi dễ gặp
 
-- **`GET /api/landlord/contacts` bỏ qua bộ lọc `listingId`, `type`, `from`, `to` ở tầng truy vấn thật**: controller/service nhận đủ tham số, nhưng đoạn code chỉ dùng `listingId` để **kiểm tra quyền sở hữu** (nếu `listingId != null` mà không phải tin của mình → 403), sau đó câu query thực thi là `contactLogRepository.findByOwnerIdAndDeletedAtIsNull(ownerId, pageable)` — **không truyền `listingId`/`type`/`from`/`to` vào query**. Kết quả: chủ trọ chọn lọc theo tin/kênh/ngày trên UI nhưng bảng vẫn hiển thị TẤT CẢ liên hệ của mọi tin. Đây là lỗi thật cần xác nhận với BE — so sánh với docstring trong code (`"lọc listingId/type/ngày áp dụng ở tầng bộ nhớ trên trang hiện tại"`) nhưng thực tế không có bước lọc bộ nhớ nào được viết.
+- **Đã xử lý:** `GET /api/landlord/contacts` truyền `listingId`, `type`, `from`, `to` vào truy vấn DB; phân trang, `totalElements` và summary dùng cùng điều kiện lọc.
 - Danh sách hội thoại role=`ALL` gộp tối đa 200 hội thoại mỗi vai trò rồi phân trang thủ công trong bộ nhớ (`MERGE_CAP=200`) — tài khoản có nhiều hội thoại hơn sẽ bị cắt bớt kết quả một cách âm thầm (không lỗi, chỉ thiếu dữ liệu).
 - `markRead` chỉ quét tối đa 500 tin gần nhất (`READ_SCAN_CAP`) — hội thoại rất dài với > 500 tin chưa đọc sẽ còn sót tin chưa được đánh dấu đọc.
 - Không có WebSocket/SSE — `MessagesPage.jsx` không tự động nhận tin mới real-time, phải tự tải lại (kiểm tra UX có polling hay yêu cầu người dùng bấm làm mới).
@@ -2418,7 +2417,7 @@ flowchart TD
 
 ### 11. Các điểm cần review
 
-- **Business (nghiêm trọng)**: xác nhận và sửa lỗi filter không hoạt động ở `GET /api/landlord/contacts` (mục 10) — ảnh hưởng trực tiếp trải nghiệm chủ trọ khi có nhiều tin đăng.
+- **Đã xử lý:** `listingId/type/from/to` của `GET /api/landlord/contacts` được áp tại DB; tổng trang và summary không còn đếm theo riêng trang hiện tại.
 - **Concurrency**: `Conversation` không có `@Version` (optimistic locking) — 2 tin nhắn gửi đồng thời có thể ghi đè bộ đếm `messageCount`/`unreadCount` (lost update kinh điển: đọc → cộng → ghi không atomic). Nên cân nhắc `UPDATE ... SET count = count + 1` ở tầng SQL hoặc thêm `@Version`.
 - **Performance**: `listConversations(role=ALL)` tải tối đa 400 bản ghi vào bộ nhớ mỗi request rồi sort/paginate thủ công — không mở rộng tốt cho landlord có hàng nghìn hội thoại; nên có finder DB gộp hoặc UNION query.
 - **API response**: `POST /api/conversations` trả `200` hay `201` tùy `alreadyExisted` — kiểm tra FE có xử lý đúng cả 2 status code (nhiều client chỉ check `res.ok`, không phân biệt).
@@ -2441,7 +2440,7 @@ flowchart TD
 Hai tính năng tương tác công khai trên trang chi tiết tin:
 
 - **Comment (bình luận — CMT-01..04)**: người dùng đã đăng nhập bình luận dưới tin đăng, hỗ trợ trả lời 1 cấp (không cho nested sâu hơn), tự động kích hoạt **AI phân tích cảm xúc** sau khi tạo/sửa (qua event, không đồng bộ).
-- **Review (đánh giá — REV-01..03)**: người dùng đã từng liên hệ tin (tùy cấu hình `review.require_contact`) được để lại 1–5 sao + nội dung (bắt buộc nội dung nếu rating ≤ 2). Điểm trung bình tin/chủ trọ được cập nhật **tăng dần (incremental)** ngay trong transaction.
+- **Review (đánh giá — REV-01..03)**: chỉ người có quan hệ thuê `RENTED` hoặc `CHECKED_OUT` với tin được để lại 1–5 sao + nội dung (bắt buộc nội dung nếu rating ≤ 2). Điểm trung bình tin/chủ trọ được cập nhật **tăng dần (incremental)** ngay trong transaction.
 - **Kiểm duyệt admin (ADM-11)**: Moderator/Admin (`COMMENT_MODERATE`/`REVIEW_MODERATE`) ẩn/khôi phục bình luận & đánh giá vi phạm, đánh dấu spam, xử lý hàng loạt bình luận.
 
 **Vai trò trong hệ thống**: đây là nguồn "tín hiệu chất lượng" quan trọng nhất cho tin đăng — vừa phục vụ người dùng tham khảo, vừa là input chính cho AI cảm xúc (một hệ thống chống lừa đảo/tin giả gián tiếp).
@@ -2497,7 +2496,7 @@ flowchart TD
     N/O --> P[201 Created + CommentResponse]
 ```
 
-**Luồng tạo đánh giá (REV-01)**: kiểm tra `publiclyVisible`, không tự đánh giá tin mình, chưa từng đánh giá tin này (`uk_reviews_user_listing`), điều kiện `review.require_contact` (đã từng có `ContactLog` chưa), validate nội dung bắt buộc khi rating ≤ 2 → lưu `Review` → **cập nhật tăng dần** trung bình sao của tin (`applyListingAggregateOnAdd`) và của chủ trọ (`applyLandlordAggregateOnAdd`) → thông báo chủ trọ `NEW_REVIEW`.
+**Luồng tạo đánh giá (REV-01)**: không tự đánh giá tin mình, chưa từng đánh giá tin này (`uk_reviews_user_listing`), kiểm tra `RentalEligibilityGateway.hasRentalHistory()` với trạng thái `RENTED`/`CHECKED_OUT`, validate nội dung bắt buộc khi rating ≤ 2 → lưu `Review` → **cập nhật tăng dần** trung bình sao của tin (`applyListingAggregateOnAdd`) và của chủ trọ (`applyLandlordAggregateOnAdd`) → thông báo chủ trọ `NEW_REVIEW`.
 
 ### 5. Dữ liệu chạy như thế nào
 
@@ -2544,7 +2543,7 @@ flowchart TD
 | DELETE | `/api/comments/{id}` | — | `204` | JWT | `COMMENT_CREATE` hoặc `COMMENT_MODERATE` | như trên |
 | GET | `/api/listings/{id}/reviews` | Query `rating?, Pageable` | `ReviewPageResponse` | Public | — | — |
 | GET | `/api/listings/{id}/reviews/eligibility` | — | `ReviewEligibilityResponse` | JWT | `isAuthenticated()` | — |
-| POST | `/api/listings/{id}/reviews` | `CreateReviewRequest{rating, content?}` | `ReviewResponse` (201) | JWT | `REVIEW_CREATE` | `REVIEW_SELF_FORBIDDEN`, `REVIEW_ALREADY_EXISTS` (409), `REVIEW_NOT_ELIGIBLE`, `REVIEW_CONTENT_REQUIRED` |
+| POST | `/api/listings/{id}/reviews` | `CreateReviewRequest{rating, content?}` | `ReviewResponse` (201) | JWT | `REVIEW_CREATE` | `REVIEW_SELF_FORBIDDEN`, `REVIEW_ALREADY_EXISTS` (409), `REVIEW_RENTAL_REQUIRED`, `REVIEW_CONTENT_REQUIRED` |
 | PUT | `/api/reviews/{id}` | `CreateReviewRequest` | `ReviewResponse` | JWT | `REVIEW_CREATE` | `REVIEW_FORBIDDEN`, `REVIEW_EDIT_WINDOW_EXPIRED` |
 | DELETE | `/api/reviews/{id}` | Query `reason?` (bắt buộc nếu là moderator ẩn hộ) | `204` | JWT | `REVIEW_CREATE` hoặc `REVIEW_MODERATE` | `MODERATION_REASON_REQUIRED` |
 | GET | `/api/reviews/my` | `Pageable` | `PageResponse<ReviewResponse>` | JWT | `REVIEW_CREATE` | **luôn trả rỗng — xem mục 10** |
@@ -2562,7 +2561,7 @@ flowchart TD
 
 ### 8. Dependency
 
-- **Phụ thuộc**: `ListingGateway`, `UserGateway`, `BannedKeywordGateway`, `AuditLogService`, `SystemConfigService` (`comment.edit_window_minutes`, `review.edit_window_hours`, `review.require_contact`, `spam.comment_per_minute`), `ContactLogRepository` (kiểm tra điều kiện review).
+- **Phụ thuộc**: `ListingGateway`, `UserGateway`, `RentalEligibilityGateway`, `BannedKeywordGateway`, `AuditLogService`, `SystemConfigService` (`comment.edit_window_minutes`, `review.edit_window_hours`, `spam.comment_per_minute`).
 - **Được phụ thuộc bởi**: **Module AI Sentiment** (lắng nghe `CommentCreatedEvent`, đọc/ghi `comments.sentiment_*` qua `CommentDataGateway`), **RPT-02** (report nhắm vào comment), **ADM-11** (trang kiểm duyệt admin dùng trực tiếp service này).
 
 ### 9. Các trường hợp cần kiểm tra
@@ -2578,7 +2577,7 @@ flowchart TD
 - [ ] Tài khoản bị `isCommentSuspended` cố bình luận → 403 `COMMENT_SUSPENDED`.
 - [ ] Đánh giá tin của chính mình → 422/409 `REVIEW_SELF_FORBIDDEN`.
 - [ ] Đánh giá lần 2 cùng 1 tin → 409 `REVIEW_ALREADY_EXISTS`.
-- [ ] Đánh giá khi chưa từng liên hệ và `review.require_contact=true` → 422 `REVIEW_NOT_ELIGIBLE`.
+- [ ] Đánh giá khi không có quan hệ thuê `RENTED`/`CHECKED_OUT` → 422 `REVIEW_RENTAL_REQUIRED`.
 - [ ] Đánh giá rating=1 không nhập content → 400 `REVIEW_CONTENT_REQUIRED`; rating=5 không nhập content → OK.
 - [ ] `GET /api/reviews/my` — **kiểm tra chắc chắn để lộ bug trả rỗng bất kể có đánh giá hay không** (mục 10).
 - [ ] Sửa/xóa đánh giá ngoài cửa sổ `review.edit_window_hours` → lỗi tương ứng.
@@ -3099,7 +3098,7 @@ flowchart TD
 ### 8. Dependency
 
 - **Phụ thuộc**: `SystemConfigRepository`, Redis (cache), `AuditLogService`.
-- **Được phụ thuộc bởi TẤT CẢ module khác trong phạm vi Người 3** (và nhiều module ngoài phạm vi): Favorite/History (`view.dedup_minutes`), Contact (`contact.dedup_minutes`), Comment (`comment.edit_window_minutes`, `spam.comment_per_minute`), Review (`review.edit_window_hours`, `review.require_contact`), Conversation (`spam.message_per_minute`), Payment (`payment.order_expiry_minutes`, `payment.callback_max_skew_seconds`, `promotion.max_priority`), AI (toàn bộ `ai.*` — nhưng quản trị qua `AdminAiController` riêng, không qua controller này).
+- **Được phụ thuộc bởi TẤT CẢ module khác trong phạm vi Người 3** (và nhiều module ngoài phạm vi): Favorite/History (`view.dedup_minutes`), Contact (`contact.dedup_minutes`), Comment (`comment.edit_window_minutes`, `spam.comment_per_minute`), Review (`review.edit_window_hours`), Conversation (`spam.message_per_minute`), Payment (`payment.order_expiry_minutes`, `payment.callback_max_skew_seconds`, `promotion.max_priority`), AI (toàn bộ `ai.*` — nhưng quản trị qua `AdminAiController` riêng, không qua controller này). Quyền review dựa trên `rental_requests`; key `review.require_contact` đã được V24 xóa.
 
 ### 9. Các trường hợp cần kiểm tra
 

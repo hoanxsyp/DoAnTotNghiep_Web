@@ -28,7 +28,6 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -68,7 +67,7 @@ public class LandlordDashboardServiceImpl implements LandlordDashboardService {
         Instant to = today.plusDays(1).atStartOfDay(DASHBOARD_ZONE).toInstant();
         Instant previousFrom = from.minus(Duration.ofDays(days));
 
-        Map<ListingStatus, Long> statusCounts = statusCounts(userId);
+        Map<ListingStatus, Long> statusCounts = listingRepository.countMapByStatusForOwner(userId);
         long activeCount = count(statusCounts, ListingStatus.ACTIVE);
         long pendingCount = count(statusCounts, ListingStatus.PENDING);
         long totalListings = listingRepository.countByOwner(userId);
@@ -112,16 +111,6 @@ public class LandlordDashboardServiceImpl implements LandlordDashboardService {
                     .warningCount(lp.getWarningCount());
         }
         return builder.build();
-    }
-
-    private Map<ListingStatus, Long> statusCounts(Long userId) {
-        Map<ListingStatus, Long> counts = new EnumMap<>(ListingStatus.class);
-        for (Object[] row : listingRepository.countByStatusForOwner(userId)) {
-            if (row[0] instanceof ListingStatus status) {
-                counts.put(status, ((Number) row[1]).longValue());
-            }
-        }
-        return counts;
     }
 
     private Map<String, Long> legacyStatusMap(Map<ListingStatus, Long> statusCounts) {

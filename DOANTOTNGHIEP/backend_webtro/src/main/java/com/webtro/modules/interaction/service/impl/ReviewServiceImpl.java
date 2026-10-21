@@ -6,7 +6,6 @@ import com.webtro.common.enums.AuditActorType;
 import com.webtro.common.enums.BannedKeywordScope;
 import com.webtro.common.enums.NotificationType;
 import com.webtro.common.enums.ReviewStatus;
-import com.webtro.constant.ConfigKey;
 import com.webtro.constant.ErrorCode;
 import com.webtro.constant.RoleCode;
 import com.webtro.exception.BusinessException;
@@ -15,7 +14,6 @@ import com.webtro.exception.ConflictException;
 import com.webtro.exception.ForbiddenException;
 import com.webtro.exception.ResourceNotFoundException;
 import com.webtro.modules.admin.service.AuditLogService;
-import com.webtro.modules.admin.service.SystemConfigService;
 import com.webtro.modules.interaction.dto.request.CreateReviewRequest;
 import com.webtro.modules.interaction.dto.response.AdminReviewResponse;
 import com.webtro.modules.interaction.dto.response.AuthorResponse;
@@ -24,19 +22,18 @@ import com.webtro.modules.interaction.dto.response.ReviewPageResponse;
 import com.webtro.modules.interaction.dto.response.ReviewResponse;
 import com.webtro.modules.interaction.entity.Review;
 import com.webtro.modules.interaction.mapper.ReviewMapper;
-import com.webtro.modules.interaction.repository.ContactLogRepository;
 import com.webtro.modules.interaction.repository.ReviewRepository;
 import com.webtro.modules.interaction.service.ReviewService;
 import com.webtro.modules.interaction.specification.ReviewSpecifications;
 import com.webtro.modules.interaction.spi.BannedKeywordGateway;
 import com.webtro.modules.interaction.spi.ListingGateway;
+import com.webtro.modules.interaction.spi.RentalEligibilityGateway;
 import com.webtro.modules.interaction.spi.UserGateway;
 import com.webtro.modules.notification.service.NotificationService;
 import com.webtro.security.RateLimitService;
 import com.webtro.security.SecurityUtils;
 import com.webtro.util.HtmlSanitizer;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -59,7 +56,6 @@ import java.util.Map;
  * số liệu denormalized đọc qua gateway); nightly reconcile bù sai số làm tròn (canonical 4.7.8
  * quy tắc 5, 6).
  */
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ReviewServiceImpl implements ReviewService {
@@ -69,14 +65,13 @@ public class ReviewServiceImpl implements ReviewService {
     private static final int CONTENT_REQUIRED_BELOW = 3;
 
     private final ReviewRepository reviewRepository;
-    private final ContactLogRepository contactLogRepository;
     private final ListingGateway listingGateway;
+    private final RentalEligibilityGateway rentalEligibilityGateway;
     private final UserGateway userGateway;
     private final BannedKeywordGateway bannedKeywordGateway;
     private final ReviewMapper reviewMapper;
     private final NotificationService notificationService;
     private final RateLimitService rateLimitService;
-    private final SystemConfigService systemConfig;
     private final AuditLogService auditLogService;
 
     @Override
@@ -119,9 +114,8 @@ public class ReviewServiceImpl implements ReviewService {
     @Transactional(readOnly = true)
     public ReviewEligibilityResponse checkEligibility(Long listingId, Long userId) {
         ListingGateway.ListingBrief listing = listingGateway.getBrief(listingId);
-        boolean contactRequired = systemConfig.getBoolean(ConfigKey.REVIEW_REQUIRE_CONTACT);
         Review existing = reviewRepository.findByUserIdAndListingIdAndDeletedAtIsNull(userId, listingId).orElse(null);
-        boolean hasContacted = hasEverContacted(listingId, userId);
+        boolean rentalVerified = rentalEligibilityGateway.hasRentalHistory(listingId, userId);
 
         String reason = null;
         boolean eligible = true;
@@ -131,9 +125,9 @@ public class ReviewServiceImpl implements ReviewService {
         } else if (existing != null) {
             eligible = false;
             reason = "ALREADY_REVIEWED";
-        } else if (contactRequired && !hasContacted) {
+        } else if (!rentalVerified) {
             eligible = false;
-            reason = "NOT_CONTACTED";
+            reason = "NOT_RENTER";
         }
 
         return ReviewEligibilityResponse.builder()
@@ -143,8 +137,9 @@ public class ReviewServiceImpl implements ReviewService {
                 .reasonMessage(reasonMessage(reason))
                 .alreadyReviewed(existing != null)
                 .existingReviewId(existing == null ? null : existing.getId())
-                .contactRequired(contactRequired)
-                .hasContacted(hasContacted)
+                .contactRequired(false)
+                .hasContacted(rentalVerified)
+                .rentalVerified(rentalVerified)
                 .contentRequiredWhenRatingBelow(CONTENT_REQUIRED_BELOW)
                 .build();
     }
@@ -155,18 +150,15 @@ public class ReviewServiceImpl implements ReviewService {
         rateLimitService.checkLimit("review", String.valueOf(userId), REVIEW_MAX_PER_DAY, Duration.ofDays(1));
 
         ListingGateway.ListingBrief listing = listingGateway.getBrief(listingId);
-        if (!listing.publiclyVisible()) {
-            throw new BusinessRuleException(ErrorCode.LISTING_NOT_ACTIVE);
-        }
         if (listing.ownerId().equals(userId)) {
             throw new BusinessRuleException(ErrorCode.REVIEW_SELF_FORBIDDEN);
         }
         if (reviewRepository.existsByUserIdAndListingIdAndDeletedAtIsNull(userId, listingId)) {
             throw new ConflictException(ErrorCode.REVIEW_ALREADY_EXISTS);
         }
-        boolean hasContacted = hasEverContacted(listingId, userId);
-        if (systemConfig.getBoolean(ConfigKey.REVIEW_REQUIRE_CONTACT) && !hasContacted) {
-            throw new BusinessRuleException(ErrorCode.REVIEW_NOT_ELIGIBLE);
+        boolean rentalVerified = rentalEligibilityGateway.hasRentalHistory(listingId, userId);
+        if (!rentalVerified) {
+            throw new BusinessRuleException(ErrorCode.REVIEW_RENTAL_REQUIRED);
         }
         String content = validateContent(request.getRating(), request.getContent());
 
@@ -176,7 +168,8 @@ public class ReviewServiceImpl implements ReviewService {
                 .rating(request.getRating())
                 .content(content)
                 .status(ReviewStatus.VISIBLE)
-                .isVerifiedContact(hasContacted)
+                .isVerifiedContact(true)
+                .activeMarker((byte) 1)
                 .build();
         review = reviewRepository.save(review);
 
@@ -210,8 +203,8 @@ public class ReviewServiceImpl implements ReviewService {
             }
             throw new ForbiddenException(ErrorCode.REVIEW_FORBIDDEN);
         }
-        if (Instant.now().isAfter(reviewEditableUntil(r))) {
-            throw new BusinessRuleException(ErrorCode.REVIEW_EDIT_WINDOW_EXPIRED);
+        if (r.getStatus() != ReviewStatus.VISIBLE) {
+            throw new BusinessRuleException(ErrorCode.REVIEW_INVALID_TRANSITION);
         }
         String content = validateContent(request.getRating(), request.getContent());
 
@@ -240,6 +233,7 @@ public class ReviewServiceImpl implements ReviewService {
     @Transactional
     public void deleteReview(Long reviewId, Long userId, String moderationReason) {
         Review r = aliveById(reviewId);
+        boolean wasVisible = r.getStatus() == ReviewStatus.VISIBLE;
         boolean author = r.getUserId().equals(userId);
         boolean moderator = SecurityUtils.hasAnyRole(RoleCode.MODERATOR, RoleCode.ADMIN);
         if (!author && !moderator) {
@@ -258,31 +252,43 @@ public class ReviewServiceImpl implements ReviewService {
             r.setHiddenAt(Instant.now());
             reviewRepository.save(r);
         } else {
-            // Tác giả xóa mềm trong cửa sổ.
-            if (Instant.now().isAfter(reviewEditableUntil(r))) {
-                throw new BusinessRuleException(ErrorCode.REVIEW_EDIT_WINDOW_EXPIRED);
-            }
+            // Tác giả luôn có thể xóa mềm đánh giá của chính mình.
             r.setStatus(ReviewStatus.DELETED);
+            r.setActiveMarker(null);
             r.softDelete();
             reviewRepository.save(r);
         }
 
-        // Sau khi bản ghi rời khỏi tập VISIBLE → tính lại trung bình.
-        ListingGateway.ListingBrief listing = listingGateway.getBrief(r.getListingId());
-        applyListingAggregateOnRemove(listing, r.getRating());
-        applyLandlordAggregateOnRemove(listing.ownerId(), r.getRating());
+        // Chỉ trừ điểm khi bản ghi thực sự vừa rời khỏi tập VISIBLE.
+        if (wasVisible) {
+            ListingGateway.ListingBrief listing = listingGateway.getBrief(r.getListingId());
+            applyListingAggregateOnRemove(listing, r.getRating());
+            applyLandlordAggregateOnRemove(listing.ownerId(), r.getRating());
+        }
     }
 
     @Override
     @Transactional(readOnly = true)
     public PageResponse<ReviewResponse> listMyReviews(Long userId, Pageable pageable) {
-        // GIỚI HẠN: ReviewRepository (đã chốt) KHÔNG có finder theo userId (chỉ có theo
-        // (userId, listingId)). Endpoint 4.7.11 cần bổ sung
-        // Page<Review> findByUserIdAndDeletedAtIsNull(Long userId, Pageable). Trước khi có method
-        // đó, trả trang rỗng để không dựng dữ liệu sai.
-        log.warn("GET /api/reviews/my: ReviewRepository thiếu finder findByUserIdAndDeletedAtIsNull "
-                + "-> trả rỗng. Cần bổ sung method này ở module listing/interaction repository.");
-        return PageResponse.empty(pageable.getPageNumber(), pageable.getPageSize());
+        Page<Review> page = reviewRepository.findByUserIdAndDeletedAtIsNull(userId, pageable);
+        Map<Long, ListingGateway.ListingBrief> listings = listingGateway.getBriefs(
+                page.getContent().stream().map(Review::getListingId).distinct().toList());
+        AuthorResponse author = reviewMapper.toAuthor(userGateway.findBrief(userId).orElse(null));
+
+        return PageResponse.from(page, r -> {
+            boolean editable = r.getStatus() == ReviewStatus.VISIBLE;
+            ReviewResponse response = reviewMapper.toResponse(r, author, editable, null);
+            ListingGateway.ListingBrief listing = listings.get(r.getListingId());
+            if (listing != null) {
+                response.setListingTitle(listing.title());
+                response.setListingThumbnailUrl(listing.thumbnailUrl());
+                response.setListingStatus(listing.status() == null ? null : listing.status().name());
+            }
+            if (r.getStatus() == ReviewStatus.HIDDEN) {
+                response.setModerationReason(r.getHiddenReason());
+            }
+            return response;
+        });
     }
 
     @Override
@@ -392,11 +398,6 @@ public class ReviewServiceImpl implements ReviewService {
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.REVIEW_NOT_FOUND));
     }
 
-    private boolean hasEverContacted(Long listingId, Long userId) {
-        return contactLogRepository
-                .existsByListingIdAndUserIdAndCreatedAtAfterAndDeletedAtIsNull(listingId, userId, Instant.EPOCH);
-    }
-
     private String validateContent(int rating, String content) {
         boolean blank = content == null || content.isBlank();
         if (rating <= CONTENT_REQUIRED_BELOW - 1 && blank) {
@@ -411,11 +412,6 @@ public class ReviewServiceImpl implements ReviewService {
                     "Nội dung chứa từ ngữ không được phép: " + String.join(", ", scan.matched()));
         }
         return HtmlSanitizer.stripAllHtml(content);
-    }
-
-    private Instant reviewEditableUntil(Review r) {
-        int hours = systemConfig.getInt(ConfigKey.REVIEW_EDIT_WINDOW_HOURS);
-        return r.getCreatedAt().plus(Duration.ofHours(hours));
     }
 
     // ----- Cập nhật trung bình tăng dần -----
@@ -535,8 +531,8 @@ public class ReviewServiceImpl implements ReviewService {
     private ReviewResponse single(Review r, UserGateway.UserBrief authorBrief, Long viewerId) {
         AuthorResponse author = reviewMapper.toAuthor(authorBrief);
         boolean editable = viewerId != null && viewerId.equals(r.getUserId())
-                && r.getStatus() == ReviewStatus.VISIBLE && Instant.now().isBefore(reviewEditableUntil(r));
-        return reviewMapper.toResponse(r, author, editable, editable ? reviewEditableUntil(r) : null);
+                && r.getStatus() == ReviewStatus.VISIBLE;
+        return reviewMapper.toResponse(r, author, editable, null);
     }
 
     private String reasonMessage(String reason) {
@@ -546,7 +542,7 @@ public class ReviewServiceImpl implements ReviewService {
         return switch (reason) {
             case "OWN_LISTING" -> "Bạn không thể đánh giá tin đăng của chính mình";
             case "ALREADY_REVIEWED" -> "Bạn đã đánh giá tin đăng này rồi";
-            case "NOT_CONTACTED" -> "Bạn cần liên hệ chủ trọ trước khi đánh giá tin này";
+            case "NOT_RENTER" -> "Chỉ người đang thuê hoặc đã trả phòng mới được đánh giá tin này";
             default -> "Bạn chưa đủ điều kiện đánh giá tin này";
         };
     }

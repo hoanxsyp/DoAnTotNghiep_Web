@@ -17,7 +17,6 @@ const userApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     })),
   deleteAvatar: () => unwrap(axiosClient.delete('/users/me/avatar')),
-  updateContact: (payload) => unwrap(axiosClient.patch('/users/me/contact', payload)),
 
   // ----- Hồ sơ chủ trọ (docs/03 mục 4.2.10–4.2.12) -----
   getLandlordProfile: () => unwrap(axiosClient.get('/users/me/landlord-profile')),

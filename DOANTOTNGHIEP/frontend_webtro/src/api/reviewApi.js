@@ -9,6 +9,8 @@ const reviewApi = {
     unwrap(axiosClient.get(`/listings/${listingId}/reviews`, { params })),
   create: (listingId, payload) =>
     unwrap(axiosClient.post(`/listings/${listingId}/reviews`, payload)),
+  getEligibility: (listingId) =>
+    unwrap(axiosClient.get(`/listings/${listingId}/reviews/eligibility`)),
   update: (id, payload) => unwrap(axiosClient.put(`/reviews/${id}`, payload)),
   remove: (id) => unwrap(axiosClient.delete(`/reviews/${id}`)),
   getMyReviews: (params) => unwrap(axiosClient.get('/reviews/my', { params })),

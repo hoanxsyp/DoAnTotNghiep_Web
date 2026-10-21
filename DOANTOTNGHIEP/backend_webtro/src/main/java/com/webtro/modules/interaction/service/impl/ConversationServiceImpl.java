@@ -6,6 +6,7 @@ import com.webtro.common.enums.ContactType;
 import com.webtro.common.event.ContactCreatedEvent;
 import com.webtro.constant.ConfigKey;
 import com.webtro.constant.ErrorCode;
+import com.webtro.exception.BusinessException;
 import com.webtro.exception.BusinessRuleException;
 import com.webtro.exception.ForbiddenException;
 import com.webtro.exception.ResourceNotFoundException;
@@ -34,7 +35,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -45,7 +45,6 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -54,11 +53,8 @@ import java.util.stream.Stream;
 /**
  * Hiện thực nghiệp vụ hội thoại/tin nhắn (CONT-03) — canonical 4.6.4–4.6.9, {@code [§3.10]}.
  *
- * <p><b>Giới hạn repository (đã chốt):</b> {@code ConversationRepository} chỉ có finder tách theo
- * tenant/landlord, không có finder gộp hay lọc {@code listingId}/{@code unreadOnly}; và
- * {@code MessageRepository} chỉ có finder sắp xếp tăng dần. Do đó role {@code ALL} và các bộ lọc
- * phụ được xử lý ở tầng bộ nhớ (có giới hạn), còn tin nhắn trả về theo thứ tự tăng dần. Muốn lọc
- * ở DB cần bổ sung Specification/@Query cho hai repository này.
+ * <p>Membership, role, listing and unread filters are applied by the repository before pagination,
+ * keeping page totals and unread counters consistent for large inboxes.
  */
 @Slf4j
 @Service
@@ -66,7 +62,6 @@ import java.util.stream.Stream;
 public class ConversationServiceImpl implements ConversationService {
 
     private static final int CONVERSATION_MAX_PER_HOUR = 20;
-    private static final int MERGE_CAP = 200;
     private static final int READ_SCAN_CAP = 500;
     private static final int PREVIEW_MAX = 200;
 
@@ -86,36 +81,14 @@ public class ConversationServiceImpl implements ConversationService {
     @Transactional(readOnly = true)
     public ConversationPageResponse listConversations(Long userId, String role, boolean unreadOnly,
                                                       Long listingId, Pageable pageable) {
-        String effectiveRole = role == null ? "ALL" : role;
-        List<Conversation> content;
-        long total;
-
-        if ("AS_TENANT".equals(effectiveRole)) {
-            Page<Conversation> page = conversationRepository
-                    .findByTenantIdAndDeletedAtIsNullOrderByLastMessageAtDesc(userId, pageable);
-            content = filter(page.getContent(), userId, unreadOnly, listingId);
-            total = page.getTotalElements();
-        } else if ("AS_LANDLORD".equals(effectiveRole)) {
-            Page<Conversation> page = conversationRepository
-                    .findByLandlordIdAndDeletedAtIsNullOrderByLastMessageAtDesc(userId, pageable);
-            content = filter(page.getContent(), userId, unreadOnly, listingId);
-            total = page.getTotalElements();
-        } else {
-            // ALL: gộp hai nguồn (có giới hạn) + phân trang thủ công.
-            List<Conversation> merged = new ArrayList<>();
-            merged.addAll(conversationRepository.findByTenantIdAndDeletedAtIsNullOrderByLastMessageAtDesc(
-                    userId, PageRequest.of(0, MERGE_CAP)).getContent());
-            merged.addAll(conversationRepository.findByLandlordIdAndDeletedAtIsNullOrderByLastMessageAtDesc(
-                    userId, PageRequest.of(0, MERGE_CAP)).getContent());
-            List<Conversation> filtered = filter(merged, userId, unreadOnly, listingId).stream()
-                    .sorted(Comparator.comparing(Conversation::getLastMessageAt,
-                            Comparator.nullsLast(Comparator.reverseOrder())))
-                    .toList();
-            total = filtered.size();
-            int start = (int) pageable.getOffset();
-            int end = Math.min(start + pageable.getPageSize(), filtered.size());
-            content = start >= filtered.size() ? List.of() : filtered.subList(start, end);
-        }
+        String effectiveRole = switch (role == null ? "ALL" : role) {
+            case "AS_TENANT" -> "AS_TENANT";
+            case "AS_LANDLORD" -> "AS_LANDLORD";
+            default -> "ALL";
+        };
+        Page<Conversation> page = conversationRepository.findAccessible(
+                userId, effectiveRole, unreadOnly, listingId, pageable);
+        List<Conversation> content = page.getContent();
 
         List<Long> listingIds = content.stream().map(Conversation::getListingId).distinct().toList();
         Map<Long, ListingGateway.ListingBrief> listings = listingGateway.getBriefs(listingIds);
@@ -125,18 +98,14 @@ public class ConversationServiceImpl implements ConversationService {
                 .distinct().toList();
         Map<Long, UserGateway.UserBrief> partners = userGateway.getBriefs(partnerIds);
 
-        List<ConversationResponse> items = content.stream().map(c -> {
-            ListingGateway.ListingBrief listing = listings.get(c.getListingId());
-            Long landlordId = landlordIdOf(c, listing);
-            Long partnerId = c.getTenantId().equals(userId) ? landlordId : c.getTenantId();
-            return conversationMapper.toResponse(c, userId, landlordId, listing, partners.get(partnerId));
-        }).toList();
-
-        Page<ConversationResponse> asPage = new PageImpl<>(items, pageable, total);
-        long unreadConvs = content.stream().filter(c -> unreadCountFor(c, userId) > 0).count();
         return ConversationPageResponse.builder()
-                .page(PageResponse.from(asPage))
-                .totalUnreadConversations(unreadConvs)
+                .page(PageResponse.from(page, c -> {
+                    ListingGateway.ListingBrief listing = listings.get(c.getListingId());
+                    Long landlordId = landlordIdOf(c, listing);
+                    Long partnerId = c.getTenantId().equals(userId) ? landlordId : c.getTenantId();
+                    return conversationMapper.toResponse(c, userId, landlordId, listing, partners.get(partnerId));
+                }))
+                .totalUnreadConversations(conversationRepository.countUnreadConversations(userId))
                 .build();
     }
 
@@ -267,19 +236,7 @@ public class ConversationServiceImpl implements ConversationService {
     @Override
     @Transactional(readOnly = true)
     public long countUnreadMessages(Long userId) {
-        // Bộ đếm chưa đọc được duy trì sẵn trên mỗi hội thoại (tenant_unread_count /
-        // landlord_unread_count) — cộng dồn theo cả hai vai trò. Giới hạn quét như các luồng khác.
-        long asTenant = conversationRepository
-                .findByTenantIdAndDeletedAtIsNullOrderByLastMessageAtDesc(userId, PageRequest.of(0, MERGE_CAP))
-                .getContent().stream()
-                .mapToLong(Conversation::getTenantUnreadCount)
-                .sum();
-        long asLandlord = conversationRepository
-                .findByLandlordIdAndDeletedAtIsNullOrderByLastMessageAtDesc(userId, PageRequest.of(0, MERGE_CAP))
-                .getContent().stream()
-                .mapToLong(Conversation::getLandlordUnreadCount)
-                .sum();
-        return asTenant + asLandlord;
+        return conversationRepository.sumUnreadMessages(userId);
     }
 
     @Override
@@ -311,6 +268,12 @@ public class ConversationServiceImpl implements ConversationService {
 
     /** Gắn tin nhắn, cập nhật bộ đếm/mốc hội thoại và {@code first_response_at} (idempotent). */
     private Message appendMessage(Conversation c, Long senderId, String content) {
+        int maxLength = Math.min(2000, Math.max(1,
+                systemConfig.getInt(ConfigKey.CHAT_MESSAGE_MAX_LENGTH)));
+        if (content == null || content.isBlank() || content.length() > maxLength) {
+            throw new BusinessException(ErrorCode.VALIDATION_FAILED,
+                    "Tin nhắn phải có từ 1 đến " + maxLength + " ký tự");
+        }
         Message message = messageRepository.save(Message.builder()
                 .conversation(c)
                 .senderId(senderId)
@@ -416,17 +379,6 @@ public class ConversationServiceImpl implements ConversationService {
             throw new ForbiddenException(ErrorCode.CONVERSATION_FORBIDDEN);
         }
         return c;
-    }
-
-    private int unreadCountFor(Conversation c, Long userId) {
-        return c.getTenantId().equals(userId) ? c.getTenantUnreadCount() : c.getLandlordUnreadCount();
-    }
-
-    private List<Conversation> filter(List<Conversation> list, Long userId, boolean unreadOnly, Long listingId) {
-        return list.stream()
-                .filter(c -> listingId == null || listingId.equals(c.getListingId()))
-                .filter(c -> !unreadOnly || unreadCountFor(c, userId) > 0)
-                .toList();
     }
 
     private Long landlordIdOf(Conversation c) {

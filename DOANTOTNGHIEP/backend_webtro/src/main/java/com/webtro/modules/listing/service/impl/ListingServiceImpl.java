@@ -35,6 +35,7 @@ import com.webtro.modules.listing.dto.response.ListingCreateResponse;
 import com.webtro.modules.listing.dto.response.ListingDetailResponse;
 import com.webtro.modules.listing.dto.response.ListingStatsResponse;
 import com.webtro.modules.listing.dto.response.ListingSummaryResponse;
+import com.webtro.modules.listing.dto.response.MyListingsResponse;
 import com.webtro.modules.listing.dto.response.ModerationImpactResponse;
 import com.webtro.modules.listing.dto.response.RenewResponse;
 import com.webtro.modules.listing.entity.Listing;
@@ -49,6 +50,7 @@ import com.webtro.modules.listing.service.ListingOwnerStatsPublisher;
 import com.webtro.modules.listing.service.ListingService;
 import com.webtro.modules.listing.service.ListingVisibilityService;
 import com.webtro.modules.listing.spi.FavoriteStatusGateway;
+import com.webtro.modules.interaction.spi.RentalEligibilityGateway;
 import com.webtro.modules.listing.statemachine.ListingEvent;
 import com.webtro.modules.listing.statemachine.ListingStateMachine;
 import com.webtro.modules.payment.entity.PromotionPackage;
@@ -82,7 +84,9 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -121,6 +125,7 @@ public class ListingServiceImpl implements ListingService {
     private final LandlordProfileRepository landlordProfileRepository;
     private final PromotionPackageRepository promotionPackageRepository;
     private final FavoriteStatusGateway favoriteStatusGateway;
+    private final RentalEligibilityGateway rentalEligibilityGateway;
 
     // ==================================================================
     //  CRUD
@@ -223,6 +228,7 @@ public class ListingServiceImpl implements ListingService {
         if (listing.getStatus() == ListingStatus.LOCKED) {
             throw new BusinessRuleException(ErrorCode.LISTING_LOCKED_CANNOT_EDIT);
         }
+        ensureNotRented(listing);
 
         Category category = requireActiveCategory(req.getCategoryId());
         validateCategoryAllowedForCurrentRole(category.getCode());
@@ -540,7 +546,8 @@ public class ListingServiceImpl implements ListingService {
         }
         Long viewerId = SecurityUtils.getCurrentUserId().orElse(null);
         boolean owner = viewerId != null && viewerId.equals(listing.getOwnerId());
-        if (!visibilityService.publiclyVisible(listing) && !owner && !privileged) {
+        boolean renter = viewerId != null && rentalEligibilityGateway.hasRentalHistory(listing.getId(), viewerId);
+        if (!visibilityService.publiclyVisible(listing) && !owner && !privileged && !renter) {
             // Không tiết lộ tin tồn tại (canonical §11.1).
             throw new ResourceNotFoundException(ErrorCode.LISTING_NOT_FOUND);
         }
@@ -559,10 +566,11 @@ public class ListingServiceImpl implements ListingService {
 
     @Override
     @Transactional(readOnly = true)
-    public PageResponse<ListingSummaryResponse> getMyListings(List<ListingStatus> statuses, String keyword,
-                                                              Long categoryId, Integer expiringWithinDays,
-                                                              Pageable pageable) {
+    public MyListingsResponse getMyListings(List<ListingStatus> statuses, String keyword,
+                                            Long categoryId, Integer expiringWithinDays,
+                                            Pageable pageable) {
         Long userId = requireCurrentUserId();
+        boolean explicitlyIncludesDeleted = statuses != null && statuses.contains(ListingStatus.DELETED);
         Specification<Listing> spec = (root, query, cb) -> {
             List<Predicate> ps = new ArrayList<>();
             ps.add(cb.equal(root.get("ownerId"), userId));
@@ -571,6 +579,8 @@ public class ListingServiceImpl implements ListingService {
             } else {
                 // Mặc định: tất cả trừ DELETED.
                 ps.add(cb.notEqual(root.get("status"), ListingStatus.DELETED));
+            }
+            if (!explicitlyIncludesDeleted) {
                 ps.add(cb.isNull(root.get("deletedAt")));
             }
             if (keyword != null && !keyword.isBlank()) {
@@ -588,7 +598,17 @@ public class ListingServiceImpl implements ListingService {
             return cb.and(ps.toArray(new Predicate[0]));
         };
         Page<Listing> page = listingRepository.findAll(spec, pageable);
-        return PageResponse.from(page, l -> mapper.toSummary(l, true));
+        Map<ListingStatus, Long> rawCounts = listingRepository.countMapByStatusForOwner(userId);
+        Map<String, Long> statusCounts = new LinkedHashMap<>();
+        for (ListingStatus listingStatus : ListingStatus.values()) {
+            if (listingStatus != ListingStatus.DELETED) {
+                statusCounts.put(listingStatus.name(), rawCounts.getOrDefault(listingStatus, 0L));
+            }
+        }
+        return MyListingsResponse.builder()
+                .page(PageResponse.from(page, l -> mapper.toSummary(l, true)))
+                .statusCounts(statusCounts)
+                .build();
     }
 
     @Override
@@ -651,6 +671,7 @@ public class ListingServiceImpl implements ListingService {
         if (listing.getStatus() == ListingStatus.LOCKED) {
             throw new BusinessRuleException(ErrorCode.LISTING_LOCKED_CANNOT_EDIT);
         }
+        ensureNotRented(listing);
         if (files == null || files.isEmpty()) {
             throw new BusinessRuleException(ErrorCode.IMAGE_COUNT_MIN);
         }
@@ -725,6 +746,7 @@ public class ListingServiceImpl implements ListingService {
         if (listing.getStatus() == ListingStatus.LOCKED) {
             throw new BusinessRuleException(ErrorCode.LISTING_LOCKED_CANNOT_EDIT);
         }
+        ensureNotRented(listing);
         List<ListingImage> images = imageRepository.findByListingIdAlive(id);
         ListingImage target = images.stream().filter(i -> i.getId().equals(imageId)).findFirst()
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.IMAGE_NOT_FOUND));
@@ -757,6 +779,7 @@ public class ListingServiceImpl implements ListingService {
         if (listing.getStatus() == ListingStatus.LOCKED) {
             throw new BusinessRuleException(ErrorCode.LISTING_LOCKED_CANNOT_EDIT);
         }
+        ensureNotRented(listing);
         List<ListingImage> images = imageRepository.findByListingIdAlive(id);
         ListingImage target = images.stream().filter(i -> i.getId().equals(imageId)).findFirst()
                 .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.IMAGE_NOT_FOUND));
@@ -791,6 +814,7 @@ public class ListingServiceImpl implements ListingService {
         if (listing.getStatus() == ListingStatus.LOCKED) {
             throw new BusinessRuleException(ErrorCode.LISTING_LOCKED_CANNOT_EDIT);
         }
+        ensureNotRented(listing);
         List<ListingImage> images = imageRepository.findByListingIdAlive(id);
         Set<Long> aliveIds = new HashSet<>();
         images.forEach(i -> aliveIds.add(i.getId()));
@@ -821,6 +845,7 @@ public class ListingServiceImpl implements ListingService {
         if (listing.getStatus() == ListingStatus.LOCKED) {
             throw new BusinessRuleException(ErrorCode.LISTING_LOCKED_CANNOT_EDIT);
         }
+        ensureNotRented(listing);
         validateAmenities(req.getAmenityIds());
         replaceAmenities(listing, req.getAmenityIds());
         return mapper.amenitiesOf(id);
@@ -883,6 +908,12 @@ public class ListingServiceImpl implements ListingService {
     private Long requireCurrentUserId() {
         return SecurityUtils.getCurrentUserId()
                 .orElseThrow(() -> new ForbiddenException(ErrorCode.FORBIDDEN));
+    }
+
+    private void ensureNotRented(Listing listing) {
+        if (listing.getStatus() == ListingStatus.RENTED) {
+            throw new BusinessRuleException(ErrorCode.LISTING_RENTED_CANNOT_EDIT);
+        }
     }
 
     private Long requireOwner(Listing listing) {
