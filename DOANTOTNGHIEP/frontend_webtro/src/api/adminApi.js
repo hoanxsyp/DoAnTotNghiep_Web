@@ -54,7 +54,10 @@ const adminApi = {
   unhideReview: (id) => unwrap(axiosClient.put(`/admin/reviews/${id}/unhide`)),
 
   // ----- Thanh toán & gói dịch vụ (PAYMENT_MANAGE / PACKAGE_MANAGE) -----
-  getPayments: (params) => unwrap(axiosClient.get('/admin/payments', { params })),
+  getPayments: async (params) => {
+    const data = await unwrap(axiosClient.get('/admin/payments', { params }));
+    return data?.page ? { ...data.page, summary: data.summary } : data;
+  },
   getPayment: (id) => unwrap(axiosClient.get(`/admin/payments/${id}`)),
   refundPayment: (id, payload) => unwrap(axiosClient.put(`/admin/payments/${id}/refund`, payload)),
   reconcilePayment: (id) => unwrap(axiosClient.post(`/admin/payments/${id}/reconcile`)),

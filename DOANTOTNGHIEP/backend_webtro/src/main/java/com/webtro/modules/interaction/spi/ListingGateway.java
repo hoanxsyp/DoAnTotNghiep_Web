@@ -39,7 +39,6 @@ public interface ListingGateway {
      * @param publiclyVisible  tin có đang hiển thị công khai không (theo publicStatuses)
      * @param averageRating    điểm đánh giá trung bình hiện lưu (denormalized)
      * @param reviewCount      số đánh giá hiển thị hiện lưu (denormalized)
-     * @param contactCount     số lượt liên hệ hiện lưu (denormalized)
      */
     record ListingBrief(
             Long id,
@@ -53,8 +52,7 @@ public interface ListingGateway {
             ListingStatus status,
             boolean publiclyVisible,
             BigDecimal averageRating,
-            int reviewCount,
-            int contactCount) {
+            int reviewCount) {
     }
 
     /** Lấy tóm tắt tin còn sống; ném {@code ResourceNotFoundException(LISTING_NOT_FOUND)} nếu không có. */
@@ -71,9 +69,6 @@ public interface ListingGateway {
 
     /** Đặt lại {@code listings.favorite_count} theo số đếm chính xác từ module interaction. */
     void setFavoriteCount(Long listingId, int count);
-
-    /** Tăng {@code listings.contact_count} thêm 1 (sau khi đã khử trùng lặp). */
-    void incrementContactCount(Long listingId);
 
     /** Đặt lại {@code listings.comment_count} theo số đếm chính xác từ module interaction. */
     void setCommentCount(Long listingId, int count);

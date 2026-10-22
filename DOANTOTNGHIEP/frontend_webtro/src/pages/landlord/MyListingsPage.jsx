@@ -157,16 +157,15 @@ const MyListingsPage = () => {
                 <TableCell>Trạng thái</TableCell>
                 <TableCell align="center">Xem</TableCell>
                 <TableCell align="center">Lưu</TableCell>
-                <TableCell align="center">Liên hệ</TableCell>
                 <TableCell>Hết hạn</TableCell>
                 <TableCell align="right">Hành động</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={7} sx={{ py: 3 }}><LoadingSkeleton variant="table" columns={7} count={6} /></TableCell></TableRow>
+                <TableRow><TableCell colSpan={6} sx={{ py: 3 }}><LoadingSkeleton variant="table" columns={6} count={6} /></TableCell></TableRow>
               ) : items.length === 0 ? (
-                <TableRow><TableCell colSpan={7} sx={{ border: 0 }}>
+                <TableRow><TableCell colSpan={6} sx={{ border: 0 }}>
                   <EmptyState
                     title="Không có tin đăng"
                     description="Chưa có tin nào khớp bộ lọc hiện tại."
@@ -198,7 +197,6 @@ const MyListingsPage = () => {
                   <TableCell><StatusChip status={row.status} /></TableCell>
                   <TableCell align="center">{row.viewCount ?? 0}</TableCell>
                   <TableCell align="center">{row.favoriteCount ?? 0}</TableCell>
-                  <TableCell align="center">{row.contactCount ?? 0}</TableCell>
                   <TableCell>
                     {row.expiredAt ? (
                       <Typography variant="caption" color={row.expiringSoon ? 'error' : 'text.secondary'}>

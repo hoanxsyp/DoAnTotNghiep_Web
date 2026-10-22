@@ -67,7 +67,6 @@ Ví dụ áp dụng:
 
 `[§11.3]` yêu cầu *"Phân trang danh sách tin"* và tối ưu hiệu năng đọc. Trang tìm kiếm là
 đường đi nóng nhất của hệ thống: mỗi trang 20 tin, nếu mỗi tin phải `COUNT()` lượt xem, lượt
-lưu, lượt liên hệ, số bình luận và `AVG()` rating thì một request sinh ra ~5 subquery tổng hợp
 trên các bảng lớn nhất (`view_histories`, `favorites`, `comments`). Do đó **cố ý** phi chuẩn hóa
 các cột đếm sẵn sau.
 
@@ -75,7 +74,6 @@ các cột đếm sẵn sau.
 |---|---|---|---|---|
 | `listings` | `view_count` | `COUNT(view_histories WHERE is_counted=1)` | Tăng nguyên tử khi ghi `view_histories` hợp lệ; job đêm đối soát | `[§3.8][§11.3]` |
 | `listings` | `favorite_count` | `COUNT(favorites WHERE deleted_at IS NULL)` | Tăng/giảm trong cùng transaction lưu/bỏ lưu | `[§3.9]` |
-| `listings` | `contact_count` | `COUNT(contact_logs WHERE is_counted=1)` | Tăng nguyên tử khi ghi `contact_logs` hợp lệ | `[§3.10][§2.6]` |
 | `listings` | `comment_count` | `COUNT(comments WHERE status='VISIBLE')` | Tăng/giảm khi tạo/ẩn/xóa mềm bình luận | `[§3.11]` |
 | `listings` | `positive_comment_count`, `negative_comment_count` | `COUNT(sentiment_results JOIN comments)` | Cập nhật sau khi sentiment trả kết quả | `[§9.1]` |
 | `listings` | `average_rating`, `review_count` | `AVG/COUNT(reviews WHERE status='VISIBLE')` | Tính lại trong transaction tạo/sửa/ẩn review | `[§3.12][§8.6]` |
@@ -103,7 +101,6 @@ các cột đếm sẵn sau.
    counter bị phát hiện ngay tại DB thay vì âm thầm.
 
 > **Vì sao không dùng trigger MySQL?** Logic đếm phụ thuộc cấu hình
-> (`view.dedup_minutes`, `contact.dedup_minutes`, `ai.sentiment.min_length`) đọc từ
 > `system_configs` — trigger không đọc được cache Redis và không test được bằng unit test.
 > Canonical mục 13 (DoD) yêu cầu *"Không hardcode ngưỡng — đọc từ SystemConfig"*.
 
@@ -639,7 +636,6 @@ erDiagram
         int review_count
         int view_count
         int favorite_count
-        int contact_count
         int comment_count
         int negative_comment_count
         int positive_comment_count
@@ -687,8 +683,6 @@ erDiagram
     users ||--o{ view_histories : "1 user co 0..n view; user_id co the null voi khach an danh"
     listings ||--o{ view_histories : "1 listing co 0..n view history"
     users ||--o{ search_histories : "1 user co 0..n search; user_id co the null"
-    users ||--o{ contact_logs : "user_id: 1 tenant co 0..n contact log"
-    listings ||--o{ contact_logs : "1 listing co 0..n contact log"
 
     users {
         bigint id PK
@@ -748,7 +742,6 @@ erDiagram
         int review_count
         int view_count
         int favorite_count
-        int contact_count
         int comment_count
         int negative_comment_count
         int positive_comment_count
@@ -791,7 +784,6 @@ erDiagram
         varchar session_id
         varchar ip_address
     }
-    contact_logs {
         bigint id PK
         bigint listing_id FK
         bigint user_id FK
@@ -872,7 +864,6 @@ erDiagram
         int review_count
         int view_count
         int favorite_count
-        int contact_count
         int comment_count
         int negative_comment_count
         int positive_comment_count
@@ -981,7 +972,6 @@ erDiagram
         int review_count
         int view_count
         int favorite_count
-        int contact_count
         int comment_count
         int negative_comment_count
         int positive_comment_count
@@ -1125,7 +1115,6 @@ erDiagram
         int review_count
         int view_count
         int favorite_count
-        int contact_count
         int comment_count
         int negative_comment_count
         int positive_comment_count
@@ -1274,7 +1263,6 @@ erDiagram
         int review_count
         int view_count
         int favorite_count
-        int contact_count
         int comment_count
         int negative_comment_count
         int positive_comment_count
@@ -1426,7 +1414,6 @@ erDiagram
         int review_count
         int view_count
         int favorite_count
-        int contact_count
         int comment_count
         int negative_comment_count
         int positive_comment_count
@@ -1626,7 +1613,6 @@ erDiagram
         int review_count
         int view_count
         int favorite_count
-        int contact_count
         int comment_count
         int negative_comment_count
         int positive_comment_count
@@ -1852,8 +1838,6 @@ erDiagram
 | 23 | `users ||--o{ view_histories` | 1 user co 0..n view; user_id co the null voi khach an danh |
 | 24 | `listings ||--o{ view_histories` | 1 listing co 0..n view history |
 | 25 | `users ||--o{ search_histories` | 1 user co 0..n search; user_id co the null |
-| 26 | `users ||--o{ contact_logs` | user_id: 1 tenant co 0..n contact log |
-| 28 | `listings ||--o{ contact_logs` | 1 listing co 0..n contact log |
 | 29 | `listings ||--o{ conversations` | 1 listing co 0..n conversation |
 | 30 | `users ||--o{ conversations` | tenant_id: 1 user co 0..n conversation dang tenant |
 | 32 | `conversations ||--o{ messages` | 1 conversation co 0..n message |
@@ -1921,7 +1905,6 @@ erDiagram
 | `favorites` | Danh sách tin mà người dùng đã lưu. |
 | `view_histories` | Nhật ký lượt xem tin để tính lượt xem và chống đếm trùng. |
 | `search_histories` | Lịch sử tìm kiếm của user. |
-| `contact_logs` | Nhật ký liên hệ tin thuê và trạng thái tính lượt liên hệ. |
 | `conversations` | Khung chat giữa tenant và landlord cho một tin đăng. |
 | `messages` | Tin nhắn trong cuộc hội thoại chat. |
 | `comments` | Bình luận của user trên tin đăng. |
@@ -2490,7 +2473,7 @@ Khớp **chính xác** danh sách thuộc tính `[§6.3] Listing` (Id, OwnerId, 
 Description, Price, Area, DepositAmount, WardId, AddressDetail,
 Latitude, Longitude, RoomCount, ToiletCount, MaxOccupants, CurrentOccupants, GenderRequirement,
 PetAllowed, ParkingAvailable, CurfewType, FurnitureStatus, Status, AverageRating,
-ViewCount, FavoriteCount, ContactCount, PublishedAt, ExpiredAt, CreatedAt, UpdatedAt — `TrustScore`
+ViewCount, FavoriteCount, PublishedAt, ExpiredAt, CreatedAt, UpdatedAt — `TrustScore`
 đã bỏ ở `V22`) và bổ sung
 các cột bắt buộc để thỏa `[§3.3][§3.7][§5.8][§9.1][§9.4][§10.4]` + canonical mục 5.1/5.2.
 
@@ -2532,7 +2515,6 @@ các cột bắt buộc để thỏa `[§3.3][§3.7][§5.8][§9.1][§9.4][§10.4
 | `review_count` | `INT UNSIGNED` | N | `0` | | Số đánh giá `VISIBLE` | `[§8.6]` |
 | `view_count` | `INT UNSIGNED` | N | `0` | IDX | Lượt xem hợp lệ (đã khử trùng lặp) | `[§6.3][§3.8]` |
 | `favorite_count` | `INT UNSIGNED` | N | `0` | | Lượt lưu | `[§6.3][§3.9]` |
-| `contact_count` | `INT UNSIGNED` | N | `0` | | Lượt liên hệ hợp lệ | `[§6.3][§3.10]` |
 | `comment_count` | `INT UNSIGNED` | N | `0` | | Bình luận `VISIBLE` | `[§3.11]` |
 | `negative_comment_count` | `INT UNSIGNED` | N | `0` | | Đầu vào trực tiếp công thức `[§5.8]` và tỷ lệ tiêu cực `[§9.1]` | `[§5.8][§9.1]` |
 | `positive_comment_count` | `INT UNSIGNED` | N | `0` | | | `[§5.8]` |
@@ -2555,7 +2537,6 @@ các cột bắt buộc để thỏa `[§3.3][§3.7][§5.8][§9.1][§9.4][§10.4
 
 > **Điều chỉnh so với danh sách bắt buộc trong đề bài — giải thích:**
 > Đề bài liệt kê `average_rating, review_count, view_count, favorite_count,
-> contact_count, comment_count, negative_comment_count, positive_comment_count,
 > need_review_count` — giữ nguyên **toàn bộ** (riêng `trust_score` đã bỏ ở `V22`). Bổ sung thêm 8 cột không có trong danh sách,
 > mỗi cột có căn cứ nghiệp vụ cứng:
 > `lock_severity` (canonical 5.1 bắt buộc *"LOCK … lý do + severity"*, `[§10.4]` *"mức độ vi phạm"*);
@@ -2633,7 +2614,6 @@ CONSTRAINT ck_listings_lock_reason        CHECK (status <> 'LOCKED'
                                                 OR (lock_reason IS NOT NULL AND lock_severity IS NOT NULL)),
 CONSTRAINT ck_listings_auto_hide_reason   CHECK ((auto_hidden_at IS NULL) = (auto_hide_reason IS NULL)),
 CONSTRAINT ck_listings_counters_non_negative CHECK (
-    view_count >= 0 AND favorite_count >= 0 AND contact_count >= 0 AND comment_count >= 0
     AND positive_comment_count >= 0 AND negative_comment_count >= 0
     AND review_count >= 0 AND need_review_count >= 0 AND renew_count >= 0)
 ```
@@ -2822,47 +2802,6 @@ danh mục `[§3.7]` luồng phụ.
 > mặc định) và **không** ghi khi user chỉ đổi trang (`page > 0` của cùng bộ lọc) — kiểm tra bằng
 > hash của `criteria` trong Redis TTL 5 phút. Không phải quy tắc nghiệp vụ mới: `[§3.7]` chỉ yêu
 > cầu lưu *"tìm kiếm"*, phân trang không phải một lượt tìm kiếm mới.
-
-#### 3.24. `contact_logs`
-
-`[§6.1] ContactLog`; `[§2.6]` CONT-02/04/05; `[§3.10]`.
-
-| Cột | Kiểu | Null | Mặc định | Khóa | Mô tả nghiệp vụ | Căn cứ |
-|---|---|---|---|---|---|---|
-| `id` | `BIGINT UNSIGNED` | N | `AUTO_INCREMENT` | PK | | |
-| `listing_id` | `BIGINT UNSIGNED` | N | — | FK, IDX | | `[§6.2]` |
-| `user_id` | `BIGINT UNSIGNED` | N | — | FK, IDX | Người thuê liên hệ. **NOT NULL** vì `[§3.10]` *"Khách chưa đăng nhập được yêu cầu đăng nhập trước khi xem số đầy đủ"* | `[§3.10]` |
-| `contact_type` | `VARCHAR(15)` | N | — | IDX | `ContactType`: `VIEW_PHONE` / `FORM` / `CHAT` | `[§3.10]` *"hình thức liên hệ"* |
-| `message` | `VARCHAR(1000)` | Y | `NULL` | | Nội dung form; `NULL` với `VIEW_PHONE` | `[§3.10]` *"nội dung nếu gửi form"* |
-| `contact_name` | `VARCHAR(100)` | Y | `NULL` | | Tên người liên hệ khai trong form (có thể khác tên tài khoản) | `[§3.10]` |
-| `contact_phone` | `VARCHAR(15)` | Y | `NULL` | | SĐT để chủ trọ gọi lại | `[§2.6]` CONT-04 |
-| `is_counted` | `BOOLEAN` | N | `TRUE` | IDX | `FALSE` khi trùng trong `contact.dedup_minutes` (60) → không cộng `contact_count` | `[§3.10]` *"Không ghi quá nhiều lượt liên hệ trùng từ cùng người dùng trong thời gian ngắn"* |
-| `is_read_by_owner` | `BOOLEAN` | N | `FALSE` | IDX | Chủ trọ đã xem chưa — badge trên `/quan-ly/nguoi-lien-he` | `[§2.6]` CONT-04 |
-| `ip_address` | `VARCHAR(45)` | Y | `NULL` | | | `[§11.4]` |
-| `created_at` … `deleted_at` | | | | | | canonical 6.1 |
-
-**Index**
-
-| Tên | Cột | Lý do |
-|---|---|---|
-| `idx_contact_logs_listing_id_created_at` | `(listing_id, created_at)` | Thống kê tin LIST-10 `[§7.3]` |
-| `idx_contact_logs_dedup` | `(listing_id, user_id, created_at)` | Khử trùng lặp `contact.dedup_minutes` `[§3.10]` |
-| `idx_contact_logs_user_id_created_at` | `(user_id, created_at)` | Hồ sơ nhu cầu w=5 (canonical 10.2) |
-
-**Unique** không có — cùng người liên hệ lại là hợp lệ (`is_counted` quyết định có đếm không).
-**Foreign key**
-
-| Tên | Cột → đích | ON DELETE | ON UPDATE | Lý do |
-|---|---|---|---|---|
-| `fk_contact_logs_listings` | `listing_id → listings(id)` | `CASCADE` | `RESTRICT` | Sở hữu bởi tin. |
-| `fk_contact_logs_users` | `user_id → users(id)` | `RESTRICT` | `RESTRICT` | **RESTRICT, không CASCADE** — khác `view_histories`. `contact_logs` là lịch sử liên hệ và dữ liệu chủ trọ đang dùng để liên lạc `[§2.6]` CONT-04; nó không còn là điều kiện đánh giá từ V23. `[§10.2]` cũng cấm xóa cứng user có dữ liệu nghiệp vụ. |
-
-**Check** `ck_contact_logs_type CHECK (contact_type IN ('VIEW_PHONE','FORM','CHAT'))`.
-Quy tắc chủ trọ không tự liên hệ tin của mình được ép ở service bằng `listing.owner_id`.
-
-**[BỔ SUNG NGOÀI CANONICAL]** — enum `ContactType : VIEW_PHONE, FORM, CHAT`
-(canonical mục 5 không có; bắt buộc vì `[§3.10]` có *"Dữ liệu vào: ListingId, **hình thức liên hệ**"*
-và luồng phân biệt "bấm xem số điện thoại" với "gửi tin nhắn").
 
 #### 3.25. `conversations`
 
@@ -3585,7 +3524,6 @@ CONSTRAINT ck_promotion_subscriptions_priority CHECK (priority BETWEEN 0 AND 100
 ```sql
 CONSTRAINT ck_notifications_type CHECK (type IN (
     'ACCOUNT_REGISTERED','LISTING_APPROVED','LISTING_REJECTED','LISTING_EXPIRING','LISTING_EXPIRED',
-    'LISTING_LOCKED','NEW_CONTACT','NEW_COMMENT','NEW_REVIEW','PAYMENT_SUCCESS','PAYMENT_FAILED',
     'REPORT_THRESHOLD','AI_NEGATIVE_ALERT','ACCOUNT_LOCKED','VIOLATION_WARNING',
     'FOLLOWED_LANDLORD_NEW_LISTING')),
 CONSTRAINT ck_notifications_channel CHECK (channel IN ('IN_APP','EMAIL')),
@@ -3641,7 +3579,6 @@ nguyên tử, không race giữa hai tab.
 ```sql
 CONSTRAINT ck_notification_preferences_type CHECK (notification_type IN (
     'ACCOUNT_REGISTERED','LISTING_APPROVED','LISTING_REJECTED','LISTING_EXPIRING','LISTING_EXPIRED',
-    'LISTING_LOCKED','NEW_CONTACT','NEW_COMMENT','NEW_REVIEW','PAYMENT_SUCCESS','PAYMENT_FAILED',
     'REPORT_THRESHOLD','AI_NEGATIVE_ALERT','ACCOUNT_LOCKED','VIOLATION_WARNING',
     'FOLLOWED_LANDLORD_NEW_LISTING')),
 CONSTRAINT ck_notification_preferences_mandatory CHECK (
@@ -3671,7 +3608,6 @@ trọng**"*. Danh sách chốt dưới đây trùng **chính xác** `03_THIET_KE
 | `AI_NEGATIVE_ALERT` | ✘ | Gửi tới Moderator/Admin — hàng đợi kiểm duyệt `[§9.1][§5.6]` |
 | `LISTING_EXPIRING` | ✔ | Nhắc nhở tiện ích `[§5.2]` |
 | `LISTING_EXPIRED` | ✔ | Trạng thái tra cứu được ở `/quan-ly/tin-dang` |
-| `NEW_CONTACT` | ✔ | Thông báo tương tác `[§5.6]` |
 | `NEW_COMMENT` | ✔ | Thông báo tương tác `[§3.11]` |
 | `NEW_REVIEW` | ✔ | Thông báo tương tác `[§3.12]` |
 | `FOLLOWED_LANDLORD_NEW_LISTING` | ✔ | Tiện ích theo dõi `[§2.5]` FOLLOW-02 |
@@ -4105,7 +4041,6 @@ Bắt buộc theo canonical mục 6 (nhóm admin có `ai_configs`); `[§2.11]` A
 | 17 | `favorites` | interaction | 38 | `chatbot_conversations` | ai |
 | 18 | `view_histories` | interaction | 39 | `chatbot_messages` | ai |
 | 19 | `search_histories` | interaction | 40 | `audit_logs` | admin |
-| 20 | `contact_logs` | interaction | 41 | `system_configs` | admin |
 | 21 | `conversations` | interaction | 42 | `ai_configs` | admin |
 
 Schema hiện hành có 42 bảng. Các bảng lịch sử đã bị loại khỏi schema cuối cùng: `user_roles` (V13), `permissions` và `role_permissions` (V15), `listing_edit_histories` (đã bỏ theo thiết kế hiện tại).
@@ -4296,7 +4231,6 @@ hằng số canonical mục 5. Đã ghi tại từng bảng ở §3. Đây là t
 | 9 | **`publiclyVisible`** = `ACTIVE` hoặc (`NEED_REVIEW` và config bật) | Phụ thuộc config runtime | `ListingVisibilityService.publicStatuses()` — **method duy nhất**, mọi truy vấn công khai dùng nó | canonical 5.2, `[§5.1]` |
 | 10 | **Cửa sổ sửa**: bình luận 30 phút, đánh giá 24 giờ | Phụ thuộc config + thời điểm request | `CommentServiceImpl.update()` / `ReviewServiceImpl.update()` đọc `comment.edit_window_minutes`, `review.edit_window_hours` | `[§3.11][§3.12]` |
 | 11 | **Đánh giá yêu cầu quan hệ thuê đã xác thực** | Cross-table (`rental_requests`) | `ReviewServiceImpl.create()` kiểm tra trạng thái `RENTED`/`CHECKED_OUT`; key liên hệ cũ đã bị V24 xóa | Luồng rental V23 |
-| 12 | **Khử trùng lặp lượt xem / liên hệ** (`view.dedup_minutes`=30, `contact.dedup_minutes`=60) | Cross-row + cửa sổ + config | `ViewHistoryServiceImpl` / `ContactLogServiceImpl` quyết định `is_counted` | `[§3.8][§3.10]` |
 | 13 | **Rate limit** (đăng nhập 5/15', đăng tin 10/ngày, bình luận 5/phút, report 10/ngày, tin nhắn 30/phút, chatbot 30/phút) | Đếm theo thời gian thực — thuộc về Redis, không phải DB | `RateLimitFilter` (Redis `INCR`+`EXPIRE`, canonical 1.1/8) | `[§11.10]` + canonical 8 |
 | 15 | `V15__drop_permission_tables.sql` | Drop `role_permissions` và `permissions`; chuyển schema sang role-only | ✔ Bắt buộc sau V14 |
 | 14 | **`messages.sender_id` phải là `tenant_id` hoặc `landlord_id`** của hội thoại | CHECK không truy vấn bảng khác | `MessageServiceImpl.send()` — 403 `FORBIDDEN` nếu sai | `[§2.6]` |
@@ -4612,9 +4546,6 @@ ngram trên `TEXT` là thao tác **nặng** (đọc + tokenize toàn bộ `descr
 | `idx_search_histories_user_id_created_at` | `search_histories` | `(user_id, created_at)` | BTREE | Hồ sơ nhu cầu w=2 | `[§9.2]` |
 | `idx_search_histories_keyword` | `search_histories` | `(keyword)` | BTREE | Từ khóa phổ biến | ADM-13 |
 | `idx_search_histories_result_count` | `search_histories` | `(result_count)` | BTREE | Truy vấn 0 kết quả | `[§3.7]` |
-| `idx_contact_logs_listing_id_created_at` | `contact_logs` | `(listing_id, created_at)` | BTREE | Thống kê tin | LIST-10 |
-| `idx_contact_logs_dedup` | `contact_logs` | `(listing_id, user_id, created_at)` | BTREE | Khử trùng lặp + điều kiện đánh giá | `[§3.10][§3.12]` |
-| `idx_contact_logs_user_id_created_at` | `contact_logs` | `(user_id, created_at)` | BTREE | Hồ sơ nhu cầu w=5 | `[§9.2]` |
 | `idx_conversations_tenant_id_last_message_at` | `conversations` | `(tenant_id, last_message_at)` | BTREE | Danh sách hội thoại (thuê) | CONT-03 |
 | `idx_conversations_listing_id` | `conversations` | `(listing_id)` | BTREE | FK | |
 | `idx_conversations_listing_id_last_message_at` | `conversations` | `(listing_id, last_message_at)` | BTREE | Danh sách hội thoại phía chủ trọ sau khi join `listings.owner_id` | CONT-03 |
@@ -5023,7 +4954,6 @@ nên có nhưng hệ thống vẫn khởi động và phục vụ được luồ
 5. listings (→users, categories, provinces, districts, wards)
    -- CHƯA có fk_listings_prediction_histories
 6. listing_images, listing_amenities, favorites,
-   view_histories, search_histories, contact_logs, conversations, comments,
    reviews, reports, payments, notifications, notification_preferences (→users),
    audit_logs, chatbot_conversations
 7. messages (→conversations), sentiment_results (→comments),
@@ -5127,7 +5057,7 @@ tiếp trong MySQL migration. `AdminAccountInitializer` đọc `ADMIN_EMAIL`/`AD
 
 | `code` | `name` | `description` | `is_system` | `display_order` |
 |---|---|---|---|---|
-| `ROLE_TENANT` | Người thuê | Mặc định khi đăng ký. Tìm kiếm, lưu tin, liên hệ, bình luận, đánh giá, báo cáo `[§1.2]` | `TRUE` | 1 |
+| `ROLE_TENANT` | Người thuê | Mặc định khi đăng ký. Tìm kiếm, lưu tin, nhắn tin, bình luận, đánh giá, báo cáo `[§1.2]` | `TRUE` | 1 |
 | `ROLE_LANDLORD` | Chủ trọ | Bao gồm "Người cho ở ghép". Đăng tin, quản lý tin, mua gói đẩy tin `[§1.2]` | `TRUE` | 2 |
 | `ROLE_MODERATOR` | Kiểm duyệt viên | Duyệt tin, xử lý báo cáo, kiểm tra bình luận. **Không** quản lý cấu hình tài chính `[§1.2]` | `TRUE` | 3 |
 | `ROLE_ADMIN` | Quản trị viên | Toàn quyền `[§1.2]` | `TRUE` | 4 |
@@ -5296,7 +5226,6 @@ Tổng: 9 + 5 + 8 + 7 = **29 amenity**.
 | `ai.price.deviation_flag_ratio` | `0.35` | `DECIMAL` | `AI_PRICE` | `[§3.3][§9.4]` |
 | `ai.chatbot.enabled` | `true` | `BOOLEAN` | `AI_CHATBOT` | `[§10.10]` |
 | `ai.chatbot.max_clarify_turns` | `3` | `INT` | `AI_CHATBOT` | `[§9.3]` |
-| `contact.dedup_minutes` | `60` | `INT` | `INTERACTION` | `[§3.10]` |
 | `view.dedup_minutes` | `30` | `INT` | `INTERACTION` | `[§3.8]` |
 | `comment.edit_window_minutes` | `30` | `INT` | `INTERACTION` | `[§3.11]` |
 | `review.edit_window_hours` | `24` | `INT` | `INTERACTION` | `[§3.12]` |
@@ -5929,7 +5858,6 @@ HIST-02, 1 cho thống kê LIST-10.
 
 | Loại dữ liệu | Chính sách | Căn cứ |
 |---|---|---|
-| **Dữ liệu nghiệp vụ** (`listings`, `users`, `payments`, `reports`, `comments`, `reviews`, `contact_logs`, `violation_warnings`, `moderation_actions`, `promotion_subscriptions`) | **KHÔNG BAO GIỜ xóa.** Chỉ xóa mềm | `[§11.5]` *"Không xóa cứng dữ liệu nghiệp vụ quan trọng"*, `[§3.6]`, `[§10.2]` |
 | **Audit** (`audit_logs`) | Giữ **tối thiểu 24 tháng**, sau đó lưu trữ ra file lạnh | `[§11.4]` |
 | **Log hành vi / AI** (`view_histories`, `search_histories`, `recommendation_logs`, `chatbot_messages`, `chatbot_conversations`) | **Được dọn theo tuổi** | Không thuộc *"dữ liệu nghiệp vụ quan trọng"* `[§11.5]`; giữ lại vô hạn còn là **rủi ro riêng tư** `[§11.1]` |
 | **Dữ liệu phái sinh** (`notifications`) | Được dọn theo tuổi | Sự kiện gốc đã ở `audit_logs`/`payments`/`moderation_actions` |
@@ -6017,11 +5945,8 @@ LIMIT 100;
 ```
 
 Khi dòng `listings` bị xóa, các bảng con `CASCADE` (§3.18–3.22) tự dọn: `listing_images`,
-`listing_amenities`, `favorites`, `view_histories`, `contact_logs`?
-— **không**, `contact_logs` là `RESTRICT` (§3.24) nên nó cũng chặn purge. Đây là **đúng**:
-`contact_logs` là lịch sử nghiệp vụ phục vụ thống kê và tra cứu liên hệ; từ V23, quyền đánh giá được xác định bằng `rental_requests`, không dùng bảng này.
 
-Thực tế: hầu như không tin nào đủ điều kiện purge (tin nào cũng có ít nhất một lượt xem/liên hệ).
+Thực tế: hầu như không tin nào đủ điều kiện purge (tin nào cũng có ít nhất một lượt xem).
 **Đó là kết quả mong muốn** — `[§3.6]` và `[§11.5]` ưu tiên giữ dữ liệu hơn tiết kiệm đĩa. Câu lệnh
 tồn tại để dọn tin `DRAFT` bị bỏ và dữ liệu test.
 
@@ -6073,9 +5998,6 @@ môi trường chạy — một lần chạy nhầm file dump lên prod sẽ **x
 | **ADR-09** | **Từ điển cảm xúc + hệ số hedonic + tri thức chatbot lưu trong `ai_configs` (JSON), KHÔNG lưu file resource, KHÔNG tạo bảng riêng** | V8 cần seed từ điển; chọn nơi lưu | (a) `src/main/resources/ai/sentiment-vi-lexicon.json`; (b) bảng `sentiment_lexicon` riêng | (a) **Admin không sửa được** ⇒ vi phạm `[§10.10]` (*"Cấu hình ngưỡng bình luận tiêu cực"*) và `[§2.11]` AI-08; mọi tinh chỉnh = rebuild + redeploy; không audit được `[§11.4]`. (b) thêm bảng ngoài canonical mục 6 **mà không có căn cứ nghiệp vụ bắt buộc** (tương phản: `notification_preferences` §3.38 được `[§11.12]` yêu cầu tường minh), và **vô ích**: từ điển luôn nạp toàn bộ vào RAM, không bao giờ truy vấn từng dòng ⇒ mô hình quan hệ không mang lại gì. `ai_configs` cho: Admin sửa qua UI, `version` để truy vết `sentiment_results.analyzer_version`, audit `AI_CONFIG_CHANGE`, cache Redis, `is_enabled` cho *"bật/tắt module AI"* | JSON ~40 KB trong một dòng; không diff được bằng git (bù bằng `audit_logs.old_value/new_value`) | `[§10.10][§2.11]`, canonical mục 6/10.1 — §7.3 |
 | **ADR-10** | **Median / percentile / IQR của dự đoán giá tính ở tầng Java, không ở SQL** | Canonical 10.4 bước 3/5 cần median(price/m²) và percentile 25/50/75 | Window function `NTILE`/`ROW_NUMBER` trong SQL | MySQL 8.4 **không có** `PERCENTILE_CONT`/`MEDIAN`. Mô phỏng bằng window function làm câu SQL phức tạp, khó test, không tái dùng. Tập comparable tối đa vài trăm dòng ⇒ tính bằng Java rẻ, rõ ràng, unit-test được từng bước hedonic | Chuyển vài trăm dòng về JVM mỗi lần dự đoán. Không đáng kể (dự đoán chạy khi chủ trọ nhập form, không phải đường nóng) | `[§9.4]`, canonical 10.4 — §9.3 |
 | **ADR-11** | **`DATETIME(6)` thay vì `TIMESTAMP`, toàn hệ thống UTC** | Cần mốc thời gian nhất quán, `[§5.2][§3.8]` phụ thuộc cửa sổ thời gian chính xác | `TIMESTAMP` | `TIMESTAMP` chết ở **2038** (32-bit epoch) và **tự chuyển đổi timezone theo session** — một client kết nối sai timezone làm dữ liệu **đọc ra sai**, phá `view.dedup_minutes` và `expired_at`. `DATETIME(6)` lưu nguyên văn giá trị đã chuẩn hóa UTC ở tầng ứng dụng, có microgiây (cần cho thứ tự `messages` trong cùng giây) | Mất tính năng tự chuyển timezone của `TIMESTAMP` — **đây là điều mong muốn**. Ứng dụng chịu trách nhiệm chuẩn hóa (JVM `-Duser.timezone=UTC`, JDBC `connectionTimeZone=UTC`) | canonical 7.3 — §1.4 |
-| **ADR-12** | **Denormalize counter (`view_count`, `favorite_count`, `average_rating`…) + đồng bộ 3 tầng, KHÔNG dùng trigger** | Trang tìm kiếm 20 tin/trang; `COUNT()`/`AVG()` mỗi tin ⇒ ~5 subquery tổng hợp trên các bảng lớn nhất mỗi request | (a) `COUNT()` khi đọc; (b) trigger MySQL duy trì counter | (a) không chịu nổi tải `[§11.3]`. (b) trigger **không đọc được** `system_configs` qua cache Redis (logic đếm phụ thuộc `view.dedup_minutes`, `contact.dedup_minutes`, `ai.sentiment.min_length`) ⇒ vi phạm canonical 13.4 (*"Không hardcode ngưỡng"*); và trigger không unit-test được. **Ba tầng**: UPDATE nguyên tử trong cùng transaction → job đêm đối soát từ nguồn sự thật (job cũ `TrustScoreRecalcJob` đã xóa ở `V22`) → `CHECK (col >= 0)` chặn dưới | Counter có thể trôi tạm thời trong ≤24h nếu ứng dụng lỗi. Chấp nhận: không có counter nào ảnh hưởng tính đúng đắn của tiền hay quyền | `[§11.3][§5.7][§5.8]` — §1.2 |
-| **ADR-13** | **`ON DELETE`: `RESTRICT` mặc định; `CASCADE` chỉ cho dữ liệu sở hữu không có giá trị audit; `SET NULL` cho tham chiếu tùy chọn** | Mỗi FK phải chọn một chính sách | `CASCADE` toàn bộ (tiện); `RESTRICT` toàn bộ (an toàn tuyệt đối) | `CASCADE` toàn bộ sẽ **xóa bằng chứng**: xóa user → mất `reports`, `payments`, `moderation_actions`, vi phạm `[§10.2]` và `[§11.4]`. `RESTRICT` toàn bộ làm không dọn nổi dữ liệu test và để lại rác mồ côi. **Luật chốt**: dữ liệu nghiệp vụ/audit → `RESTRICT` (`payments`, `reports`, `contact_logs`, `reviews`, `comments`, `listings.owner_id`); dữ liệu sở hữu thuần (`listing_images`, `favorites`, `messages`, token, `notifications`) → `CASCADE`; tham chiếu tùy chọn nullable (`resolved_by`, `price_prediction_id`, `moderator_id`, `actor_id`) → `SET NULL`. `ON UPDATE` **luôn** `RESTRICT` (id `AUTO_INCREMENT` không bao giờ đổi; `CASCADE` chỉ tạo ảo tưởng) | Xóa cứng một user "sạch" cần dọn thủ công theo thứ tự. Chấp nhận — `[§10.2]` vốn cấm xóa cứng user có dữ liệu nghiệp vụ | `[§3.6][§10.2][§11.4][§11.5]` |
-| **ADR-14** | **`DataRetentionJob` (03:30) dọn log hành vi theo tuổi; dữ liệu nghiệp vụ KHÔNG BAO GIỜ bị dọn** | 15,8 GB/năm tăng vô hạn làm backup/restore `[§11.5]` bất khả thi | Giữ tất cả vô hạn; partition theo tháng | Giữ tất cả ⇒ `mysqldump` hàng chục GB, restore ngoài cửa sổ bảo trì ⇒ *"kế hoạch khôi phục"* `[§11.5]` chỉ là câu chữ. Partition thêm phức tạp vận hành, chưa cần ở quy mô này. Phân loại: `view_histories` 90 ngày, `recommendation_logs` 60, `search_histories` 180, `chatbot_messages` 90, `notifications` 90/365, `audit_logs` 24 tháng (xuất file rồi xóa). Kết quả: **~4,5 GB ổn định + 0,3 GB/năm** thay vì +15,8 GB/năm. Dữ liệu nghiệp vụ (`listings`, `payments`, `reports`, `comments`, `contact_logs`) **không nằm trong danh sách** | Mất lịch sử xem > 90 ngày. Không ảnh hưởng: `listings.view_count` đã cộng dồn (LIST-10 nguyên vẹn), recommendation chỉ dùng hành vi gần đây (canonical 10.2) | `[§11.5][§11.1]` — §10.2 |
 | **ADR-15** | **`system_configs` (ngưỡng vô hướng) tách bạch tuyệt đối với `ai_configs` (tri thức có cấu trúc, có `version`)** | Hai bảng cấu hình có nguy cơ chồng lấn | Gộp làm một bảng | Canonical mục 6 chốt **cả hai** bảng tồn tại; canonical mục 9 là danh sách **đóng** của `system_configs`. Ranh giới: mọi key `ai.*` **vô hướng** (canonical mục 9) → `system_configs`; mọi thứ AI cần **ngoài** danh sách đó (từ điển, hệ số, FAQ) → `ai_configs`. `ai_configs` có `version` vì kết quả AI phải truy vết được về phiên bản tri thức đã dùng `[§10.10]`; `system_configs` không cần | Lập trình viên phải nhớ tra bảng nào. Bù bằng: hai service riêng (`SystemConfigService` / `AiConfigService`), `ConfigKey` constant chỉ chứa key của `system_configs` | canonical mục 6/9, `[§10.10]` — §3.46 |
 | **ADR-16** | **Tin được đẩy chỉ ảnh hưởng `ORDER BY`, TUYỆT ĐỐI không ảnh hưởng `WHERE`** | `[§2.9]` PROMO-01 *"Đẩy tin lên đầu"* nhưng `[§3.14]` *"Không cho phép tin vi phạm dùng tiền để vượt kiểm duyệt"* | Chèn tin đẩy vào kết quả bằng `UNION`/nới lỏng bộ lọc | Nếu tin đẩy được chèn qua đường khác, một tin `LOCKED` có `is_promoted=TRUE` sẽ lọt ra công khai — vi phạm trực tiếp `[§3.14]` và `[§3.7]` (*"Tin Locked, Hidden, Expired, Deleted không xuất hiện"*). Giữ `is_promoted`/`promotion_priority` **chỉ** trong `ORDER BY` làm quy tắc này thành **bất biến cấu trúc**, không phải kỷ luật lập trình. Recommendation cũng vậy: `promotedBoost` là **hệ số nhân điểm** có trần 1.15 (`ck_recommendation_logs_boost`), không phải điều kiện lọc | Tin đẩy không xuất hiện nếu không khớp bộ lọc — **đúng** `[§3.7]` *"đảm bảo không làm mất tính liên quan"* | `[§2.9][§3.7][§3.14][§9.2]` — §5.4, §9.1 |
 | **ADR-17** | **Bổ sung transition `AUTO_HIDE_BY_SYSTEM` (ACTIVE/NEED_REVIEW → HIDDEN, actor SYSTEM) + `UNHIDE_BY_MODERATOR`, và cột `listings.auto_hidden_at`/`auto_hide_reason`** | `[§5.3]` liệt kê 4 điều kiện *"tự động ẩn tin"*, trong đó có *"AI sentiment phát hiện tỷ lệ bình luận tiêu cực cao **và** tin đã từng bị cảnh báo trước đó"*. Nhưng canonical mục 5.1 chỉ có `HIDE_BY_OWNER` với actor **LANDLORD** — **không tồn tại** đường nào đưa tin sang `HIDDEN` bởi SYSTEM ⇒ quy tắc `[§5.3]` **không có chỗ thực thi**, trái canonical 13.2 (*"mọi business rule trong tài liệu có chỗ thực thi tương ứng"*) | (a) **Im lặng bỏ qua** quy tắc; (b) diễn giải thành `FLAG_NEED_REVIEW` như ADR-07 đã làm với ngưỡng report; (c) dùng `LOCK` | (a) **Loại** — bỏ một quy tắc nghiệp vụ tường minh mà không ghi lý do là cách hỏng tệ nhất. (b) **Loại** — ADR-07 diễn giải được vì `[§3.13]` nói rõ *"Report **không tự động khóa tin ngay**"*, tức nghiệp vụ **tự mâu thuẫn** ở chỗ đó và phải chọn một hướng; còn ở đây `[§5.3]` **không** có mệnh đề phản bác nào, lại còn đặt điều kiện AND rất chặt (*"đã **từng bị cảnh báo** trước đó"*) — đó là dấu hiệu tác giả **cố ý** muốn hành động mạnh hơn `NEED_REVIEW`. Hơn nữa tin đã bị cảnh báo mà vẫn nhận ≥50% bình luận tiêu cực thì `NEED_REVIEW` (**mặc định vẫn hiển thị công khai**, canonical 5.2) là **không có tác dụng gì**. (c) **Loại** — `LOCK` vi phạm `[§10.10]` (*"AI không bao giờ tự khóa"*, *"quyết định nặng cần Admin/Moderator xác nhận"*). **Ẩn ≠ khóa**: ẩn là chế tài **tạm thời, đảo ngược được**, và `[§5.3]` cho phép **tường minh** bằng chính chữ *"tự động ẩn"*. `[§10.10]` được tôn trọng bằng cách khác: tin bị ẩn **vào hàng đợi Moderator** (`notifications(AI_NEGATIVE_ALERT)`) và **chỉ người** mới gỡ được (`UNHIDE_BY_MODERATOR`) | Sai sót của AI làm một tin sạch bị ẩn tạm thời. Rủi ro được ép xuống thấp bằng **ba** lớp: (1) ngưỡng L2 (≥10 bình luận & ≥50% tiêu cực), (2) **AND** bắt buộc *"đã từng bị cảnh báo"* (`need_review_count > 0` hoặc có `violation_warnings`) — tin sạch **không bao giờ** bị ẩn dù bị bơm bao nhiêu bình luận tiêu cực, (3) `sentiment_weight` đã loại bình luận spam/tài khoản mới/quá ngắn khỏi thống kê `[§9.1]`. Chủ trọ **không** tự gỡ được (cột `auto_hidden_at` chặn `UNHIDE_BY_OWNER`) — cố ý, nếu không chế tài vô nghĩa | `[§5.3][§9.1][§10.10]`, canonical 5.1/13.2 — §3.17, §6.1, §9.6 |
@@ -6092,7 +6014,6 @@ review đối chiếu. File canonical **không bị sửa**.
 | Enum | Giá trị | Bắt buộc vì | Bảng dùng |
 |---|---|---|---|
 | `AmenityGroup` | `FURNITURE, SECURITY, UTILITY, TRANSPORT` | `[§10.5]` *"Nhóm tiện ích: nội thất, an ninh, sinh hoạt, giao thông"* | `amenities.group_code` |
-| `ContactType` | `VIEW_PHONE, FORM, CHAT` | `[§3.10]` *"Dữ liệu vào: ListingId, **hình thức liên hệ**"* | `contact_logs.contact_type` |
 | `ConversationStatus` | `ACTIVE, ARCHIVED, BLOCKED` | `[§3.10]` *"Người dùng bị report spam có thể bị **hạn chế liên hệ**"* | `conversations.status` |
 | `BannedKeywordSeverity` | `MILD, SEVERE` | `[§5.3]` *"Nội dung chứa từ khóa cấm **nghiêm trọng**"* (phân biệt với từ khóa thường) | `banned_keywords.severity` |
 | `BannedKeywordScope` | `LISTING, COMMENT, BOTH` | `[§3.3]` và `[§3.11]` xử lý từ khóa cấm **khác nhau** | `banned_keywords.applies_to` |
@@ -6154,7 +6075,6 @@ ADR-17
 
 | Mục | Nội dung | Vì sao |
 |---|---|---|
-| Quy ước tên FK self-reference kép | `fk_<bảng>_<bảng_đích>_<vai_trò>` — ví dụ `fk_follows_users_follower` / `fk_follows_users_landlord` | Canonical mục 2 quy ước `fk_<bảng>_<bảng_đích>` bị **trùng tên** khi một bảng có 2 FK về cùng đích (`follows`, `contact_logs`, `conversations`, `reviews`) — §1.3 |
 | Quy ước tên CHECK | `ck_<bảng>_<ý_nghĩa>` | Canonical mục 2 không có — §1.3 |
 | Quy ước tên FULLTEXT | `ft_<bảng>_<cột>_<cột>` | Canonical mục 2 không có — §1.3 |
 | Quy ước cột sinh unique | `<cột>_uk` | ADR-02 — §1.3 |
@@ -6179,7 +6099,6 @@ ADR-17
 | "Tỷ lệ bình luận tiêu cực **cao**" (điều kiện tự động ẩn) | `[§5.3]` *"AI sentiment phát hiện tỷ lệ bình luận tiêu cực **cao**"* — không định lượng | = ngưỡng **L2** của `[§9.1]` (≥ `ai.sentiment.min_comments_l2` bình luận **và** ≥ `ai.sentiment.negative_ratio_l2` tiêu cực) — mức duy nhất mà `[§9.1]` gọi là *"cảnh báo mức **cao**"*. **Không** dùng L1: `[§9.1]` chốt L1 chỉ đáng *"đánh dấu NeedReview"* | ADR-17 — §9.6 |
 | "Tin đã từng bị cảnh báo trước đó" | `[§5.3]` — không nói cảnh báo nào | = `listings.need_review_count > 0` (hệ thống đã cảnh báo) **HOẶC** có `violation_warnings` của tin (người đã cảnh báo `[§5.4]`). Là điều kiện **AND** với tỷ lệ tiêu cực, đúng liên từ *"và"* của nghiệp vụ gốc | ADR-17 — §9.6 |
 | "Phản hồi **nhanh và đầy đủ**" | `[§5.7]` — không định lượng | *"đầy đủ"* = có `conversations.first_response_at`; *"nhanh"* = trong 24 giờ. **Gộp làm một** chỉ số `response_rate_percent`: hội thoại chỉ được tính "đạt" khi phản hồi **trong** SLA ⇒ một con số mã hóa cả hai vế, không phải cân hai trọng số rời | §9.2, §9.8 |
-| Loại thông báo nào *"không quan trọng"* (được tắt) | `[§11.12]` *"Có thể tắt **một số** loại thông báo **không quan trọng**"* — không liệt kê | 6 loại tắt được (`LISTING_EXPIRING`, `LISTING_EXPIRED`, `NEW_CONTACT`, `NEW_COMMENT`, `NEW_REVIEW`, `FOLLOWED_LANDLORD_NEW_LISTING`); 10 loại **không** tắt được (kết quả kiểm duyệt, chế tài, giao dịch tiền, hàng đợi Moderator). Trùng **chính xác** `03_THIET_KE_API.md` mục 4.10.6 | §3.38 |
 
 ### A.6. Bảng bổ sung ngoài canonical (1)
 
@@ -6197,9 +6116,3 @@ Các mục liên quan đã được đồng bộ trong ERD và bảng tổng ki�
 > Tài liệu này là đặc tả đầy đủ cho `V1__baseline_schema.sql` … `V10__fulltext_index.sql` và cho
 > toàn bộ entity JPA. Mọi mâu thuẫn giữa tài liệu này và `00_CANONICAL_DECISIONS.md` phải được giải
 > quyết **theo canonical**; mọi mục `[BỔ SUNG NGOÀI CANONICAL]` ở §12 cần được duyệt trước khi code.
-
-
-
-
-
-

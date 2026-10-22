@@ -163,7 +163,7 @@ class ReviewServiceImplTest {
         return new ListingGateway.ListingBrief(
                 LISTING_ID, LANDLORD_ID, "Phòng thử nghiệm", "phong-thu-nghiem", null,
                 BigDecimal.valueOf(3_000_000), BigDecimal.valueOf(25), "Hà Nội",
-                ListingStatus.ACTIVE, true, BigDecimal.valueOf(4), 2, 0);
+                ListingStatus.ACTIVE, true, BigDecimal.valueOf(4), 2);
     }
 
     private UserGateway.UserBrief userBrief() {

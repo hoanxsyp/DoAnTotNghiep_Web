@@ -12,8 +12,8 @@
 | Xem chi tiết tin, ảnh, thông số, tiện ích và tin liên quan | Chưa check |
 | Xem hồ sơ công khai và tin đăng của chủ trọ | Chưa check |
 | Không xem được tin chưa duyệt, bị ẩn, khóa hoặc đã xóa | Chưa check |
-| Không lộ thông tin liên hệ riêng khi chưa đăng nhập | Chưa check |
-| Được yêu cầu đăng nhập khi lưu tin, liên hệ, nhắn tin hoặc gửi yêu cầu thuê | Chưa check |
+| Số điện thoại chủ trọ hiển thị trực tiếp dạng text trên chi tiết tin | Chưa check |
+| Được yêu cầu đăng nhập khi lưu tin, nhắn tin hoặc gửi yêu cầu thuê | Chưa check |
 | Đăng ký tài khoản Tenant/Landlord và xác thực email | Chưa check |
 | Gửi lại mã xác thực và tiếp tục xác thực sau khi tải lại trang | Chưa check |
 | Đăng nhập, quên mật khẩu và đặt lại mật khẩu | Chưa check |
@@ -43,7 +43,7 @@ Các vai trò đăng nhập kiểm tra nhóm này trong phạm vi quyền của 
 |---|:---:|
 | Lưu/bỏ lưu tin và xem danh sách tin đã lưu | Chưa check |
 | Theo dõi/bỏ theo dõi chủ trọ | Chưa check |
-| Xem thông tin liên hệ và gửi yêu cầu liên hệ chủ tin | Chưa check |
+| Xem trực tiếp số điện thoại và nhắn tin cho chủ trọ | Chưa check |
 | Tạo cuộc trò chuyện, gửi/nhận tin nhắn và cập nhật số chưa đọc | Chưa check |
 | Tạo, trả lời, sửa và xóa bình luận trong phạm vi cho phép | Chưa check |
 | Gửi báo cáo vi phạm và xem báo cáo của mình | Chưa check |
@@ -51,7 +51,6 @@ Các vai trò đăng nhập kiểm tra nhóm này trong phạm vi quyền của 
 | Sửa tin ở ghép, quản lý ảnh/tiện ích và gửi lại sau khi bị từ chối | Chưa check |
 | Ẩn/hiện, đóng, gia hạn và xóa tin ở ghép theo trạng thái cho phép | Chưa check |
 | Không tạo/sửa tin sang loại chỉ dành cho chủ trọ | Chưa check |
-| Xem danh sách tin đã đăng, thống kê và người liên hệ tin của mình | Chưa check |
 | Gửi yêu cầu thuê phòng với ngày xem hợp lệ | Chưa check |
 | Không gửi yêu cầu trùng đang mở hoặc yêu cầu vào tin không khả dụng | Chưa check |
 | Xem trạng thái yêu cầu thuê, đổi ngày khi còn chờ và hủy đúng thời hạn | Chưa check |
@@ -77,7 +76,6 @@ Các vai trò đăng nhập kiểm tra nhóm này trong phạm vi quyền của 
 | Ẩn/hiện, đóng, gia hạn và xóa tin đúng trạng thái | Chưa check |
 | Không sửa/xóa hoặc lách khóa đối với tin đang bị khóa/đang cho thuê | Chưa check |
 | Lọc danh sách tin và xem thống kê từng tin | Chưa check |
-| Xem người liên hệ và nhắn tin với người quan tâm | Chưa check |
 | Xem, duyệt và từ chối yêu cầu thuê trên tin của mình | Chưa check |
 | Xác nhận thuê; trạng thái tin và các yêu cầu cạnh tranh cập nhật đúng | Chưa check |
 | Không xác nhận hai người thuê cùng phòng hoặc một người đang thuê hai phòng | Chưa check |
@@ -87,7 +85,7 @@ Các vai trò đăng nhập kiểm tra nhóm này trong phạm vi quyền của 
 | Kiểm tra thanh toán thành công, thất bại, hủy và lịch sử giao dịch | Chưa check |
 | Gói đẩy tin chỉ kích hoạt sau thanh toán hợp lệ, không kích hoạt trùng | Chưa check |
 | Gói hết hạn thì tin không còn hưởng ưu tiên sai | Chưa check |
-| Nhận thông báo kiểm duyệt, sắp hết hạn, liên hệ và đánh giá | Chưa check |
+| Nhận thông báo kiểm duyệt, sắp hết hạn và đánh giá | Chưa check |
 | Tài khoản bị hạn chế đăng tin không vượt được hạn chế | Chưa check |
 
 ## 5. Kiểm duyệt viên — MODERATOR
@@ -152,7 +150,7 @@ Phân công cho người phụ trách module tương ứng. Kiểm tra demo AI �
 | AI tắt/lỗi/timeout không làm hỏng luồng chính của website | Chưa check |
 | Xác nhận module AI nào đã nối dữ liệu thật của website, module nào còn độc lập | Chưa check |
 | Đăng ký → đăng tin → duyệt → khách tìm thấy tin | Chưa check |
-| Tìm phòng → liên hệ/chat → yêu cầu thuê → xác nhận thuê → đánh giá | Chưa check |
+| Tìm phòng → kiểm tra số điện thoại hiển thị trực tiếp/chat → yêu cầu thuê → xác nhận thuê → đánh giá | Chưa check |
 | Trả phòng → cập nhật tin → người thuê có thể thuê tiếp | Chưa check |
 | Báo cáo vi phạm → kiểm duyệt xử lý → chủ tin/người báo nhận kết quả | Chưa check |
 | Mua gói → xác nhận thanh toán → đẩy tin → hết hạn gói | Chưa check |

@@ -17,13 +17,6 @@ import notify from '@/utils/toast';
 import { formatCurrency, formatDate } from '@/utils/format';
 
 const RETURN_URL = `${window.location.origin}/quan-ly/thanh-toan/ket-qua`;
-const PAYMENT_METHODS = [
-  { value: 'SANDBOX', label: 'Thanh toán thử nghiệm (Sandbox)' },
-  { value: 'VNPAY', label: 'VNPay' },
-  { value: 'MOMO', label: 'MoMo' },
-  { value: 'BANK_TRANSFER', label: 'Chuyển khoản ngân hàng' },
-];
-
 const newIdempotencyKey = () =>
   (window.crypto?.randomUUID?.() || `key-${Date.now()}-${Math.random().toString(16).slice(2)}`);
 
@@ -35,7 +28,7 @@ const PackagesPage = () => {
   const [loading, setLoading] = useState(true);
 
   const [buyPkg, setBuyPkg] = useState(null);
-  const [form, setForm] = useState({ listingId: '', paymentMethod: 'SANDBOX', couponCode: '' });
+  const [form, setForm] = useState({ listingId: '', couponCode: '' });
   const [coupon, setCoupon] = useState(null);
   const [validating, setValidating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -63,7 +56,7 @@ const PackagesPage = () => {
   const openBuy = (pkg) => {
     setBuyPkg(pkg);
     setCoupon(null);
-    setForm({ listingId: searchParams.get('listingId') || '', paymentMethod: 'SANDBOX', couponCode: '' });
+    setForm({ listingId: searchParams.get('listingId') || '', couponCode: '' });
   };
 
   const validateCoupon = async () => {
@@ -88,7 +81,7 @@ const PackagesPage = () => {
       const payload = {
         listingId: Number(form.listingId),
         packageId: buyPkg.id,
-        paymentMethod: form.paymentMethod,
+        paymentMethod: 'SANDBOX',
         returnUrl: RETURN_URL,
       };
       if (coupon?.valid || form.couponCode) payload.couponCode = form.couponCode.trim().toUpperCase();
@@ -184,10 +177,9 @@ const PackagesPage = () => {
                 {listings.map((l) => <MenuItem key={l.id} value={l.id}>{l.title}</MenuItem>)}
               </TextField>
             )}
-            <TextField select label="Phương thức thanh toán" fullWidth value={form.paymentMethod}
-              onChange={(e) => setForm((f) => ({ ...f, paymentMethod: e.target.value }))}>
-              {PAYMENT_METHODS.map((m) => <MenuItem key={m.value} value={m.value}>{m.label}</MenuItem>)}
-            </TextField>
+            <Alert severity="info">
+              Phương thức thanh toán: <strong>Sandbox</strong> (mô phỏng thử nghiệm).
+            </Alert>
             <Stack direction="row" spacing={1}>
               <TextField label="Mã khuyến mãi" fullWidth value={form.couponCode}
                 onChange={(e) => { setForm((f) => ({ ...f, couponCode: e.target.value })); setCoupon(null); }}

@@ -9,7 +9,7 @@ import { useTheme } from '@mui/material/styles';
 import SendIcon from '@mui/icons-material/Send';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
-import contactApi from '@/api/contactApi';
+import conversationApi from '@/api/conversationApi';
 import PageHeader from '@/components/dashboard/PageHeader';
 import LoadingSkeleton from '@/components/common/LoadingSkeleton';
 import EmptyState from '@/components/common/EmptyState';
@@ -65,7 +65,7 @@ const MessagesPage = () => {
   const loadConversations = useCallback(async () => {
     setLoadingList(true);
     try {
-      const data = await contactApi.getConversations({ page: 0, size: 50, sort: 'lastMessageAt,desc' });
+      const data = await conversationApi.getConversations({ page: 0, size: 50, sort: 'lastMessageAt,desc' });
       setConversations(data?.items || []);
       return data?.items || [];
     } catch (e) {
@@ -89,11 +89,11 @@ const MessagesPage = () => {
     if (!id) return;
     setLoadingMsg(true);
     try {
-      const data = await contactApi.getMessages(id, { page: 0, size: 50, sort: 'createdAt,desc' });
+      const data = await conversationApi.getMessages(id, { page: 0, size: 50, sort: 'createdAt,desc' });
       // API trả mới -> cũ; đảo lại để render từ cũ -> mới.
       setMessages([...(data?.items || [])].reverse());
       // Đánh dấu đã đọc.
-      contactApi.markRead(id).then(() => {
+      conversationApi.markRead(id).then(() => {
         setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, unreadCount: 0 } : c)));
       }).catch(() => {});
     } catch (e) {
@@ -121,7 +121,7 @@ const MessagesPage = () => {
     return chatSocket.subscribeConversation(activeId, (message) => {
       upsertMessage(message);
       if (!message.sentByMe) {
-        contactApi.markRead(activeId).then(() => {
+        conversationApi.markRead(activeId).then(() => {
           setConversations((prev) => prev.map((c) => (
             c.id === activeId ? { ...c, unreadCount: 0 } : c
           )));
@@ -164,7 +164,7 @@ const MessagesPage = () => {
     if (!content || !activeId) return;
     setSending(true);
     try {
-      const msg = await contactApi.sendMessage(activeId, { content });
+      const msg = await conversationApi.sendMessage(activeId, { content });
       upsertMessage(msg);
       setInput('');
       setConversations((prev) => prev.map((c) => (

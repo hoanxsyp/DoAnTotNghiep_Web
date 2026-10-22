@@ -73,7 +73,12 @@ public class RentalApiLightgbmPriceEstimator implements PriceEstimator {
         this.wardRepository = wardRepository;
         this.amenityRepository = amenityRepository;
         Duration connectTimeout = appProperties.getAi().getRentalPrice().getConnectTimeout();
-        this.httpClient = HttpClient.newBuilder().connectTimeout(connectTimeout).build();
+        // Uvicorn không hỗ trợ HTTP/2 cleartext upgrade (h2c). Java HttpClient mặc định thử
+        // nâng cấp kết nối HTTP, khiến Uvicorn bỏ body của POST /predict và trả 422 body missing.
+        this.httpClient = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
+                .connectTimeout(connectTimeout)
+                .build();
     }
 
     @Override

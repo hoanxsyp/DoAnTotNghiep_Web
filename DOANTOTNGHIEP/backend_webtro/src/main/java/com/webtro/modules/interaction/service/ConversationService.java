@@ -10,7 +10,7 @@ import com.webtro.modules.interaction.dto.response.MessageResponse;
 import org.springframework.data.domain.Pageable;
 
 /**
- * Nghiệp vụ hội thoại và tin nhắn nội bộ — CONT-03, canonical mục 4.6, {@code [§3.10]}.
+ * Nghiệp vụ hội thoại và tin nhắn nội bộ.
  */
 public interface ConversationService {
 
@@ -38,13 +38,6 @@ public interface ConversationService {
      * chủ trọ). Phục vụ badge gộp ở {@code GET /api/notifications/unread-count} (docs/03 mục 4.10.2).
      */
     long countUnreadMessages(Long userId);
-
-    /**
-     * Tạo/lấy lại hội thoại phục vụ luồng {@code POST /api/listings/{id}/contact} với
-     * {@code type = START_CHAT} (CONT-05). Trả về id hội thoại và id tin nhắn đầu.
-     */
-    ConversationCreatedResponse startChatFromContact(Long listingId, Long tenantId, Long landlordId,
-                                                     String initialMessage);
 
     /** Kiem tra user co thuoc hoi thoai hay khong; nem loi neu khong co quyen. */
     void assertConversationMember(Long conversationId, Long userId);

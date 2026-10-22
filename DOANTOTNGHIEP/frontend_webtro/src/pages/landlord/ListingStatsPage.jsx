@@ -6,7 +6,6 @@ import {
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import BookmarkIcon from '@mui/icons-material/Bookmark';
-import ContactPhoneIcon from '@mui/icons-material/ContactPhone';
 import PeopleIcon from '@mui/icons-material/People';
 import listingApi from '@/api/listingApi';
 import StatCard from '@/components/dashboard/StatCard';
@@ -56,7 +55,6 @@ const ListingStatsPage = () => {
     datasets: [
       { label: 'Lượt xem', data: data.timeSeries.map((p) => p.views) },
       { label: 'Lượt lưu', data: data.timeSeries.map((p) => p.favorites) },
-      { label: 'Lượt liên hệ', data: data.timeSeries.map((p) => p.contacts) },
     ],
   } : null;
 
@@ -75,10 +73,9 @@ const ListingStatsPage = () => {
       </Stack>
 
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={6} md={3}><StatCard label="Lượt xem" value={s.viewCount ?? 0} icon={<VisibilityIcon />} color="info" hint={`${s.uniqueViewerCount ?? 0} người xem`} /></Grid>
-        <Grid item xs={6} md={3}><StatCard label="Lượt lưu" value={s.favoriteCount ?? 0} icon={<BookmarkIcon />} color="secondary" /></Grid>
-        <Grid item xs={6} md={3}><StatCard label="Lượt liên hệ" value={s.contactCount ?? 0} icon={<ContactPhoneIcon />} color="primary" hint={`Tỷ lệ chuyển đổi ${s.conversionRatePercent ?? 0}%`} /></Grid>
-        <Grid item xs={6} md={3}><StatCard label="Đánh giá" value={s.averageRating != null ? `${s.averageRating}/5` : '—'} icon={<PeopleIcon />} color="success" hint={`${s.reviewCount ?? 0} đánh giá`} /></Grid>
+        <Grid item xs={12} sm={4}><StatCard label="Lượt xem" value={s.viewCount ?? 0} icon={<VisibilityIcon />} color="info" hint={`${s.uniqueViewerCount ?? 0} người xem`} /></Grid>
+        <Grid item xs={12} sm={4}><StatCard label="Lượt lưu" value={s.favoriteCount ?? 0} icon={<BookmarkIcon />} color="secondary" /></Grid>
+        <Grid item xs={12} sm={4}><StatCard label="Đánh giá" value={s.averageRating != null ? `${s.averageRating}/5` : '—'} icon={<PeopleIcon />} color="success" hint={`${s.reviewCount ?? 0} đánh giá`} /></Grid>
       </Grid>
 
       <Grid container spacing={3}>
@@ -96,10 +93,6 @@ const ListingStatsPage = () => {
                   <Grid item xs={6} md={3}>
                     <Typography variant="caption" color="text.secondary">Lượt xem TB khu vực</Typography>
                     <Typography variant="h6">{data.comparison.averageViewsInDistrict ?? '—'}</Typography>
-                  </Grid>
-                  <Grid item xs={6} md={3}>
-                    <Typography variant="caption" color="text.secondary">Lượt liên hệ TB khu vực</Typography>
-                    <Typography variant="h6">{data.comparison.averageContactsInDistrict ?? '—'}</Typography>
                   </Grid>
                 </Grid>
               </CardContent>

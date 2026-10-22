@@ -16,8 +16,8 @@ Nguyên tắc liệt kê: không tách các endpoint kỹ thuật nhỏ thành u
 | --- | --- | --- |
 | Khách vãng lai | Truy cập website khi chưa đăng nhập | Có thể xem trang công khai, tìm kiếm, xem chi tiết tin, xem đánh giá/bình luận công khai, sử dụng chatbot và nhận gợi ý công khai. |
 | Người dùng đã xác thực | Actor tổng quát cho các tài khoản đã đăng nhập | Là actor cha của Người thuê, Chủ trọ, Kiểm duyệt viên và Quản trị viên. |
-| Người thuê | Người tìm phòng, tương tác với tin đăng và chủ trọ | Có thể lưu tin, xem lịch sử, liên hệ, chat, bình luận, báo cáo vi phạm và theo dõi chủ trọ. Chỉ được đánh giá tin khi đã được xác nhận `RENTED` hoặc `CHECKED_OUT`. Có thể đăng tin tìm người ở ghép, bị giới hạn ở danh mục `ROOMMATE`. |
-| Chủ trọ | Người đăng và quảng cáo phòng trọ | Có thể tạo/quản lý tin đăng, xem lead/liên hệ, nhắn tin, thanh toán gói quảng bá, quản lý hồ sơ chủ trọ và yêu cầu xác minh. |
+| Người thuê | Người tìm phòng, tương tác với tin đăng và chủ trọ | Có thể lưu tin, xem lịch sử, nhận số điện thoại hiển thị trực tiếp, chat, bình luận, báo cáo vi phạm và theo dõi chủ trọ. Chỉ được đánh giá tin khi đã được xác nhận `RENTED` hoặc `CHECKED_OUT`. Có thể đăng tin tìm người ở ghép, bị giới hạn ở danh mục `ROOMMATE`. |
+| Chủ trọ | Người đăng và quảng cáo phòng trọ | Có thể tạo/quản lý tin đăng, nhắn tin, thanh toán gói quảng bá, quản lý hồ sơ chủ trọ và yêu cầu xác minh. |
 | Kiểm duyệt viên | Người kiểm soát chất lượng nội dung | Có thể duyệt tin, xử lý báo cáo, quản lý bình luận/đánh giá vi phạm, xem log/cảnh báo AI và xử lý hồ sơ chủ trọ. Không quản lý tài chính, cấu hình hệ thống, danh mục cốt lõi. |
 | Quản trị viên | Người quản trị toàn bộ nền tảng | Có đầy đủ quyền quản trị người dùng, tin đăng, danh mục, gói dịch vụ, thanh toán, AI, cấu hình hệ thống, thống kê và audit log. |
 | Dịch vụ AI | Tác nhân hỗ trợ xử lý thông minh | Hỗ trợ gợi ý tin, chatbot tư vấn, dự đoán giá phòng, phân tích cảm xúc bình luận/đánh giá và tạo cảnh báo. |
@@ -51,7 +51,7 @@ flowchart LR
   UC02(("UC-02<br/>Đăng và quản lý tin"))
   UC03(("UC-03<br/>Quảng bá và thanh toán"))
   UC04(("UC-04<br/>AI hỗ trợ"))
-  UC05(("UC-05<br/>Liên hệ và nhắn tin"))
+  UC05(("UC-05<br/>Nhắn tin với chủ trọ"))
   UC06(("UC-06<br/>Tương tác và báo cáo"))
   UC07(("UC-07<br/>Tài khoản và thông báo"))
   UC08(("UC-08<br/>Kiểm duyệt"))
@@ -137,7 +137,7 @@ rectangle "Webtro - Website quảng cáo phòng trọ có AI hỗ trợ" {
   }
 
   package "Tương tác người dùng" {
-    usecase "UC-05\nLiên hệ và nhắn tin" as UC05
+    usecase "UC-05\nNhắn tin với chủ trọ" as UC05
     usecase "UC-06\nLưu tin, theo dõi,\nbình luận, đánh giá,\nbáo cáo vi phạm" as UC06
     usecase "UC-07\nTài khoản, hồ sơ\nvà thông báo" as UC07
   }
@@ -180,7 +180,7 @@ UC04a ..> UC01 : <<extend>>
 UC04b ..> UC01 : <<extend>>
 UC04c ..> UC02 : <<extend>>
 UC03 ..> UC02 : <<extend>>\nđẩy tin/gia hạn có phí
-UC05 ..> UC01 : <<extend>>\nliên hệ sau khi xem tin
+UC05 ..> UC01 : <<extend>>\nnhắn tin sau khi xem tin
 UC06 ..> UC01 : <<extend>>
 UC02 ..> UC08 : <<include>>\nduyệt trước khi hiển thị
 UC08 ..> UC06 : <<include>>\nxử lý báo cáo/nội dung vi phạm
@@ -213,7 +213,7 @@ Hoạt động chính:
 Quan hệ use case:
 
 - `<<extend>>` bởi UC-04: gợi ý AI, tin liên quan, chatbot tư vấn khi người dùng cần hỗ trợ thêm.
-- `<<extend>>` bởi UC-05: liên hệ hoặc chat với chủ trọ sau khi xem tin.
+- `<<extend>>` bởi UC-05: chat với chủ trọ sau khi xem tin; số điện thoại đã hiển thị trực tiếp trong chi tiết tin.
 - `<<extend>>` bởi UC-06: lưu tin, theo dõi chủ trọ, bình luận, đánh giá, báo cáo vi phạm.
 - `<<include>>` các bước tải danh mục/khu vực/tiện ích công khai.
 
@@ -229,7 +229,7 @@ flowchart LR
   Catalog(("Tải danh mục,<br/>khu vực, tiện ích"))
   History(("Ghi lịch sử xem<br/>và tìm kiếm"))
   Reco(("Gợi ý AI<br/>và tin liên quan"))
-  Contact(("Liên hệ/chat<br/>với chủ trọ"))
+  Chat(("Nhắn tin<br/>với chủ trọ"))
   Interact(("Lưu tin, đánh giá,<br/>báo cáo"))
 
   Guest --> Main
@@ -237,7 +237,7 @@ flowchart LR
   Main -.->|include| Catalog
   Main -.->|extend khi đã đăng nhập| History
   Reco -.->|extend| Main
-  Contact -.->|extend| Main
+  Chat -.->|extend| Main
   Interact -.->|extend| Main
   AI --> Reco
 ```
@@ -256,7 +256,7 @@ rectangle "UC-01. Tìm kiếm, khám phá và xem chi tiết phòng trọ" {
   usecase "Tải danh mục,\nkhu vực, tiện ích" as Catalog
   usecase "Ghi lịch sử\nxem/tìm kiếm" as History
   usecase "Gợi ý AI,\ntin liên quan" as Reco
-  usecase "Liên hệ/chat\nvới chủ trọ" as Contact
+  usecase "Nhắn tin\nvới chủ trọ" as Chat
   usecase "Lưu tin/đánh giá/\nbáo cáo" as Interact
 }
 
@@ -265,7 +265,7 @@ Auth --> Main
 Main ..> Catalog : <<include>>
 Main ..> History : <<extend>>\nkhi đã đăng nhập
 Reco ..> Main : <<extend>>
-Contact ..> Main : <<extend>>
+Chat ..> Main : <<extend>>
 Interact ..> Main : <<extend>>
 AI --> Reco
 @enduml
@@ -291,7 +291,6 @@ Hoạt động chính:
 6. Actor lưu bản nháp hoặc gửi duyệt.
 7. Khi gửi duyệt, hệ thống kiểm tra điều kiện tối thiểu, tạo bản ghi moderation và chuyển tin sang trạng thái chờ duyệt.
 8. Nếu tin đăng đang hoạt động bị sửa các trường nhạy cảm, hệ thống chuyển tin về trạng thái cần duyệt lại.
-9. Actor quản lý danh sách tin của mình: xem trạng thái, sửa, xóa mềm, ẩn/hiện, đóng tin, gia hạn, xem thống kê và danh sách người liên hệ.
 
 Quan hệ use case:
 
@@ -591,102 +590,30 @@ Config ..> UC09 : <<include>>
 @enduml
 ```
 
-### UC-05. Liên hệ, tạo lead và nhắn tin giữa người tìm phòng với chủ trọ (Cường)
+### UC-05. Nhắn tin với chủ trọ (Cường)
 
 | Thuộc tính | Mô tả |
 | --- | --- |
-| Mục tiêu | Kết nối người có nhu cầu thuê phòng với chủ trọ thông qua thông tin liên hệ, yêu cầu liên hệ và hội thoại tin nhắn. |
-| Actor chính | Người thuê, Chủ trọ, Người dùng đã xác thực. |
-| Actor phụ | Dịch vụ thông báo. |
-| Tiền điều kiện | Actor đã đăng nhập; tin đăng còn được phép liên hệ; đối tượng nhận tồn tại và không bị khóa. |
-| Hậu điều kiện | Yêu cầu liên hệ/hội thoại/tin nhắn được tạo; chủ trọ có thể quản lý danh sách người quan tâm. |
+| Mục tiêu | Cho phép người tìm phòng trao đổi với chủ trọ qua hội thoại nội bộ; số điện thoại đã được hiển thị trực tiếp trên chi tiết tin. |
+| Actor chính | Người thuê, Chủ trọ. |
+| Tiền điều kiện | Tin đăng đang hiển thị; chủ trọ có số điện thoại. Muốn nhắn tin thì người dùng phải đăng nhập. |
+| Hậu điều kiện | Hội thoại/tin nhắn được tạo hoặc tái sử dụng. Việc hiển thị số điện thoại không phát sinh hành động hay dữ liệu theo dõi. |
 
 Hoạt động chính:
 
-1. Người dùng xem chi tiết tin và chọn liên hệ chủ trọ.
-2. Hệ thống trả thông tin liên hệ phù hợp hoặc ghi nhận yêu cầu liên hệ.
-3. Người dùng tạo hội thoại với chủ trọ hoặc gửi tin nhắn trong hội thoại có sẵn.
-4. Hệ thống lưu tin nhắn, cập nhật trạng thái đã đọc/chưa đọc và gửi thông báo đến bên liên quan.
-5. Chủ trọ xem danh sách người đã liên hệ theo từng tin đăng, theo dõi lead và tiếp tục trao đổi.
-
-Quan hệ use case:
-
-- `<<extend>>` UC-01: liên hệ thường bắt đầu sau khi người dùng xem chi tiết tin.
-- `<<include>>` UC-07: cần tài khoản đăng nhập và thông báo.
-- `<<extend>>` UC-02: Chủ trọ xem lead/liên hệ trong màn hình quản lý tin đăng.
-
-Sơ đồ UC-05 - preview Markdown:
+1. Người dùng mở trang chi tiết tin; số điện thoại được hiển thị trực tiếp dưới dạng text.
+2. Nếu cần trao đổi trong hệ thống, người dùng chọn "Nhắn tin cho chủ trọ".
+3. Hệ thống tạo hoặc lấy lại hội thoại gắn với tin đăng và lưu tin nhắn.
+4. Hai bên theo dõi trạng thái đã đọc/chưa đọc trong màn hình Tin nhắn.
 
 ```mermaid
 flowchart LR
-  Tenant["Người thuê"]
-  Landlord["Chủ trọ"]
-  Auth["Người dùng đã xác thực"]
-  Notify["Dịch vụ thông báo"]
-
-  Main(("UC-05<br/>Liên hệ, tạo lead<br/>và nhắn tin"))
-  ContactInfo(("Xem thông tin<br/>liên hệ"))
-  Lead(("Tạo yêu cầu<br/>liên hệ/lead"))
-  Conversation(("Tạo hội thoại"))
-  Message(("Gửi/nhận tin nhắn"))
-  ReadState(("Cập nhật trạng thái<br/>đã đọc/chưa đọc"))
-  NotifyUC(("Gửi thông báo"))
-  UC01(("UC-01<br/>Xem chi tiết tin"))
-  UC02(("UC-02<br/>Quản lý tin đăng"))
-  UC07(("UC-07<br/>Tài khoản/thông báo"))
-
-  Tenant --> Main
-  Landlord --> Main
-  Auth --> Main
-  Main -.->|include| ContactInfo
-  Main -.->|include| Lead
-  Main -.->|include| Conversation
-  Main -.->|include| Message
-  Message -.->|include| ReadState
-  Message -.->|include| NotifyUC
-  Notify --> NotifyUC
-  Main -.->|extend| UC01
-  Main -.->|extend| UC02
-  Main -.->|include| UC07
-```
-
-Mã PlantUML UC-05 để paste vào công cụ vẽ:
-
-```plantuml
-@startuml
-left to right direction
-actor "Người thuê" as Tenant
-actor "Chủ trọ" as Landlord
-actor "Người dùng\nđã xác thực" as Auth
-actor "Dịch vụ thông báo" as Notify
-
-rectangle "UC-05. Liên hệ, tạo lead và nhắn tin" {
-  usecase "Liên hệ và nhắn tin" as Main
-  usecase "Xem thông tin\nliên hệ" as ContactInfo
-  usecase "Tạo yêu cầu\nliên hệ/lead" as Lead
-  usecase "Tạo hội thoại" as Conversation
-  usecase "Gửi/nhận tin nhắn" as Message
-  usecase "Cập nhật trạng thái\nđã đọc/chưa đọc" as ReadState
-  usecase "Gửi thông báo" as NotifyUC
-  usecase "Xem chi tiết tin" as UC01
-  usecase "Quản lý tin đăng" as UC02
-  usecase "Tài khoản/thông báo" as UC07
-}
-
-Tenant --> Main
-Landlord --> Main
-Auth --> Main
-Main ..> ContactInfo : <<include>>
-Main ..> Lead : <<include>>
-Main ..> Conversation : <<include>>
-Main ..> Message : <<include>>
-Message ..> ReadState : <<include>>
-Message ..> NotifyUC : <<include>>
-Notify --> NotifyUC
-Main ..> UC01 : <<extend>>
-Main ..> UC02 : <<extend>>
-Main ..> UC07 : <<include>>
-@enduml
+  Tenant["Người thuê"] --> Detail(("Xem chi tiết tin"))
+  Detail --> Chat(("Nhắn tin cho chủ trọ"))
+  Landlord["Chủ trọ"] --> Chat
+  Chat --> Conversation(("Tạo/lấy hội thoại"))
+  Conversation --> Message(("Gửi/nhận tin nhắn"))
+  Message --> ReadState(("Cập nhật đã đọc/chưa đọc"))
 ```
 
 ### UC-06. Tương tác cộng đồng, uy tín và báo cáo vi phạm (Cường)
@@ -705,7 +632,7 @@ Hoạt động chính:
 2. Xem/xóa lịch sử xem tin và lịch sử tìm kiếm.
 3. Theo dõi/bỏ theo dõi chủ trọ và xem danh sách chủ trọ đang theo dõi.
 4. Tạo, trả lời, sửa, xóa bình luận theo quyền tác giả/kiểm duyệt.
-5. Kiểm tra `rental_requests` có trạng thái `RENTED`/`CHECKED_OUT`, sau đó mới cho tạo đánh giá; mỗi người chỉ đánh giá một tin một lần. Liên hệ, bình luận hoặc lưu tin không cấp quyền đánh giá.
+5. Kiểm tra `rental_requests` có trạng thái `RENTED`/`CHECKED_OUT`, sau đó mới cho tạo đánh giá; mỗi người chỉ đánh giá một tin một lần. Việc số điện thoại được hiển thị, nhắn tin, bình luận hoặc lưu tin không cấp quyền đánh giá.
 6. Gửi báo cáo vi phạm đối với tin đăng, bình luận, đánh giá hoặc người dùng; có thể đính kèm bằng chứng.
 7. Hệ thống kiểm tra trùng lặp/rate limit. Khi nhiều tài khoản báo cáo cùng mục tiêu trong thời gian ngắn, hệ thống có thể tự động đánh dấu cần xem xét.
 
@@ -1260,7 +1187,7 @@ Luồng gặp mặt, xem phòng và ký hợp đồng diễn ra ngoài website; 
 | Use case nguồn | Quan hệ | Use case đích | Ý nghĩa |
 | --- | --- | --- | --- |
 | UC-01 Tìm kiếm/xem tin | `extend` | UC-04 AI hỗ trợ | Gợi ý AI, tin liên quan và chatbot làm mở rộng trải nghiệm tìm phòng. | 
-| UC-01 Tìm kiếm/xem tin | `extend` | UC-05 Liên hệ/nhắn tin | Sau khi xem tin, người dùng có thể liên hệ chủ trọ. |
+| UC-01 Tìm kiếm/xem tin | `extend` | UC-05 Nhắn tin với chủ trọ | Sau khi xem tin, người dùng có thể nhắn tin cho chủ trọ; số điện thoại được hiển thị trực tiếp trong chi tiết tin. |
 | UC-01 Tìm kiếm/xem tin | `extend` | UC-06 Tương tác cộng đồng | Sau khi xem tin, người dùng có thể lưu, theo dõi, bình luận, đánh giá, báo cáo. |
 | UC-02 Đăng/quản lý tin | `include` | UC-08 Kiểm duyệt | Tin đăng gửi công khai phải qua kiểm duyệt trước khi hiển thị. |
 | UC-02 Đăng/quản lý tin | `extend` | UC-04 Dự đoán giá AI | AI hỗ trợ đề xuất giá khi tạo/sửa tin. |

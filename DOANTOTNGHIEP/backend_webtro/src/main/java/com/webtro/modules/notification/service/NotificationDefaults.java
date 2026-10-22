@@ -33,7 +33,6 @@ public final class NotificationDefaults {
             NotificationType.LISTING_EXPIRING,
             NotificationType.LISTING_EXPIRED,
             NotificationType.LISTING_LOCKED,
-            NotificationType.NEW_CONTACT,
             NotificationType.NEW_COMMENT,
             NotificationType.NEW_REVIEW,
             NotificationType.PAYMENT_SUCCESS,
@@ -60,7 +59,7 @@ public final class NotificationDefaults {
             NotificationType.ACCOUNT_VERIFICATION);
 
     /**
-     * Loại mặc định gửi kèm EMAIL (canonical §5.6). Toàn bộ loại bắt buộc + hai loại liên hệ/sắp
+     * Loại mặc định gửi kèm EMAIL (canonical §5.6). Toàn bộ loại bắt buộc + loại sắp
      * hết hạn. Các loại còn lại (bình luận, đánh giá, tin đã hết hạn, chủ trọ theo dõi có tin mới)
      * mặc định chỉ IN_APP.
      */
@@ -70,7 +69,6 @@ public final class NotificationDefaults {
             NotificationType.LISTING_REJECTED,
             NotificationType.LISTING_LOCKED,
             NotificationType.LISTING_EXPIRING,
-            NotificationType.NEW_CONTACT,
             NotificationType.PAYMENT_SUCCESS,
             NotificationType.PAYMENT_FAILED,
             NotificationType.ACCOUNT_LOCKED,

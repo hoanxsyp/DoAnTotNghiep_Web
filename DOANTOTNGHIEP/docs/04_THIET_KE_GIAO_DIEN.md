@@ -553,7 +553,6 @@ graph TD
     QL --> L3["tin-dang/tao · Stepper"]
     QL --> L4["tin-dang/:id/sua · Stepper"]
     QL --> L5["tin-dang/:id/thong-ke"]
-    QL --> L6["nguoi-lien-he"]
     QL --> L7["tin-nhan"]
     QL --> L8["goi-dich-vu"]
     QL --> L9["thanh-toan"]
@@ -624,7 +623,6 @@ graph TD
 | 26 | `/quan-ly/tin-dang/tao` | Tạo tin (Stepper) | `LISTING_CREATE` | `LandlordLayout` | `[§3.3]`; `[§11.7]` |
 | 27 | `/quan-ly/tin-dang/:id/sua` | Sửa tin (Stepper) | `LISTING_UPDATE_OWN` | `LandlordLayout` | `[§3.4]` |
 | 28 | `/quan-ly/tin-dang/:id/thong-ke` | Thống kê tin | `LISTING_UPDATE_OWN` | `LandlordLayout` | `[§2.3]` LIST-10 |
-| 29 | `/quan-ly/nguoi-lien-he` | Người liên hệ | `RoleRoute[ROLE_LANDLORD, ROLE_ADMIN]` | `LandlordLayout` | `[§2.6]` CONT-04 |
 | 30 | `/quan-ly/tin-nhan` | Tin nhắn (chủ trọ) | `RoleRoute[ROLE_LANDLORD, ROLE_ADMIN]` | `LandlordLayout` | `[§2.6]` CONT-03 |
 | 31 | `/quan-ly/goi-dich-vu` | Gói dịch vụ | `RoleRoute[ROLE_LANDLORD, ROLE_ADMIN]` | `LandlordLayout` | `[§2.9]` PAY-01,02 |
 | 32 | `/quan-ly/thanh-toan` | Thanh toán của tôi | `PAYMENT_VIEW_OWN` | `LandlordLayout` | `[§2.9]` PAY-06 |
@@ -889,7 +887,6 @@ Tin nhắn / Thông báo) — giảm số lần phải mở Drawer.
 │ ▸ Tạo tin mới  │ │                                                         │ │
 │                │ │                                                         │ │
 │ KHÁCH HÀNG     │ │                                                         │ │
-│ ▸ Người liên hệ│ │                                                         │ │
 │ ▸ Tin nhắn   2 │ │                                                         │ │
 │                │ │                                                         │ │
 │ DỊCH VỤ        │ │                                                         │ │
@@ -1328,7 +1325,6 @@ number/array/boolean).
 |---|---|
 | **Route** | `/tin/:slug-:id` |
 | **Actor** | Tất cả (nội dung khác nhau theo quyền) |
-| **Use case** | `[§3.8]`; `[§7.1]` *"Xem chi tiết tin"*; `[§2.4]` SRCH-09; `[§2.5]` FAV-01; `[§2.6]` CONT-01,02; `[§2.7]` CMT-01, REV-01; `[§2.8]` RPT-01 |
 
 **Wireframe (desktop, `lg`)**
 
@@ -1347,7 +1343,7 @@ number/array/boolean).
 │ │   │                     ├───────┤     │ │ │  Đánh giá 4,5/5 (12)         │ │
 │ │   │                     │ +5 ảnh│     │ │ │  Tham gia 03/2024 · 8 tin    │ │
 │ │   └─────────────────────┴───────┘     │ │ ├──────────────────────────────┤ │
-│ └───────────────────────────────────────┘ │ │ [📞  0901***456  Hiện số]    │ │  ← MaskUtil
+│ └───────────────────────────────────────┘ │ │ [📞  0901234456]    │ │  ← MaskUtil
 │                                           │ │ [💬  Nhắn tin cho chủ trọ]   │ │
 │                                           │ │ [♡   Lưu tin]  [⚑ Báo cáo]   │ │
 │                                           │ ├──────────────────────────────┤ │
@@ -1434,7 +1430,7 @@ number/array/boolean).
   *"nút liên hệ rõ"*:
   ```
   ┌──────────────────────────────────────────────────┐
-  │  [♡]  │  [💬 Nhắn tin]  │  [📞 Gọi 0901***456 ] │
+  │  [♡]  │  [💬 Nhắn tin]  │  [📞 Gọi 0901234456 ] │
   │  44px │      1fr        │        1.4fr           │
   └──────────────────────────────────────────────────┘
   ```
@@ -1444,7 +1440,7 @@ number/array/boolean).
 
 **Component:** `ImageGallery`, `RichTextViewer`, `RatingStars`,
 `CommentThread`, `ListingCard` (compact), `EmptyState`, `LoadingSkeleton`, `ConfirmDialog`,
-`ReportDialog`, `MaskedPhoneButton`, `FavoriteButton`, `SpecGrid`, `AmenityChipGroup`,
+`ReportDialog`, `FavoriteButton`, `SpecGrid`, `AmenityChipGroup`,
 `PriceReferenceCard`, `StaticMap`.
 
 **API**
@@ -1459,7 +1455,6 @@ number/array/boolean).
 | Sửa / xóa bình luận | `PUT /api/comments/{id}` · `DELETE /api/comments/{id}` | trong `comment.edit_window_minutes` = 30 |
 | Đánh giá | `GET /api/listings/{id}/reviews?page=0&size=5` · `POST /api/listings/{id}/reviews` | cần `REVIEW_CREATE` |
 | Lưu / bỏ lưu | `POST /api/favorites` body `{ listingId }` · `DELETE /api/favorites/{listingId}` | cần `FAVORITE_MANAGE` |
-| Hiện số / liên hệ | `POST /api/listings/{id}/contact` body `{ type: 'PHONE' }` | trả số đầy đủ + ghi `ContactLog` (dedup `contact.dedup_minutes`=60) `[§3.10]` |
 | Nhắn tin | `POST /api/conversations` body `{ listingId }` → nhận `conversationId` | rồi `navigate('/tai-khoan/tin-nhan/' + id)` |
 | Báo cáo | `POST /api/reports` body `{ targetType: 'LISTING', targetId, reason, description, evidenceImageUrl }` | `ReportTargetType.LISTING`, `ReportReason` (canonical mục 5) |
 | Giá tham khảo | trả kèm trong `GET /api/listings/{id}` field `priceReference` | không gọi `POST /api/ai/price-prediction` ở màn công khai — endpoint đó dành cho form đăng tin của chủ trọ `[§3.16]` |
@@ -1468,8 +1463,6 @@ number/array/boolean).
 
 | Người xem | Số điện thoại `[§3.8]` | Lưu tin | Bình luận | Đánh giá | Báo cáo | Xem tin non-public |
 |---|---|---|---|---|---|---|
-| Khách chưa đăng nhập | `0901***456` + nút "Hiện số" → mở dialog yêu cầu đăng nhập `[§3.10]` | Dialog đăng nhập | Ô nhập disabled + "Đăng nhập để bình luận" | ẩn nút | ẩn nút | Không (404) |
-| Người thuê | Bấm "Hiện số" → gọi API → hiện đủ | ✔ `FAVORITE_MANAGE` | ✔ `COMMENT_CREATE` | ✔ nếu đủ điều kiện (dưới) | ✔ `REPORT_CREATE` | Không |
 | Chủ trọ (tin của mình) | Hiện đủ | ẩn (không tự lưu tin mình) | ✔ (badge "Chủ trọ") | ẩn | ẩn | ✔ + banner "Đây là tin của bạn" + nút "Sửa tin" |
 | Moderator / Admin | Hiện đủ | — | ✔ | — | ✔ | ✔ `LISTING_VIEW_ANY` + banner trạng thái + nút hành động kiểm duyệt |
 
@@ -1522,8 +1515,6 @@ export const reviewSchema = yup.object({
 ```
 
 **Tương tác & điều hướng**
-- Bấm "Hiện số" (đã đăng nhập) → `POST /api/listings/{id}/contact` → nút biến thành số đầy đủ,
-  bấm lần nữa → `tel:` link. Chủ trọ nhận `NotificationType.NEW_CONTACT` `[§5.6]`.
 - Bấm "Nhắn tin" → tạo conversation → sang `/tai-khoan/tin-nhan/:id`.
 - Bấm "Báo cáo" → `ReportDialog`. Gửi xong: toast *"Đã gửi báo cáo. Chúng tôi sẽ xem xét trong
   thời gian sớm nhất."* Tin **không** đổi trạng thái ngay — `[§3.13]` *"Report không tự động
@@ -2444,10 +2435,6 @@ sidebar giảm. Cuộn tự động xuống tin mới nhất khi mở và khi c�
 │ │       "Phòng trọ 25m² gần ĐH Bách Khoa" đang hiển thị.           │   │    nhạt = chưa đọc
 │ │       2 giờ trước                                                │   │
 │ ├──────────────────────────────────────────────────────────────────┤   │
-│ │ ● (🔵) Có người liên hệ tin của bạn                        [⋮]  │   │
-│ │       Trần Thị C đã xem số điện thoại.                           │   │
-│ │       5 giờ trước                                                │   │
-│ ├──────────────────────────────────────────────────────────────────┤   │
 │ │   (🟠) Tin sắp hết hạn                                     [⋮]  │   │  ← đã đọc: nền
 │ │       "Căn hộ mini Q.7" sẽ hết hạn sau 3 ngày.                   │   │    background.paper
 │ │       Hôm qua                                     [Gia hạn ngay] │   │
@@ -2470,7 +2457,6 @@ sidebar giảm. Cuộn tự động xuống tin mới nhất khi mở và khi c�
 | `LISTING_EXPIRING` | ⏰ | `warning` | Tin sắp hết hạn | `/quan-ly/tin-dang` + action "Gia hạn ngay" |
 | `LISTING_EXPIRED` | 🕐 | `default` | Tin đã hết hạn | `/quan-ly/tin-dang?status=EXPIRED` |
 | `LISTING_LOCKED` | 🔒 | `error` | Tin bị khóa | `/quan-ly/tin-dang/:id/sua` |
-| `NEW_CONTACT` | 📞 | `info` | Có người liên hệ | `/quan-ly/nguoi-lien-he` |
 | `NEW_COMMENT` | 💬 | `info` | Bình luận mới | `/tin/:slug-:id#binh-luan` |
 | `NEW_REVIEW` | ⭐ | `info` | Đánh giá mới | `/tin/:slug-:id#danh-gia` |
 | `PAYMENT_SUCCESS` | 💳 | `success` | Thanh toán thành công | `/quan-ly/thanh-toan` |
@@ -2481,7 +2467,6 @@ sidebar giảm. Cuộn tự động xuống tin mới nhất khi mở và khi c�
 | `VIOLATION_WARNING` | ⚠️ | `warning` | Cảnh báo vi phạm | `/tai-khoan/thong-bao` (ở lại, hiện chi tiết) |
 | `FOLLOWED_LANDLORD_NEW_LISTING` | 🔔 | `info` | Chủ trọ bạn theo dõi có tin mới | `/tin/:slug-:id` |
 
-Nhóm Tab: **Tin đăng** = `LISTING_*`; **Tương tác** = `NEW_CONTACT`, `NEW_COMMENT`,
 `NEW_REVIEW`, `FOLLOWED_LANDLORD_NEW_LISTING`; **Hệ thống** = còn lại.
 
 **Component:** `NotificationItem`, `Tabs`, `EmptyState`, `LoadingSkeleton`, `Menu`.
@@ -2507,7 +2492,6 @@ Nhóm Tab: **Tin đăng** = `LISTING_*`; **Tương tác** = `NEW_CONTACT`, `NEW_
 | Trạng thái | Thể hiện |
 |---|---|
 | Loading | 5 skeleton dòng. |
-| Empty | `EmptyState` 🔔 *"Bạn chưa có thông báo nào."* + *"Chúng tôi sẽ báo khi có tin mới phù hợp, có người liên hệ hoặc tin của bạn được duyệt."* |
 | Empty (tab "Chưa đọc") | *"Bạn đã đọc hết thông báo. 🎉"* |
 | Error | `ErrorState` + "Thử lại". |
 | Success (đọc 1) | Nền đổi sang đã đọc ngay (optimistic), `notification.unreadCount` giảm → `NotificationBell` cập nhật. |
@@ -2542,7 +2526,6 @@ loại `optional = true`, và khóa các loại `optional = false`.
 │   Tin đã hết hạn                    [==•]      [•==]     │
 │   Tin bị khóa                       [==•] 🔒   [==•] 🔒  │
 │ ▸ Tương tác                                              │
-│   Có người liên hệ                  [==•]      [==•]     │
 │   Bình luận mới                     [==•]      [•==]     │
 │   Đánh giá mới                      [==•]      [•==]     │
 │   Chủ trọ bạn theo dõi có tin mới   [==•]      [•==]     │
@@ -2570,7 +2553,6 @@ Giá trị `optional = false` hiện tại (03 mục 4.10.6) gồm 10 loại:
 | `LISTING_EXPIRING` | Tin sắp hết hạn | Tin đăng | `true` | bật/tắt được |
 | `LISTING_EXPIRED` | Tin đã hết hạn | Tin đăng | `true` | bật/tắt được |
 | `LISTING_LOCKED` | Tin bị khóa | Tin đăng | `false` | `disabled`, luôn bật |
-| `NEW_CONTACT` | Có người liên hệ | Tương tác | `true` | bật/tắt được |
 | `NEW_COMMENT` | Bình luận mới | Tương tác | `true` | bật/tắt được |
 | `NEW_REVIEW` | Đánh giá mới | Tương tác | `true` | bật/tắt được |
 | `FOLLOWED_LANDLORD_NEW_LISTING` | Chủ trọ bạn theo dõi có tin mới | Tương tác | `true` | bật/tắt được |
@@ -2916,13 +2898,12 @@ mục 4.2 cho Admin mọi permission listing).
 │ └──────────┴──────────┴──────────┴──────────┘                              │
 ├────────────────────────────────────────────────────────────────────────────┤
 │ ┌──────────────────────────────────────┬───────────────────────────────┐   │
-│ │ ChartCard: Lượt xem & liên hệ 30 ngày│ CẦN XỬ LÝ                     │   │
+│ │ ChartCard: Lượt xem 30 ngày│ CẦN XỬ LÝ                     │   │
 │ │  ┌─────────────────────────────────┐ │ ┌───────────────────────────┐ │   │
 │ │  │      ╱╲      ╱╲╱╲              │ │ │ ⏰ 2 tin sắp hết hạn      │ │   │  ← [§5.2]
 │ │  │  ╱╲╱  ╲╱╲╱╲╱    ╲╱╲            │ │ │    [Gia hạn ngay →]       │ │   │
 │ │  │ ─────────────────────────       │ │ ├───────────────────────────┤ │   │
 │ │  └─────────────────────────────────┘ │ │ ❌ 1 tin bị từ chối       │ │   │
-│ │  ● Lượt xem   ● Lượt liên hệ         │ │    [Xem lý do & sửa →]    │ │   │
 │ └──────────────────────────────────────┤ ├───────────────────────────┤ │   │
 │ ┌──────────────────────────────────────┤ │ 🤖 1 tin có nhiều bình    │ │   │  ← [§9.1]
 │ │ TIN HIỆU QUẢ NHẤT                    │ │    luận tiêu cực           │ │   │    AI_NEGATIVE
@@ -2932,7 +2913,6 @@ mục 4.2 cho Admin mọi permission listing).
 │ │                    [Xem tất cả →]    │ │ │    [Xem chi tiết →]       │ │   │
 │ └──────────────────────────────────────┤ └───────────────────────────┘ │   │
 │ ┌──────────────────────────────────────┴───────────────────────────────┐   │
-│ │ NGƯỜI LIÊN HỆ GẦN ĐÂY                              [Xem tất cả →]    │   │
 │ │ (Av) Trần Thị C · Phòng trọ 25m² · 📞 Xem SĐT · 2 giờ trước  [💬]   │   │
 │ │ (Av) Lê Văn D   · Căn hộ mini Q.7 · 💬 Nhắn tin · 5 giờ trước [💬]  │   │
 │ └──────────────────────────────────────────────────────────────────────┘   │
@@ -2947,10 +2927,7 @@ biểu đồ (hành động quan trọng hơn số liệu trên màn hình nhỏ
 
 **API**
 
-| Mục đích | Endpoint **[BỔ SUNG NGOÀI CANONICAL]** — `[§12]` không có nhóm endpoint dashboard cho chủ trọ (chỉ có `/api/admin/dashboard`), nhưng `[§4.2]` + `[§1.2]` yêu cầu chủ trọ *"Theo dõi lượt xem, lượt lưu, lượt liên hệ"* |
 |---|---|
-| Tổng quan | `GET /api/landlord/dashboard` → `{ activeCount, pendingCount, viewCount30d, contactCount30d, deltas, chart: [{date, views, contacts}], topListings[], actionItems[] }` |
-| Người liên hệ gần đây | `GET /api/landlord/contacts?size=5&sort=createdAt,desc` `[§12.5]` |
 
 **"Cần xử lý"** — nguồn từng loại:
 
@@ -2967,9 +2944,8 @@ biểu đồ (hành động quan trọng hơn số liệu trên màn hình nhỏ
 | Trạng thái | Thể hiện |
 |---|---|
 | Loading | 4 StatCard skeleton + chart skeleton + 3 dòng skeleton. |
-| Empty (chưa có tin nào) | Thay **toàn bộ** trang bằng onboarding: minh họa + *"Bạn chưa có tin đăng nào"* + *"Đăng tin đầu tiên để bắt đầu tiếp cận người thuê."* + CTA lớn "Đăng tin ngay" + 3 bước hướng dẫn (Nhập thông tin → Chờ duyệt → Nhận liên hệ) theo `[§4.2]`. |
+| Empty (chưa có tin nào) | Thay **toàn bộ** trang bằng onboarding: minh họa + *"Bạn chưa có tin đăng nào"* + *"Đăng tin đầu tiên để bắt đầu tiếp cận người thuê."* + CTA lớn "Đăng tin ngay" + 3 bước hướng dẫn (Nhập thông tin → Chờ duyệt → Nhận tin nhắn) theo `[§4.2]`. |
 | Empty ("Cần xử lý") | ✅ *"Không có việc gì cần xử lý. Mọi thứ đang ổn."* |
-| Empty (người liên hệ) | *"Chưa có ai liên hệ. Tin của bạn cần thời gian để tiếp cận người thuê."* |
 | Error | Từng khối lỗi độc lập → `ErrorState` nhỏ trong khối đó. |
 | Chưa xác thực chủ trọ | Alert warning trên đầu `[§3.1]` *"Tài khoản chủ trọ chưa xác thực vẫn có thể tạo nháp nhưng không nên được đăng tin công khai nếu hệ thống yêu cầu xác thực"* |
 
@@ -3238,7 +3214,6 @@ tin"*). Hủy request cũ bằng `AbortController` khi có thay đổi mới.
 |---|---|
 | Chưa đủ dữ liệu | *"Nhập loại tin, khu vực và diện tích để xem giá tham khảo."* `[§9.4]` luồng phụ *"Nếu thiếu dữ liệu, hệ thống thông báo cần nhập thêm trường"* |
 | Loading | Skeleton panel + *"Đang phân tích giá khu vực…"* |
-| `PriceConfidence = INSUFFICIENT_DATA` | *"Chưa đủ dữ liệu tin tương tự tại khu vực này để đưa ra giá tham khảo."* — **không hiện số nào**. Canonical 10.4 bước 2: `n < ai.price.min_samples` (8) → *"**không dự đoán**"* |
 | `HIGH` / `MEDIUM` / `LOW` | Hiện khoảng giá + `Chip` độ tin cậy (màu theo 2.1.3). Với `LOW` thêm dòng *"Độ tin cậy thấp do ít dữ liệu tương tự."* `[§9.4]` *"Không hiển thị AI như nguồn đảm bảo chính xác tuyệt đối"* |
 | Error 503 `AI_SERVICE_UNAVAILABLE` | Panel hiện *"Không lấy được giá tham khảo lúc này."* + nút "Thử lại". **Không** chặn form — `ai.price.enabled = false` cũng vào nhánh này. |
 | `ai.price.enabled = false` | Ẩn hẳn panel. |
@@ -3472,7 +3447,6 @@ duyệt lại"* → khi tin `ACTIVE` và người dùng đổi một trong: `tit
 | | |
 |---|---|
 | **Route** | `/quan-ly/tin-dang/:id/thong-ke` · **Quyền** `LISTING_UPDATE_OWN` |
-| **Use case** | `[§2.3]` **LIST-10**; `[§7.3]` *"Xem thống kê tin — Xem lượt xem, lưu, liên hệ"*; `[§1.2]` |
 
 **Wireframe**
 
@@ -3501,16 +3475,13 @@ duyệt lại"* → khi tin `ACTIVE` và người dùng đổi một trong: `tit
 │ │  │  ─────────────────────────────────────                         │  │   │
 │ │  │  ↑ vạch dọc: 18/07 — bắt đầu đẩy tin                           │  │   │  ← annotation
 │ │  └────────────────────────────────────────────────────────────────┘  │   │
-│ │  ● Lượt xem  ● Lượt lưu  ● Lượt liên hệ                              │   │
 │ └──────────────────────────────────────────────────────────────────────┘   │
 ├────────────────────────────────────────────────────────────────────────────┤
 │ ┌───────────────────────────────────┬──────────────────────────────────┐   │
 │ │ TỶ LỆ CHUYỂN ĐỔI                  │ CẢM XÚC BÌNH LUẬN                │   │
 │ │  Xem → Lưu:      2,9%             │                                  │   │
-│ │  Xem → Liên hệ:  1,9%             │  ┌────────────────────────────┐  │   │
 │ │  ────────────────────────────     │  │ Cảm xúc bình luận [§9.1]   │  │   │
 │ │  So với trung bình khu vực:       │  │ 😊 Tích cực   2  ████████  │  │   │
-│ │  Xem → Liên hệ TB: 1,4%           │  │ 😐 Trung lập  1  ████      │  │   │
 │ │  ✓ Tin của bạn tốt hơn 36%        │  │ 😞 Tiêu cực   0            │  │   │
 │ └───────────────────────────────────┤  └────────────────────────────┘  │   │
 │ ┌───────────────────────────────────┴──────────────────────────────────┐   │
@@ -3528,8 +3499,6 @@ duyệt lại"* → khi tin `ACTIVE` và người dùng đổi một trong: `tit
 `EmptyState`, `LoadingSkeleton`, `ToggleButtonGroup`.
 
 **API:** `GET /api/listings/{id}/stats?range=7d|30d|all` `[§12.3]` →
-`{ viewCount, favoriteCount, contactCount, commentCount, deltas, series: [{date, views,
-favorites, contacts}], conversion: { viewToFavorite, viewToContact, areaAvgViewToContact },
 sentimentSummary: { POSITIVE, NEUTRAL, NEGATIVE, MIXED,
 PENDING_ANALYSIS }, promotionPeriods: [{from, to}], suggestions[] }`.
 
@@ -3550,76 +3519,6 @@ sentiment ở trạng thái PendingAnalysis"*. `MIXED` hiện *"Vừa khen vừa
 
 **Tương tác:** đổi khoảng thời gian → refetch (không đổi URL). Vạch annotation trên chart đánh
 dấu kỳ đẩy tin `[§2.9]` PROMO-01 → giúp chủ trọ thấy hiệu quả gói đã mua.
-
----
-
-#### 5.3.6. Người liên hệ
-
-| | |
-|---|---|
-| **Route** | `/quan-ly/nguoi-lien-he` |
-| **Use case** | `[§2.6]` **CONT-04**; `[§7.3]` *"Quản lý người liên hệ — Xem danh sách người quan tâm"*; `[§3.10]` |
-
-**Wireframe**
-
-```
-┌────────────────────────────────────────────────────────────────────────────┐
-│ PageHeader <h1>Người liên hệ</h1>  38 lượt trong 30 ngày                   │
-├────────────────────────────────────────────────────────────────────────────┤
-│ 🔍 [Tìm theo tên…]  [Tin đăng: Tất cả ▾]  [Hình thức ▾]  [30 ngày ▾]      │
-├────────────────────────────────────────────────────────────────────────────┤
-│ ┌────────────────────────────────────────────────────────────────────────┐ │
-│ │ DataTable                                                              │ │
-│ │ ┌────────────┬──────────────────┬──────────┬────────────┬───────────┐  │ │
-│ │ │ Người liên │ Tin đăng         │ Hình thức│ Thời gian ↓│ Thao tác  │  │ │
-│ │ │ hệ         │                  │          │            │           │  │ │
-│ │ ├────────────┼──────────────────┼──────────┼────────────┼───────────┤  │ │
-│ │ │(Av) Trần   │[ảnh] Phòng trọ   │📞 Xem SĐT│ 2 giờ trước│ [💬][👤] │  │ │
-│ │ │ Thị C      │ 25m² gần ĐH…     │          │            │           │  │ │
-│ │ │ 0912***789 │                  │          │            │           │  │ │
-│ │ ├────────────┼──────────────────┼──────────┼────────────┼───────────┤  │ │
-│ │ │(Av) Lê Văn │[ảnh] Căn hộ mini │💬 Nhắn   │ 5 giờ trước│ [💬][👤] │  │ │
-│ │ │ D          │ Q.7…             │   tin    │            │           │  │ │
-│ │ ├────────────┼──────────────────┼──────────┼────────────┼───────────┤  │ │
-│ │ │(Av) Phạm E │[ảnh] Ở ghép nữ   │📋 Gửi    │ Hôm qua    │ [💬][👤] │  │ │
-│ │ │            │ Q.3…             │   form   │            │           │  │ │
-│ │ │            │ 💬 "Còn phòng ko ạ? Em muốn xem vào cuối tuần"      │  │ │  ← nội dung
-│ │ └────────────┴──────────────────┴──────────┴────────────┴───────────┘  │ │    form
-│ │                              20/trang · ‹ 1 [2] ›                      │ │
-│ └────────────────────────────────────────────────────────────────────────┘ │
-└────────────────────────────────────────────────────────────────────────────┘
-```
-
-**Mobile:** DataTable → danh sách Card (mục 9.2 — quy tắc chuyển bảng thành card ở `xs`).
-
-**Component:** `DataTable`, `Avatar`, `Chip`, `EmptyState`, `LoadingSkeleton`.
-
-**API:** `GET /api/landlord/contacts?listingId=&type=&from=&to=&keyword=&page=0&size=20&
-sort=createdAt,desc` `[§12.5]`.
-
-**Hình thức liên hệ** — ánh xạ từ `ContactLog` `[§3.10]`: `PHONE` → "📞 Xem SĐT" ·
-`MESSAGE` → "💬 Nhắn tin" · `FORM` → "📋 Gửi form". **[BỔ SUNG NGOÀI CANONICAL]** — canonical
-mục 5 không có enum `ContactType`, nhưng `[§3.10]` nêu 3 hình thức (*"gọi điện, gửi form hoặc
-chat"* `[§7.2]`) và `[§2.6]` CONT-01/02/03 tách bạch chúng → cần enum để lọc và thống kê.
-Đề xuất: `ContactType : PHONE, MESSAGE, FORM`.
-
-**Che số điện thoại người liên hệ:** hiện `0912***789`. Chủ trọ **không** cần số của người
-thuê để làm việc — họ đã có kênh chat và người thuê chủ động gọi. Đây là quyết định bảo vệ
-quyền riêng tư người thuê; `[§11.1]` *"Không lộ thông tin nhạy cảm trong API response"* →
-BE trả sẵn số đã che, FE không nhận số đầy đủ.
-
-**Trạng thái**
-
-| Trạng thái | Thể hiện |
-|---|---|
-| Loading | Skeleton bảng 5 dòng. |
-| Empty | `EmptyState` 📞 *"Chưa có ai liên hệ."* + *"Khi người thuê xem số điện thoại hoặc nhắn tin, họ sẽ xuất hiện ở đây."* |
-| Empty (sau khi lọc) | *"Không có lượt liên hệ nào khớp bộ lọc."* + nút "Xóa bộ lọc". |
-| Error | `ErrorState`. |
-
-**Tương tác:** `[💬]` → mở/tạo hội thoại → `/quan-ly/tin-nhan/:id`. `[👤]` → hồ sơ công khai
-người thuê. Bấm tin đăng → chi tiết tin. Lượt liên hệ trùng trong `contact.dedup_minutes` (60)
-đã được BE gộp `[§3.10]` — FE không tự lọc trùng.
 
 ---
 
@@ -5460,7 +5359,7 @@ có `AI_LOG_VIEW` nhưng **không** có `AI_CONFIG_MANAGE` (canonical mục 4.2)
 | Người dùng | Người dùng mới/ngày (Bar) · Cơ cấu vai trò (Doughnut) · Hoạt động (Line) · Bảng theo `UserStatus` | `[§7.5]` *"Thống kê người dùng"* |
 | Tin đăng | Tin mới/ngày (Bar) · Cơ cấu theo `ListingStatus` (Doughnut) · Theo `CategoryCode` (Bar ngang) · Top khu vực · **Tỷ lệ duyệt/từ chối** · **Tỷ lệ tin `CLOSED`** | `[§7.5]` *"Thống kê tin"*; `[§3.6]` *"Tin Closed có thể dùng để thống kê tỷ lệ thành công"* |
 | Doanh thu | Doanh thu/ngày (Bar) · Theo gói (Doughnut) · Theo `PaymentMethod` · Tỷ lệ thành công/thất bại · Giá trị TB/giao dịch | `[§7.5]` *"Thống kê doanh thu"*; `[§10.1]` |
-| Tương tác | Lượt xem/lưu/liên hệ theo ngày (Line 3 đường) · Tỷ lệ chuyển đổi xem→liên hệ · Số bình luận, đánh giá, report/ngày | `[§5.7]`, `[§10.1]` |
+| Tương tác | Lượt xem/lưu theo ngày (Line 2 đường) · Số bình luận, đánh giá, report/ngày | `[§5.7]`, `[§10.1]` |
 | AI | Phân bố `SentimentLabel` (Doughnut) · Số lần gợi ý + tỷ lệ click · Phân bố `PriceConfidence` · Phân bố `ChatbotIntent` · Tỷ lệ `OUT_OF_SCOPE` | `[§10.10]` |
 
 **Tab "Tin đăng" có "tỷ lệ thành công"** — hiện thực `[§3.6]` *"Tin Closed có thể dùng để thống
@@ -5544,7 +5443,6 @@ react-chartjs-2 (canonical mục 1.2), `maintainAspectRatio: false`, màu lấy 
 |---|---|
 | Tin đăng | `listing.display_days`, `listing.image.min/max`, `listing.image.max_size_mb`, `listing.title.min/max`, `listing.description.min/max`, `listing.expiry.reminder_days`, `listing.renew.free_per_month`, `listing.need_review.publicly_visible`, `listing.auto_approve.trusted_landlord` |
 | Kiểm duyệt | `moderation.autohide.report_count`, `moderation.autohide.distinct_reporters`, `moderation.autohide.window_hours`, `moderation.threshold.warning_count`, `moderation.threshold.warning_window_days`, `moderation.threshold.locked_listing_count`, `moderation.threshold.locked_listing_window_days`, `moderation.threshold.spam_comment_count`, `moderation.threshold.spam_comment_window_hours` |
-| Tương tác | `contact.dedup_minutes`, `view.dedup_minutes`, `comment.edit_window_minutes`, `review.edit_window_hours`, `promotion.max_priority`; quyền đánh giá dựa trên quan hệ thuê `RENTED/CHECKED_OUT` |
 | Chống spam | `security.login.*`, `security.register.rate`, `spam.listing.new_account_daily`, `spam.listing.daily`, `spam.comment.per_minute`, `spam.report.daily`, `spam.message.per_minute`, `spam.chatbot.per_minute` + quản lý **`BannedKeyword`** (canonical mục 6) |
 | Nội dung tĩnh | `page.about`, `page.terms` **[BỔ SUNG NGOÀI CANONICAL]** (mục 5.1.12) |
 | Email | cấu hình template/người gửi — đọc từ biến môi trường, **chỉ hiển thị trạng thái**, không sửa |
@@ -5875,9 +5773,7 @@ Admin/Moderator 18 · Chatbot 1.
 | 20 | `NotificationBell` | `count` (num), `onOpen` (fn) | Icon chuông + `Badge` số chưa đọc (max hiển thị `99+`). Bấm → Popover 5 thông báo mới nhất + "Xem tất cả" → `/tai-khoan/thong-bao`. Đọc `notification.unreadCount` từ Redux (mục 7.1), poll 60s khi tab hiển thị. `aria-label="Thông báo, {n} chưa đọc"`. | Header của `PublicLayout`, `TenantLayout`, `LandlordLayout`, `AdminLayout` |
 | 21 | `ChatbotWidget` | *(không props — tự lấy state)* | FAB + khung hội thoại (5.5). Ẩn nếu `ai.chatbot.enabled = false`. Tự đẩy lên `bottom:88` khi trang có sticky action bar. Full-screen ở `xs`. | `PublicLayout`, `TenantLayout`, `LandlordLayout` (**không** ở `AdminLayout`) |
 | 22 | `RichTextViewer` | `content` (str), `maxLines` (num), `expandable` (bool), `variant` | **An toàn XSS** `[§11.1]` — xem 6.2. Hiển thị mô tả tin, bình luận, nội dung tĩnh. `maxLines` + `expandable` → thu gọn + "Xem thêm ▾". Giữ xuống dòng, tự nhận diện URL → link `rel="nofollow noopener noreferrer"`. | 5.1.3, 5.1.12, 5.4.7, `CommentThread` |
-| 23 | `PriceSuggestionPanel` | `prediction` (obj), `currentPrice` (num), `loading`, `error`, `onRetry`, `onApply` (fn), `variant` `'sidebar'\|'accordion'` | Giá AI đề xuất `[§9.4]`: khoảng giá (p25/p50/p75), giá đang nhập, **chênh lệch**, `PriceConfidence` chip, giải thích hedonic, nút "Áp dụng giá". `INSUFFICIENT_DATA` → không hiện số nào (canonical 10.4). `variant='accordion'` cho mobile. **Không bao giờ** chặn form. | 5.3.3 (bước 3), 5.3.4 |
 | 24 | `FavoriteButton` | `listingId`, `favorited` (bool), `onToggle` (fn), `size`, `variant` `'icon'\|'button'` | Nút tim. Chưa đăng nhập → mở dialog đăng nhập (không gọi API). Đã đăng nhập → optimistic toggle + rollback nếu lỗi. Đọc `favorite.ids` từ Redux (mục 7.1) → đồng bộ mọi nơi. `aria-label` đổi theo trạng thái ("Lưu tin"/"Bỏ lưu tin"). | `ListingCard`, 5.1.3, 5.2.3, 5.5 |
-| 25 | `MaskedPhoneButton` | `listingId`, `maskedPhone` (str), `onReveal` (fn) | Hiện `0901***456` + nút "Hiện số" `[§3.8]`. Bấm: chưa đăng nhập → dialog đăng nhập `[§3.10]`; đã đăng nhập → `POST /api/listings/{id}/contact` → hiện số đầy đủ, bấm tiếp → `tel:`. Số đầy đủ **chỉ** từ API, FE không tự bỏ mask. | 5.1.3 |
 | 26 | `ReportDialog` | `open`, `targetType` (`ReportTargetType`), `targetId`, `targetPreview` (node), `onClose`, `onSuccess` | Form báo cáo `[§3.13]`: Select `ReportReason` (8 giá trị), ô mô tả (10–500), upload 1 ảnh bằng chứng (tùy chọn). 409 `REPORT_CONFLICT` → *"Bạn đã báo cáo nội dung này với lý do tương tự."* | 5.1.3 (tin + bình luận + đánh giá), 5.1.4 |
 | 27 | `Can` | `permission` (str \| arr), `role` (str \| arr), `mode` `'all'\|'any'` (mặc định `'all'` cho permission, `'any'` cho role), `fallback` (node), `children` | Ẩn/hiện theo quyền. Không đủ quyền → render `fallback` (mặc định `null`). Dùng cho nút, cột bảng, khối dashboard (5.4.1). **Chỉ là UX** — không thay `@PreAuthorize` (mục 3.5). | Khắp nơi trong `/admin/*`, `/quan-ly/*` |
 | 28 | `PageHeader` | `title`, `subtitle`, `breadcrumbs` (arr), `action` (node), `backTo` (str) | Tiêu đề trang. Render `<h1>` với `variant="h2"` (mục 2.2) — đảm bảo **đúng một `<h1>`/trang** (mục 1.3). `backTo` → nút "← Quay lại". Tự set `document.title`. | Mọi trang có layout |
@@ -5888,7 +5784,7 @@ Admin/Moderator 18 · Chatbot 1.
 | 33 | `NotificationPreferencesSection` | trong `NotificationsPage` | Tab "Thiết lập" của trang thông báo `[§11.12]`: bảng các `NotificationType` do BE trả về × 2 cột `Switch` (Trên app / Email), nhóm theo Tin đăng / Tương tác / Hệ thống. Loại `optional = false` → `Switch` `disabled` + chip "Bắt buộc" + Tooltip *"Thông báo bắt buộc"*. `GET /api/notifications/preferences` khi mở tab, `PUT` khi lưu — chỉ gửi phần đã đổi. Đủ trạng thái loading/empty/error/success. | 5.2.5 |
 
 **Tổng: 33 component dùng lại** — đủ 22 component bắt buộc theo đề bài + 11 component bổ trợ
-(`PriceSuggestionPanel`, `FavoriteButton`, `MaskedPhoneButton`, `ReportDialog`, `Can`,
+(`PriceSuggestionPanel`, `FavoriteButton`, `ReportDialog`, `Can`,
 `PageHeader`, `ErrorState`, `PasswordField`, `ErrorBoundary`, `CaptchaField`,
 `NotificationPreferencesSection`).
 
@@ -7028,7 +6924,6 @@ cho bạn". Cờ này do BE trả (`personalized: true|false`) — BE biết có
 | Đang theo dõi | 👥 | Bạn chưa theo dõi chủ trọ nào | Theo dõi để nhận thông báo tin mới | Khám phá tin đăng |
 | Landlord — tổng quan | 🏠 | Bạn chưa có tin đăng nào | Đăng tin đầu tiên để tiếp cận người thuê | Đăng tin ngay |
 | Landlord — danh sách tin | 🏠 | Chưa có tin nào ở trạng thái này | — | Tạo tin mới |
-| Landlord — người liên hệ | 📞 | Chưa có ai liên hệ | Người thuê xem SĐT sẽ hiện ở đây | — |
 | Landlord — thanh toán | 💳 | Bạn chưa có giao dịch nào | Mua gói đẩy tin để tăng hiển thị | Xem gói dịch vụ |
 | Landlord — thống kê tin | 📊 | Chưa có dữ liệu | Tin vừa đăng — số liệu sẽ xuất hiện khi có người xem | — |
 | Chi tiết tin — bình luận | 💬 | Chưa có bình luận nào | Hãy là người đầu tiên đặt câu hỏi | — |
@@ -7242,7 +7137,6 @@ Danh sách để bước review đối chiếu. Tài liệu này **không** sử
 
 | Enum | Giá trị | Vì sao cần | Mục |
 |---|---|---|---|
-| `ContactType` | `PHONE`, `MESSAGE`, `FORM` | `[§3.10]` + `[§7.2]` nêu 3 hình thức liên hệ; `[§2.6]` CONT-01/02/03 tách bạch. Cần để lọc + thống kê ở màn "Người liên hệ". | 5.3.6 |
 | `AmenityGroup` | `FURNITURE`, `SECURITY`, `LIVING`, `TRANSPORT` | `[§10.5]` *"Nhóm tiện ích: nội thất, an ninh, sinh hoạt, giao thông"*. Bắt buộc để `AmenityPicker` nhóm checkbox. | 5.4.13, 6.1 |
 
 ### 13.3. Config key đề xuất bổ sung
@@ -7330,4 +7224,3 @@ Toàn bộ danh sách ở mục 8.1 ngoài 8 mã chuẩn canonical 7.2. Chúng t
 
 > *"Không còn TODO, FIXME, 'demo', 'giả sử', code rỗng"* — tài liệu này không chứa mục nào bỏ
 > ngỏ; mọi màn hình có đủ 8 phần đặc tả, mọi enum/permission/config key trùng khớp canonical.
-

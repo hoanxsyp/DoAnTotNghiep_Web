@@ -87,11 +87,6 @@ public interface ListingRepository
             + "AND l.deletedAt IS NULL")
     long sumFavoriteCountForOwner(@Param("ownerId") Long ownerId);
 
-    /** Tổng lượt liên hệ tất cả tin của một chủ trọ (bỏ tin đã xóa mềm). */
-    @Query("SELECT COALESCE(SUM(l.contactCount), 0) FROM Listing l WHERE l.ownerId = :ownerId "
-            + "AND l.deletedAt IS NULL")
-    long sumContactCountForOwner(@Param("ownerId") Long ownerId);
-
     /** So tin theo owner/status, bo qua xoa mem. */
     @Query("SELECT COUNT(l) FROM Listing l WHERE l.ownerId = :ownerId AND l.status = :status "
             + "AND l.deletedAt IS NULL")
@@ -106,9 +101,9 @@ public interface ListingRepository
                                    @Param("now") Instant now,
                                    @Param("threshold") Instant threshold);
 
-    /** Top tin cua chu tro theo luot xem/lien he. */
+    /** Top tin cua chu tro theo luot xem. */
     @Query("SELECT l FROM Listing l WHERE l.ownerId = :ownerId AND l.status IN :statuses "
-            + "AND l.deletedAt IS NULL ORDER BY l.viewCount DESC, l.contactCount DESC, l.updatedAt DESC")
+            + "AND l.deletedAt IS NULL ORDER BY l.viewCount DESC, l.updatedAt DESC")
     List<Listing> findTopForLandlordDashboard(@Param("ownerId") Long ownerId,
                                               @Param("statuses") Collection<ListingStatus> statuses,
                                               Pageable pageable);

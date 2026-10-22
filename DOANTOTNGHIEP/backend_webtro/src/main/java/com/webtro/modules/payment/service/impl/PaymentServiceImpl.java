@@ -138,6 +138,13 @@ public class PaymentServiceImpl implements PaymentService {
                                      String idempotencyKey, String clientIp) {
         rateLimitService.checkLimit("payment_create", String.valueOf(userId), 20, Duration.ofHours(1));
 
+        // Chỉ chấp nhận đúng phương thức mà gateway đang triển khai. Hiện hệ thống dùng
+        // SandboxPaymentGateway nên các giá trị VNPAY/MOMO/BANK_TRANSFER không được giả lập
+        // thành giao dịch thành công.
+        if (method == null || !paymentGateway.provider().equalsIgnoreCase(method.name())) {
+            throw new BusinessException(ErrorCode.PAYMENT_METHOD_UNSUPPORTED);
+        }
+
         String idemKey = validateIdempotencyKey(idempotencyKey);
         validateReturnUrl(returnUrl);
 

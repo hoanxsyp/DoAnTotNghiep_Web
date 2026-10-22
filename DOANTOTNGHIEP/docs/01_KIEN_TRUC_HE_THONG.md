@@ -41,7 +41,7 @@ Bốn ràng buộc phạm vi gốc, được nâng thành **ràng buộc kiến 
 
 **CÓ (nằm trong hệ thống)** — theo `[§13.1]` + `[§14.1]` + `[§14.2]`:
 
-Đăng ký/đăng nhập/phân quyền; quản lý hồ sơ; đăng tin 7 loại `[§0.3]`; duyệt tin; tìm kiếm/lọc nâng cao; lưu tin; lịch sử xem/tìm kiếm; liên hệ chủ trọ; chat nội bộ (mức cơ bản `[§13.2]`); bình luận; đánh giá; báo cáo vi phạm; kiểm duyệt; thanh toán đẩy tin (sandbox); gói đẩy tin; notification (in-app + email); admin dashboard + thống kê; audit log; 4 module AI; upload ảnh; SEO cơ bản; theo dõi chủ trọ.
+Đăng ký/đăng nhập/phân quyền; quản lý hồ sơ; đăng tin 7 loại `[§0.3]`; duyệt tin; tìm kiếm/lọc nâng cao; lưu tin; lịch sử xem/tìm kiếm; hiển thị trực tiếp số điện thoại chủ trọ; chat nội bộ (mức cơ bản `[§13.2]`); bình luận; đánh giá; báo cáo vi phạm; kiểm duyệt; thanh toán đẩy tin (sandbox); gói đẩy tin; notification (in-app + email); admin dashboard + thống kê; audit log; 4 module AI; upload ảnh; SEO cơ bản; theo dõi chủ trọ.
 
 **CỐ TÌNH KHÔNG LÀM** — copy nguyên `[§13.3]`, mỗi dòng là một cam kết kiến trúc:
 
@@ -127,7 +127,7 @@ graph TB
     end
 
     GUEST -->|"HTTPS: xem, tìm kiếm, chatbot cơ bản, đăng ký"| SYS
-    TENANT -->|"HTTPS: lưu tin, liên hệ, bình luận, đánh giá, báo cáo"| SYS
+    TENANT -->|"HTTPS: lưu tin, nhắn tin, bình luận, đánh giá, báo cáo"| SYS
     LANDLORD -->|"HTTPS: đăng/sửa/gia hạn tin, mua gói, xem thống kê"| SYS
     MOD -->|"HTTPS: duyệt tin, xử lý report, kiểm duyệt bình luận"| SYS
     ADMIN -->|"HTTPS: quản trị user/tin/thanh toán/cấu hình/AI/thống kê"| SYS
@@ -354,10 +354,8 @@ sequenceDiagram
 | 3 | **catalog** | Dữ liệu tra cứu ít đổi, dùng chung: loại tin `[§0.3]`, cây hành chính tỉnh/huyện/xã, tiện ích theo nhóm. Là module bị phụ thuộc nhiều nhất, **không phụ thuộc ai**. | `categories`, `provinces`, `districts`, `wards`, `amenities` | `ADM-05` quản lý danh mục, `ADM-06` quản lý khu vực, `ADM-07` quản lý tiện ích `[§2.12]`; `[§10.5]` |
 | 4 | **listing** | Vòng đời tin đăng (state machine), CRUD tin, ảnh, tiện ích của tin, gia hạn, thống kê tin, quy tắc hiển thị công khai. **Chủ sở hữu `ListingStateMachine` và `ListingVisibilityService`.** | `listings`, `listing_images`, `listing_amenities` | `LIST-01` tạo nháp, `LIST-02` đăng tin, `LIST-03` sửa tin, `LIST-04` gửi duyệt, `LIST-05` duyệt/từ chối (thực thi state), `LIST-06` ẩn, `LIST-07` đóng, `LIST-08` xóa mềm, `LIST-09` gia hạn, `LIST-10` thống kê tin, `LIST-11` quản lý ảnh, `LIST-12` quản lý tiện ích `[§2.3]` |
 | 5 | **search** | Truy vấn tìm kiếm + lọc + sắp xếp + phân trang, tin liên quan, gợi ý mở rộng khi ít kết quả, ghi lịch sử tìm kiếm, xen tin được đẩy mà vẫn giữ tính liên quan `[§3.7]`. **Chỉ đọc**, không sở hữu entity nghiệp vụ. | *(không sở hữu entity riêng; đọc `listings` qua `ListingQueryService`; ghi `search_histories` qua module `interaction`)* | `SRCH-01` từ khóa, `SRCH-02` khu vực, `SRCH-03` giá, `SRCH-04` diện tích, `SRCH-05` loại tin, `SRCH-06` tiện ích, `SRCH-07` lọc ở ghép theo giới tính/số người, `SRCH-08` sắp xếp, `SRCH-09` tin liên quan `[§2.4]` |
-| 6 | **interaction** | Lưu tin, lịch sử xem, lịch sử tìm kiếm, ghi nhận liên hệ, chat nội bộ, bình luận, đánh giá. Quyền đánh giá đọc quan hệ thuê `RENTED`/`CHECKED_OUT` qua `RentalEligibilityGateway`, không dựa trên `ContactLog`. Là **nguồn dữ liệu hành vi** cho recommendation `[§9.2]`. | `favorites`, `view_histories`, `search_histories`, `contact_logs`, `conversations`, `messages`, `comments`, `reviews` | `FAV-01..03` `[§2.5]`; `HIST-01` ghi lịch sử xem, `HIST-02` xem lịch sử `[§2.5]`; `CONT-01..05` `[§2.6]`; `CMT-01..04`, `REV-01..03` `[§2.7]` |
 | 7 | **moderation** | Báo cáo vi phạm, xử lý report, hành động kiểm duyệt, cảnh báo vi phạm, từ khóa cấm, ngưỡng tự động ẩn `[§5.3]`, ngưỡng khóa `[§5.4]`. | `reports`, `moderation_actions`, `violation_warnings`, `banned_keywords` | `RPT-01` báo cáo tin, `RPT-02` báo cáo bình luận, `RPT-03` báo cáo người dùng, `RPT-04` xử lý báo cáo, `RPT-05` gửi cảnh báo vi phạm, `RPT-06` khóa tin/tài khoản `[§2.8]`; `CMT-04`, `REV-03` (quyết định kiểm duyệt) `[§2.7]` |
 | 8 | **payment** | Gói dịch vụ, tạo giao dịch, callback cổng thanh toán, kích hoạt gói, lịch sử thanh toán, đẩy tin, nhãn nổi bật, coupon. | `promotion_packages`, `payments`, `promotion_subscriptions`, `coupons` | `PAY-01` xem gói, `PAY-02` mua gói đẩy tin, `PAY-03` tạo giao dịch, `PAY-04` xác nhận thanh toán, `PAY-05` kích hoạt gói, `PAY-06` lịch sử thanh toán; `PROMO-01` đẩy tin lên đầu, `PROMO-02` gắn nhãn nổi bật `[§2.9]` |
-| 9 | **notification** | Thông báo in-app, gửi email qua template Thymeleaf, đánh dấu đã đọc, digest. Là module **hạ nguồn** — ai cũng gọi được, nó không gọi ngược lên. | `notifications` | `NOTI-01` thông báo trong hệ thống, `NOTI-02` email xác thực, `NOTI-03` email cảnh báo, `NOTI-04` có người liên hệ, `NOTI-05` tin sắp hết hạn, `NOTI-06` kết quả duyệt tin `[§2.10]` |
 | 10 | **ai** | 4 engine sau interface: sentiment, recommendation, chatbot, price. Log AI + cấu hình ngưỡng. **Chỉ đề xuất, không quyết định** `[§10.10]`. | `sentiment_results`, `recommendation_logs`, `prediction_histories`, `chatbot_conversations`, `chatbot_messages` | `AI-01` phân tích cảm xúc, `AI-04` gợi ý cá nhân hóa, `AI-05` chatbot, `AI-06` dự đoán giá, `AI-07` quản lý log AI, `AI-08` cấu hình ngưỡng AI `[§2.11]` |
 | 11 | **admin** | Dashboard, thống kê, cấu hình hệ thống, cấu hình AI, audit log. Là **mặt tiền quản trị**: điều phối các module khác, tự mình chứa rất ít nghiệp vụ. | `audit_logs`, `system_configs`, `ai_configs` | `ADM-01` dashboard, `ADM-02` quản lý người dùng, `ADM-03` quản lý chủ trọ, `ADM-04` quản lý tin đăng, `ADM-08` quản lý gói dịch vụ, `ADM-09` quản lý thanh toán, `ADM-10` quản lý báo cáo/khiếu nại, `ADM-11` quản lý bình luận/đánh giá, `ADM-12` quản lý AI, `ADM-13` thống kê và báo cáo, `ADM-14` quản lý cấu hình hệ thống `[§2.12]` |
 
@@ -518,7 +516,6 @@ backend_webtro/
     │   │   │       ├── ReviewCreatedEvent.java · ListingApprovedEvent.java
     │   │   │       ├── ListingStatusChangedEvent.java · ReportCreatedEvent.java
     │   │   │       ├── PaymentSucceededEvent.java · FavoriteCreatedEvent.java
-    │   │   │       └── ContactCreatedEvent.java
     │   │   │
     │   │   ├── config/
     │   │   │   ├── SecurityConfig.java               # SecurityFilterChain, csrf().disable() + lý do
@@ -672,21 +669,16 @@ backend_webtro/
     │   │       │   ├── controller/    FavoriteController · ViewHistoryController · ContactController
     │   │       │   │                  ConversationController · CommentController · ReviewController
     │   │       │   ├── service/       FavoriteService · ViewHistoryService · SearchHistoryService
-    │   │       │   │                  ContactService · ConversationService · MessageService
     │   │       │   │                  CommentService · ReviewService
     │   │       │   ├── service/impl/  (…Impl)
     │   │       │   ├── repository/    FavoriteRepository · ViewHistoryRepository · SearchHistoryRepository
-    │   │       │   │                  ContactLogRepository · ConversationRepository · MessageRepository
     │   │       │   │                  CommentRepository · ReviewRepository
-    │   │       │   ├── entity/        Favorite · ViewHistory · SearchHistory · ContactLog
     │   │       │   │                  Conversation · Message · Comment · Review
     │   │       │   ├── dto/request/   CreateFavoriteRequest · CreateContactRequest · SendMessageRequest
     │   │       │   │                  CreateCommentRequest · UpdateCommentRequest · ReplyCommentRequest
     │   │       │   │                  CreateReviewRequest · UpdateReviewRequest
-    │   │       │   ├── dto/response/  FavoriteResponse · ViewHistoryResponse · ContactLogResponse
     │   │       │   │                  ConversationResponse · MessageResponse
     │   │       │   │                  CommentResponse · ReviewResponse · RatingSummaryResponse
-    │   │       │   └── mapper/        FavoriteMapper · ViewHistoryMapper · ContactLogMapper
     │   │       │                      ConversationMapper · MessageMapper · CommentMapper · ReviewMapper
     │   │       │
     │   │       ├── moderation/
@@ -886,7 +878,6 @@ frontend_webtro/
     │   ├── listingApi.js              # CRUD, submit, hide, close, renew, images, stats
     │   ├── searchApi.js               # searchListings, relatedListings, suggestions
     │   ├── favoriteApi.js · historyApi.js
-    │   ├── contactApi.js · conversationApi.js
     │   ├── commentApi.js · reviewApi.js
     │   ├── reportApi.js
     │   ├── paymentApi.js              # packages, createPayment, myPayments, promote
@@ -1299,43 +1290,11 @@ http.csrf(AbstractHttpConfigurer::disable);
 | `latitude/longitude` chính xác tuyệt đối của nhà riêng | Trả tọa độ **làm tròn 3 chữ số thập phân** (~110m) cho người chưa đăng nhập; đủ để hiển thị vị trí khu vực `[§13.2]` mà không chỉ đúng cửa nhà — **[BỔ SUNG NGOÀI CANONICAL]** |
 | Header lộ công nghệ | nginx `server_tokens off`, tắt `X-Powered-By` |
 
-### 5.4. Che số điện thoại với khách chưa đăng nhập `[§3.8]`
+### 5.4. Hiển thị số điện thoại trên chi tiết tin
 
-**Yêu cầu gốc:** `[§3.8]` *"Thông tin liên hệ có thể bị che một phần nếu người dùng chưa đăng nhập"*; `[§1.2]` *"Không được... xem đầy đủ thông tin liên hệ nếu hệ thống yêu cầu đăng nhập"*; `[§3.10]` *"Khách chưa đăng nhập được yêu cầu đăng nhập trước khi xem số đầy đủ"*.
-**Canonical §8 chốt:** khách chưa đăng nhập chỉ thấy `0901***456` (`MaskUtil`).
+`ListingDetailResponse.contactPhone` trả số điện thoại chủ trọ đầy đủ cho cả khách và người dùng đã đăng nhập. Frontend hiển thị số dưới dạng text, không có nút mở số và không phát sinh log/thống kê/thông báo khi người dùng xem số.
 
-| Đối tượng xem | Thấy gì | Cơ sở |
-|---|---|---|
-| Khách chưa đăng nhập | `0901***456` (che 3 số giữa) | canonical §8, `[§3.8]` |
-| Người dùng đã đăng nhập (`ACTIVE`) | Số đầy đủ + ghi `ContactLog` `[§3.10]` | `[§2.6]` CONT-01 |
-| Chủ sở hữu tin | Số đầy đủ | Của chính mình |
-| MODERATOR / ADMIN (`LISTING_VIEW_ANY`) | Số đầy đủ | Cần để kiểm duyệt `[§10.4]` |
-
-**Hiện thực — điểm mấu chốt: che ở BACKEND, không phải frontend.**
-
-```java
-// ListingMapper — luật 3: mapper là nơi DUY NHẤT quyết định field nào lộ ra
-public ListingDetailResponse toDetailResponse(Listing l, CurrentUser viewer) {
-    boolean canSeeFullPhone =
-            viewer != null && (
-                    viewer.getUserId().equals(l.getOwnerId())
-                 || SecurityUtils.hasAnyRole(RoleCode.MODERATOR, RoleCode.ADMIN)
-                 || viewer.getStatus() == UserStatus.ACTIVE
-            );
-    return ListingDetailResponse.builder()
-            .contactPhone(canSeeFullPhone
-                    ? l.getContactPhone()
-                    : MaskUtil.maskPhone(l.getContactPhone()))   // 0901234456 -> 0901***456
-            .phoneMasked(!canSeeFullPhone)                        // FE hiện nút "Đăng nhập để xem số"
-            .build();
-}
-```
-
-> **Vì sao che ở backend là bắt buộc:** nếu backend trả số đầy đủ rồi frontend mới che bằng CSS/JS, số **vẫn nằm trong response JSON** — mở DevTools tab Network là thấy. Đó không phải bảo mật, đó là trang trí. `[§11.2]` đã cảnh báo đúng nguyên tắc này: *"API cần kiểm tra quyền ở backend, không chỉ ẩn nút ở frontend"*.
->
-> Hệ quả bắt buộc: `ListingDetailResponse` **không được** cache chung cho mọi người xem (mục 8.4) — vì nội dung phụ thuộc người xem.
-
-**Ghi nhận lượt liên hệ** `[§3.10]`: khi người dùng đã đăng nhập bấm "Xem số điện thoại" → `POST /api/listings/{id}/contact` → ghi `ContactLog` (chống trùng trong `contact.dedup_minutes` = 60 `[§3.10]`) → tăng `listings.contact_count` → thông báo `NEW_CONTACT` cho chủ trọ `[§5.6]`.
+Hồ sơ công khai của chủ trọ vẫn áp dụng chính sách riêng về dữ liệu cá nhân; thay đổi này chỉ áp dụng cho số điện thoại đã được chủ trọ dùng để quảng cáo trên trang chi tiết tin.
 
 ### 5.5. Bảng tổng hợp rate limit `[§11.10]` (canonical §8)
 
@@ -1544,25 +1503,23 @@ Hàng đợi là **`LinkedBlockingQueue` bên trong `ThreadPoolTaskExecutor`** (
 | `ViewHistory` | **1** | `view_histories` |
 | `SearchHistory` | **2** | `search_histories` |
 | `Favorite` | **3** | `favorites` |
-| `ContactLog` | **5** | `contact_logs` |
 
 **7 chiều nhu cầu suy ra — phủ đúng danh sách "Dữ liệu đầu vào" `[§9.2]` (11 mục):**
 
 | # | Chiều `UserPreferenceProfile` | Kiểu | Cách suy ra từ hành vi có trọng số | Mục `[§9.2]` được phủ |
 |---|---|---|---|---|
-| 1 | `preferredWards` / `preferredDistricts` / `preferredProvince` | `Set<Long>` theo tần suất có trọng số | Gom `ward_id`/`district_id` của tin trong `view_histories`/`favorites`/`contact_logs` + tham số khu vực trong `search_histories`; giữ top‑N (`N = 5`) theo tổng trọng số | *"Khu vực thường xem"*, *"Lịch sử xem tin"*, *"Lịch sử tìm kiếm"*, *"Tin đã lưu"*, *"Tin đã liên hệ"* |
 | 2 | `preferredPriceRange` | `[minPrice, maxPrice]` | **Percentile 10–90** của `listings.price` trên tập hành vi có trọng số (mỗi bản ghi được nhân bản theo trọng số khi tính percentile) | *"Khoảng giá thường xem"* |
 | 3 | `preferredCategories` | `Set<CategoryCode>` | Tần suất có trọng số của `listings.category_id`; giữ top‑3 | *"Loại phòng thường xem"* |
 | 4 | `preferredAmenities` | `Set<Long>` | Tần suất có trọng số của `listing_amenities.amenity_id` + tiện ích được tick trong `search_histories` | *(chi tiết hóa `[§2.4]` SRCH‑06)* |
 | 5 | `preferredAreaRange` | `[minAreaM2, maxAreaM2]` | **Percentile 10–90** của `listings.area` trên **cùng** tập hành vi có trọng số như chiều giá; nếu `search_histories` có `areaFrom/areaTo` tường minh thì tham số tìm kiếm **ghi đè** (ý định khai báo mạnh hơn ý định suy diễn) | *"Diện tích quan tâm"* `[§2.4]` SRCH‑04 |
 | 6 | `preferredOccupants` (`maxOccupants`) | `Integer` | Lấy **mode** (giá trị xuất hiện nhiều nhất) của `listings.max_occupants` trên tập hành vi; nếu `search_histories` có tham số số người thì ưu tiên tham số đó; đọc từ `user_profiles.preferred_occupants` nếu người dùng đã khai trong hồ sơ | *"Số người ở"* `[§2.4]` SRCH‑07 |
-| 7 | `preferredGenderRequirement` | `GenderRequirement` | Ưu tiên 1: cột `user_profiles.preferred_gender_requirement` do người dùng khai `[§2.2]`. Ưu tiên 2: tham số giới tính trong `search_histories` gần nhất. Ưu tiên 3: suy từ `listings.gender_requirement` của các tin `ROOMMATE` đã lưu/liên hệ. Không đủ căn cứ → `ANY` | *"Giới tính nếu là ở ghép"* `[§2.4]` SRCH‑07 |
+| 7 | `preferredGenderRequirement` | `GenderRequirement` | Ưu tiên 1: cột `user_profiles.preferred_gender_requirement` do người dùng khai `[§2.2]`. Ưu tiên 2: tham số giới tính trong `search_histories` gần nhất. Ưu tiên 3: suy từ `listings.gender_requirement` của các tin `ROOMMATE` đã lưu. Không đủ căn cứ → `ANY` | *"Giới tính nếu là ở ghép"* `[§2.4]` SRCH‑07 |
 
 > **Ba mục còn lại của `[§9.2]` được phủ ở chỗ khác, không phải chiều hồ sơ:** *"Lịch sử xem tin"* / *"Lịch sử tìm kiếm"* là **nguồn** (bảng trọng số ở trên), không phải chiều; *"Tin đang Active trong hệ thống"* là **tập ứng viên** đầu vào của `ListingScorer`, lấy qua `ListingVisibilityService.publicStatuses()` (canonical §5.2) — xem "Bộ lọc bắt buộc" bên dưới.
 
 > **`preferredGenderRequirement` chỉ có nghĩa với tin `ROOMMATE`.** Cột `user_profiles.preferred_gender_requirement` `[§9.2]` được **tiêu thụ tại đây** (`UserPreferenceProfileBuilder` đọc, `ListingScorer` chấm `genderMatch`) — đây là module duy nhất dùng nó, ngoài `search` (SRCH‑07 lọc cứng theo tham số người dùng nhập tại thời điểm tìm). Khác biệt: `search` **lọc cứng**, recommendation **chấm điểm mềm**.
 
-> Thang trọng số 1/2/3/5 phản ánh **mức cam kết**: xem là tò mò, tìm kiếm là có chủ đích, lưu là quan tâm, **liên hệ là tín hiệu mạnh nhất** — người đó thật sự muốn thuê. Đây là hiện thực trực tiếp của `[§9.2]` *"Hệ thống thu thập hành vi hợp lệ"*.
+> Thang trọng số 1/2/3/5 phản ánh **mức cam kết**: xem là tò mò, tìm kiếm là có chủ đích, lưu là tín hiệu quan tâm mạnh. Đây là hiện thực trực tiếp của `[§9.2]` *"Hệ thống thu thập hành vi hợp lệ"*.
 
 **Công thức chấm điểm (canonical §10.2):**
 
@@ -1726,7 +1683,7 @@ Bảng `recommendation_logs` (02_THIET_KE_DATABASE.md) lưu **từng** điểm t
 |---|---|
 | **Chỉ trả tin public** | Gọi `ListingSearchService`, vốn dùng `ListingVisibilityService.publicStatuses()` (canonical §5.2). Chatbot **không** có đường truy cập DB riêng |
 | **Không bịa thông tin ngoài DB** | `ChatbotResponseBuilder` chỉ render từ `ListingSummaryResponse` trả về. Không có LLM sinh văn bản tự do → **về mặt kiến trúc, chatbot không thể bịa** |
-| Không cam kết còn phòng | `[§9.3]` *"Tự cam kết phòng còn trống"* bị cấm. Template luôn kèm "Vui lòng liên hệ chủ trọ để xác nhận" |
+| Không cam kết còn phòng | `[§9.3]` *"Tự cam kết phòng còn trống"* bị cấm. Template luôn kèm "Vui lòng gọi theo số điện thoại trên tin hoặc nhắn tin cho chủ trọ để xác nhận" |
 | Không tư vấn pháp lý | Intent `OUT_OF_SCOPE` → trả lời giới hạn hỗ trợ |
 | Không đặt cọc / thương lượng thay người dùng | Không có endpoint nào cho việc đó `[§13.3]` |
 | Không tạo tin thay chủ trọ | `[§9.3]` |
@@ -2120,7 +2077,7 @@ Hạ tầng: Redis 7.4 + `spring-boot-starter-data-redis` (Lettuce), `CacheManag
 | `home:featured` | Tin nổi bật trang chủ | `home:featured:{provinceId or 'all'}` | **5 phút** | TTL tự hết (không evict thủ công) | `[§11.11]` *"Cache trang chủ trong **thời gian ngắn**"* |
 | `home:newest` | Tin mới nhất trang chủ | `home:newest:{provinceId or 'all'}` | **5 phút** | TTL tự hết | `[§11.11]` |
 | `home:popular_areas` | Top khu vực nhiều tin | `home:popular_areas` | **1 giờ** | TTL | `[§7.1]` *"khu vực phổ biến"* |
-| `ai:recommendation` | Kết quả gợi ý | `ai:recommendation:{userId}:{source}:{contextHash}` | **15 phút** (`ai.recommendation.cache_ttl_minutes`) | Người dùng lưu tin / liên hệ tin → evict theo `userId` (hồ sơ nhu cầu vừa đổi) | `[§11.11]` *"Cache kết quả gợi ý có TTL"`, canonical §9 |
+| `ai:recommendation` | Kết quả gợi ý | `ai:recommendation:{userId}:{source}:{contextHash}` | **15 phút** (`ai.recommendation.cache_ttl_minutes`) | Người dùng lưu hoặc bỏ lưu tin → evict theo `userId` (hồ sơ nhu cầu vừa đổi) | `[§11.11]` *"Cache kết quả gợi ý có TTL"`, canonical §9 |
 | `ai:recommendation:coldstart` | Gợi ý cold start (khách) | `ai:recommendation:coldstart:{provinceId or 'all'}` | **15 phút** | TTL | `[§9.2]` |
 | `listing:related` | Tin liên quan (SRCH-09) | `listing:related:{listingId}` | **30 phút** | Tin đổi trạng thái → evict | `[§2.4]` SRCH-09 |
 | `stat:dashboard` | Số liệu dashboard | `stat:dashboard:{date}` | **10 phút** | TTL | `[§10.1]` — aggregate nặng |
@@ -2174,7 +2131,6 @@ Hạ tầng: Redis 7.4 + `spring-boot-starter-data-redis` (Lettuce), `CacheManag
 | `conversations`, `messages` | Nội dung riêng tư |
 | `notifications` | Cá nhân |
 | `payments` | Tài chính `[§11.1]` |
-| `contact_logs` | Ai liên hệ ai — nhạy cảm |
 | `reports` | Danh tính người báo cáo — lộ ra sẽ gây trả đũa |
 | `audit_logs` | Chỉ `AUDIT_LOG_VIEW` |
 
@@ -2227,7 +2183,6 @@ Hạ tầng: Redis 7.4 + `spring-boot-starter-data-redis` (Lettuce), `CacheManag
 | `idx_favorites_user_listing` (UNIQUE `uk_favorites_user_listing`) | `(user_id, listing_id)` | `[§3.9]` *"Một người dùng chỉ lưu một tin một lần"* — **unique constraint là nơi thi hành luật này**, không phải if trong service |
 | `idx_view_histories_user_created` | `(user_id, created_at)` | HIST-02 + input recommendation |
 | `idx_view_histories_listing_user_created` | `(listing_id, user_id, created_at)` | Chống đếm view trùng `view.dedup_minutes` = 30 `[§3.8]` |
-| `idx_contact_logs_listing_user_created` | `(listing_id, user_id, created_at)` | Chống trùng `contact.dedup_minutes` = 60 `[§3.10]` |
 | `idx_comments_listing_status_created` | `(listing_id, status, created_at)` | Danh sách bình luận |
 | `idx_reviews_listing_status` | `(listing_id, status)` | Danh sách đánh giá + tính `average_rating` |
 | `uk_reviews_user_listing` | UNIQUE `(user_id, listing_id)` | `[§3.12]` *"Một người dùng chỉ đánh giá một tin một lần"* |
@@ -2296,7 +2251,6 @@ Hạ tầng: Redis 7.4 + `spring-boot-starter-data-redis` (Lettuce), `CacheManag
 | Hạng mục | Quyết định |
 |---|---|
 | Connection pool | HikariCP `maximum-pool-size = ${DB_POOL_SIZE:20}`. **Không** để mặc định lớn hơn số connection MySQL cho phép |
-| Đếm view/favorite/contact | `[§6.3]` có sẵn `view_count`, `favorite_count`, `contact_count` trên `listings` — **denormalize có chủ đích**. Đếm `COUNT(*)` mỗi lần hiển thị danh sách 20 tin = 20 query aggregate. Cập nhật bằng `UPDATE listings SET view_count = view_count + 1 WHERE id = ?` (atomic, không đọc-sửa-ghi → không mất lượt khi đồng thời) |
 | Chống đếm view trùng | `view.dedup_minutes` = 30 `[§3.8]` *"Không tính nhiều lượt xem liên tục từ cùng người dùng/IP trong thời gian ngắn"* — kiểm bằng Redis key `view:dedup:{listingId}:{userId or ip}` TTL 30 phút, **rẻ hơn nhiều** so với query `view_histories` |
 | `average_rating` | Denormalize trên `listings` + `landlord_profiles`, cập nhật khi có review mới `[§8.6]` |
 | Nén HTTP | nginx `gzip on` cho JSON/JS/CSS |

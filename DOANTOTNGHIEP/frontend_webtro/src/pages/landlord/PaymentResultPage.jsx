@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link as RouterLink, useSearchParams } from 'react-router-dom';
 import {
   Box, Card, CardContent, Stack, Typography, Button, Divider, CircularProgress,
+  Alert,
 } from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
@@ -9,8 +10,8 @@ import paymentApi from '@/api/paymentApi';
 import { formatCurrency, formatDateTime } from '@/utils/format';
 
 /**
- * Trang kết quả callback thanh toán sandbox (docs/03 mục 6). Đọc query trả về từ cổng
- * (transactionCode/status/amount/sig...), xác nhận lại qua paymentApi.getPayment khi có id.
+ * Trang kết quả thanh toán. Với gateway sandbox, URL chứa token đã ký và trang sẽ gửi callback
+ * mô phỏng về backend trước khi đọc lại trạng thái giao dịch từ nguồn dữ liệu chính thức.
  */
 const pick = (sp, keys) => { for (const k of keys) { const v = sp.get(k); if (v != null) return v; } return null; };
 
@@ -19,20 +20,65 @@ const PaymentResultPage = () => {
   const paymentId = pick(sp, ['paymentId', 'id']);
   const txn = pick(sp, ['transactionCode', 'tc', 'txn', 'vnp_TxnRef']);
   const amountParam = pick(sp, ['amount', 'vnp_Amount']);
+  const signature = pick(sp, ['sig', 'signature']);
   const statusParam = (pick(sp, ['status', 'resultCode', 'vnp_ResponseCode']) || '').toUpperCase();
 
-  const [loading, setLoading] = useState(!!paymentId);
+  const isSandboxReturn = !paymentId && !!txn && !!amountParam && !!signature;
+  const [loading, setLoading] = useState(!!paymentId || isSandboxReturn);
   const [payment, setPayment] = useState(null);
+  const [processingError, setProcessingError] = useState('');
 
   useEffect(() => {
-    if (!paymentId) return;
     let alive = true;
-    paymentApi.getPayment(paymentId)
-      .then((d) => alive && setPayment(d))
-      .catch(() => {})
-      .finally(() => alive && setLoading(false));
+
+    const loadPayment = async () => {
+      try {
+        let resolvedPaymentId = paymentId;
+
+        if (isSandboxReturn) {
+          const now = new Date();
+          const callback = await paymentApi.processCallback({
+            transactionCode: txn,
+            gatewayTransactionId: `SANDBOX-${txn}`,
+            amount: amountParam,
+            status: 'SUCCESS',
+            responseCode: '00',
+            responseMessage: 'Thanh toán Sandbox thành công',
+            paidAt: now.toISOString(),
+            timestamp: Math.floor(now.getTime() / 1000),
+            nonce: window.crypto?.randomUUID?.()
+              || `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+            signature,
+          });
+          resolvedPaymentId = callback?.paymentId;
+        }
+
+        if (!resolvedPaymentId) {
+          throw new Error('Không xác định được giao dịch thanh toán');
+        }
+
+        const detail = await paymentApi.getPayment(resolvedPaymentId);
+        if (alive) setPayment(detail);
+      } catch (error) {
+        if (alive) {
+          const message = error?.response?.data?.message
+            || error?.message
+            || 'Không thể xác nhận kết quả thanh toán';
+          setProcessingError(message);
+        }
+      } finally {
+        if (alive) setLoading(false);
+      }
+    };
+
+    if (paymentId || isSandboxReturn) {
+      loadPayment();
+    } else {
+      setLoading(false);
+    }
+
     return () => { alive = false; };
-  }, [paymentId]);
+  }, [amountParam, isSandboxReturn, paymentId, signature, txn]);
 
   const success = useMemo(() => {
     if (payment) return payment.status === 'SUCCESS';
@@ -65,6 +111,12 @@ const PaymentResultPage = () => {
               ? 'Gói dịch vụ đã được kích hoạt cho tin đăng của bạn.'
               : 'Giao dịch không thành công hoặc đã bị hủy. Bạn có thể thử lại.'}
           </Typography>
+
+          {processingError && (
+            <Alert severity="error" sx={{ mt: 2, textAlign: 'left' }}>
+              {processingError}
+            </Alert>
+          )}
 
           <Divider sx={{ my: 3 }} />
           <Stack spacing={1} sx={{ textAlign: 'left' }}>

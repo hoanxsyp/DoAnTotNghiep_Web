@@ -3,7 +3,6 @@ package com.webtro.modules.user.service.impl;
 import com.webtro.common.enums.ListingStatus;
 import com.webtro.constant.ErrorCode;
 import com.webtro.exception.BusinessException;
-import com.webtro.modules.interaction.repository.ContactLogRepository;
 import com.webtro.modules.interaction.repository.ViewHistoryRepository;
 import com.webtro.modules.listing.dto.response.ListingSummaryResponse;
 import com.webtro.modules.listing.entity.Listing;
@@ -49,7 +48,6 @@ public class LandlordDashboardServiceImpl implements LandlordDashboardService {
     private final ListingRepository listingRepository;
     private final LandlordProfileRepository landlordProfileRepository;
     private final ViewHistoryRepository viewHistoryRepository;
-    private final ContactLogRepository contactLogRepository;
     private final ReportRepository reportRepository;
     private final ListingMapper listingMapper;
 
@@ -72,23 +70,14 @@ public class LandlordDashboardServiceImpl implements LandlordDashboardService {
         long pendingCount = count(statusCounts, ListingStatus.PENDING);
         long totalListings = listingRepository.countByOwner(userId);
         long viewCountInWindow = viewHistoryRepository.countCountedViewsForOwnerBetween(userId, from, to);
-        long contactCountInWindow = contactLogRepository
-                .countByOwnerIdAndIsCountedTrueAndCreatedAtGreaterThanEqualAndCreatedAtLessThanAndDeletedAtIsNull(
-                        userId, from, to);
-
         long previousViewCount = viewHistoryRepository.countCountedViewsForOwnerBetween(userId, previousFrom, from);
-        long previousContactCount = contactLogRepository
-                .countByOwnerIdAndIsCountedTrueAndCreatedAtGreaterThanEqualAndCreatedAtLessThanAndDeletedAtIsNull(
-                        userId, previousFrom, from);
 
         LandlordDashboardResponse.LandlordDashboardResponseBuilder builder = LandlordDashboardResponse.builder()
                 .activeCount(activeCount)
                 .pendingCount(pendingCount)
                 .viewCount30d(viewCountInWindow)
-                .contactCount30d(contactCountInWindow)
                 .deltas(LandlordDashboardResponse.Deltas.builder()
                         .viewCountPercent(percentDelta(viewCountInWindow, previousViewCount))
-                        .contactCountPercent(percentDelta(contactCountInWindow, previousContactCount))
                         .build())
                 .chart(chart(userId, fromDate, days, from, to))
                 .topListings(topListings(userId))
@@ -97,8 +86,7 @@ public class LandlordDashboardServiceImpl implements LandlordDashboardService {
                 .totalListings(totalListings)
                 .listingsByStatus(legacyStatusMap(statusCounts))
                 .totalViews(listingRepository.sumViewCountForOwner(userId))
-                .totalFavorites(listingRepository.sumFavoriteCountForOwner(userId))
-                .totalContacts(listingRepository.sumContactCountForOwner(userId));
+                .totalFavorites(listingRepository.sumFavoriteCountForOwner(userId));
 
         LandlordProfile lp = landlordProfileRepository.findByUser_IdAndDeletedAtIsNull(userId).orElse(null);
         if (lp != null) {
@@ -128,16 +116,12 @@ public class LandlordDashboardServiceImpl implements LandlordDashboardService {
                                                              Instant from, Instant to) {
         Map<LocalDate, Long> viewsByDate = dailyMap(
                 viewHistoryRepository.countDailyViewsForOwnerBetween(userId, from, to));
-        Map<LocalDate, Long> contactsByDate = dailyMap(
-                contactLogRepository.countDailyContactsForOwnerBetween(userId, from, to));
-
         List<LandlordDashboardResponse.ChartPoint> points = new ArrayList<>(days);
         for (int i = 0; i < days; i++) {
             LocalDate date = fromDate.plusDays(i);
             points.add(LandlordDashboardResponse.ChartPoint.builder()
                     .date(date)
                     .views(viewsByDate.getOrDefault(date, 0L))
-                    .contacts(contactsByDate.getOrDefault(date, 0L))
                     .build());
         }
         return points;

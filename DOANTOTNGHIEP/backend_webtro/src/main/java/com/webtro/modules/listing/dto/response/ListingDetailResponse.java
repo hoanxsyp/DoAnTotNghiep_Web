@@ -70,7 +70,6 @@ public class ListingDetailResponse {
 
     private String contactName;
     private String contactPhone;
-    private Boolean phoneMasked;
 
     private String status;
     private String statusLabel;
@@ -79,7 +78,6 @@ public class ListingDetailResponse {
     private Integer commentCount;
     private Integer viewCount;
     private Integer favoriteCount;
-    private Integer contactCount;
 
     private Boolean favoritedByMe;
     private Boolean reviewedByMe;

@@ -50,6 +50,8 @@ import com.webtro.modules.listing.service.ListingService;
 import com.webtro.modules.listing.service.ListingVisibilityService;
 import com.webtro.modules.listing.spi.FavoriteStatusGateway;
 import com.webtro.modules.interaction.spi.RentalEligibilityGateway;
+import com.webtro.modules.interaction.repository.FavoriteRepository;
+import com.webtro.modules.interaction.repository.ViewHistoryRepository;
 import com.webtro.modules.listing.statemachine.ListingEvent;
 import com.webtro.modules.listing.statemachine.ListingStateMachine;
 import com.webtro.modules.payment.entity.PromotionPackage;
@@ -82,6 +84,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -100,6 +103,8 @@ import java.util.Set;
 public class ListingServiceImpl implements ListingService {
 
     private static final ZoneId ZONE_VN = ZoneId.of("Asia/Ho_Chi_Minh");
+    private static final int DEFAULT_STATS_DAYS = 30;
+    private static final int MAX_STATS_DAYS = 180;
 
     private final ListingRepository listingRepository;
     private final ListingImageRepository imageRepository;
@@ -125,6 +130,8 @@ public class ListingServiceImpl implements ListingService {
     private final PromotionPackageRepository promotionPackageRepository;
     private final FavoriteStatusGateway favoriteStatusGateway;
     private final RentalEligibilityGateway rentalEligibilityGateway;
+    private final ViewHistoryRepository viewHistoryRepository;
+    private final FavoriteRepository favoriteRepository;
 
     // ==================================================================
     //  CRUD
@@ -621,24 +628,28 @@ public class ListingServiceImpl implements ListingService {
         if (!owner && !SecurityUtils.hasRole(RoleCode.ADMIN)) {
             throw new ForbiddenException(ErrorCode.LISTING_FORBIDDEN);
         }
-        if (from != null && to != null && to.isBefore(from)) {
-            throw new BusinessRuleException(ErrorCode.STATISTIC_RANGE_INVALID);
+        LocalDate effectiveTo = to != null ? to : LocalDate.now(ZONE_VN);
+        LocalDate effectiveFrom = from != null ? from : effectiveTo.minusDays(DEFAULT_STATS_DAYS);
+        if (effectiveTo.isBefore(effectiveFrom)) {
+            throw new BusinessRuleException(ErrorCode.STATISTIC_RANGE_INVALID,
+                    "Ngày bắt đầu phải trước ngày kết thúc");
+        }
+        if (effectiveFrom.plusDays(MAX_STATS_DAYS).isBefore(effectiveTo)) {
+            throw new BusinessRuleException(ErrorCode.STATISTIC_RANGE_INVALID,
+                    "Khoảng thống kê tối đa 180 ngày");
         }
 
-        int views = nz(listing.getViewCount());
-        int contacts = nz(listing.getContactCount());
-        BigDecimal conversion = views == 0 ? BigDecimal.ZERO
-                : BigDecimal.valueOf(contacts).multiply(BigDecimal.valueOf(100))
-                        .divide(BigDecimal.valueOf(views), 2, RoundingMode.HALF_UP);
+        Instant rangeStart = effectiveFrom.atStartOfDay(ZONE_VN).toInstant();
+        Instant rangeEnd = effectiveTo.plusDays(1).atStartOfDay(ZONE_VN).toInstant();
 
+        int views = nz(listing.getViewCount());
         ListingStatsResponse.Summary summary = ListingStatsResponse.Summary.builder()
                 .viewCount(views)
+                .uniqueViewerCount(viewHistoryRepository.countUniqueViewersByListingId(id))
                 .favoriteCount(nz(listing.getFavoriteCount()))
-                .contactCount(contacts)
                 .commentCount(nz(listing.getCommentCount()))
                 .reviewCount(nz(listing.getReviewCount()))
                 .averageRating(listing.getAverageRating())
-                .conversionRatePercent(conversion)
                 .daysActive(daysBetween(listing.getPublishedAt(), Instant.now()))
                 .daysRemaining(remainingDays(listing.getExpiredAt()))
                 .build();
@@ -656,8 +667,46 @@ public class ListingServiceImpl implements ListingService {
                 .status(listing.getStatus().name())
                 .summary(summary)
                 .promotion(promotion)
-                .timeSeries(List.of())
+                .timeSeries(buildListingTimeSeries(id, effectiveFrom, effectiveTo, rangeStart, rangeEnd))
                 .build();
+    }
+
+    private List<ListingStatsResponse.TimeSeriesPoint> buildListingTimeSeries(
+            Long listingId, LocalDate from, LocalDate to, Instant rangeStart, Instant rangeEnd) {
+        Map<LocalDate, Long> views = dailyMap(
+                viewHistoryRepository.countDailyViewsForListingBetween(listingId, rangeStart, rangeEnd));
+        Map<LocalDate, Long> favorites = dailyMap(
+                favoriteRepository.countDailyFavoritesForListingBetween(listingId, rangeStart, rangeEnd));
+        List<ListingStatsResponse.TimeSeriesPoint> result = new ArrayList<>();
+        for (LocalDate date = from; !date.isAfter(to); date = date.plusDays(1)) {
+            result.add(ListingStatsResponse.TimeSeriesPoint.builder()
+                    .date(date.toString())
+                    .views(Math.toIntExact(views.getOrDefault(date, 0L)))
+                    .favorites(Math.toIntExact(favorites.getOrDefault(date, 0L)))
+                    .build());
+        }
+        return result;
+    }
+
+    private Map<LocalDate, Long> dailyMap(List<Object[]> rows) {
+        Map<LocalDate, Long> result = new HashMap<>();
+        for (Object[] row : rows) {
+            LocalDate date = toLocalDate(row[0]);
+            if (date != null) {
+                result.put(date, ((Number) row[1]).longValue());
+            }
+        }
+        return result;
+    }
+
+    private LocalDate toLocalDate(Object value) {
+        if (value instanceof LocalDate localDate) {
+            return localDate;
+        }
+        if (value instanceof java.sql.Date sqlDate) {
+            return sqlDate.toLocalDate();
+        }
+        return value == null ? null : LocalDate.parse(value.toString());
     }
 
     // ==================================================================
@@ -886,14 +935,6 @@ public class ListingServiceImpl implements ListingService {
     public void incrementFavoriteCount(Long listingId, int delta) {
         Listing listing = loadAlive(listingId);
         listing.setFavoriteCount(Math.max(0, nz(listing.getFavoriteCount()) + delta));
-        listingRepository.save(listing);
-    }
-
-    @Override
-    @Transactional
-    public void incrementContactCount(Long listingId) {
-        Listing listing = loadAlive(listingId);
-        listing.setContactCount(nz(listing.getContactCount()) + 1);
         listingRepository.save(listing);
     }
 

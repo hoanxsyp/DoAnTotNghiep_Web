@@ -150,7 +150,6 @@ public enum ErrorCode {
     FAVORITE_NOT_FOUND(HttpStatus.NOT_FOUND, "Tin đăng chưa có trong danh sách đã lưu"),
     CONTACT_FORBIDDEN_SELF(HttpStatus.UNPROCESSABLE_ENTITY, "Bạn không thể liên hệ tin đăng của chính mình"),
     CONTACT_RESTRICTED_SPAM(HttpStatus.FORBIDDEN, "Chức năng liên hệ của bạn đang bị hạn chế do bị báo cáo spam"),
-    CONTACT_INFO_LOGIN_REQUIRED(HttpStatus.UNAUTHORIZED, "Vui lòng đăng nhập để xem đầy đủ số điện thoại"),
     CONVERSATION_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy cuộc trò chuyện"),
     CONVERSATION_FORBIDDEN(HttpStatus.FORBIDDEN, "Bạn không thuộc cuộc trò chuyện này"),
     CHAT_DISABLED_BY_LANDLORD(HttpStatus.UNPROCESSABLE_ENTITY, "Chủ trọ đã tắt chat. Vui lòng liên hệ qua số điện thoại"),

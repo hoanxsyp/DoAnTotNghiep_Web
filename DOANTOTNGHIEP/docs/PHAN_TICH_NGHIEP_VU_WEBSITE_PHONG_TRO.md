@@ -12,7 +12,7 @@ Hệ thống là website trung gian giúp kết nối giữa:
 - Người muốn cho người khác ở ghép.
 - Admin/Moderator quản lý và kiểm duyệt hệ thống.
 
-Website hỗ trợ người dùng đăng tin, tìm kiếm, lọc, lưu tin, liên hệ, đánh giá, bình luận và báo cáo vi phạm. Hệ thống có thêm 4 module AI ở mức ứng dụng thực tế:
+Website hỗ trợ người dùng đăng tin, tìm kiếm, lọc, lưu tin, nhận số điện thoại được hiển thị trực tiếp, nhắn tin, đánh giá, bình luận và báo cáo vi phạm. Hệ thống có thêm 4 module AI ở mức ứng dụng thực tế:
 
 1. Phân tích cảm xúc bình luận.
 2. Gợi ý tin đăng phù hợp.
@@ -23,7 +23,7 @@ Website hỗ trợ người dùng đăng tin, tìm kiếm, lọc, lưu tin, liê
 
 Hệ thống cần đủ lớn để thể hiện năng lực phân tích, thiết kế và triển khai nhưng vẫn thực tế. Do đó:
 
-- Tập trung vào nghiệp vụ đăng tin, tìm kiếm, liên hệ và quản trị.
+- Tập trung vào nghiệp vụ đăng tin, tìm kiếm, nhắn tin và quản trị.
 - Thanh toán có thể mô phỏng hoặc tích hợp cổng thanh toán sandbox.
 - AI ở mức hỗ trợ quyết định, không thay thế hoàn toàn người kiểm duyệt.
 - Không triển khai đặt cọc, ký hợp đồng điện tử phức tạp hoặc xác minh giấy tờ nhà đất bằng AI.
@@ -63,10 +63,9 @@ Hệ thống cần đủ lớn để thể hiện năng lực phân tích, thi�
 | Actor | Mô tả | Vai trò chính |
 |---|---|---|
 | Khách chưa đăng nhập | Người truy cập website chưa có tài khoản hoặc chưa đăng nhập | Xem, tìm kiếm, lọc tin công khai |
-| Người thuê | Người có tài khoản, cần tìm phòng hoặc tìm ở ghép | Tìm kiếm, lưu tin, liên hệ, bình luận, đánh giá, báo cáo |
-| Chủ trọ | Người có tài khoản, đăng tin cho thuê | Đăng tin, quản lý tin, nhận liên hệ, mua gói đẩy tin |
-| Người cho ở ghép | Người có phòng/căn hộ và muốn tìm người ở chung | Đăng tin ở ghép, quản lý người liên hệ |
-| Người cần ở ghép | Người tìm phòng hoặc người cùng thuê | Tìm kiếm tin ở ghép, liên hệ, lưu tin |
+| Người thuê | Người có tài khoản, cần tìm phòng hoặc tìm ở ghép | Tìm kiếm, lưu tin, nhắn tin, bình luận, đánh giá, báo cáo |
+| Chủ trọ | Người có tài khoản, đăng tin cho thuê | Đăng tin, quản lý tin, nhận tin nhắn, mua gói đẩy tin |
+| Người cần ở ghép | Người tìm phòng hoặc người cùng thuê | Tìm kiếm tin ở ghép, xem thông tin chủ tin, nhắn tin, lưu tin |
 | Moderator | Nhân sự kiểm duyệt nội dung | Duyệt tin, xử lý báo cáo, kiểm tra bình luận |
 | Admin | Quản trị toàn bộ hệ thống | Quản lý người dùng, tin, thanh toán, cấu hình, thống kê, AI |
 | Hệ thống AI | Tác nhân xử lý tự động | Phân tích bình luận, gợi ý, chatbot, dự đoán giá |
@@ -83,7 +82,7 @@ Hệ thống cần đủ lớn để thể hiện năng lực phân tích, thi�
 - Xem thông tin cơ bản của chủ trọ.
 - Sử dụng chatbot ở mức cơ bản.
 - Đăng ký, đăng nhập.
-- Không được lưu tin, bình luận, đánh giá, báo cáo hoặc xem đầy đủ thông tin liên hệ nếu hệ thống yêu cầu đăng nhập.
+- Không được lưu tin, bình luận, đánh giá, báo cáo hoặc nhắn tin nếu chưa đăng nhập.
 
 #### Người thuê
 
@@ -91,7 +90,7 @@ Hệ thống cần đủ lớn để thể hiện năng lực phân tích, thi�
 - Tìm kiếm, lọc, xem chi tiết tin đăng.
 - Lưu hoặc bỏ lưu tin.
 - Xem lịch sử đã xem.
-- Liên hệ chủ trọ qua số điện thoại, chat nội bộ hoặc form liên hệ.
+- Xem trực tiếp số điện thoại chủ trọ hoặc chat nội bộ.
 - Bình luận dưới tin đăng.
 - Đánh giá tin hoặc chủ trọ sau khi có tương tác hợp lệ.
 - Báo cáo tin vi phạm.
@@ -107,7 +106,6 @@ Hệ thống cần đủ lớn để thể hiện năng lực phân tích, thi�
 - Mua gói đẩy tin.
 - Xem danh sách người đã liên hệ.
 - Phản hồi bình luận.
-- Xem thống kê tin đăng: lượt xem, lượt lưu, lượt liên hệ.
 - Xem gợi ý giá thuê khi đăng hoặc sửa tin.
 - Nhận cảnh báo khi tin có nhiều bình luận tiêu cực hoặc bị báo cáo.
 
@@ -205,15 +203,11 @@ Hệ thống cần đủ lớn để thể hiện năng lực phân tích, thi�
 | FOLLOW-01 | Theo dõi chủ trọ | Người thuê |
 | FOLLOW-02 | Nhận thông báo từ chủ trọ đã theo dõi | Người thuê |
 
-### 2.6. Contact & Conversation
+### 2.6. Hiển thị số điện thoại & Conversation
 
 | Mã | Chức năng | Actor |
 |---|---|---|
-| CONT-01 | Hiển thị thông tin liên hệ | Người thuê |
-| CONT-02 | Gửi yêu cầu liên hệ | Người thuê |
 | CONT-03 | Chat nội bộ giữa người thuê và chủ trọ | Người dùng |
-| CONT-04 | Chủ trọ quản lý người liên hệ | Chủ trọ |
-| CONT-05 | Ghi nhận lượt liên hệ | Hệ thống |
 
 ### 2.7. Comment & Review
 
@@ -258,7 +252,6 @@ Hệ thống cần đủ lớn để thể hiện năng lực phân tích, thi�
 | NOTI-01 | Thông báo trong hệ thống | Hệ thống |
 | NOTI-02 | Gửi email xác thực | Hệ thống |
 | NOTI-03 | Gửi email cảnh báo | Hệ thống |
-| NOTI-04 | Thông báo có người liên hệ | Hệ thống |
 | NOTI-05 | Thông báo tin sắp hết hạn | Hệ thống |
 | NOTI-06 | Thông báo kết quả duyệt tin | Hệ thống |
 
@@ -635,34 +628,15 @@ Quy tắc nghiệp vụ:
 - Một người dùng chỉ lưu một tin một lần.
 - Dữ liệu Favorite dùng cho Recommendation System.
 
-### 3.10. Liên hệ chủ trọ
+### 3.10. Hiển thị số điện thoại và nhắn tin với chủ trọ
 
 | Nội dung | Mô tả |
 |---|---|
 | Mục đích | Kết nối người thuê với chủ trọ |
-| Người sử dụng | Người thuê |
-| Điều kiện sử dụng | Tin Active, người dùng không bị khóa |
-| Dữ liệu vào | ListingId, hình thức liên hệ, nội dung nếu gửi form |
-| Dữ liệu ra | ContactLog, thông báo cho chủ trọ |
+| Điều kiện sử dụng | Tin đang hiển thị; cần đăng nhập nếu muốn nhắn tin |
+| Dữ liệu ra | Số điện thoại hiển thị trực tiếp hoặc hội thoại nội bộ |
 
-Luồng chính:
-
-1. Người thuê bấm xem số điện thoại hoặc gửi tin nhắn.
-2. Hệ thống kiểm tra quyền.
-3. Hệ thống ghi nhận lượt liên hệ.
-4. Hệ thống hiển thị số điện thoại hoặc tạo cuộc trò chuyện.
-5. Chủ trọ nhận thông báo.
-
-Luồng phụ:
-
-- Khách chưa đăng nhập được yêu cầu đăng nhập trước khi xem số đầy đủ.
-- Nếu chủ trọ tắt chat, hệ thống chỉ hiển thị số điện thoại.
-
-Quy tắc nghiệp vụ:
-
-- Không ghi quá nhiều lượt liên hệ trùng từ cùng người dùng trong thời gian ngắn.
-- Chủ trọ có thể xem danh sách người đã liên hệ tin của mình.
-- Người dùng bị report spam có thể bị hạn chế liên hệ.
+Số điện thoại chủ trọ được hiển thị đầy đủ dưới dạng text trên trang chi tiết tin. Hành động xem số không tạo log, không tăng thống kê và không phát thông báo. Nút nhắn tin vẫn tạo hoặc tái sử dụng hội thoại gắn với tin đăng.
 
 ### 3.11. Bình luận
 
@@ -727,7 +701,7 @@ Luồng phụ:
 Quy tắc nghiệp vụ:
 
 - Một người dùng chỉ đánh giá một tin một lần.
-- Chỉ người đã được chủ trọ xác nhận đang thuê hoặc đã trả phòng mới được đánh giá; việc liên hệ, bình luận hoặc lưu tin không cấp quyền đánh giá.
+- Chỉ người đã được chủ trọ xác nhận đang thuê hoặc đã trả phòng mới được đánh giá; việc nhắn tin, bình luận hoặc lưu tin không cấp quyền đánh giá.
 - Đánh giá quá tiêu cực vẫn được hiển thị nếu không vi phạm nội dung, nhưng được AI và Admin theo dõi.
 
 Validation:
@@ -880,11 +854,11 @@ Xem danh sách tin
 ↓
 Xem chi tiết tin
 ↓
-Đăng nhập nếu muốn lưu/liên hệ/bình luận
+Đăng nhập nếu muốn lưu/nhắn tin/bình luận
 ↓
 Lưu tin quan tâm
 ↓
-Liên hệ chủ trọ
+Gọi theo số điện thoại hiển thị trực tiếp hoặc nhắn tin cho chủ trọ
 ↓
 Đi xem phòng ngoài thực tế
 ↓
@@ -912,9 +886,8 @@ Gửi duyệt tin
 ↓
 Tin được duyệt và hiển thị
 ↓
-Nhận liên hệ từ người thuê
+Nhận tin nhắn từ người thuê
 ↓
-Theo dõi lượt xem, lượt lưu, lượt liên hệ
 ↓
 Mua gói đẩy tin nếu cần
 ↓
@@ -1033,7 +1006,6 @@ Gợi ý ngưỡng cho đồ án:
 | Tài khoản đăng ký thành công | Người dùng | Email/In-app |
 | Tin được duyệt | Chủ trọ | In-app/Email |
 | Tin bị từ chối | Chủ trọ | In-app/Email |
-| Có người liên hệ | Chủ trọ | In-app/Email |
 | Có bình luận mới | Chủ trọ | In-app |
 | Tin sắp hết hạn | Chủ trọ | In-app/Email |
 | Thanh toán thành công | Chủ trọ/Admin | In-app/Email |
@@ -1087,7 +1059,6 @@ AI dự đoán giá thuê được tính lại khi:
 | Favorite | Tin đã lưu |
 | ViewHistory | Lịch sử xem tin |
 | SearchHistory | Lịch sử tìm kiếm |
-| ContactLog | Lượt liên hệ |
 | Conversation | Cuộc trò chuyện |
 | Message | Tin nhắn |
 | Comment | Bình luận |
@@ -1119,7 +1090,6 @@ AI dự đoán giá thuê được tính lại khi:
 | User - Favorite - Listing | Người dùng lưu nhiều tin, một tin được nhiều người lưu |
 | User - ViewHistory - Listing | Ghi lịch sử xem tin |
 | User - SearchHistory | Ghi lịch sử tìm kiếm |
-| Listing - ContactLog - User | Ghi người thuê đã liên hệ tin |
 | Conversation - Message | Một cuộc trò chuyện có nhiều tin nhắn |
 | Listing - Comment | Một tin có nhiều bình luận |
 | Comment - SentimentResult | Một bình luận có một kết quả sentiment mới nhất hoặc nhiều phiên bản |
@@ -1177,7 +1147,7 @@ AI dự đoán giá thuê được tính lại khi:
 - AverageRating.
 - ViewCount.
 - FavoriteCount.
-- ContactCount.
+
 - PublishedAt.
 - ExpiredAt.
 - CreatedAt.
@@ -1248,7 +1218,7 @@ AI dự đoán giá thuê được tính lại khi:
 | Lưu tin | Lưu tin quan tâm |
 | Xem tin đã lưu | Quản lý danh sách yêu thích |
 | Xem lịch sử | Xem lại tin đã xem |
-| Liên hệ chủ trọ | Gọi điện, gửi form hoặc chat |
+| Hiển thị số điện thoại và nhắn tin cho chủ trọ | Số điện thoại dạng text hoặc chat nội bộ |
 | Bình luận | Đặt câu hỏi hoặc chia sẻ trải nghiệm |
 | Đánh giá | Chấm điểm tin/chủ trọ sau tương tác |
 | Báo cáo vi phạm | Báo cáo tin, bình luận, người dùng |
@@ -1270,8 +1240,7 @@ AI dự đoán giá thuê được tính lại khi:
 | Đóng tin | Đánh dấu đã cho thuê |
 | Gia hạn tin | Kéo dài thời gian hiển thị |
 | Mua gói đẩy tin | Thanh toán để tăng hiển thị |
-| Xem thống kê tin | Xem lượt xem, lưu, liên hệ |
-| Quản lý người liên hệ | Xem danh sách người quan tâm |
+| Xem thống kê tin | Xem lượt xem và lượt lưu |
 | Phản hồi bình luận | Trả lời câu hỏi công khai |
 
 ### 7.4. Moderator
@@ -1385,7 +1354,7 @@ Website -> Người thuê: Hiển thị "Gợi ý cho bạn"
 
 ```text
 Người thuê -> Website: Gửi đánh giá
-Website -> Database: Kiểm tra đã liên hệ hoặc đủ điều kiện
+Website -> Database: Kiểm tra quan hệ thuê đủ điều kiện
 Website -> Database: Kiểm tra chưa đánh giá trước đó
 Website -> Database: Lưu Review
 Website -> Database: Tính lại AverageRating của tin và chủ trọ
@@ -1501,7 +1470,7 @@ Gợi ý ngưỡng:
 - Số người ở.
 - Giới tính nếu là ở ghép.
 - Tin đã lưu.
-- Tin đã liên hệ.
+- Tin đã lưu hoặc đã xem.
 - Tin đang Active trong hệ thống.
 
 #### Cách hoạt động ở mức nghiệp vụ
@@ -1991,12 +1960,10 @@ Audit:
 | GET | /api/history/views | Lịch sử xem |
 | DELETE | /api/history/views | Xóa lịch sử xem |
 
-### 12.5. Contact & Chat
+### 12.5. Chat
 
 | Method | Endpoint | Mô tả |
 |---|---|---|
-| POST | /api/listings/{id}/contact | Ghi nhận liên hệ |
-| GET | /api/landlord/contacts | Chủ trọ xem người liên hệ |
 | GET | /api/conversations | Danh sách cuộc trò chuyện |
 | POST | /api/conversations | Tạo cuộc trò chuyện |
 | GET | /api/conversations/{id}/messages | Xem tin nhắn |
@@ -2080,7 +2047,7 @@ Audit:
 | Tìm kiếm/lọc nâng cao | Cao | Trung bình | Cao | Rất quan trọng |
 | Lưu tin | Cao | Dễ | Cao | Dữ liệu cho gợi ý |
 | Lịch sử xem/tìm kiếm | Cao | Dễ | Cao | Hỗ trợ AI |
-| Liên hệ chủ trọ | Cao | Dễ | Cao | Cốt lõi chuyển đổi |
+| Hiển thị số điện thoại và nhắn tin cho chủ trọ | Cao | Dễ | Cao | Cốt lõi chuyển đổi |
 | Bình luận | Cao | Trung bình | Trung bình | Cần cho sentiment |
 | Đánh giá | Cao | Trung bình | Cao | Giúp người thuê tham khảo |
 | Báo cáo vi phạm | Cao | Trung bình | Cao | Cần cho kiểm duyệt |
@@ -2133,7 +2100,7 @@ Audit:
 - Tìm kiếm và lọc.
 - Xem chi tiết tin.
 - Lưu tin.
-- Liên hệ chủ trọ.
+- Gọi theo số điện thoại hiển thị trực tiếp hoặc nhắn tin cho chủ trọ.
 - Bình luận.
 - Báo cáo vi phạm.
 - Admin duyệt tin và quản lý report.

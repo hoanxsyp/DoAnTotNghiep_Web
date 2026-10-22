@@ -124,7 +124,7 @@ class RentalRequestServiceImplTest {
         when(listingGateway.getBrief(LISTING_ID)).thenReturn(new ListingGateway.ListingBrief(
                 LISTING_ID, OWNER_ID, "Phòng thử nghiệm", "phong-thu-nghiem", null,
                 BigDecimal.valueOf(3_000_000), BigDecimal.valueOf(25), "Hà Nội",
-                ListingStatus.ACTIVE, true, BigDecimal.ZERO, 0, 0));
+                ListingStatus.ACTIVE, true, BigDecimal.ZERO, 0));
         when(userGateway.getBrief(TENANT_ID)).thenReturn(new UserGateway.UserBrief(
                 TENANT_ID, "Người thuê", null, "0900000000", null));
     }
