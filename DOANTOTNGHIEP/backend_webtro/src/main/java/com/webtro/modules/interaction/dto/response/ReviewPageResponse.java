@@ -36,6 +36,9 @@ public class ReviewPageResponse {
     @Schema(name = "ReviewSummary", description = "Thống kê đánh giá")
     public static class ReviewSummary {
         private java.math.BigDecimal averageRating;
+        /** Phòng có các đánh giá này ({@code null} với danh sách đánh giá của chủ trọ). */
+        private Long rentalUnitId;
+        private String rentalUnitName;
         private long totalReviews;
 
         @Schema(description = "Phân bố số lượng theo số sao, khóa \"1\"..\"5\"")

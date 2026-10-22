@@ -130,11 +130,15 @@ public class UserGatewayAdapter implements UserGateway {
     @Override
     @Transactional
     public void updateLandlordReviewAggregate(Long landlordId, BigDecimal averageRating, int reviewCount) {
-        LandlordProfile lp = landlordProfileRepository.findByUser_IdAndDeletedAtIsNull(landlordId)
-                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.USER_NOT_FOUND));
-        lp.setAverageRating(averageRating != null ? averageRating : BigDecimal.ZERO);
-        lp.setReviewCount(reviewCount);
-        landlordProfileRepository.save(lp);
+        landlordProfileRepository.applyRating(landlordId,
+                averageRating != null ? averageRating : BigDecimal.ZERO, Math.max(0, reviewCount));
+    }
+
+    /** Khoá hồ sơ chủ trọ (nếu có) trước khi tính lại điểm chủ trọ. */
+    @Override
+    @Transactional
+    public boolean lockLandlordProfile(Long landlordId) {
+        return landlordProfileRepository.findAliveByUserIdForUpdate(landlordId).isPresent();
     }
 
     private UserBrief toBrief(User user) {

@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate, useLocation, Link as RouterLink } from 'react-router-dom';
 import {
   Container, Grid, Box, Typography, Stack, Button, Paper, Avatar, Divider, Chip,
-  Pagination, Tooltip,
+  Pagination, Tooltip, Rating,
 } from '@mui/material';
+import MeetingRoomOutlinedIcon from '@mui/icons-material/MeetingRoomOutlined';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import PersonAddAltIcon from '@mui/icons-material/PersonAddAlt';
 import HowToRegIcon from '@mui/icons-material/HowToReg';
@@ -13,7 +14,7 @@ import RatingStars from '@/components/interaction/RatingStars';
 import EmptyState from '@/components/common/EmptyState';
 import useAuth from '@/hooks/useAuth';
 import { notify } from '@/utils/toast';
-import { formatDate, compactNumber } from '@/utils/format';
+import { formatDate, compactNumber, fromNow } from '@/utils/format';
 
 const toItems = (d) => (Array.isArray(d) ? d : d?.items ?? []);
 const PAGE = 12;
@@ -34,6 +35,10 @@ const LandlordProfilePage = () => {
   const [listings, setListings] = useState({ items: [], totalPages: 0 });
   const [listingsLoading, setListingsLoading] = useState(true);
   const [page, setPage] = useState(0);
+
+  // Đánh giá về chủ trọ: mọi phòng, kể cả phòng có tin đã đóng (RE-2) — mỗi đánh giá kèm tên phòng.
+  const [reviews, setReviews] = useState({ items: [], totalPages: 0 });
+  const [reviewPage, setReviewPage] = useState(0);
 
   useEffect(() => {
     if (!id) return undefined;
@@ -76,6 +81,18 @@ const LandlordProfilePage = () => {
       alive = false;
     };
   }, [id, page, notFound]);
+
+  useEffect(() => {
+    if (!id || notFound) return undefined;
+    let alive = true;
+    userApi
+      .getReviews(id, { page: reviewPage, size: 5 })
+      .then((data) => alive && setReviews({ items: toItems(data), totalPages: data?.totalPages ?? 1 }))
+      .catch(() => alive && setReviews({ items: [], totalPages: 0 }));
+    return () => {
+      alive = false;
+    };
+  }, [id, reviewPage, notFound]);
 
   const handleFollow = async () => {
     if (!isAuthenticated) {
@@ -221,6 +238,48 @@ const LandlordProfilePage = () => {
                 page={page + 1}
                 onChange={(_, p) => setPage(p - 1)}
                 color="primary"
+              />
+            </Stack>
+          )}
+
+          <Typography variant="h6" component="h2" sx={{ fontWeight: 700, mt: 4, mb: 1 }}>
+            Đánh giá từ người thuê
+          </Typography>
+          {reviews.items.length === 0 ? (
+            <EmptyState size="sm" title="Chủ trọ chưa có đánh giá" />
+          ) : (
+            <Stack divider={<Divider flexItem />}>
+              {reviews.items.map((r) => (
+                <Box key={r.id} sx={{ py: 1.5 }}>
+                  <Stack direction="row" spacing={1.5}>
+                    <Avatar src={r.author?.avatarUrl} sx={{ width: 36, height: 36 }}>
+                      {r.author?.fullName?.charAt(0)}
+                    </Avatar>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                        <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>{r.author?.fullName}</Typography>
+                        <Rating value={r.rating} readOnly size="small" />
+                        <Typography variant="caption" color="text.secondary">{fromNow(r.createdAt)}</Typography>
+                      </Stack>
+                      {r.rentalUnitName && (
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <MeetingRoomOutlinedIcon sx={{ fontSize: 14 }} /> {r.rentalUnitName}
+                        </Typography>
+                      )}
+                      {r.content && <Typography variant="body2" sx={{ mt: 0.5, whiteSpace: 'pre-line' }}>{r.content}</Typography>}
+                    </Box>
+                  </Stack>
+                </Box>
+              ))}
+            </Stack>
+          )}
+          {reviews.totalPages > 1 && (
+            <Stack alignItems="center" sx={{ mt: 2 }}>
+              <Pagination
+                count={reviews.totalPages}
+                page={reviewPage + 1}
+                onChange={(_, p) => setReviewPage(p - 1)}
+                size="small"
               />
             </Stack>
           )}

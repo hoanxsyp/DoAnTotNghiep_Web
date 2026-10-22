@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import dayjs from 'dayjs';
 import { useParams, useNavigate, useLocation, Link as RouterLink } from 'react-router-dom';
 import {
   Container, Grid, Box, Typography, Stack, Chip, Button, Paper, Divider, Avatar, Breadcrumbs,
@@ -647,13 +648,19 @@ const ListingDetailPage = () => {
           )}
 
           {/* Đánh giá */}
-          <Typography variant="h6" component="h2" sx={{ fontWeight: 700, mt: 3, mb: 1 }}>
+          <Typography variant="h6" component="h2" sx={{ fontWeight: 700, mt: 3, mb: 0.5 }}>
             Đánh giá {totalReviews > 0 ? `(${totalReviews})` : ''}
           </Typography>
+          {/* Đánh giá thuộc về phòng: gồm cả đánh giá từ các lần đăng tin trước của cùng phòng (RE-2). */}
+          {(reviews.summary?.rentalUnitName || listing?.rentalUnit?.name) && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+              Đánh giá của phòng &quot;{reviews.summary?.rentalUnitName || listing?.rentalUnit?.name}&quot; qua mọi lần đăng tin
+            </Typography>
+          )}
           {reviewsLoading ? (
             <LoadingSkeleton variant="comment" count={2} />
           ) : totalReviews === 0 ? (
-            <EmptyState size="sm" title="Chưa có đánh giá nào cho tin này" />
+            <EmptyState size="sm" title="Chưa có đánh giá nào cho phòng này" />
           ) : (
             <Box>
               <Stack direction="row" spacing={2} alignItems="center">
@@ -701,6 +708,11 @@ const ListingDetailPage = () => {
                             {fromNow(r.createdAt)}
                           </Typography>
                         </Stack>
+                        {r.rentedViaListingCreatedAt && String(r.listingId) !== String(listing?.id) && (
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                            Thuê qua tin đăng tháng {dayjs(r.rentedViaListingCreatedAt).format('MM/YYYY')}
+                          </Typography>
+                        )}
                         {r.content && <RichTextViewer content={r.content} variant="body2" />}
                       </Box>
                       {isAuthenticated && String(r.author?.id) === String(user?.id) && (

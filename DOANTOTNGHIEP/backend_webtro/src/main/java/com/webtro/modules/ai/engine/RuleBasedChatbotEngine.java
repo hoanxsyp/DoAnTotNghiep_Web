@@ -184,9 +184,10 @@ public class RuleBasedChatbotEngine implements ChatbotEngine {
             case GREETING -> "Chào bạn! Mình là trợ lý tìm phòng trọ. Bạn muốn tìm phòng ở khu vực nào, "
                     + "khoảng giá bao nhiêu ạ?";
             case HOW_TO_POST -> "Để đăng tin cho thuê: đăng nhập bằng tài khoản chủ trọ, vào mục "
-                    + "\"Quản lý → Tin đăng → Tạo tin\", điền thông tin phòng, tải tối thiểu 1 ảnh rồi bấm "
-                    + "\"Gửi duyệt\". Tin sẽ hiển thị sau khi được kiểm duyệt. Mình chỉ hướng dẫn, không "
-                    + "đăng tin thay bạn nhé.";
+                    + "\"Quản lý → Tin đăng → Tạo tin\", chọn phòng có sẵn hoặc tạo phòng mới, điền thông "
+                    + "tin phòng, tải tối thiểu 1 ảnh rồi bấm \"Gửi duyệt\". Tin sẽ hiển thị sau khi được "
+                    + "kiểm duyệt. Phòng đã từng đăng thì vào \"Phòng của tôi\" và bấm \"Đăng lại\" để giữ "
+                    + "các đánh giá cũ. Mình chỉ hướng dẫn, không đăng tin thay bạn nhé.";
             case FAQ -> "Mình có thể giúp giải thích cách dùng website: tìm phòng, lưu tin, liên hệ chủ "
                     + "trọ, báo cáo tin sai. Bạn muốn hỏi về việc gì ạ?";
             case OUT_OF_SCOPE -> "Mình chỉ hỗ trợ tìm phòng trọ, giải thích thuật ngữ và hướng dẫn sử "

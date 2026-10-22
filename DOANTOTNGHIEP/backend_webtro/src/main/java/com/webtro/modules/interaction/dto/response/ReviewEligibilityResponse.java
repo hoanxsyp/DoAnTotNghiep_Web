@@ -20,6 +20,9 @@ import lombok.Setter;
 public class ReviewEligibilityResponse {
 
     private Long listingId;
+    /** Đánh giá áp dụng cho cả phòng, không riêng tin (RE-1). */
+    private Long rentalUnitId;
+    private String rentalUnitName;
     private Boolean eligible;
 
     @Schema(description = "Lý do không đủ điều kiện: NOT_RENTER/ALREADY_REVIEWED/OWN_LISTING/NOT_AUTHENTICATED")

@@ -23,6 +23,7 @@ import com.webtro.modules.interaction.dto.response.ReviewResponse;
 import com.webtro.modules.interaction.entity.Review;
 import com.webtro.modules.interaction.mapper.ReviewMapper;
 import com.webtro.modules.interaction.repository.ReviewRepository;
+import com.webtro.modules.interaction.service.ReviewRatingRecalculator;
 import com.webtro.modules.interaction.service.ReviewService;
 import com.webtro.modules.interaction.specification.ReviewSpecifications;
 import com.webtro.modules.interaction.spi.BannedKeywordGateway;
@@ -34,34 +35,37 @@ import com.webtro.security.RateLimitService;
 import com.webtro.security.SecurityUtils;
 import com.webtro.util.HtmlSanitizer;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Hiện thực nghiệp vụ đánh giá (REV) — canonical 4.7.6–4.7.12, {@code [§3.12]}.
  *
- * <p>Điểm trung bình của tin/chủ trọ được cập nhật <i>tăng dần</i> ngay trong transaction (dùng
- * số liệu denormalized đọc qua gateway); nightly reconcile bù sai số làm tròn (canonical 4.7.8
- * quy tắc 5, 6).
+ * <p><b>Đánh giá theo Phòng</b> (docs/DANH_GIA_THEO_PHONG_DOI_CHIEU.md mục 3): đánh giá gắn vào
+ * {@code rental_units}, hiện trên mọi tin của phòng (RE-2). Quyền đánh giá: từng thuê
+ * ({@code RENTED}/{@code CHECKED_OUT}) qua bất kỳ tin nào của phòng (RE-1). Mỗi người một đánh
+ * giá cho mỗi phòng (RE-5). Chủ trọ suy ra từ phòng nên đánh giá trên tin đã đóng/đã xoá mềm
+ * vẫn sửa, xoá, ẩn được.
+ *
+ * <p><b>Điểm</b> chỉ được ghi qua {@link ReviewRatingRecalculator}: khoá chủ trọ + phòng trước khi
+ * đổi đánh giá, rồi tính lại từ đầu bằng AVG/COUNT trong cùng transaction (mục 10).
  */
 @Service
 @RequiredArgsConstructor
 public class ReviewServiceImpl implements ReviewService {
 
     private static final int REVIEW_MAX_PER_DAY = 10;
-    private static final int SUMMARY_SCAN_CAP = 1000;
     private static final int CONTENT_REQUIRED_BELOW = 3;
 
     private final ReviewRepository reviewRepository;
@@ -73,21 +77,28 @@ public class ReviewServiceImpl implements ReviewService {
     private final NotificationService notificationService;
     private final RateLimitService rateLimitService;
     private final AuditLogService auditLogService;
+    private final ReviewRatingRecalculator ratingRecalculator;
+
+    // ==================================================================
+    //  Đọc công khai
+    // ==================================================================
 
     @Override
     @Transactional(readOnly = true)
     public ReviewPageResponse listListingReviews(Long listingId, Integer rating, Pageable pageable) {
-        ListingGateway.ListingBrief listing = listingGateway.getBrief(listingId);
-        Page<Review> page = reviewRepository
-                .findByListingIdAndStatusAndDeletedAtIsNull(listingId, ReviewStatus.VISIBLE, pageable);
-        PageResponse<ReviewResponse> mapped = mapReviewPage(page, rating, false);
+        Long unitId = listingGateway.rentalUnitIdOf(listingId);
+        ListingGateway.RentalUnitBrief unit = listingGateway.getUnitBrief(unitId);
+        Page<Review> page = reviewRepository.findByUnit(unitId, ReviewStatus.VISIBLE, rating, pageable);
 
         return ReviewPageResponse.builder()
-                .page(mapped)
+                .page(mapReviewPage(page, false))
                 .summary(ReviewPageResponse.ReviewSummary.builder()
-                        .averageRating(listing.averageRating())
-                        .totalReviews(listing.reviewCount())
-                        .distribution(distributionForListing(listingId))
+                        .rentalUnitId(unit.id())
+                        .rentalUnitName(unit.name())
+                        .averageRating(unit.averageRating())
+                        .totalReviews(unit.reviewCount())
+                        .distribution(distribution(
+                                reviewRepository.ratingDistributionByUnit(unitId, ReviewStatus.VISIBLE)))
                         .build())
                 .build();
     }
@@ -96,16 +107,15 @@ public class ReviewServiceImpl implements ReviewService {
     @Transactional(readOnly = true)
     public ReviewPageResponse listLandlordReviews(Long landlordId, Integer rating, Pageable pageable) {
         UserGateway.LandlordAggregate agg = userGateway.getLandlordAggregate(landlordId);
-        Page<Review> page = reviewRepository
-                .findByLandlordIdAndStatusAndDeletedAtIsNull(landlordId, ReviewStatus.VISIBLE, pageable);
-        PageResponse<ReviewResponse> mapped = mapReviewPage(page, rating, true);
+        Page<Review> page = reviewRepository.findByLandlord(landlordId, ReviewStatus.VISIBLE, rating, pageable);
 
         return ReviewPageResponse.builder()
-                .page(mapped)
+                .page(mapReviewPage(page, true))
                 .summary(ReviewPageResponse.ReviewSummary.builder()
                         .averageRating(agg.averageRating())
                         .totalReviews(agg.reviewCount())
-                        .distribution(distributionForLandlord(landlordId))
+                        .distribution(distribution(
+                                reviewRepository.ratingDistributionByLandlord(landlordId, ReviewStatus.VISIBLE)))
                         .build())
                 .build();
     }
@@ -113,13 +123,14 @@ public class ReviewServiceImpl implements ReviewService {
     @Override
     @Transactional(readOnly = true)
     public ReviewEligibilityResponse checkEligibility(Long listingId, Long userId) {
-        ListingGateway.ListingBrief listing = listingGateway.getBrief(listingId);
-        Review existing = reviewRepository.findByUserIdAndListingIdAndDeletedAtIsNull(userId, listingId).orElse(null);
-        boolean rentalVerified = rentalEligibilityGateway.hasRentalHistory(listingId, userId);
+        Long unitId = listingGateway.rentalUnitIdOf(listingId);
+        ListingGateway.RentalUnitBrief unit = listingGateway.getUnitBrief(unitId);
+        Review existing = reviewRepository.findByUserIdAndRentalUnitIdAndDeletedAtIsNull(userId, unitId).orElse(null);
+        boolean rentalVerified = rentalEligibilityGateway.findRentedListingInUnit(unitId, userId).isPresent();
 
         String reason = null;
         boolean eligible = true;
-        if (listing.ownerId().equals(userId)) {
+        if (unit.ownerId().equals(userId)) {
             eligible = false;
             reason = "OWN_LISTING";
         } else if (existing != null) {
@@ -132,6 +143,8 @@ public class ReviewServiceImpl implements ReviewService {
 
         return ReviewEligibilityResponse.builder()
                 .listingId(listingId)
+                .rentalUnitId(unitId)
+                .rentalUnitName(unit.name())
                 .eligible(eligible)
                 .reason(reason)
                 .reasonMessage(reasonMessage(reason))
@@ -144,26 +157,33 @@ public class ReviewServiceImpl implements ReviewService {
                 .build();
     }
 
+    // ==================================================================
+    //  Ghi (người thuê)
+    // ==================================================================
+
     @Override
     @Transactional
     public ReviewResponse createReview(Long listingId, CreateReviewRequest request, Long userId) {
         rateLimitService.checkLimit("review", String.valueOf(userId), REVIEW_MAX_PER_DAY, Duration.ofDays(1));
 
-        ListingGateway.ListingBrief listing = listingGateway.getBrief(listingId);
-        if (listing.ownerId().equals(userId)) {
+        Long unitId = listingGateway.rentalUnitIdOf(listingId);
+        ListingGateway.RentalUnitBrief unit = listingGateway.getUnitBrief(unitId);
+        if (unit.ownerId().equals(userId)) {
             throw new BusinessRuleException(ErrorCode.REVIEW_SELF_FORBIDDEN);
-        }
-        if (reviewRepository.existsByUserIdAndListingIdAndDeletedAtIsNull(userId, listingId)) {
-            throw new ConflictException(ErrorCode.REVIEW_ALREADY_EXISTS);
-        }
-        boolean rentalVerified = rentalEligibilityGateway.hasRentalHistory(listingId, userId);
-        if (!rentalVerified) {
-            throw new BusinessRuleException(ErrorCode.REVIEW_RENTAL_REQUIRED);
         }
         String content = validateContent(request.getRating(), request.getContent());
 
+        ReviewRatingRecalculator.Scope scope = ratingRecalculator.lock(unitId);
+        if (reviewRepository.existsByUserIdAndRentalUnitIdAndDeletedAtIsNull(userId, unitId)) {
+            throw new ConflictException(ErrorCode.REVIEW_ALREADY_EXISTS);
+        }
+        // Ghi lại tin mà người này đã thuê qua (có thể là tin cũ của phòng, không phải tin đang xem).
+        Long rentedViaListingId = rentalEligibilityGateway.findRentedListingInUnit(unitId, userId)
+                .orElseThrow(() -> new BusinessRuleException(ErrorCode.REVIEW_RENTAL_REQUIRED));
+
         Review review = Review.builder()
-                .listingId(listingId)
+                .rentalUnitId(unitId)
+                .listingId(rentedViaListingId)
                 .userId(userId)
                 .rating(request.getRating())
                 .content(content)
@@ -171,26 +191,18 @@ public class ReviewServiceImpl implements ReviewService {
                 .isVerifiedContact(true)
                 .activeMarker((byte) 1)
                 .build();
-        review = reviewRepository.save(review);
-
-        // Cập nhật trung bình tin + chủ trọ.
-        BigDecimal listingAvg = applyListingAggregateOnAdd(listing, request.getRating());
-        BigDecimal landlordAvg = applyLandlordAggregateOnAdd(listing.ownerId(), request.getRating());
-        int listingCount = (int) reviewRepository
-                .countByListingIdAndStatusAndDeletedAtIsNull(listingId, ReviewStatus.VISIBLE);
-
-
-        if (!userId.equals(listing.ownerId())) {
-            notificationService.notifyUser(listing.ownerId(), NotificationType.NEW_REVIEW,
-                    "Đánh giá mới", "Tin \"" + listing.title() + "\" vừa nhận đánh giá " + request.getRating() + " sao.");
+        try {
+            review = reviewRepository.saveAndFlush(review);
+        } catch (DataIntegrityViolationException ex) {
+            throw new ConflictException(ErrorCode.REVIEW_ALREADY_EXISTS);
         }
 
-        UserGateway.UserBrief author = userGateway.findBrief(userId).orElse(null);
-        ReviewResponse resp = single(review, author, userId);
-        resp.setListingAverageRating(listingAvg);
-        resp.setListingReviewCount(listingCount);
-        resp.setLandlordAverageRating(landlordAvg);
-        return resp;
+        ReviewRatingRecalculator.Result rating = ratingRecalculator.recalc(scope);
+
+        notificationService.notifyUser(unit.ownerId(), NotificationType.NEW_REVIEW,
+                "Đánh giá mới", "Phòng \"" + unit.name() + "\" vừa nhận đánh giá " + request.getRating() + " sao.");
+
+        return withRating(single(review, userGateway.findBrief(userId).orElse(null), userId, unit), rating);
     }
 
     @Override
@@ -208,62 +220,48 @@ public class ReviewServiceImpl implements ReviewService {
         }
         String content = validateContent(request.getRating(), request.getContent());
 
-        int oldRating = r.getRating();
+        ReviewRatingRecalculator.Scope scope = ratingRecalculator.lock(r.getRentalUnitId());
         r.setRating(request.getRating());
         r.setContent(content);
         r.setEditedAt(Instant.now());
-        reviewRepository.save(r);
+        reviewRepository.saveAndFlush(r);
+        ReviewRatingRecalculator.Result rating = ratingRecalculator.recalc(scope);
 
-        ListingGateway.ListingBrief listing = listingGateway.getBrief(r.getListingId());
-        BigDecimal listingAvg = applyListingAggregateOnChange(listing, oldRating, request.getRating());
-        BigDecimal landlordAvg = applyLandlordAggregateOnChange(listing.ownerId(), oldRating, request.getRating());
-        int listingCount = (int) reviewRepository
-                .countByListingIdAndStatusAndDeletedAtIsNull(r.getListingId(), ReviewStatus.VISIBLE);
-
-
-        UserGateway.UserBrief author = userGateway.findBrief(userId).orElse(null);
-        ReviewResponse resp = single(r, author, userId);
-        resp.setListingAverageRating(listingAvg);
-        resp.setListingReviewCount(listingCount);
-        resp.setLandlordAverageRating(landlordAvg);
-        return resp;
+        ListingGateway.RentalUnitBrief unit = listingGateway.getUnitBrief(r.getRentalUnitId());
+        return withRating(single(r, userGateway.findBrief(userId).orElse(null), userId, unit), rating);
     }
 
     @Override
     @Transactional
     public void deleteReview(Long reviewId, Long userId, String moderationReason) {
         Review r = aliveById(reviewId);
-        boolean wasVisible = r.getStatus() == ReviewStatus.VISIBLE;
         boolean author = r.getUserId().equals(userId);
         boolean moderator = SecurityUtils.hasAnyRole(RoleCode.MODERATOR, RoleCode.ADMIN);
         if (!author && !moderator) {
             throw new ForbiddenException(ErrorCode.REVIEW_FORBIDDEN);
         }
-
-        if (!author && moderator) {
+        if (!author && (moderationReason == null || moderationReason.trim().length() < 10
+                || moderationReason.trim().length() > 255)) {
             // Kiểm duyệt viên ẩn (không xóa) + bắt buộc lý do — [§10.9], canonical 4.7.10.
-            if (moderationReason == null || moderationReason.trim().length() < 10
-                    || moderationReason.trim().length() > 255) {
-                throw new BusinessException(ErrorCode.MODERATION_REASON_REQUIRED);
-            }
+            throw new BusinessException(ErrorCode.MODERATION_REASON_REQUIRED);
+        }
+
+        ReviewRatingRecalculator.Scope scope = ratingRecalculator.lock(r.getRentalUnitId());
+        boolean wasVisible = r.getStatus() == ReviewStatus.VISIBLE;
+        if (!author) {
             r.setStatus(ReviewStatus.HIDDEN);
             r.setHiddenReason(moderationReason.trim());
             r.setHiddenBy(userId);
             r.setHiddenAt(Instant.now());
-            reviewRepository.save(r);
         } else {
             // Tác giả luôn có thể xóa mềm đánh giá của chính mình.
             r.setStatus(ReviewStatus.DELETED);
             r.setActiveMarker(null);
             r.softDelete();
-            reviewRepository.save(r);
         }
-
-        // Chỉ trừ điểm khi bản ghi thực sự vừa rời khỏi tập VISIBLE.
+        reviewRepository.saveAndFlush(r);
         if (wasVisible) {
-            ListingGateway.ListingBrief listing = listingGateway.getBrief(r.getListingId());
-            applyListingAggregateOnRemove(listing, r.getRating());
-            applyLandlordAggregateOnRemove(listing.ownerId(), r.getRating());
+            ratingRecalculator.recalc(scope);
         }
     }
 
@@ -271,14 +269,17 @@ public class ReviewServiceImpl implements ReviewService {
     @Transactional(readOnly = true)
     public PageResponse<ReviewResponse> listMyReviews(Long userId, Pageable pageable) {
         Page<Review> page = reviewRepository.findByUserIdAndDeletedAtIsNull(userId, pageable);
-        Map<Long, ListingGateway.ListingBrief> listings = listingGateway.getBriefs(
-                page.getContent().stream().map(Review::getListingId).distinct().toList());
+        Map<Long, ListingGateway.ListingBrief> listings = listingGateway.getBriefsIncludingDeleted(
+                page.getContent().stream().map(Review::getListingId).filter(Objects::nonNull).distinct().toList());
+        Map<Long, ListingGateway.RentalUnitBrief> units = listingGateway.getUnitBriefs(
+                page.getContent().stream().map(Review::getRentalUnitId).distinct().toList());
         AuthorResponse author = reviewMapper.toAuthor(userGateway.findBrief(userId).orElse(null));
 
         return PageResponse.from(page, r -> {
             boolean editable = r.getStatus() == ReviewStatus.VISIBLE;
             ReviewResponse response = reviewMapper.toResponse(r, author, editable, null);
-            ListingGateway.ListingBrief listing = listings.get(r.getListingId());
+            fillUnitAndVia(response, r, units, listings);
+            ListingGateway.ListingBrief listing = r.getListingId() == null ? null : listings.get(r.getListingId());
             if (listing != null) {
                 response.setListingTitle(listing.title());
                 response.setListingThumbnailUrl(listing.thumbnailUrl());
@@ -291,32 +292,34 @@ public class ReviewServiceImpl implements ReviewService {
         });
     }
 
+    // ==================================================================
+    //  Kiểm duyệt (REVIEW_MODERATE)
+    // ==================================================================
+
     @Override
     @Transactional
     public void hideByModeration(Long reviewId, Long moderatorId, String reason) {
         Review r = aliveById(reviewId);
+        ReviewRatingRecalculator.Scope scope = ratingRecalculator.lock(r.getRentalUnitId());
         boolean wasVisible = r.getStatus() == ReviewStatus.VISIBLE;
         r.setStatus(ReviewStatus.HIDDEN);
         r.setHiddenReason(reason == null ? null
                 : (reason.trim().length() <= 500 ? reason.trim() : reason.trim().substring(0, 500)));
         r.setHiddenBy(moderatorId);
         r.setHiddenAt(Instant.now());
-        reviewRepository.save(r);
+        reviewRepository.saveAndFlush(r);
 
-        // Chỉ tính lại trung bình khi đánh giá vừa rời khỏi tập VISIBLE (tránh trừ trùng nếu đã ẩn).
+        // Chỉ tính lại khi đánh giá vừa rời khỏi tập VISIBLE.
         if (wasVisible) {
-            ListingGateway.ListingBrief listing = listingGateway.getBrief(r.getListingId());
-            applyListingAggregateOnRemove(listing, r.getRating());
-            applyLandlordAggregateOnRemove(listing.ownerId(), r.getRating());
+            ratingRecalculator.recalc(scope);
         }
     }
-
-    // ------------------ Kiểm duyệt (REVIEW_MODERATE) ------------------
 
     @Override
     @Transactional(readOnly = true)
     public PageResponse<AdminReviewResponse> adminListReviews(ReviewStatus status, Integer rating, Long listingId,
-                                                              Long landlordId, String keyword, Pageable pageable) {
+                                                              Long rentalUnitId, Long landlordId, String keyword,
+                                                              Pageable pageable) {
         Specification<Review> spec = ReviewSpecifications.notDeleted();
         if (status != null) {
             spec = spec.and(ReviewSpecifications.statusEq(status));
@@ -327,6 +330,9 @@ public class ReviewServiceImpl implements ReviewService {
         if (listingId != null) {
             spec = spec.and(ReviewSpecifications.listingIdEq(listingId));
         }
+        if (rentalUnitId != null) {
+            spec = spec.and(ReviewSpecifications.rentalUnitIdEq(rentalUnitId));
+        }
         if (landlordId != null) {
             spec = spec.and(ReviewSpecifications.landlordIdEq(landlordId));
         }
@@ -335,15 +341,16 @@ public class ReviewServiceImpl implements ReviewService {
         }
 
         Page<Review> page = reviewRepository.findAll(spec, pageable);
-        List<Long> userIds = page.getContent().stream().map(Review::getUserId).distinct().toList();
-        Map<Long, UserGateway.UserBrief> authors = userGateway.getBriefs(userIds);
-        Map<Long, ListingGateway.ListingBrief> listings = listingGateway.getBriefs(
-                page.getContent().stream().map(Review::getListingId).distinct().toList());
+        Map<Long, UserGateway.UserBrief> authors = userGateway.getBriefs(
+                page.getContent().stream().map(Review::getUserId).distinct().toList());
+        Map<Long, ListingGateway.RentalUnitBrief> units = listingGateway.getUnitBriefs(
+                page.getContent().stream().map(Review::getRentalUnitId).distinct().toList());
 
-        return PageResponse.from(page, r -> reviewMapper.toAdminResponse(
-                r,
-                reviewMapper.toAuthor(authors.get(r.getUserId())),
-                listings.get(r.getListingId()) == null ? null : listings.get(r.getListingId()).ownerId()));
+        return PageResponse.from(page, r -> {
+            ListingGateway.RentalUnitBrief unit = units.get(r.getRentalUnitId());
+            return reviewMapper.toAdminResponse(r, reviewMapper.toAuthor(authors.get(r.getUserId())),
+                    unit == null ? null : unit.ownerId(), unit == null ? null : unit.name());
+        });
     }
 
     @Override
@@ -353,7 +360,7 @@ public class ReviewServiceImpl implements ReviewService {
         if (r.getStatus() == ReviewStatus.HIDDEN) {
             throw new ConflictException(ErrorCode.REVIEW_ALREADY_HIDDEN);
         }
-        // Tái dùng nghiệp vụ ẩn chuẩn (ghi hidden_* + tính lại trung bình sao khi rời tập VISIBLE).
+        // Tái dùng nghiệp vụ ẩn chuẩn (ghi hidden_* + tính lại điểm khi rời tập VISIBLE).
         hideByModeration(reviewId, moderatorId, reason);
 
         auditLogService.record(AuditAction.REVIEW_HIDE, AuditActorType.USER, moderatorId,
@@ -368,28 +375,29 @@ public class ReviewServiceImpl implements ReviewService {
         if (r.getStatus() != ReviewStatus.HIDDEN) {
             throw new BusinessRuleException(ErrorCode.REVIEW_INVALID_TRANSITION);
         }
+        ReviewRatingRecalculator.Scope scope = ratingRecalculator.lock(r.getRentalUnitId());
         r.setStatus(ReviewStatus.VISIBLE);
         r.setHiddenReason(null);
         r.setHiddenBy(null);
         r.setHiddenAt(null);
-        reviewRepository.save(r);
+        reviewRepository.saveAndFlush(r);
 
-        // Đánh giá quay lại tập VISIBLE → cộng lại vào trung bình sao của tin/chủ trọ.
-        ListingGateway.ListingBrief listing = listingGateway.getBrief(r.getListingId());
-        applyListingAggregateOnAdd(listing, r.getRating());
-        applyLandlordAggregateOnAdd(listing.ownerId(), r.getRating());
+        // Đánh giá quay lại tập VISIBLE → tính lại điểm phòng, tin và chủ trọ.
+        ratingRecalculator.recalc(scope);
 
         auditLogService.record(AuditAction.REVIEW_UNHIDE, AuditActorType.USER, moderatorId,
                 "REVIEW", reviewId, "Khôi phục đánh giá bị ẩn");
         return buildAdmin(r);
     }
 
-    // ------------------------------------------------------------------
+    // ==================================================================
+    //  Helper
+    // ==================================================================
 
     private AdminReviewResponse buildAdmin(Review r) {
         AuthorResponse author = reviewMapper.toAuthor(userGateway.findBrief(r.getUserId()).orElse(null));
-        ListingGateway.ListingBrief listing = listingGateway.getBrief(r.getListingId());
-        return reviewMapper.toAdminResponse(r, author, listing.ownerId());
+        ListingGateway.RentalUnitBrief unit = listingGateway.getUnitBrief(r.getRentalUnitId());
+        return reviewMapper.toAdminResponse(r, author, unit.ownerId(), unit.name());
     }
 
     private Review aliveById(Long reviewId) {
@@ -414,84 +422,24 @@ public class ReviewServiceImpl implements ReviewService {
         return HtmlSanitizer.stripAllHtml(content);
     }
 
-    // ----- Cập nhật trung bình tăng dần -----
-
-    private BigDecimal applyListingAggregateOnAdd(ListingGateway.ListingBrief listing, int rating) {
-        int newCount = listing.reviewCount() + 1;
-        BigDecimal newSum = sum(listing.averageRating(), listing.reviewCount()).add(BigDecimal.valueOf(rating));
-        BigDecimal newAvg = avg(newSum, newCount);
-        listingGateway.updateReviewAggregate(listing.id(), newAvg, newCount);
-        return newAvg;
-    }
-
-    private BigDecimal applyListingAggregateOnChange(ListingGateway.ListingBrief listing, int oldRating, int newRating) {
-        int count = listing.reviewCount();
-        BigDecimal newSum = sum(listing.averageRating(), count)
-                .subtract(BigDecimal.valueOf(oldRating)).add(BigDecimal.valueOf(newRating));
-        BigDecimal newAvg = avg(newSum, count);
-        listingGateway.updateReviewAggregate(listing.id(), newAvg, count);
-        return newAvg;
-    }
-
-    private BigDecimal applyListingAggregateOnRemove(ListingGateway.ListingBrief listing, int rating) {
-        int newCount = Math.max(0, listing.reviewCount() - 1);
-        BigDecimal newSum = sum(listing.averageRating(), listing.reviewCount()).subtract(BigDecimal.valueOf(rating));
-        BigDecimal newAvg = avg(newSum, newCount);
-        listingGateway.updateReviewAggregate(listing.id(), newAvg, newCount);
-        return newAvg;
-    }
-
-    private BigDecimal applyLandlordAggregateOnAdd(Long landlordId, int rating) {
-        UserGateway.LandlordAggregate agg = userGateway.getLandlordAggregate(landlordId);
-        int newCount = agg.reviewCount() + 1;
-        BigDecimal newAvg = avg(sum(agg.averageRating(), agg.reviewCount()).add(BigDecimal.valueOf(rating)), newCount);
-        userGateway.updateLandlordReviewAggregate(landlordId, newAvg, newCount);
-        return newAvg;
-    }
-
-    private BigDecimal applyLandlordAggregateOnChange(Long landlordId, int oldRating, int newRating) {
-        UserGateway.LandlordAggregate agg = userGateway.getLandlordAggregate(landlordId);
-        int count = agg.reviewCount();
-        BigDecimal newAvg = avg(sum(agg.averageRating(), count)
-                .subtract(BigDecimal.valueOf(oldRating)).add(BigDecimal.valueOf(newRating)), count);
-        userGateway.updateLandlordReviewAggregate(landlordId, newAvg, count);
-        return newAvg;
-    }
-
-    private BigDecimal applyLandlordAggregateOnRemove(Long landlordId, int rating) {
-        UserGateway.LandlordAggregate agg = userGateway.getLandlordAggregate(landlordId);
-        int newCount = Math.max(0, agg.reviewCount() - 1);
-        BigDecimal newAvg = avg(sum(agg.averageRating(), agg.reviewCount()).subtract(BigDecimal.valueOf(rating)), newCount);
-        userGateway.updateLandlordReviewAggregate(landlordId, newAvg, newCount);
-        return newAvg;
-    }
-
-    private BigDecimal sum(BigDecimal average, int count) {
-        BigDecimal a = average == null ? BigDecimal.ZERO : average;
-        return a.multiply(BigDecimal.valueOf(count));
-    }
-
-    private BigDecimal avg(BigDecimal sum, int count) {
-        if (count <= 0) {
-            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
-        }
-        return sum.divide(BigDecimal.valueOf(count), 2, RoundingMode.HALF_UP);
-    }
-
-    // ----- Ánh xạ + thống kê -----
-
-    private PageResponse<ReviewResponse> mapReviewPage(Page<Review> page, Integer ratingFilter, boolean withListing) {
-        List<Long> userIds = page.getContent().stream().map(Review::getUserId).distinct().toList();
-        Map<Long, UserGateway.UserBrief> authors = userGateway.getBriefs(userIds);
-        Map<Long, ListingGateway.ListingBrief> listings = withListing
-                ? listingGateway.getBriefs(page.getContent().stream().map(Review::getListingId).distinct().toList())
-                : Map.of();
+    /**
+     * Ánh xạ một trang đánh giá: luôn kèm tên phòng và tin đã thuê qua; {@code withListing} thêm
+     * tiêu đề/ảnh/trạng thái của tin (dùng ở hồ sơ chủ trọ).
+     */
+    private PageResponse<ReviewResponse> mapReviewPage(Page<Review> page, boolean withListing) {
+        Map<Long, UserGateway.UserBrief> authors = userGateway.getBriefs(
+                page.getContent().stream().map(Review::getUserId).distinct().toList());
+        Map<Long, ListingGateway.RentalUnitBrief> units = listingGateway.getUnitBriefs(
+                page.getContent().stream().map(Review::getRentalUnitId).distinct().toList());
+        Map<Long, ListingGateway.ListingBrief> listings = listingGateway.getBriefsIncludingDeleted(
+                page.getContent().stream().map(Review::getListingId).filter(Objects::nonNull).distinct().toList());
 
         return PageResponse.from(page, r -> {
             AuthorResponse author = reviewMapper.toAuthor(authors.get(r.getUserId()));
             ReviewResponse resp = reviewMapper.toResponse(r, author, false, null);
+            fillUnitAndVia(resp, r, units, listings);
             if (withListing) {
-                ListingGateway.ListingBrief lb = listings.get(r.getListingId());
+                ListingGateway.ListingBrief lb = r.getListingId() == null ? null : listings.get(r.getListingId());
                 if (lb != null) {
                     resp.setListingTitle(lb.title());
                     resp.setListingThumbnailUrl(lb.thumbnailUrl());
@@ -500,39 +448,49 @@ public class ReviewServiceImpl implements ReviewService {
             }
             return resp;
         });
-        // Ghi chú: tham số lọc `rating` không áp ở DB (ReviewRepository không có finder theo rating);
-        // FE có thể lọc, hoặc bổ sung finder có @Query. Giữ nguyên trang để không phá phân trang.
     }
 
-    private Map<String, Long> distributionForListing(Long listingId) {
-        Page<Review> all = reviewRepository.findByListingIdAndStatusAndDeletedAtIsNull(
-                listingId, ReviewStatus.VISIBLE, PageRequest.of(0, SUMMARY_SCAN_CAP));
-        return distribution(all.getContent());
+    private void fillUnitAndVia(ReviewResponse resp, Review r,
+                                Map<Long, ListingGateway.RentalUnitBrief> units,
+                                Map<Long, ListingGateway.ListingBrief> listings) {
+        ListingGateway.RentalUnitBrief unit = units.get(r.getRentalUnitId());
+        if (unit != null) {
+            resp.setRentalUnitName(unit.name());
+        }
+        ListingGateway.ListingBrief via = r.getListingId() == null ? null : listings.get(r.getListingId());
+        if (via != null) {
+            resp.setRentedViaListingTitle(via.title());
+            resp.setRentedViaListingCreatedAt(via.createdAt());
+        }
     }
 
-    private Map<String, Long> distributionForLandlord(Long landlordId) {
-        Page<Review> all = reviewRepository.findByLandlordIdAndStatusAndDeletedAtIsNull(
-                landlordId, ReviewStatus.VISIBLE, PageRequest.of(0, SUMMARY_SCAN_CAP));
-        return distribution(all.getContent());
-    }
-
-    private Map<String, Long> distribution(List<Review> reviews) {
-        Map<String, Long> dist = new HashMap<>();
+    private Map<String, Long> distribution(List<Object[]> rows) {
+        Map<String, Long> dist = new LinkedHashMap<>();
         for (int star = 1; star <= 5; star++) {
             dist.put(String.valueOf(star), 0L);
         }
-        for (Review r : reviews) {
-            String k = String.valueOf(r.getRating());
-            dist.merge(k, 1L, Long::sum);
+        for (Object[] row : rows) {
+            dist.put(String.valueOf(((Number) row[0]).intValue()), ((Number) row[1]).longValue());
         }
         return dist;
     }
 
-    private ReviewResponse single(Review r, UserGateway.UserBrief authorBrief, Long viewerId) {
+    private ReviewResponse single(Review r, UserGateway.UserBrief authorBrief, Long viewerId,
+                                  ListingGateway.RentalUnitBrief unit) {
         AuthorResponse author = reviewMapper.toAuthor(authorBrief);
         boolean editable = viewerId != null && viewerId.equals(r.getUserId())
                 && r.getStatus() == ReviewStatus.VISIBLE;
-        return reviewMapper.toResponse(r, author, editable, null);
+        ReviewResponse resp = reviewMapper.toResponse(r, author, editable, null);
+        resp.setRentalUnitName(unit == null ? null : unit.name());
+        return resp;
+    }
+
+    /** Điểm vừa tính lại (của phòng — tin là bản sao — và của chủ trọ). */
+    private ReviewResponse withRating(ReviewResponse resp, ReviewRatingRecalculator.Result rating) {
+        resp.setListingAverageRating(rating.unitAverage());
+        resp.setListingReviewCount(rating.unitCount());
+        resp.setLandlordAverageRating(rating.landlordAverage());
+        return resp;
     }
 
     private String reasonMessage(String reason) {
@@ -540,10 +498,10 @@ public class ReviewServiceImpl implements ReviewService {
             return null;
         }
         return switch (reason) {
-            case "OWN_LISTING" -> "Bạn không thể đánh giá tin đăng của chính mình";
-            case "ALREADY_REVIEWED" -> "Bạn đã đánh giá tin đăng này rồi";
-            case "NOT_RENTER" -> "Chỉ người đang thuê hoặc đã trả phòng mới được đánh giá tin này";
-            default -> "Bạn chưa đủ điều kiện đánh giá tin này";
+            case "OWN_LISTING" -> "Bạn không thể đánh giá phòng của chính mình";
+            case "ALREADY_REVIEWED" -> "Bạn đã đánh giá phòng này rồi";
+            case "NOT_RENTER" -> "Chỉ người đang thuê hoặc đã trả phòng này mới được đánh giá";
+            default -> "Bạn chưa đủ điều kiện đánh giá phòng này";
         };
     }
 }

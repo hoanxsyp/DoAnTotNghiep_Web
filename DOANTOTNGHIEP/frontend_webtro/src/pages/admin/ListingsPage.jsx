@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   Box, Stack, TextField, MenuItem, Typography, IconButton, InputAdornment,
-  Menu, ListItemIcon, ListItemText, Button, Link,
+  Menu, ListItemIcon, ListItemText, Button, Link, Chip,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
@@ -87,6 +87,14 @@ const ListingsPage = () => {
           <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
             {r.categoryName || CATEGORY_CODES[r.categoryCode] || ''} · {r.provinceName || ''}
           </Typography>
+          {r.rentalUnitName && r.rentalUnitName !== r.title && (
+            <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
+              Phòng: {r.rentalUnitName}
+            </Typography>
+          )}
+          {r.duplicateAddress && (
+            <Chip size="small" color="warning" variant="outlined" sx={{ mt: 0.5 }} label="Trùng địa chỉ với chủ trọ khác" />
+          )}
         </Box>
       ),
     },

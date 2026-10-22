@@ -60,7 +60,7 @@ import java.util.UUID;
  * khai, không bịa thông tin, luôn kèm disclaimer khi trả tin, hỏi lại tối đa
  * {@code ai.chatbot.max_clarify_turns}.
  *
- * <p>Câu hỏi tìm phòng do module AI chatbot trả lời ({@link AiChatbotClient}: PhoBERT + tin thật
+ * <p>Câu hỏi tìm phòng do module AI chatbot trả lời ({@link AiChatbotClient}: ViSoBERT + tin thật
  * qua {@code /api/search/listings} → vẫn đúng {@code publicStatuses()}, + Gemini có guardrail).
  * Chatbot theo luật ({@link ChatbotEngine}) chỉ còn lo nhạy cảm, thuật ngữ, câu mẫu chào hỏi /
  * đăng tin / FAQ, và toàn bộ hội thoại khi tắt {@code app.ai.chatbot-api.enabled}. AI sập →
@@ -304,7 +304,7 @@ public class ChatbotServiceImpl implements ChatbotService {
     /**
      * Dùng câu mẫu của luật khi luật nhận ra chào hỏi/đăng tin/FAQ/ngoài phạm vi VÀ chatbot AI
      * không có gì cụ thể để nói: ngoài phạm vi, chỉ hỏi lại khu vực/giá, hoặc không trả tin nào
-     * mà cũng không phải câu tìm phòng. PhoBERT chỉ được dạy chuyện tìm phòng — "làm sao để đăng
+     * mà cũng không phải câu tìm phòng. ViSoBERT chỉ được dạy chuyện tìm phòng — "làm sao để đăng
      * tin cho thuê" bị xếp nhầm vào room_detail và hỏi lại "phòng nào?".
      */
     private static boolean preferRuleReply(ChatbotResult rule, AiReply ai) {

@@ -33,6 +33,12 @@ public interface ListingService {
 
     ListingCreateResponse create(ListingCreateRequest request);
 
+    /**
+     * Đăng lại phòng: tạo tin nháp mới cho phòng từ tin gần nhất (nội dung, tiện ích, ảnh).
+     * Phòng phải thuộc người gọi, còn dùng và không có tin sống (RU-2).
+     */
+    ListingCreateResponse relist(Long rentalUnitId);
+
     ListingDetailResponse update(Long id, ListingUpdateRequest request);
 
     void delete(Long id);

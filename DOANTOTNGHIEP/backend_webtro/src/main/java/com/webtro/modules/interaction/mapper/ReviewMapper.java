@@ -32,6 +32,7 @@ public class ReviewMapper {
         return ReviewResponse.builder()
                 .id(r.getId())
                 .listingId(r.getListingId())
+                .rentalUnitId(r.getRentalUnitId())
                 .rating(r.getRating())
                 .content(r.getContent())
                 .status(r.getStatus() == null ? null : r.getStatus().name())
@@ -46,12 +47,17 @@ public class ReviewMapper {
     /**
      * Ánh xạ sang DTO cho màn hình kiểm duyệt (kèm thông tin ẩn và các khóa liên quan).
      *
-     * @param author tác giả đã nạp qua gateway (có thể null nếu tài khoản đã bị xóa)
+     * @param author         tác giả đã nạp qua gateway (có thể null nếu tài khoản đã bị xóa)
+     * @param landlordId     chủ phòng
+     * @param rentalUnitName tên phòng được đánh giá
      */
-    public AdminReviewResponse toAdminResponse(Review r, AuthorResponse author, Long landlordId) {
+    public AdminReviewResponse toAdminResponse(Review r, AuthorResponse author, Long landlordId,
+                                               String rentalUnitName) {
         return AdminReviewResponse.builder()
                 .id(r.getId())
                 .listingId(r.getListingId())
+                .rentalUnitId(r.getRentalUnitId())
+                .rentalUnitName(rentalUnitName)
                 .landlordId(landlordId)
                 .rating(r.getRating())
                 .content(r.getContent())

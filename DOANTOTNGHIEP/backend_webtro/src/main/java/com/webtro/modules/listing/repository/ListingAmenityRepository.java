@@ -19,6 +19,13 @@ public interface ListingAmenityRepository extends JpaRepository<ListingAmenity, 
             + "AND la.deletedAt IS NULL")
     List<ListingAmenity> findByListingIdAlive(@Param("listingId") Long listingId);
 
+    /**
+     * Mọi liên kết tiện ích của tin, kể cả đã xoá mềm. Khoá unique (listing_id, amenity_id) áp cho cả
+     * dòng đã xoá, nên gắn lại tiện ích phải khôi phục dòng cũ thay vì chèn dòng mới.
+     */
+    @Query("SELECT la FROM ListingAmenity la WHERE la.listing.id = :listingId")
+    List<ListingAmenity> findAllByListingId(@Param("listingId") Long listingId);
+
     /** id các tiện ích còn gắn với tin (dùng để render bộ lọc / chi tiết). */
     @Query("SELECT la.amenityId FROM ListingAmenity la WHERE la.listing.id = :listingId "
             + "AND la.deletedAt IS NULL")

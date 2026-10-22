@@ -45,6 +45,12 @@ import com.webtro.modules.interaction.repository.ViewHistoryRepository;
 import com.webtro.modules.listing.entity.Listing;
 import com.webtro.modules.listing.entity.ListingAmenity;
 import com.webtro.modules.listing.entity.ListingImage;
+import com.webtro.modules.listing.entity.RentalUnit;
+import com.webtro.modules.listing.repository.RentalUnitRepository;
+import com.webtro.modules.interaction.service.ReviewRatingRecalculator;
+import com.webtro.modules.rental.entity.RentalRequest;
+import com.webtro.modules.rental.repository.RentalRequestRepository;
+import com.webtro.common.enums.RentalRequestStatus;
 import com.webtro.modules.listing.repository.ListingAmenityRepository;
 import com.webtro.modules.listing.repository.ListingImageRepository;
 import com.webtro.modules.listing.repository.ListingRepository;
@@ -161,6 +167,9 @@ public class DemoDataInitializer implements ApplicationRunner {
     // listing module
     private final ListingRepository listingRepository;
     private final ListingImageRepository listingImageRepository;
+    private final RentalUnitRepository rentalUnitRepository;
+    private final RentalRequestRepository rentalRequestRepository;
+    private final ReviewRatingRecalculator ratingRecalculator;
     private final ListingAmenityRepository listingAmenityRepository;
     private final ListingCategoryCountPublisher categoryCountPublisher;
     private final ListingOwnerStatsPublisher ownerStatsPublisher;
@@ -414,6 +423,7 @@ public class DemoDataInitializer implements ApplicationRunner {
                     .publishedAt(publishedAt)
                     .expiredAt(expiredAt)
                     .build();
+            attachDemoUnit(listing);
             listing = listingRepository.save(listing);
             listings.add(listing);
 
@@ -499,6 +509,7 @@ public class DemoDataInitializer implements ApplicationRunner {
                         .publishedAt(now.minus(Duration.ofDays(1L + c)))
                         .expiredAt(now.plus(Duration.ofDays(30)))
                         .build();
+                attachDemoUnit(listing);
                 listing = listingRepository.save(listing);
                 listings.add(listing);
 
@@ -633,13 +644,26 @@ public class DemoDataInitializer implements ApplicationRunner {
             }
             int rating = ratingCycle[k % ratingCycle.length];
             String content = rating >= 4 ? reviewTexts[k % 2] : reviewTexts[2 + (k % 3)];
+            // Chỉ người từng thuê mới được đánh giá (RE-1): gieo kèm một lần thuê đã trả phòng.
+            Instant rentedAt = now.minus(Duration.ofDays(120L + k * 5L));
+            rentalRequestRepository.save(RentalRequest.builder()
+                    .listingId(listing.getId())
+                    .rentalUnitId(listing.getRentalUnitId())
+                    .tenantId(tenant.getId())
+                    .desiredViewingDate(LocalDate.ofInstant(rentedAt.minus(Duration.ofDays(3)), java.time.ZoneOffset.UTC))
+                    .status(RentalRequestStatus.CHECKED_OUT)
+                    .approvedAt(rentedAt.minus(Duration.ofDays(2)))
+                    .rentedAt(rentedAt)
+                    .checkedOutAt(rentedAt.plus(Duration.ofDays(90)))
+                    .build());
             reviewRepository.save(Review.builder()
                     .listingId(listing.getId())
+                    .rentalUnitId(listing.getRentalUnitId())
                     .userId(tenant.getId())
                     .rating(rating)
                     .content(content)
                     .status(ReviewStatus.VISIBLE)
-                    .isVerifiedContact(k % 2 == 0)
+                    .isVerifiedContact(true)
                     .build());
             int[] c = counters.get(listing.getId());
             c[5]++;
@@ -657,13 +681,12 @@ public class DemoDataInitializer implements ApplicationRunner {
             l.setViewCount(c[0] + 5 + (idx % 9) * 7);        // thêm nền nhẹ theo index
             l.setFavoriteCount(c[1]);
             l.setCommentCount(c[2]);
-            l.setReviewCount(c[5]);
-            if (c[5] > 0) {
-                l.setAverageRating(BigDecimal.valueOf(c[6])
-                        .divide(BigDecimal.valueOf(c[5]), 2, RoundingMode.HALF_UP));
-            }
             listingRepository.save(l);
         }
+        // Điểm phòng / tin / chủ trọ tính bằng đúng đường ghi của hệ thống (mục 10), không tự cộng.
+        listings.stream().filter(l -> counters.get(l.getId())[5] > 0)
+                .map(Listing::getRentalUnitId).distinct()
+                .forEach(ratingRecalculator::lockAndRecalc);
 
         // ---- Cập nhật hồ sơ chủ trọ: tổng tin + đánh giá trung bình ----
         updateLandlordAggregates(landlords, listings, landlordRating);
@@ -699,6 +722,7 @@ public class DemoDataInitializer implements ApplicationRunner {
         int paymentCreated = createPaymentsAndPromotions(landlords, listings, now);
 
         updateCategoryListingCounts(listings);
+        backdateDemoListings(now);
 
         // ============================ TỔNG KẾT ============================
         log.info("Gieo dữ liệu mẫu HOÀN TẤT: {} người dùng (1 moderator + {} chủ trọ + {} người thuê), "
@@ -848,6 +872,9 @@ public class DemoDataInitializer implements ApplicationRunner {
                 }
             }
         }
+        if (created > 0 || streetCreated > 0) {
+            backdateDemoListings(now);
+        }
         if (created > 0 || streetCreated > 0 || fixedAddresses > 0) {
             log.info("Bổ sung tin mẫu theo khu vực: +{} tin cho {} phường (tối thiểu {} tin ACTIVE/phường), "
                             + "+{} tin theo đường/phố (tối thiểu {} tin/đường), sửa {} địa chỉ cũ",
@@ -993,6 +1020,7 @@ public class DemoDataInitializer implements ApplicationRunner {
                 .build();
         ListingCategoryCountPublisher.Snapshot catBefore = categoryCountPublisher.snapshot(null);
         ListingOwnerStatsPublisher.Snapshot ownerBefore = ownerStatsPublisher.snapshot(null);
+        attachDemoUnit(listing);
         listing = listingRepository.save(listing);
         categoryCountPublisher.publishIfChanged(catBefore, listing);
         ownerStatsPublisher.publishIfChanged(ownerBefore, listing);
@@ -1116,6 +1144,31 @@ public class DemoDataInitializer implements ApplicationRunner {
         }
     }
 
+    /**
+     * Tin demo vừa gieo mang ngày tạo = lúc khởi động, nên chiếm hết hạn mức "tối đa N tin/ngày" của
+     * các chủ trọ demo. Lùi ngày tạo về ngày đăng giả lập (tin chưa đăng thì lùi 1 ngày) để chủ trọ
+     * demo vẫn đăng tin thử được ngay trong ngày.
+     */
+    private void backdateDemoListings(Instant since) {
+        int n = listingRepository.backdateDemoListingsCreatedSince(since.minus(Duration.ofMinutes(1)));
+        log.info("Lùi ngày tạo của {} tin demo về ngày đăng giả lập (không chiếm hạn mức đăng tin trong ngày)", n);
+    }
+
+    /** Mỗi tin demo một phòng riêng (giống backfill V28: 1 tin = 1 phòng). */
+    private void attachDemoUnit(Listing listing) {
+        String name = listing.getTitle().length() <= 150 ? listing.getTitle() : listing.getTitle().substring(0, 150);
+        RentalUnit unit = rentalUnitRepository.save(RentalUnit.builder()
+                .ownerId(listing.getOwnerId())
+                .name(name)
+                .wardId(listing.getWardId())
+                .addressDetail(listing.getAddressDetail())
+                .latitude(listing.getLatitude())
+                .longitude(listing.getLongitude())
+                .locationSource(listing.getLocationSource())
+                .build());
+        listing.setRentalUnitId(unit.getId());
+    }
+
     private void updateLandlordAggregates(List<User> landlords, List<Listing> listings,
                                           Map<Long, int[]> landlordRating) {
         for (User landlord : landlords) {
@@ -1133,12 +1186,7 @@ public class DemoDataInitializer implements ApplicationRunner {
             LandlordProfile profile = opt.get();
             profile.setTotalListings((int) total);
             profile.setTotalActiveListings((int) active);
-            int[] r = landlordRating.get(landlord.getId());
-            if (r != null && r[0] > 0) {
-                profile.setReviewCount(r[0]);
-                profile.setAverageRating(BigDecimal.valueOf(r[1])
-                        .divide(BigDecimal.valueOf(r[0]), 2, RoundingMode.HALF_UP));
-            }
+            // Điểm chủ trọ do ReviewRatingRecalculator ghi (landlordRating chỉ còn để đếm log).
             landlordProfileRepository.save(profile);
         }
     }

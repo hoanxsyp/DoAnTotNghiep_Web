@@ -106,7 +106,7 @@ Kết quả mong đợi bên dưới đã được **chạy thật và kiểm ch
 | ID | Gửi | Mong đợi | ☐ |
 |---|---|---|---|
 | TC-33 | `xin chào` | `GREETING`, câu chào + hỏi khu vực/giá. Không có `engine` | ☐ |
-| TC-34 | `làm sao để đăng tin cho thuê` | `HOW_TO_POST`, hướng dẫn đăng tin | ☐ |
+| TC-34 | `làm sao để đăng tin cho thuê` | `HOW_TO_POST`, hướng dẫn đăng tin (có bước chọn/tạo phòng và "Đăng lại" phòng cũ) | ☐ |
 | TC-35 | `quên mật khẩu thì làm sao` | `FAQ` | ☐ |
 | TC-36 | `ở ghép là gì` | `GLOSSARY`, định nghĩa "ở ghép" | ☐ |
 | TC-37 | `thời tiết hôm nay thế nào` | `OUT_OF_SCOPE`, nói chỉ hỗ trợ tìm phòng | ☐ |

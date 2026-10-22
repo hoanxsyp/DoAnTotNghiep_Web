@@ -1,12 +1,13 @@
 package com.webtro.modules.listing.service.impl;
 
 import com.webtro.common.PageResponse;
+import com.webtro.common.event.ListingWithdrawnEvent;
 import com.webtro.common.enums.CategoryCode;
 import com.webtro.common.enums.ListingStatus;
-import com.webtro.common.enums.LocationSource;
 import com.webtro.constant.ConfigKey;
 import com.webtro.constant.ErrorCode;
 import com.webtro.constant.RoleCode;
+import com.webtro.exception.BusinessException;
 import com.webtro.exception.BusinessRuleException;
 import com.webtro.exception.ConflictException;
 import com.webtro.exception.ForbiddenException;
@@ -41,6 +42,7 @@ import com.webtro.modules.listing.dto.response.RenewResponse;
 import com.webtro.modules.listing.entity.Listing;
 import com.webtro.modules.listing.entity.ListingAmenity;
 import com.webtro.modules.listing.entity.ListingImage;
+import com.webtro.modules.listing.entity.RentalUnit;
 import com.webtro.modules.listing.mapper.ListingMapper;
 import com.webtro.modules.listing.repository.ListingAmenityRepository;
 import com.webtro.modules.listing.repository.ListingImageRepository;
@@ -49,6 +51,7 @@ import com.webtro.modules.listing.service.ListingCategoryCountPublisher;
 import com.webtro.modules.listing.service.ListingOwnerStatsPublisher;
 import com.webtro.modules.listing.service.ListingService;
 import com.webtro.modules.listing.service.ListingVisibilityService;
+import com.webtro.modules.listing.service.RentalUnitSupport;
 import com.webtro.modules.listing.spi.FavoriteStatusGateway;
 import com.webtro.modules.interaction.spi.RentalEligibilityGateway;
 import com.webtro.modules.listing.statemachine.ListingEvent;
@@ -66,6 +69,7 @@ import com.webtro.util.SlugUtil;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -88,6 +92,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -126,6 +131,8 @@ public class ListingServiceImpl implements ListingService {
     private final PromotionPackageRepository promotionPackageRepository;
     private final FavoriteStatusGateway favoriteStatusGateway;
     private final RentalEligibilityGateway rentalEligibilityGateway;
+    private final RentalUnitSupport rentalUnitSupport;
+    private final ApplicationEventPublisher eventPublisher;
 
     // ==================================================================
     //  CRUD
@@ -138,7 +145,6 @@ public class ListingServiceImpl implements ListingService {
 
         Category category = requireActiveCategory(req.getCategoryId());
         validateCategoryAllowedForCurrentRole(category.getCode());
-        Ward ward = validateLocation(req.getProvinceId(), req.getDistrictId(), req.getWardId());
         validateAmenities(req.getAmenityIds());
         validateTextLengths(req.getTitle(), req.getDescription());
         validateAvailableFrom(req.getAvailableFrom());
@@ -149,8 +155,10 @@ public class ListingServiceImpl implements ListingService {
         enforcePostingNotSuspended(userId);
 
         String title = HtmlSanitizer.stripAllHtml(req.getTitle());
-        String description = HtmlSanitizer.stripAllHtml(req.getDescription());
-        String addressDetail = HtmlSanitizer.stripAllHtml(req.getAddressDetail());
+        String description = HtmlSanitizer.stripAllHtmlKeepLines(req.getDescription());
+
+        // RU-1: mỗi tin thuộc một phòng — chọn phòng có sẵn hoặc tạo phòng mới từ địa chỉ gửi kèm.
+        RentalUnit unit = resolveUnitForNewListing(req, userId, title);
 
         Listing listing = Listing.builder()
                 .ownerId(userId)
@@ -163,8 +171,6 @@ public class ListingServiceImpl implements ListingService {
                 .depositAmount(defaultZero(req.getDepositAmount()))
                 .electricityPrice(req.getElectricityPrice())
                 .waterPrice(req.getWaterPrice())
-                .wardId(req.getWardId())
-                .addressDetail(addressDetail)
                 .roomCount(req.getRoomCount())
                 .toiletCount(req.getToiletCount())
                 .toiletType(req.getToiletType())
@@ -182,20 +188,120 @@ public class ListingServiceImpl implements ListingService {
                 .floorCount(req.getFloorCount())
                 .status(ListingStatus.DRAFT)
                 .build();
-        applyCoordinates(listing, req.getLatitude(), req.getLongitude(), ward);
+        rentalUnitSupport.attach(listing, unit);
         listing = listingRepository.save(listing);
         ownerStatsPublisher.publishIfChanged(null, listing);
+        // Tin mới của phòng đã có đánh giá mang ngay điểm hiện tại của phòng (mục 10.3).
+        listingRepository.copyRatingFromUnit(unit.getId());
 
         replaceAmenities(listing, req.getAmenityIds());
 
-        int displayDays = config.getInt(ConfigKey.LISTING_DISPLAY_DAYS);
         String statusName = listing.getStatus().name();
-
         if (Boolean.TRUE.equals(req.getSubmitImmediately())) {
             ListingActionResponse submitResult = submit(listing.getId());
             statusName = submitResult.getStatus();
         }
+        return createdResponse(listing, statusName);
+    }
 
+    /**
+     * Phòng cho tin mới (RU-1). Có {@code rentalUnitId}: khoá phòng và kiểm tra RU-2, địa chỉ gửi
+     * kèm bị bỏ qua. Không có: tạo phòng mới từ địa chỉ gửi kèm (chặn trùng với phòng của chính
+     * chủ trọ, RU-6).
+     */
+    private RentalUnit resolveUnitForNewListing(ListingCreateRequest req, Long userId, String title) {
+        if (req.getRentalUnitId() != null) {
+            return rentalUnitSupport.lockForNewListing(req.getRentalUnitId(), userId);
+        }
+        if (req.getProvinceId() == null || req.getDistrictId() == null || req.getWardId() == null
+                || req.getAddressDetail() == null || req.getAddressDetail().isBlank()) {
+            throw new BusinessException(ErrorCode.RENTAL_UNIT_ADDRESS_REQUIRED);
+        }
+        Ward ward = validateLocation(req.getProvinceId(), req.getDistrictId(), req.getWardId());
+        if (SecurityUtils.hasRole(RoleCode.TENANT)) {
+            // Người thuê (tin ở ghép) không có màn "Phòng của tôi" để chọn phòng: đăng lại cùng địa
+            // chỉ thì tự dùng lại phòng cũ của chính họ thay vì báo trùng.
+            Optional<RentalUnit> own = rentalUnitSupport.findSameOwnerDuplicate(userId, ward.getId(),
+                    req.getAddressDetail(), req.getUnitLabel(), null);
+            if (own.isPresent()) {
+                return rentalUnitSupport.lockForNewListing(own.get().getId(), userId);
+            }
+        }
+        String unitName = req.getUnitName() == null || req.getUnitName().isBlank() ? title : req.getUnitName();
+        return rentalUnitSupport.createUnit(userId, truncate(unitName, 150),
+                new RentalUnitSupport.UnitAddress(ward, req.getAddressDetail(), req.getUnitLabel(),
+                        req.getLatitude(), req.getLongitude()));
+    }
+
+    /**
+     * Đăng lại phòng (RE-2, RU-2): tạo tin nháp mới cho phòng, sao chép nội dung, tiện ích và ảnh
+     * của tin gần nhất. Phòng phải còn dùng và không có tin sống; đánh giá của phòng tự hiện trên
+     * tin mới vì gắn với phòng.
+     */
+    @Override
+    @Transactional
+    public ListingCreateResponse relist(Long rentalUnitId) {
+        Long userId = requireCurrentUserId();
+        RentalUnit unit = rentalUnitSupport.lockForNewListing(rentalUnitId, userId);
+        Listing source = listingRepository.findAllByRentalUnit(rentalUnitId).stream().findFirst()
+                .orElseThrow(() -> new BusinessRuleException(ErrorCode.RENTAL_UNIT_NO_LISTING_TO_RELIST));
+        Category category = requireActiveCategory(source.getCategoryId());
+        validateCategoryAllowedForCurrentRole(category.getCode());
+        enforcePostingQuota(userId);
+        enforcePostingNotSuspended(userId);
+
+        LocalDate availableFrom = source.getAvailableFrom() != null
+                && source.getAvailableFrom().isBefore(LocalDate.now(ZONE_VN)) ? null : source.getAvailableFrom();
+        Listing listing = Listing.builder()
+                .ownerId(userId)
+                .categoryId(source.getCategoryId())
+                .title(source.getTitle())
+                .slug(uniqueSlug(source.getTitle()))
+                .description(source.getDescription())
+                .price(source.getPrice())
+                .area(source.getArea())
+                .depositAmount(source.getDepositAmount())
+                .electricityPrice(source.getElectricityPrice())
+                .waterPrice(source.getWaterPrice())
+                .roomCount(source.getRoomCount())
+                .toiletCount(source.getToiletCount())
+                .toiletType(source.getToiletType())
+                .maxOccupants(source.getMaxOccupants())
+                .currentOccupants(source.getCurrentOccupants())
+                .genderRequirement(source.getGenderRequirement())
+                .petAllowed(source.getPetAllowed())
+                .parkingAvailable(source.getParkingAvailable())
+                .curfewType(source.getCurfewType())
+                .furnitureStatus(source.getFurnitureStatus())
+                .availableFrom(availableFrom)
+                .floorCount(source.getFloorCount())
+                .status(ListingStatus.DRAFT)
+                .build();
+        rentalUnitSupport.attach(listing, unit);
+        listing = listingRepository.save(listing);
+        ownerStatsPublisher.publishIfChanged(null, listing);
+        listingRepository.copyRatingFromUnit(unit.getId());
+
+        replaceAmenities(listing, amenityLinkRepository.findAmenityIdsByListingIdAlive(source.getId()));
+        for (ListingImage image : imageRepository.findByListingIdAlive(source.getId())) {
+            imageRepository.save(ListingImage.builder()
+                    .listing(listing)
+                    .url(image.getUrl())
+                    .thumbnailUrl(image.getThumbnailUrl())
+                    .isPrimary(image.getIsPrimary())
+                    .displayOrder(image.getDisplayOrder())
+                    .originalName(image.getOriginalName())
+                    .fileSize(image.getFileSize())
+                    .contentType(image.getContentType())
+                    .width(image.getWidth())
+                    .height(image.getHeight())
+                    .build());
+        }
+        return createdResponse(listing, listing.getStatus().name());
+    }
+
+    private ListingCreateResponse createdResponse(Listing listing, String statusName) {
+        int displayDays = config.getInt(ConfigKey.LISTING_DISPLAY_DAYS);
         int imageCount = imageRepository.findByListingIdAlive(listing.getId()).size();
         List<String> nextSteps = new ArrayList<>();
         if (imageCount < config.getInt(ConfigKey.LISTING_IMAGE_MIN)) {
@@ -232,7 +338,11 @@ public class ListingServiceImpl implements ListingService {
 
         Category category = requireActiveCategory(req.getCategoryId());
         validateCategoryAllowedForCurrentRole(category.getCode());
-        Ward ward = validateLocation(req.getProvinceId(), req.getDistrictId(), req.getWardId());
+        // Địa chỉ là của phòng (RU-3): chỉ xét khi gửi đủ bộ địa chỉ; thiếu thì giữ nguyên.
+        boolean addressProvided = req.getProvinceId() != null && req.getDistrictId() != null
+                && req.getWardId() != null && req.getAddressDetail() != null && !req.getAddressDetail().isBlank();
+        Ward ward = addressProvided
+                ? validateLocation(req.getProvinceId(), req.getDistrictId(), req.getWardId()) : null;
         validateAmenities(req.getAmenityIds());
         validateTextLengths(req.getTitle(), req.getDescription());
         validateAvailableFrom(req.getAvailableFrom());
@@ -240,8 +350,8 @@ public class ListingServiceImpl implements ListingService {
                 req.getMaxOccupants(), req.getCurrentOccupants());
 
         String newTitle = HtmlSanitizer.stripAllHtml(req.getTitle());
-        String newDescription = HtmlSanitizer.stripAllHtml(req.getDescription());
-        String newAddress = HtmlSanitizer.stripAllHtml(req.getAddressDetail());
+        String newDescription = HtmlSanitizer.stripAllHtmlKeepLines(req.getDescription());
+        String newAddress = addressProvided ? HtmlSanitizer.stripAllHtml(req.getAddressDetail()).trim() : null;
 
         ListingStatus statusBefore = listing.getStatus();
         ListingCategoryCountPublisher.Snapshot categoryCountBefore = categoryCountPublisher.snapshot(listing);
@@ -252,11 +362,13 @@ public class ListingServiceImpl implements ListingService {
         detect(changes, "title", listing.getTitle(), newTitle, true);
         detect(changes, "description", listing.getDescription(), newDescription, true);
         detect(changes, "price", str(listing.getPrice()), str(req.getPrice()), true);
-        LocationParts currentLocation = locationOf(listing.getWardId());
-        detect(changes, "provinceId", str(currentLocation.provinceId()), str(req.getProvinceId()), true);
-        detect(changes, "districtId", str(currentLocation.districtId()), str(req.getDistrictId()), true);
-        detect(changes, "wardId", str(listing.getWardId()), str(req.getWardId()), true);
-        detect(changes, "addressDetail", listing.getAddressDetail(), newAddress, true);
+        if (addressProvided) {
+            LocationParts currentLocation = locationOf(listing.getWardId());
+            detect(changes, "provinceId", str(currentLocation.provinceId()), str(req.getProvinceId()), true);
+            detect(changes, "districtId", str(currentLocation.districtId()), str(req.getDistrictId()), true);
+            detect(changes, "wardId", str(listing.getWardId()), str(req.getWardId()), true);
+            detect(changes, "addressDetail", listing.getAddressDetail(), newAddress, true);
+        }
         // ----- Trường nhỏ (giữ nguyên trạng thái) -----
         detect(changes, "categoryId", str(listing.getCategoryId()), str(req.getCategoryId()), false);
         detect(changes, "area", str(listing.getArea()), str(req.getArea()), false);
@@ -272,9 +384,15 @@ public class ListingServiceImpl implements ListingService {
         listing.setDepositAmount(defaultZero(req.getDepositAmount()));
         listing.setElectricityPrice(req.getElectricityPrice());
         listing.setWaterPrice(req.getWaterPrice());
-        listing.setWardId(req.getWardId());
-        listing.setAddressDetail(newAddress);
-        applyCoordinates(listing, req.getLatitude(), req.getLongitude(), ward);
+        if (addressProvided) {
+            // Đổi địa chỉ phòng rồi chép sang mọi tin của phòng. Phòng đã có đánh giá thì khoá
+            // địa chỉ, kể cả khi tin đang ẩn (lỗ hổng 7) — chỉ ADMIN được đổi.
+            RentalUnit unit = rentalUnitSupport.requireAlive(listing.getRentalUnitId());
+            rentalUnitSupport.changeAddress(unit,
+                    new RentalUnitSupport.UnitAddress(ward, newAddress, req.getUnitLabel(),
+                            req.getLatitude(), req.getLongitude()),
+                    SecurityUtils.hasRole(RoleCode.ADMIN), listing);
+        }
         listing.setRoomCount(req.getRoomCount());
         listing.setToiletCount(req.getToiletCount());
         listing.setToiletType(req.getToiletType());
@@ -341,6 +459,8 @@ public class ListingServiceImpl implements ListingService {
         listingRepository.save(listing);
         categoryCountPublisher.publishIfChanged(categoryCountBefore, listing);
         ownerStatsPublisher.publishIfChanged(ownerStatsBefore, listing);
+        eventPublisher.publishEvent(new ListingWithdrawnEvent(listing.getId(), listing.getTitle(),
+                "Tin đăng đã bị xóa"));
     }
 
     // ==================================================================
@@ -447,9 +567,13 @@ public class ListingServiceImpl implements ListingService {
         ListingOwnerStatsPublisher.Snapshot ownerStatsBefore = ownerStatsPublisher.snapshot(listing);
         ListingStatus target = stateMachine.transition(before, ListingEvent.CLOSE);
         listing.setStatus(target);
+        listing.setCloseReason(req.getReason());
         listingRepository.save(listing);
         categoryCountPublisher.publishIfChanged(categoryCountBefore, listing);
         ownerStatsPublisher.publishIfChanged(ownerStatsBefore, listing);
+        // Yêu cầu thuê đang chờ của tin này không còn ý nghĩa (lỗ hổng 10).
+        eventPublisher.publishEvent(new ListingWithdrawnEvent(listing.getId(), listing.getTitle(),
+                "Tin đăng đã được chủ trọ đóng"));
 
         return ListingActionResponse.builder()
                 .id(listing.getId())
@@ -949,44 +1073,13 @@ public class ListingServiceImpl implements ListingService {
         return category;
     }
 
-    /**
-     * Gán tọa độ cho tin. Chủ trọ gửi đủ cặp lat/lng thì dùng nguyên ({@code OWNER}); thiếu thì lấy
-     * tâm phường ({@code WARD}) để lọc theo bán kính (tìm kiếm, chatbot) vẫn hoạt động — form đăng
-     * tin hiện chưa có ô chọn vị trí. Phường chưa có tọa độ thì để trống.
-     */
-    private void applyCoordinates(Listing listing, BigDecimal latitude, BigDecimal longitude, Ward ward) {
-        if (latitude != null && longitude != null) {
-            listing.setLatitude(latitude);
-            listing.setLongitude(longitude);
-            listing.setLocationSource(LocationSource.OWNER);
-        } else if (ward.getLatitude() != null && ward.getLongitude() != null) {
-            listing.setLatitude(ward.getLatitude());
-            listing.setLongitude(ward.getLongitude());
-            listing.setLocationSource(LocationSource.WARD);
-        } else {
-            listing.setLatitude(null);
-            listing.setLongitude(null);
-            listing.setLocationSource(null);
-        }
+    private static String truncate(String value, int max) {
+        String v = value == null ? "" : value.trim();
+        return v.length() <= max ? v : v.substring(0, max);
     }
 
     private Ward validateLocation(Long provinceId, Long districtId, Long wardId) {
-        Province province = provinceRepository.findById(provinceId)
-                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.PROVINCE_NOT_FOUND));
-        if (!Boolean.TRUE.equals(province.getIsActive())) {
-            throw new BusinessRuleException(ErrorCode.AREA_NOT_SUPPORTED);
-        }
-        District district = districtRepository.findById(districtId)
-                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.DISTRICT_NOT_FOUND));
-        if (district.getProvince() == null || !Objects.equals(district.getProvince().getId(), provinceId)) {
-            throw new BusinessRuleException(ErrorCode.ADDRESS_HIERARCHY_MISMATCH);
-        }
-        Ward ward = wardRepository.findById(wardId)
-                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.WARD_NOT_FOUND));
-        if (ward.getDistrict() == null || !Objects.equals(ward.getDistrict().getId(), districtId)) {
-            throw new BusinessRuleException(ErrorCode.ADDRESS_HIERARCHY_MISMATCH);
-        }
-        return ward;
+        return rentalUnitSupport.resolveWard(provinceId, districtId, wardId);
     }
 
     private LocationParts locationOf(Long wardId) {
@@ -1059,8 +1152,12 @@ public class ListingServiceImpl implements ListingService {
                 cb.greaterThanOrEqualTo(root.get("createdAt"), startOfDay));
         long todayCount = listingRepository.count(spec);
 
-        if (todayCount >= config.getInt(ConfigKey.SPAM_LISTING_DAILY)) {
-            throw new BusinessRuleException(ErrorCode.LISTING_QUOTA_DAILY);
+        int limit = config.getInt(ConfigKey.SPAM_LISTING_DAILY);
+        if (todayCount >= limit) {
+            // Lấy đúng số trong cấu hình (admin đổi được), không ghi cứng trong thông báo.
+            throw new BusinessRuleException(ErrorCode.LISTING_QUOTA_DAILY,
+                    "Bạn đã đạt giới hạn " + limit + " tin mỗi ngày (tính cả tin nháp và tin đã xoá). "
+                            + "Vui lòng thử lại vào ngày mai.");
         }
     }
 
@@ -1169,22 +1266,35 @@ public class ListingServiceImpl implements ListingService {
         }
     }
 
+    /**
+     * Đặt tập tiện ích của tin bằng cách chỉ đổi phần khác biệt: giữ liên kết còn dùng, xoá mềm liên
+     * kết bị bỏ, khôi phục liên kết đã xoá mềm khi gắn lại. Không chèn trùng vì khoá unique
+     * {@code (listing_id, amenity_id)} áp cho cả dòng đã xoá mềm (trước đây xoá mềm hết rồi chèn lại
+     * nên mọi lần sửa tin có tiện ích đều lỗi 500).
+     */
     private void replaceAmenities(Listing listing, List<Long> amenityIds) {
-        List<ListingAmenity> existing = amenityLinkRepository.findByListingIdAlive(listing.getId());
-        existing.forEach(link -> {
-            link.softDelete();
-            amenityLinkRepository.save(link);
-        });
-        if (amenityIds == null) {
-            return;
+        Set<Long> wanted = amenityIds == null ? Set.of() : new java.util.LinkedHashSet<>(amenityIds);
+        Map<Long, ListingAmenity> byAmenity = new java.util.HashMap<>();
+        for (ListingAmenity link : amenityLinkRepository.findAllByListingId(listing.getId())) {
+            byAmenity.put(link.getAmenityId(), link);
         }
-        Set<Long> distinct = new java.util.LinkedHashSet<>(amenityIds);
-        for (Long amenityId : distinct) {
-            ListingAmenity link = ListingAmenity.builder()
-                    .listing(listing)
-                    .amenityId(amenityId)
-                    .build();
-            amenityLinkRepository.save(link);
+        for (ListingAmenity link : byAmenity.values()) {
+            boolean keep = wanted.contains(link.getAmenityId());
+            if (keep && link.getDeletedAt() != null) {
+                link.restore();
+                amenityLinkRepository.save(link);
+            } else if (!keep && link.getDeletedAt() == null) {
+                link.softDelete();
+                amenityLinkRepository.save(link);
+            }
+        }
+        for (Long amenityId : wanted) {
+            if (!byAmenity.containsKey(amenityId)) {
+                amenityLinkRepository.save(ListingAmenity.builder()
+                        .listing(listing)
+                        .amenityId(amenityId)
+                        .build());
+            }
         }
     }
 
@@ -1192,7 +1302,9 @@ public class ListingServiceImpl implements ListingService {
         String base = SlugUtil.toSlug(title);
         String candidate = base;
         int suffix = 1;
-        while (listingRepository.existsBySlugAndDeletedAtIsNull(candidate)) {
+        // Kiểm tra cả tin đã xoá mềm: uk_listings_slug áp cho mọi dòng, nên dùng lại slug của tin
+        // đã xoá sẽ lỗi trùng khoá (gặp khi đăng lại phòng có tin cũ đã bị xoá).
+        while (listingRepository.existsBySlug(candidate)) {
             suffix++;
             candidate = base + "-" + suffix;
         }

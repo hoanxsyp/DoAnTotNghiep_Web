@@ -40,6 +40,20 @@ public class ListingCreateRequest {
     @NotNull(message = "Vui lòng chọn loại tin")
     private Long categoryId;
 
+    /**
+     * Phòng có sẵn để đăng tin (RU-1). Có giá trị thì địa chỉ lấy từ phòng, các trường địa chỉ
+     * bên dưới bị bỏ qua. Bỏ trống thì hệ thống tạo phòng mới từ địa chỉ gửi kèm.
+     */
+    private Long rentalUnitId;
+
+    /** Tên phòng khi tạo phòng mới; bỏ trống thì dùng tiêu đề tin. */
+    @Size(max = 150, message = "Tên phòng tối đa 150 ký tự")
+    private String unitName;
+
+    /** Số/mã phòng (P101, Tầng 2…) khi tạo phòng mới — phân biệt các phòng cùng địa chỉ. */
+    @Size(max = 50, message = "Số phòng tối đa 50 ký tự")
+    private String unitLabel;
+
     @NotBlank(message = "Vui lòng nhập tiêu đề")
     @Size(max = 150, message = "Tiêu đề tối đa 150 ký tự")
     private String title;
@@ -72,16 +86,12 @@ public class ListingCreateRequest {
     @Digits(integer = 15, fraction = 2, message = "Giá nước không hợp lệ")
     private BigDecimal waterPrice;
 
-    @NotNull(message = "Vui lòng chọn tỉnh/thành phố")
     private Long provinceId;
 
-    @NotNull(message = "Vui lòng chọn quận/huyện")
     private Long districtId;
 
-    @NotNull(message = "Vui lòng chọn phường/xã")
     private Long wardId;
 
-    @NotBlank(message = "Vui lòng nhập địa chỉ chi tiết")
     @Size(min = 5, max = 255, message = "Địa chỉ chi tiết phải từ 5 đến 255 ký tự")
     private String addressDetail;
 

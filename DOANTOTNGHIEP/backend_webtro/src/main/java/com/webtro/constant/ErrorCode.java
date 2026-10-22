@@ -112,7 +112,7 @@ public enum ErrorCode {
     PROVINCE_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy tỉnh/thành phố"),
     DISTRICT_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy quận/huyện"),
     WARD_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy phường/xã"),
-    LISTING_QUOTA_DAILY(HttpStatus.TOO_MANY_REQUESTS, "Bạn đã đạt giới hạn 10 tin mỗi ngày"),
+    LISTING_QUOTA_DAILY(HttpStatus.TOO_MANY_REQUESTS, "Bạn đã đạt giới hạn số tin được tạo trong ngày"),
     LANDLORD_NOT_VERIFIED(HttpStatus.FORBIDDEN, "Tài khoản chủ trọ chưa được xác thực nên chưa thể đăng tin công khai"), // LƯU Ý: doc có 2 status, chọn theo bảng tổng
     LISTING_POSTING_SUSPENDED(HttpStatus.FORBIDDEN, "Chức năng đăng tin của bạn đang bị tạm khóa do vi phạm"),
 
@@ -136,6 +136,16 @@ public enum ErrorCode {
     LISTING_NO_PENDING_REVIEW(HttpStatus.UNPROCESSABLE_ENTITY, "Tin không ở trạng thái cần kiểm tra"),
     LISTING_DELETED(HttpStatus.GONE, "Tin đăng đã bị xóa"),
     LISTING_INVALID_TRANSITION(HttpStatus.UNPROCESSABLE_ENTITY, "Không thể chuyển trạng thái tin đăng theo yêu cầu"),
+
+    // ===== Nhóm: Phòng (rental_units) =====
+    RENTAL_UNIT_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy phòng"),
+    RENTAL_UNIT_FORBIDDEN(HttpStatus.FORBIDDEN, "Bạn không có quyền thao tác trên phòng này"),
+    RENTAL_UNIT_DUPLICATE(HttpStatus.CONFLICT, "Bạn đã có phòng ở địa chỉ này, hãy chọn phòng có sẵn thay vì tạo phòng mới"),
+    RENTAL_UNIT_ADDRESS_LOCKED(HttpStatus.UNPROCESSABLE_ENTITY, "Phòng đã có đánh giá nên không thể đổi địa chỉ hoặc số phòng"),
+    RENTAL_UNIT_HAS_LIVE_LISTING(HttpStatus.CONFLICT, "Phòng này đang có một tin đăng chưa đóng"),
+    RENTAL_UNIT_ARCHIVED(HttpStatus.UNPROCESSABLE_ENTITY, "Phòng đã được lưu trữ, hãy khôi phục phòng trước khi đăng tin"),
+    RENTAL_UNIT_NO_LISTING_TO_RELIST(HttpStatus.UNPROCESSABLE_ENTITY, "Phòng chưa có tin đăng nào để đăng lại"),
+    RENTAL_UNIT_ADDRESS_REQUIRED(HttpStatus.BAD_REQUEST, "Vui lòng chọn phòng có sẵn hoặc nhập đủ địa chỉ để tạo phòng mới"),
 
     // ===== Nhóm: Search - Tìm kiếm =====
     PRICE_RANGE_INVALID(HttpStatus.BAD_REQUEST, "Giá từ không được lớn hơn giá đến"),
@@ -170,7 +180,7 @@ public enum ErrorCode {
     RENTAL_LISTING_OCCUPIED(HttpStatus.CONFLICT, "Phòng này đã có người thuê"),
     RENTAL_TENANT_ALREADY_RENTING(HttpStatus.CONFLICT, "Bạn đang thuê một phòng khác"),
     RENTAL_CONCURRENCY_CONFLICT(HttpStatus.CONFLICT, "Phòng hoặc người thuê vừa được xác nhận ở một giao dịch khác"),
-    REVIEW_RENTAL_REQUIRED(HttpStatus.UNPROCESSABLE_ENTITY, "Chỉ người đang thuê hoặc đã trả phòng mới được đánh giá tin này"),
+    REVIEW_RENTAL_REQUIRED(HttpStatus.UNPROCESSABLE_ENTITY, "Chỉ người đang thuê hoặc đã trả phòng mới được đánh giá phòng này"),
 
     // ===== Nhóm: Interaction - Bình luận & đánh giá =====
     COMMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy bình luận"),
@@ -186,7 +196,7 @@ public enum ErrorCode {
     COMMENT_ALREADY_HIDDEN(HttpStatus.CONFLICT, "Bình luận đã bị ẩn"),
     REVIEW_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy đánh giá"),
     REVIEW_FORBIDDEN(HttpStatus.FORBIDDEN, "Bạn chỉ có thể sửa đánh giá của mình"),
-    REVIEW_ALREADY_EXISTS(HttpStatus.CONFLICT, "Bạn đã đánh giá tin đăng này rồi"),
+    REVIEW_ALREADY_EXISTS(HttpStatus.CONFLICT, "Bạn đã đánh giá phòng này rồi"),
     REVIEW_SELF_FORBIDDEN(HttpStatus.UNPROCESSABLE_ENTITY, "Bạn không thể đánh giá tin đăng của chính mình"),
     REVIEW_RATING_INVALID(HttpStatus.BAD_REQUEST, "Số sao phải từ 1 đến 5"),
     REVIEW_CONTENT_REQUIRED(HttpStatus.BAD_REQUEST, "Vui lòng nhập nội dung đánh giá khi chấm từ 2 sao trở xuống"),

@@ -26,6 +26,9 @@ public class ListingDetailResponse {
 
     private Long id;
     private String slug;
+
+    /** Phòng của tin; đánh giá và điểm hiển thị thuộc về phòng (RE-2). */
+    private RentalUnitSummaryResponse rentalUnit;
     private String title;
     private String description;
 
