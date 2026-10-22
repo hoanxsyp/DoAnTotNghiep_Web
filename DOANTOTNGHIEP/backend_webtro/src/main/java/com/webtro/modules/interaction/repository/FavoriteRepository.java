@@ -43,4 +43,18 @@ public interface FavoriteRepository extends JpaRepository<Favorite, Long> {
             + "where f.userId = :userId and f.listingId in :listingIds and f.deletedAt is null")
     List<Long> findFavoritedListingIds(@Param("userId") Long userId,
                                        @Param("listingIds") Collection<Long> listingIds);
+
+    /** Lượt lưu hiện còn hiệu lực theo ngày của một tin trong khoảng [from, to). */
+    @Query(value = """
+            SELECT DATE(f.created_at) AS day, COUNT(*) AS total
+            FROM favorites f
+            WHERE f.listing_id = :listingId
+              AND f.deleted_at IS NULL
+              AND f.created_at >= :from
+              AND f.created_at < :to
+            GROUP BY DATE(f.created_at)
+            """, nativeQuery = true)
+    List<Object[]> countDailyFavoritesForListingBetween(@Param("listingId") Long listingId,
+                                                        @Param("from") Instant from,
+                                                        @Param("to") Instant to);
 }

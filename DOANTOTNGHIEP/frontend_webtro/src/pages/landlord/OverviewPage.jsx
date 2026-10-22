@@ -7,7 +7,6 @@ import {
 import ArticleIcon from '@mui/icons-material/Article';
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import VisibilityIcon from '@mui/icons-material/Visibility';
-import ContactPhoneIcon from '@mui/icons-material/ContactPhone';
 import AddBoxIcon from '@mui/icons-material/AddBox';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
@@ -46,13 +45,12 @@ const OverviewPage = () => {
 
   useEffect(() => { load(); }, [load]);
 
-  const isEmpty = data && (data.activeCount + data.pendingCount) === 0 && (data.topListings || []).length === 0;
+  const isEmpty = data && (data.totalListings ?? 0) === 0;
 
   const chartData = data?.chart ? {
     labels: data.chart.map((p) => formatDateTime(p.date, 'DD/MM')),
     datasets: [
       { label: 'Lượt xem', data: data.chart.map((p) => p.views), yAxisID: 'y' },
-      { label: 'Lượt liên hệ', data: data.chart.map((p) => p.contacts), yAxisID: 'y' },
     ],
   } : null;
 
@@ -84,23 +82,19 @@ const OverviewPage = () => {
         <>
           {/* Stat cards */}
           <Grid container spacing={2} sx={{ mb: 3 }}>
-            <Grid item xs={6} md={3}>
+            <Grid item xs={12} md={4}>
               <StatCard loading={loading} label="Tin đang hiển thị" value={data?.activeCount ?? 0}
                 icon={<ArticleIcon />} color="success" delta={data?.deltas?.activeCount}
                 deltaSuffix="" onClick={() => navigate('/quan-ly/tin-dang?status=ACTIVE')} />
             </Grid>
-            <Grid item xs={6} md={3}>
+            <Grid item xs={12} md={4}>
               <StatCard loading={loading} label="Chờ duyệt" value={data?.pendingCount ?? 0}
                 icon={<HourglassEmptyIcon />} color="warning" delta={data?.deltas?.pendingCount}
                 deltaSuffix="" onClick={() => navigate('/quan-ly/tin-dang?status=PENDING')} />
             </Grid>
-            <Grid item xs={6} md={3}>
+            <Grid item xs={12} md={4}>
               <StatCard loading={loading} label={`Lượt xem (${days} ngày)`} value={data?.viewCount30d ?? 0}
                 icon={<VisibilityIcon />} color="info" delta={data?.deltas?.viewCountPercent} deltaLabel="so với kỳ trước" />
-            </Grid>
-            <Grid item xs={6} md={3}>
-              <StatCard loading={loading} label={`Lượt liên hệ (${days} ngày)`} value={data?.contactCount30d ?? 0}
-                icon={<ContactPhoneIcon />} color="primary" delta={data?.deltas?.contactCountPercent} deltaLabel="so với kỳ trước" />
             </Grid>
           </Grid>
 
@@ -108,7 +102,7 @@ const OverviewPage = () => {
             {/* Chart */}
             <Grid item xs={12} lg={8}>
               <ChartCard
-                title="Xu hướng lượt xem & liên hệ"
+                title="Xu hướng lượt xem"
                 subtitle={`${days} ngày gần nhất`}
                 type="line"
                 loading={loading}
@@ -162,7 +156,6 @@ const OverviewPage = () => {
                               secondary={(
                                 <Stack direction="row" spacing={1.5} component="span">
                                   <Chip size="small" variant="outlined" icon={<VisibilityIcon />} label={l.viewCount} />
-                                  <Chip size="small" variant="outlined" icon={<ContactPhoneIcon />} label={l.contactCount} />
                                 </Stack>
                               )}
                             />

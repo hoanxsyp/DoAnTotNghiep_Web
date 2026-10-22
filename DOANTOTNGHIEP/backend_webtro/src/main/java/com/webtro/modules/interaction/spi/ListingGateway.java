@@ -41,7 +41,6 @@ public interface ListingGateway {
      * @param publiclyVisible  tin có đang hiển thị công khai không (theo publicStatuses)
      * @param averageRating    điểm đánh giá trung bình hiện lưu (denormalized)
      * @param reviewCount      số đánh giá hiển thị hiện lưu (denormalized)
-     * @param contactCount     số lượt liên hệ hiện lưu (denormalized)
      * @param rentalUnitId     phòng của tin (rental_units.id)
      * @param createdAt        thời điểm tạo tin (dùng cho ghi chú "thuê qua tin tháng MM/YYYY")
      */
@@ -58,7 +57,6 @@ public interface ListingGateway {
             boolean publiclyVisible,
             BigDecimal averageRating,
             int reviewCount,
-            int contactCount,
             Long rentalUnitId,
             Instant createdAt) {
     }
@@ -91,9 +89,6 @@ public interface ListingGateway {
 
     /** Đặt lại {@code listings.favorite_count} theo số đếm chính xác từ module interaction. */
     void setFavoriteCount(Long listingId, int count);
-
-    /** Tăng {@code listings.contact_count} thêm 1 (sau khi đã khử trùng lặp). */
-    void incrementContactCount(Long listingId);
 
     /** Đặt lại {@code listings.comment_count} theo số đếm chính xác từ module interaction. */
     void setCommentCount(Long listingId, int count);

@@ -1154,7 +1154,7 @@ public class DemoDataInitializer implements ApplicationRunner {
         log.info("Lùi ngày tạo của {} tin demo về ngày đăng giả lập (không chiếm hạn mức đăng tin trong ngày)", n);
     }
 
-    /** Mỗi tin demo một phòng riêng (giống backfill V28: 1 tin = 1 phòng). */
+    /** Mỗi tin demo một phòng riêng (giống backfill V29: 1 tin = 1 phòng). */
     private void attachDemoUnit(Listing listing) {
         String name = listing.getTitle().length() <= 150 ? listing.getTitle() : listing.getTitle().substring(0, 150);
         RentalUnit unit = rentalUnitRepository.save(RentalUnit.builder()

@@ -244,6 +244,13 @@ public class UserServiceImpl implements UserService {
         if (lp.getVerificationStatus() == VerificationStatus.VERIFIED) {
             throw new ConflictException(ErrorCode.LANDLORD_ALREADY_VERIFIED);
         }
+        if (lp.getVerificationStatus() == VerificationStatus.PENDING
+                && !verificationRepository
+                .findByUser_IdAndTypeAndStatusAndDeletedAtIsNull(
+                        userId, VerificationType.LANDLORD, VerificationStatus.PENDING)
+                .isEmpty()) {
+            throw new ConflictException(ErrorCode.LANDLORD_VERIFICATION_PENDING);
+        }
 
         // Đặt hồ sơ về trạng thái chờ duyệt + lưu ghi chú gửi Admin.
         lp.setVerificationStatus(VerificationStatus.PENDING);

@@ -18,7 +18,7 @@ Bản nháp ngày 13/10 viết **trước** khi main merge 3 thay đổi làm đ
 
 Kết luận: **khoảng một nửa thiết kế cũ không cần làm nữa**. Phần còn đáng làm là thực thể Phòng (G1 cũ), nhưng phải sửa lại cho khớp với luồng thuê.
 
-Migration mới phải đánh số từ **V28** (hiện tại đến `V27__listing_location_source.sql`).
+Migration mới phải đánh số từ **V29** (hiện tại đến `V28__listing_location_source.sql`).
 
 ---
 
@@ -91,9 +91,9 @@ landlord ──1:N── rental_units (địa chỉ gốc, số phòng, điểm 
 
 | File | Nội dung |
 |---|---|
-| `V28__create_rental_units.sql` | Tạo `rental_units`; backfill 1 tin = 1 phòng (không tự gộp, vì gộp sai còn tệ hơn không gộp); thêm `listings.rental_unit_id` (NOT NULL, FK, index `(rental_unit_id, status)`); thêm `listings.duplicate_address` (BOOLEAN, mặc định FALSE) cho cờ trùng địa chỉ ở RU-6 |
-| `V29__link_reviews_rentals_to_units.sql` | Thêm `rental_unit_id` cho `reviews` và `rental_requests` và backfill từ `listings`; đổi unique review thành `(user_id, rental_unit_id, active_marker)`; đổi `fk_reviews_listings` từ `CASCADE` sang `SET NULL` (cho `reviews.listing_id` được `NULL`); tính điểm phòng và điểm chủ trọ từ review hiện có; **chép điểm phòng sang mọi tin của phòng**; đặt `address_locked = TRUE` cho phòng có review |
-| ~~`V30__drop_listing_rating_columns.sql`~~ | **Không làm** (quyết định A, mục 9): giữ 2 cột trên `listings` làm bản sao điểm phòng |
+| `V29__create_rental_units.sql` | Tạo `rental_units`; backfill 1 tin = 1 phòng (không tự gộp, vì gộp sai còn tệ hơn không gộp); thêm `listings.rental_unit_id` (NOT NULL, FK, index `(rental_unit_id, status)`); thêm `listings.duplicate_address` (BOOLEAN, mặc định FALSE) cho cờ trùng địa chỉ ở RU-6 |
+| `V30__link_reviews_rentals_to_units.sql` | Thêm `rental_unit_id` cho `reviews` và `rental_requests` và backfill từ `listings`; đổi unique review thành `(user_id, rental_unit_id, active_marker)`; đổi `fk_reviews_listings` từ `CASCADE` sang `SET NULL` (cho `reviews.listing_id` được `NULL`); tính điểm phòng và điểm chủ trọ từ review hiện có; **chép điểm phòng sang mọi tin của phòng**; đặt `address_locked = TRUE` cho phòng có review |
+| ~~`V31__drop_listing_rating_columns.sql`~~ | **Không làm** (quyết định A, mục 9): giữ 2 cột trên `listings` làm bản sao điểm phòng |
 
 Kiểm tra sau migration:
 - `SELECT COUNT(*) FROM listings WHERE rental_unit_id IS NULL` = 0.
@@ -120,7 +120,7 @@ Kiểm tra sau migration:
 
 | Khu vực | File | Mức |
 |---|---|---|
-| Migration | `V28`–`V29` (mới) | Lớn |
+| Migration | `V29`–`V30` (mới) | Lớn |
 | Listing | `entity/RentalUnit`, `RentalUnitRepository`, `RentalUnitService(+Impl)`, `LandlordRentalUnitController`, DTO, mapper (**mới**) | Lớn |
 | | `Listing.java` (thêm `rentalUnitId`; `averageRating`/`reviewCount` đổi thành `@Column(insertable = false, updatable = false)`, bỏ setter, xem mục 10.3), `ListingServiceImpl` (tạo/sửa tin theo phòng, RU-2/RU-3, prefill, huỷ yêu cầu thuê treo khi đóng/xoá tin), `ListingMapper` (khối `rentalUnit`) | Vừa |
 | | `ListingGatewayAdapter` / `interaction/spi/ListingGateway` (bỏ `updateReviewAggregate`, thêm thông tin phòng). `ListingDataGatewayAdapter` **không đổi** vì vẫn đọc cột bản sao | Nhỏ |
@@ -178,7 +178,7 @@ Kiểm tra sau migration:
 | Bước | Nội dung | Cỡ |
 |---|---|---|
 | G0 | Sửa độc lập: `canComment` đang bằng `viewerAuthenticated` nên cho cả MODERATOR (`ListingMapper.java:174`) trong khi backend chặn MODERATOR bình luận | S |
-| G1 | V28–V29, entity/service/API `RentalUnit`, tạo/sửa tin theo phòng, review và điểm theo phòng (`ReviewRatingRecalculator`, `RatingReconcileJob`) | L |
+| G1 | V29–V30, entity/service/API `RentalUnit`, tạo/sửa tin theo phòng, review và điểm theo phòng (`ReviewRatingRecalculator`, `RatingReconcileJob`) | L |
 | G2 | Frontend: wizard, trang "Phòng của tôi", trang chi tiết tin, phần admin | M–L |
 | G3 | Demo data (`DemoDataInitializer`), test, cập nhật docs `00`/`02`/`03`/`04`/`09` | M |
 
@@ -202,7 +202,7 @@ Khoảng 1/3 công sức của phương án đầy đủ. Nhược điểm: khô
 | 1 | Khu trọ nhiều phòng giống nhau | Giữ **1 tin = 1 phòng**. Ràng buộc 1 người thuê mỗi tin và luồng `RENTED ↔ ACTIVE` đều dựa trên giả định này |
 | 2 | Phương án đầy đủ hay nhẹ | **Phương án đầy đủ** `rental_units` (mục 3) |
 | 3 | Chủ trọ không xác nhận "đã thuê" | **Chấp nhận là hạn chế**, ghi vào báo cáo. Không làm cơ chế khiếu nại |
-| A | Bỏ cột điểm trên `listings` (V30)? | **Không bỏ.** Giữ làm bản sao chỉ đọc của điểm phòng, **bắt buộc luôn khớp** với `rental_units` (mục 10). Search, chatbot, gợi ý phòng không phải sửa |
+| A | Bỏ cột điểm trên `listings` (V31)? | **Không bỏ.** Giữ làm bản sao chỉ đọc của điểm phòng, **bắt buộc luôn khớp** với `rental_units` (mục 10). Search, chatbot, gợi ý phòng không phải sửa |
 | B | Phòng trùng địa chỉ với chủ trọ khác | Cho tạo, gắn cờ trùng địa chỉ trong hàng duyệt khi tin `PENDING`; không dùng `NEED_REVIEW` (RU-6) |
 | C | Thuê cùng phòng nhiều lần | 1 review cho mỗi phòng, sửa được (RE-5) |
 
@@ -246,7 +246,7 @@ WHERE l.average_rating <> u.average_rating
    OR l.review_count   <> u.review_count;
 ```
 
-- Dùng ngay sau migration V29 (phải trả về 0 dòng).
+- Dùng ngay sau migration V30 (phải trả về 0 dòng).
 - `RatingReconcileJob` chạy hằng đêm: tính lại điểm mọi phòng có review, chép sang tin, ghi log cảnh báo nếu phát hiện lệch. Job này cũng thay cho "nightly reconcile" mà ghi chú cũ trong `ReviewServiceImpl` nhắc tới nhưng chưa từng có.
 - Test tích hợp: sau mỗi thao tác review (tạo, sửa, xoá, ẩn, hiện, đăng lại phòng), câu truy vấn trên trả về 0 dòng.
 
@@ -259,7 +259,7 @@ WHERE l.average_rating <> u.average_rating
 | Kiểm tra | Kết quả |
 |---|---|
 | `mvn test` | 32 test qua (7 test cũ sửa cho khớp + 25 test mới: `ReviewServiceImplTest`, `ReviewRatingRecalculatorTest`, `RentalUnitSupportTest`, `AddressNormalizerTest`, `ListingWithdrawnListenerTest`) |
-| V1→V29 trên MySQL 8.4 với dữ liệu thử (tin đang đăng, tin đã đóng, tin đã xoá mềm, review ẩn/xoá, yêu cầu thuê) | Điểm phòng, bản sao điểm trên tin, điểm chủ trọ, cờ khoá địa chỉ, phòng lưu trữ của tin đã xoá đều đúng; `updated_at` của tin giữ nguyên; 0 tin lệch điểm |
+| V1→V30 trên MySQL 8.4 với dữ liệu thử (tin đang đăng, tin đã đóng, tin đã xoá mềm, review ẩn/xoá, yêu cầu thuê) | Điểm phòng, bản sao điểm trên tin, điểm chủ trọ, cờ khoá địa chỉ, phòng lưu trữ của tin đã xoá đều đúng; `updated_at` của tin giữ nguyên; 0 tin lệch điểm |
 | Khởi động backend trên DB trống | Flyway chạy 29 migration, Hibernate `validate` khớp schema, dữ liệu demo gieo qua `ReviewRatingRecalculator` (52 tin ↔ 52 phòng, 0 lệch) |
 | Kịch bản API đầu-cuối (34 bước) | Thuê → trả phòng → đánh giá → đóng tin (yêu cầu thuê đang chờ tự kết thúc, lưu `close_reason`) → đăng lại → review cũ hiện trên tin mới kèm "thuê qua tin…" → chặn review lần 2 / đăng lại khi còn tin sống / đổi địa chỉ phòng đã khoá / tạo phòng trùng → moderator ẩn, hiện review → điểm phòng, tin, chủ trọ khớp |
 | Frontend | `vite build` và `eslint` các file sửa đều sạch. **Chưa** bấm thử trên trình duyệt |

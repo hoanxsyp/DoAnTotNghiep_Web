@@ -1,6 +1,5 @@
 package com.webtro.modules.user.adapter;
 
-import com.webtro.common.enums.VerificationStatus;
 import com.webtro.constant.ErrorCode;
 import com.webtro.exception.ResourceNotFoundException;
 import com.webtro.modules.interaction.spi.UserGateway;
@@ -22,7 +21,7 @@ import java.util.Optional;
 /**
  * Adapter (module {@code user}) hiện thực {@link UserGateway} mà module {@code interaction} cần —
  * canonical luật 4. Bọc {@link UserRepository} + {@link LandlordProfileRepository}: cung cấp thông
- * tin hiển thị tác giả bình luận/đánh giá, thông tin liên hệ chủ trọ, cờ hạn chế bình luận/liên hệ,
+ * tin hiển thị tác giả bình luận/đánh giá, cờ hạn chế bình luận/nhắn tin,
  * và tổng hợp đánh giá chủ trọ.
  */
 @Component
@@ -31,27 +30,6 @@ public class UserGatewayAdapter implements UserGateway {
 
     private final UserRepository userRepository;
     private final LandlordProfileRepository landlordProfileRepository;
-
-    /** Thông tin liên hệ công khai của chủ trọ; ném {@code USER_NOT_FOUND} nếu không có hồ sơ chủ trọ. */
-    @Override
-    @Transactional(readOnly = true)
-    public LandlordContactInfo getLandlordContactInfo(Long landlordId) {
-        LandlordProfile lp = landlordProfileRepository.findByUser_IdAndDeletedAtIsNull(landlordId)
-                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.USER_NOT_FOUND));
-        User user = lp.getUser();
-        String landlordName = lp.getDisplayName() != null && !lp.getDisplayName().isBlank()
-                ? lp.getDisplayName()
-                : (user != null ? user.getFullName() : null);
-        // Schema landlord_profiles chưa có cột Zalo riêng → trả trùng số liên hệ (canonical 4.6.1).
-        return new LandlordContactInfo(
-                landlordId,
-                landlordName,
-                lp.getContactName(),
-                lp.getContactPhone(),
-                lp.getContactPhone(),
-                Boolean.TRUE.equals(lp.getAllowChat()),
-                lp.getVerificationStatus() == VerificationStatus.VERIFIED);
-    }
 
     /** Thông tin người dùng còn sống; ném {@code USER_NOT_FOUND} nếu không có. */
     @Override

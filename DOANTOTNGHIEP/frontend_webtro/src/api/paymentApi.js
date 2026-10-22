@@ -1,6 +1,11 @@
 import axiosClient from './axiosClient';
 import { unwrap } from './apiHelper';
 
+const unwrapPaymentHistory = async (promise) => {
+  const data = await unwrap(promise);
+  return data?.page ? { ...data.page, summary: data.summary } : data;
+};
+
 /**
  * API thanh toán & gói đẩy tin (khớp docs/03 mục 4.9). Chỉ gọi HTTP + bóc envelope (luật F2).
  *
@@ -10,9 +15,10 @@ import { unwrap } from './apiHelper';
 const paymentApi = {
   getPackages: (params) => unwrap(axiosClient.get('/promotion-packages', { params })),
   createPayment: (payload, config) => unwrap(axiosClient.post('/payments', payload, config)),
+  processCallback: (payload) => unwrap(axiosClient.post('/payments/callback', payload)),
   promote: (listingId, payload, config) =>
     unwrap(axiosClient.post(`/listings/${listingId}/promote`, payload, config)),
-  getMyPayments: (params) => unwrap(axiosClient.get('/payments/my', { params })),
+  getMyPayments: (params) => unwrapPaymentHistory(axiosClient.get('/payments/my', { params })),
   getPayment: (id) => unwrap(axiosClient.get(`/payments/${id}`)),
   cancelPayment: (id) => unwrap(axiosClient.post(`/payments/${id}/cancel`)),
   getMySubscriptions: (params) =>

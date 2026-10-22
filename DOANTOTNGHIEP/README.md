@@ -1,7 +1,7 @@
 # DOANTOTNGHIEP — Website quảng cáo và tìm kiếm phòng trọ
 
 Hệ thống website trung gian kết nối **chủ trọ** với **người thuê**, hỗ trợ đăng tin, tìm kiếm,
-lọc, lưu tin, liên hệ, bình luận, đánh giá, báo cáo vi phạm, thanh toán đẩy tin và kiểm duyệt —
+lọc, lưu tin, nhắn tin, bình luận, đánh giá, báo cáo vi phạm, thanh toán đẩy tin và kiểm duyệt —
 kèm **3 module AI**: gợi ý tin đăng, chatbot tìm trọ và dự đoán giá thuê.
 
 > **Đã loại khỏi hệ thống:**
@@ -109,9 +109,16 @@ DOANTOTNGHIEP/
 │   ├── 04_THIET_KE_GIAO_DIEN.md            #   Thiết kế giao diện
 │   ├── 05_TONG_KET_TRIEN_KHAI.md           #   Tổng kết & hướng dẫn vận hành
 │   ├── 06_PHAN_CONG_REVIEW_HE_THONG.md     #   Phân công review 3 người
-│   └── 07_BAN_GIAO_SESSION.md              #   Bàn giao trạng thái dự án
+│   ├── 07_BAN_GIAO_SESSION.md              #   Bàn giao trạng thái dự án
+│   ├── 08_QUY_TAC_LAM_VIEC_VOI_GIT.md      #   Quy tắc Git
+│   ├── 09_BAO_CAO_USECASE_HE_THONG.md      #   Báo cáo use case
+│   └── 10_CHECKLIST_KIEM_THU_THEO_ROLE.md  #   Checklist kiểm tra theo vai trò
 ├── backend_webtro/                         # Spring Boot API
 ├── frontend_webtro/                        # ReactJS SPA
+├── AI_Module/
+│   ├── AI_Recommendation/                 # FAISS retrieval + LightGBM ranking
+│   ├── AI_Rental_Price_Predictor/          # Thu thập dữ liệu, train, API giá và UI demo
+│   └── Module-AI-CHATBOT/chatbot/          # RoomFinder, NLU, ML và widget độc lập
 ├── docker-compose.yml
 ├── .env.example
 └── README.md
@@ -152,3 +159,10 @@ compose (đang publish ra cổng `3307`), hãy đặt `DB_PORT=3307` khi chạy.
   không chỉ ẩn nút ở frontend.
 - **AI hỗ trợ, không thay thế kiểm duyệt con người**: AI chỉ đề xuất và cảnh báo, mọi quyết
   định nặng (khóa tin, khóa tài khoản) đều cần Admin/Moderator xác nhận.
+
+---
+
+## 6. Kiểm thử và theo dõi hoàn thiện
+
+Bắt đầu từ [checklist kiểm thử theo vai trò](docs/10_CHECKLIST_KIEM_THU_THEO_ROLE.md).
+Danh sách chia theo vai trò, có cột **Trạng thái** để cả nhóm điền **Chưa check**, **Đang check** hoặc **Đã check**.

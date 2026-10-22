@@ -109,7 +109,6 @@ const RentalUnitDetailPage = () => import('@/pages/landlord/RentalUnitDetailPage
 const CreateListingPage = () => import('@/pages/landlord/CreateListingPage');
 const EditListingPage = () => import('@/pages/landlord/EditListingPage');
 const ListingStatsPage = () => import('@/pages/landlord/ListingStatsPage');
-const ContactsPage = () => import('@/pages/landlord/ContactsPage');
 const LandlordRentalRequestsPage = () => import('@/pages/landlord/RentalRequestsPage');
 const LandlordPackagesPage = () => import('@/pages/landlord/PackagesPage');
 const LandlordPaymentsPage = () => import('@/pages/landlord/PaymentsPage');
@@ -218,7 +217,6 @@ const router = createBrowserRouter([
       { path: '/quan-ly/tin-dang/tao', element: load(CreateListingPage) },
       { path: '/quan-ly/tin-dang/:id/sua', element: load(EditListingPage) },
       { path: '/quan-ly/tin-dang/:id/thong-ke', element: load(ListingStatsPage) },
-      { path: '/quan-ly/nguoi-lien-he', element: load(ContactsPage) },
       { path: '/quan-ly/yeu-cau-thue', element: loadForRoles([ROLES.LANDLORD, ROLES.ADMIN], LandlordRentalRequestsPage) },
       // Cùng trang với /tai-khoan/tin-nhan; API trả myRole nên dùng chung được cho chủ trọ.
       { path: '/quan-ly/tin-nhan', element: load(MessagesPage) },

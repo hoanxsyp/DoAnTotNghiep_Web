@@ -1406,8 +1406,7 @@ tên thành UUID; lưu ngoài webroot; tạo thumbnail 128×128; **không** ph�
     "totalActiveListings": 4,
     "totalClosedListings": 9,
     "contactName": "Anh An",
-    "contactPhone": "0901***456",
-    "phoneMasked": true,
+    "contactPhone": "0901234456",
     "chatEnabled": true,
     "responseRatePercent": 92,
     "followerCount": 58,
@@ -2433,15 +2432,13 @@ xuất hiện ≥ 5 lần để không lộ truy vấn cá nhân `[§11.11]` *"K
       "followedByMe": false
     },
     "contactName": "Anh An",
-    "contactPhone": "0901***456",
-    "phoneMasked": true,
+    "contactPhone": "0901234456",
     "status": "ACTIVE",
     "averageRating": 4.6,
     "reviewCount": 12,
     "commentCount": 8,
     "viewCount": 1544,
     "favoriteCount": 87,
-    "contactCount": 34,
     "favoritedByMe": false,
     "reviewedByMe": false,
     "canReview": false,
@@ -2472,9 +2469,7 @@ xuất hiện ≥ 5 lần để không lộ truy vấn cá nhân `[§11.11]` *"K
    (async, không chặn response).
 4. **Ghi `ViewHistory`** (bước 5): chỉ khi đăng nhập `[§3.8]`; async; là input `w = 1` cho
    recommendation (canonical §10.2). Ghi cả khi bị dedup view_count (lịch sử xem ≠ đếm lượt xem).
-5. **Che số điện thoại** (canonical §8, `[§3.8]`): khách → `contactPhone = "0901***456"`,
-   `phoneMasked = true`. Đã đăng nhập → số đầy đủ, `phoneMasked = false`. `MaskUtil.maskPhone()`
-   giữ 4 số đầu + 3 số cuối.
+5. **Số điện thoại chủ trọ** được trả đầy đủ trong `contactPhone` và hiển thị trực tiếp dạng text trên trang chi tiết tin.
 6. *(Đã bỏ — nhãn cảnh báo uy tín `lowTrustWarning` không còn, `V22`.)*
 7. **`canReview`**: `true` khi user đăng nhập, chưa đánh giá, không phải chủ tin và có quan hệ thuê
    `RENTED` hoặc `CHECKED_OUT` trong `rental_requests`. Liên hệ không cấp quyền đánh giá.
@@ -3276,7 +3271,6 @@ quan trọng"* → chạy async, ghi `prediction_histories`.
 
 | Mục | Nội dung |
 |---|---|
-| Mã chức năng | `[§2.3]` **LIST-10**; `[§7.3]` "Xem thống kê tin"; `[§4.2]` "Theo dõi lượt xem, lượt lưu, lượt liên hệ" |
 | Quyền | `LISTING_UPDATE_OWN` + **OWNER**, hoặc `STATISTIC_VIEW` (Admin) |
 | Cache | Redis `stats:listing:{id}`, TTL 5 phút |
 
@@ -3304,8 +3298,7 @@ quan trọng"* → chạy async, ghi `prediction_histories`.
       "viewCount": 1544,
       "uniqueViewerCount": 1102,
       "favoriteCount": 87,
-      "contactCount": 34,
-      "commentCount": 8,
+        "commentCount": 8,
       "reviewCount": 12,
       "averageRating": 4.6,
       "conversionRatePercent": 2.20,
@@ -3392,8 +3385,7 @@ cảnh báo sớm `[§1.2]` *"Nhận cảnh báo khi tin có nhiều bình luậ
         "rejectReason": null,
         "viewCount": 1544,
         "favoriteCount": 87,
-        "contactCount": 34,
-        "promoted": true,
+            "promoted": true,
         "publishedAt": "2026-07-10T02:30:00Z",
         "expiredAt": "2026-08-09T02:30:00Z",
         "daysRemaining": 23,
@@ -3444,8 +3436,6 @@ truyền `status=DELETED` tường minh.
 
 | Mục | Nội dung |
 |---|---|
-| Mã chức năng | `[§4.2]` + `[§1.2]` *"Theo dõi lượt xem, lượt lưu, lượt liên hệ"*; sitemap `/quan-ly/tong-quan` (canonical §12) — **[BỔ SUNG NGOÀI `[§12]`]** |
-| Quyền | `LISTING_CREATE` *(đại diện vai trò chủ trọ — cùng quy ước với `GET /api/listings/my` và `GET /api/landlord/contacts`)* |
 | Cache | Redis `landlord:dashboard:{userId}`, TTL 60 giây `[§11.11]` |
 
 **Vì sao không tái dùng `GET /api/admin/dashboard`:** endpoint đó yêu cầu `STATISTIC_VIEW` — theo
@@ -3522,7 +3512,6 @@ riêng biệt, không phải một endpoint dùng chung.
 | `activeCount` | `COUNT(listings WHERE user_id = me AND status = 'ACTIVE')` | Không tính tin `DELETED` |
 | `pendingCount` | `COUNT(... status = 'PENDING')` | Tin đang chờ Admin duyệt `[§5.1]` |
 | `viewCount30d` | `SUM(view_histories)` trong `days` ngày, **chỉ tin của mình** | Đã khử trùng theo `view.dedup_minutes` (30) `[§3.8]` |
-| `contactCount30d` | `SUM(contact_logs)` trong `days` ngày | Đã khử trùng theo `contact.dedup_minutes` (60) `[§3.10]` |
 | `deltas.activeCount` / `pendingCount` | Chỉ trả khi có nguồn lịch sử trạng thái đủ tin cậy | Không suy diễn từ trạng thái hiện tại; nếu chưa có snapshot/event lịch sử thì bỏ field |
 | `deltas.viewCountPercent` / `contactCountPercent` | Chênh lệch **phần trăm** so với kỳ liền trước cùng độ dài | `DECIMAL(5,2)` có dấu; kỳ trước = 0 → trả `null` (**không** trả `100` hay chia cho 0) |
 | `chart` | Chuỗi thời gian theo **ngày**, đủ `days` phần tử | Ngày không có dữ liệu → `views: 0, contacts: 0` (**không** bỏ trống — FE vẽ liền mạch) |
@@ -3825,184 +3814,13 @@ cho `UserPreferenceProfile` (canonical §10.2).
 
 ---
 
-### 4.6. Module Contact & Chat (9 endpoint)
+### 4.6. Module Chat (6 endpoint)
 
-Controller: `ContactController`, `ConversationController`. Tag Swagger: `06. Contact & Chat`.
-
----
-
-#### 4.6.1. `GET /api/listings/{id}/contact-info` — Hiển thị thông tin liên hệ
-
-| Mục | Nội dung |
-|---|---|
-| Mã chức năng | `[§2.6]` **CONT-01**; `[§3.10]` bước 1–4 |
-| Quyền | `CONTACT_CREATE` |
-| Rate limit | 60 / giờ / user |
-
-**Path param:** `id` (long, ✔).
-
-**Response 200**
-
-```json
-{
-  "success": true,
-  "message": "Lấy thông tin liên hệ thành công",
-  "data": {
-    "listingId": 1024,
-    "contactName": "Anh An",
-    "contactPhone": "0901234456",
-    "contactZalo": "0901234456",
-    "phoneMasked": false,
-    "chatEnabled": true,
-    "landlordId": 42,
-    "landlordName": "Nguyễn Văn An",
-    "landlordVerified": true,
-    "contactLogged": true,
-    "conversationId": null
-  },
-  "timestamp": "2026-07-17T10:00:00Z"
-}
-```
-
-**Mã lỗi:** `UNAUTHORIZED` / `CONTACT_INFO_LOGIN_REQUIRED`, `FORBIDDEN`, `LISTING_NOT_FOUND`,
-`LISTING_NOT_ACTIVE`, `CONTACT_FORBIDDEN_SELF`, `CONTACT_RESTRICTED_SPAM`, `RATE_LIMIT_EXCEEDED`.
-
-**Quy tắc `[§3.10]`:**
-1. **Khách chưa đăng nhập → `401 CONTACT_INFO_LOGIN_REQUIRED`** — `[§3.10]` Luồng phụ *"Khách chưa
-   đăng nhập được yêu cầu đăng nhập trước khi xem số đầy đủ"*. FE mở modal đăng nhập.
-   (Số **đã mask** vẫn hiển thị cho khách qua `GET /api/listings/{id}` — mục 4.4.4.)
-2. **Ghi nhận lượt liên hệ** (bước 3) — gọi endpoint này **là** một lượt liên hệ (CONT-05):
-   tự động tạo `ContactLog` với `type = VIEW_PHONE`, `contactLogged = true`.
-3. **Dedup** `[§3.10]` *"Không ghi quá nhiều lượt liên hệ trùng từ cùng người dùng trong thời gian
-   ngắn"*: Redis `contact:dedup:{listingId}:{userId}` TTL = `contact.dedup_minutes` (60 — canonical §9).
-   Trong cửa sổ → **không** tăng `contact_count`, `contactLogged = false`, vẫn trả số điện thoại.
-4. `chatEnabled = false` → FE ẩn nút chat, chỉ hiện SĐT `[§3.10]` *"Nếu chủ trọ tắt chat, hệ thống
-   chỉ hiển thị số điện thoại"*.
-5. **Hạn chế spam** `[§3.10]`: user có `reports` với `reason = SPAM`, `targetType = USER`,
-   `status = RESOLVED`, `result ∈ {MEDIUM_HIDE, SEVERE_LOCK}` → `403 CONTACT_RESTRICTED_SPAM`.
-6. Chủ tin tự xem → `422 CONTACT_FORBIDDEN_SELF`.
-7. Thông báo chủ trọ (bước 5): `NotificationType = NEW_CONTACT`, kênh `IN_APP` + `EMAIL` `[§5.6]`.
+Controller: `ConversationController`. Tag Swagger: `06. Chat`.
 
 ---
 
-#### 4.6.2. `POST /api/listings/{id}/contact` — Gửi yêu cầu liên hệ
-
-| Mục | Nội dung |
-|---|---|
-| Mã chức năng | `[§2.6]` **CONT-02**, **CONT-05**; `[§12.5]`; `[§3.10]` |
-| Quyền | `CONTACT_CREATE` |
-| Rate limit | 20 / giờ / user |
-
-**Request body** — `CreateContactRequest`
-
-| Field | Kiểu | Bắt buộc | Ràng buộc | Mô tả |
-|---|---|:--:|---|---|
-| `type` | enum | ✔ | `VIEW_PHONE` \| `SEND_FORM` \| `START_CHAT` | Hình thức liên hệ `[§3.10]` "hình thức liên hệ" |
-| `message` | string | điều kiện | Bắt buộc khi `type ∈ {SEND_FORM, START_CHAT}`; 10–1000 ký tự; sanitize; `@NoBannedKeyword` | Nội dung `[§3.10]` "nội dung nếu gửi form" |
-| `callbackPhone` | string | ✘ | `@ValidPhone` | SĐT để chủ trọ gọi lại |
-
-**Response 201** + `Location: /api/conversations/{id}` (khi `START_CHAT`) hoặc `/api/landlord/contacts`
-
-```json
-{
-  "success": true,
-  "message": "Đã gửi yêu cầu liên hệ. Chủ trọ sẽ phản hồi sớm nhất có thể.",
-  "data": {
-    "contactLogId": 9011,
-    "listingId": 1024,
-    "type": "START_CHAT",
-    "conversationId": 305,
-    "contactCount": 35,
-    "deduplicated": false,
-    "landlordNotified": true,
-    "createdAt": "2026-07-17T10:00:00Z"
-  },
-  "timestamp": "2026-07-17T10:00:00Z"
-}
-```
-
-**Mã lỗi:** `UNAUTHORIZED`, `FORBIDDEN`, `LISTING_NOT_FOUND`, `LISTING_NOT_ACTIVE`,
-`CONTACT_FORBIDDEN_SELF`, `CONTACT_RESTRICTED_SPAM`, `CHAT_DISABLED_BY_LANDLORD`,
-`BANNED_KEYWORD_DETECTED`, `DANGEROUS_HTML_DETECTED`, `VALIDATION_FAILED`, `RATE_LIMIT_EXCEEDED`.
-
-**Quy tắc `[§3.10]`:**
-1. Tin phải **public** (điều kiện sử dụng `[§3.10]` *"Tin Active, người dùng không bị khóa"*) →
-   ngoài `publicStatuses()` → `422 LISTING_NOT_ACTIVE`.
-2. `type = START_CHAT` và `landlord_profiles.chat_enabled = false` → `422 CHAT_DISABLED_BY_LANDLORD`.
-3. `type = START_CHAT` → **tạo hoặc lấy lại** `Conversation` giữa `(tenantId, landlordId, listingId)`
-   (unique) rồi gửi `message` đầu tiên (bước 4 *"tạo cuộc trò chuyện"*).
-4. Dedup `contact.dedup_minutes` (60) như 4.6.1 → `deduplicated = true`, không tăng `contact_count`.
-   Riêng `SEND_FORM`/`START_CHAT` **luôn** ghi `ContactLog` (mỗi tin nhắn là một tương tác thật)
-   nhưng chỉ tăng `contact_count` khi ngoài cửa sổ dedup.
-5. `ContactLog` **không phải điều kiện đánh giá** từ V23; quyền đánh giá lấy từ quan hệ thuê
-   `RENTED`/`CHECKED_OUT` trong `rental_requests`.
-6. Là input **`w = 5`** (cao nhất) cho `UserPreferenceProfile` (canonical §10.2).
-7. Thông báo chủ trọ `NotificationType = NEW_CONTACT` `[§5.6]`.
-
----
-
-#### 4.6.3. `GET /api/landlord/contacts` — Chủ trọ xem người liên hệ
-
-| Mục | Nội dung |
-|---|---|
-| Mã chức năng | `[§2.6]` **CONT-04**; `[§12.5]`; `[§7.3]` "Quản lý người liên hệ"; sitemap `/quan-ly/nguoi-lien-he` |
-| Quyền | `LISTING_CREATE` |
-
-**Query params**
-
-| Param | Kiểu | Bắt buộc | Mặc định | Ràng buộc |
-|---|---|:--:|---|---|
-| `listingId` | long | ✘ | — | Lọc theo tin; phải là tin của chính mình |
-| `type` | enum | ✘ | — | `VIEW_PHONE` \| `SEND_FORM` \| `START_CHAT` |
-| `from` / `to` | date | ✘ | `today-30d` / `today` | khoảng ≤ 180 ngày |
-| `page` / `size` | int | ✘ | `0` / `20` | `size ≤ 100` |
-| `sort` | string | ✘ | `createdAt,desc` | ∈ {`createdAt`} |
-
-**Response 200**
-
-```json
-{
-  "success": true,
-  "message": "Lấy danh sách người liên hệ thành công",
-  "data": {
-    "items": [
-      {
-        "contactLogId": 9011,
-        "listingId": 1024,
-        "listingTitle": "Phòng trọ mới xây, có gác lửng, Q. Bình Thạnh",
-        "type": "START_CHAT",
-        "typeLabel": "Nhắn tin",
-        "message": "Chào anh, phòng còn trống không ạ? Em muốn xem phòng cuối tuần này.",
-        "callbackPhone": "0912345678",
-        "conversationId": 305,
-        "tenant": {
-          "id": 88,
-          "fullName": "Trần Thị Bình",
-          "avatarUrl": "https://cdn.webtro.vn/avatars/d4e5f6a7.webp",
-          "phone": "0912345678",
-          "memberSince": "2026-03-02T06:00:00Z"
-        },
-        "createdAt": "2026-07-17T10:00:00Z"
-      }
-    ],
-    "page": 0, "size": 20, "totalElements": 34, "totalPages": 2, "first": true, "last": false,
-    "summary": { "totalContacts": 34, "viewPhone": 21, "sendForm": 6, "startChat": 7 }
-  },
-  "timestamp": "2026-07-17T10:00:00Z"
-}
-```
-
-**Mã lỗi:** `UNAUTHORIZED`, `FORBIDDEN`, `LISTING_NOT_FOUND`, `LISTING_FORBIDDEN`,
-`INVALID_SORT_FIELD`, `VALIDATION_FAILED`.
-
-**Quy tắc `[§3.10]`:** *"Chủ trọ có thể xem danh sách người đã liên hệ tin của mình"* → chỉ trả
-`ContactLog` của tin thuộc `owner_id = currentUserId`. `tenant.phone` hiển thị **đầy đủ** ở đây —
-chủ trọ cần gọi lại, và người thuê đã chủ động liên hệ nên đây là chia sẻ có chủ đích (không vi
-phạm `[§11.1]`). Truyền `listingId` của người khác → `403 LISTING_FORBIDDEN`.
-
----
-
-#### 4.6.4. `GET /api/conversations` — Danh sách cuộc trò chuyện
+#### 4.6.1. `GET /api/conversations` — Danh sách cuộc trò chuyện
 
 | Mục | Nội dung |
 |---|---|
@@ -4067,7 +3885,7 @@ FE poll `unread-count` mỗi 30 giây thay vì WebSocket.
 
 ---
 
-#### 4.6.5. `POST /api/conversations` — Tạo cuộc trò chuyện
+#### 4.6.2. `POST /api/conversations` — Tạo cuộc trò chuyện
 
 | Mục | Nội dung |
 |---|---|
@@ -4109,11 +3927,10 @@ FE poll `unread-count` mỗi 30 giây thay vì WebSocket.
 
 **Quy tắc:** `uk_conversations_tenant_landlord_listing (tenant_id, landlord_id, listing_id)` —
 gọi lại với cùng bộ ba → trả **200** hội thoại cũ với `alreadyExisted = true` (không 409, vì đây là
-hành vi mong muốn của FE). Đồng thời ghi `ContactLog` `type = START_CHAT` (CONT-05).
 
 ---
 
-#### 4.6.6. `GET /api/conversations/{id}` — Chi tiết cuộc trò chuyện
+#### 4.6.3. `GET /api/conversations/{id}` — Chi tiết cuộc trò chuyện
 
 | Mục | Nội dung |
 |---|---|
@@ -4126,7 +3943,7 @@ hành vi mong muốn của FE). Đồng thời ghi `ContactLog` `type = START_CH
 
 ---
 
-#### 4.6.7. `GET /api/conversations/{id}/messages` — Xem tin nhắn
+#### 4.6.4. `GET /api/conversations/{id}/messages` — Xem tin nhắn
 
 | Mục | Nội dung |
 |---|---|
@@ -4167,7 +3984,7 @@ hành vi mong muốn của FE). Đồng thời ghi `ContactLog` `type = START_CH
 
 ---
 
-#### 4.6.8. `POST /api/conversations/{id}/messages` — Gửi tin nhắn
+#### 4.6.5. `POST /api/conversations/{id}/messages` — Gửi tin nhắn
 
 | Mục | Nội dung |
 |---|---|
@@ -4205,7 +4022,7 @@ Tin nhắn xóa mềm (canonical §6.1) — dùng cho xử lý report `[§2.8]` 
 
 ---
 
-#### 4.6.9. `POST /api/conversations/{id}/read` — Đánh dấu đã đọc
+#### 4.6.6. `POST /api/conversations/{id}/read` — Đánh dấu đã đọc
 
 | Mục | Nội dung |
 |---|---|
@@ -4656,7 +4473,7 @@ giả và `REVIEW_MODERATE`. **Đánh giá tiêu cực vẫn hiển thị** nế
 1. **Một người dùng chỉ đánh giá một tin một lần** `[§3.12]` → `uk_reviews_user_listing (user_id, listing_id)`
    → trùng → `409 REVIEW_ALREADY_EXISTS` (bước 3 *"Kiểm tra chưa đánh giá trước đó"*).
 2. **Yêu cầu quan hệ thuê đã xác thực**: phải tồn tại `rental_requests(tenant_id, listing_id)` ở trạng thái
-   `RENTED` hoặc `CHECKED_OUT`. Chỉ liên hệ, bình luận hoặc lưu tin không cấp quyền đánh giá.
+   `RENTED` hoặc `CHECKED_OUT`. Chỉ nhắn tin, bình luận hoặc lưu tin không cấp quyền đánh giá.
    → không có → `422 REVIEW_RENTAL_REQUIRED`. Không có cấu hình bỏ qua điều kiện này.
 3. **Nội dung bắt buộc khi `rating <= 2`** `[§3.12]` *"Nội dung đánh giá có thể bắt buộc nếu rating <= 2"*
    → thiếu → `400 REVIEW_CONTENT_REQUIRED`.
@@ -5434,8 +5251,6 @@ NOTI-01→06 và `[§11.12]` bắt buộc phải có, và canonical §12 có rou
       },
       {
         "id": 88175,
-        "type": "NEW_CONTACT",
-        "typeLabel": "Có người liên hệ",
         "title": "Trần Thị Bình đã liên hệ tin của bạn",
         "content": "Chào anh, phòng còn trống không ạ? Em muốn xem phòng cuối tuần này.",
         "iconType": "INFO",
@@ -5569,7 +5384,6 @@ NOTI-01→06 và `[§11.12]` bắt buộc phải có, và canonical §12 có rou
         "inApp": true, "email": true, "optional": false },
       { "type": "LISTING_EXPIRING", "typeLabel": "Tin sắp hết hạn",
         "inApp": true, "email": true, "optional": true },
-      { "type": "NEW_CONTACT", "typeLabel": "Có người liên hệ",
         "inApp": true, "email": true, "optional": true },
       { "type": "NEW_COMMENT", "typeLabel": "Có bình luận mới",
         "inApp": true, "email": false, "optional": true },
@@ -9238,8 +9052,6 @@ Tag Swagger: `20. Admin - System`.
       {
         "group": "INTERACTION", "label": "Tương tác",
         "configs": [
-          { "key": "contact.dedup_minutes", "value": 60, "type": "INT", "defaultValue": 60,
-            "min": 0, "max": 1440, "label": "Cửa sổ chống trùng lượt liên hệ (phút)", "source": "[§3.10]" },
           { "key": "view.dedup_minutes", "value": 30, "type": "INT", "defaultValue": 30,
             "min": 0, "max": 1440, "label": "Cửa sổ chống trùng lượt xem (phút)", "source": "[§3.8]" },
           { "key": "comment.edit_window_minutes", "value": 30, "type": "INT", "defaultValue": 30,
@@ -9804,7 +9616,6 @@ Dùng nhúng ở: tác giả bình luận, tác giả đánh giá, `partner` tro
 | `fullName` | string | luôn |
 | `avatarUrl` | string | luôn |
 | `isLandlordOfListing` | boolean | chỉ trong ngữ cảnh bình luận của một tin |
-| **`phone`** | string | **CHỈ** trong `GET /api/landlord/contacts` (chủ trọ cần gọi lại — mục 4.6.3) |
 | **`email`** | string | **CHỈ** `USER_MANAGE` / `REPORT_RESOLVE` |
 | **`accountAgeDays`** | int | **CHỈ** `COMMENT_MODERATE` / `REVIEW_MODERATE` / `REPORT_RESOLVE` |
 | **`memberSince`** | Instant | luôn (công khai, không nhạy cảm) |
@@ -10522,7 +10333,6 @@ hoặc Mixed nếu hệ thống hỗ trợ"* → hệ thống **hỗ trợ** `MI
    finalScore = score × promotedBoost          // promotedBoost ≤ ai.recommendation.promoted_boost = 1.15
    ```
 2. **`UserPreferenceProfile`** dựng từ (canonical §10.2):
-   `ViewHistory` (**w=1**) + `SearchHistory` (**w=2**) + `Favorite` (**w=3**) + `ContactLog` (**w=5**)
    → suy ra khu vực ưu tiên, khoảng giá ưu tiên (**percentile 10–90**), loại tin ưu tiên, tiện ích quan tâm.
    Đúng danh sách input `[§9.2]` "Dữ liệu đầu vào".
 3. **Loại trừ bắt buộc** `[§9.2]`, canonical §10.2:
@@ -10605,7 +10415,7 @@ hoặc Mixed nếu hệ thống hỗ trợ"* → hệ thống **hỗ trợ** `MI
       { "label": "Giờ giấc tự do", "action": "REFINE", "value": "{\"curfewType\": \"FREE\"}" },
       { "label": "Tìm khu vực khác", "action": "RESET_SLOT", "value": "districtId" }
     ],
-    "disclaimer": "Thông tin lấy trực tiếp từ tin đăng. Bạn vui lòng liên hệ chủ trọ để xác nhận phòng còn trống.",
+    "disclaimer": "Thông tin lấy trực tiếp từ tin đăng. Bạn vui lòng xem số điện thoại hoặc nhắn tin cho chủ trọ để xác nhận phòng còn trống.",
     "createdAt": "2026-07-17T10:00:00Z"
   },
   "timestamp": "2026-07-17T10:00:00Z"
@@ -11005,7 +10815,6 @@ TTL 24 giờ; đăng nhập → `chatbot_conversations` (canonical §6). `title`
       "deviationFlagged": true,
       "thresholdRatio": 0.35,
       "verdict": "MUCH_HIGHER",
-      "verdictMessage": "Giá bạn nhập cao hơn 42% so với giá đề xuất. Bạn vẫn có thể đăng tin với giá này, nhưng tin có thể ít người liên hệ hơn và sẽ được kiểm duyệt viên xem qua.",
       "blocksPosting": false
     },
     "disclaimer": "Giá đề xuất chỉ mang tính tham khảo dựa trên các tin đăng tương đương, không phải định giá chính thức. Bạn hoàn toàn có thể đặt giá khác.",
@@ -11499,7 +11308,6 @@ sequenceDiagram
         else Cache miss
             API->>RE: recommend(userId, source, size) [§8.5]
             RE->>DB: Lấy lịch sử xem, tìm kiếm, lưu tin, liên hệ [§8.5]
-            DB-->>RE: ViewHistory (w=1), SearchHistory (w=2),<br/>Favorite (w=3), ContactLog (w=5)
 
             alt Không đủ hành vi (khách / user mới)
                 Note over RE: COLD START [§9.2]
@@ -11816,7 +11624,6 @@ public class OpenApiConfig {
 | `03. Catalog` | Danh mục, khu vực, tiện ích, cấu hình công khai | `/api/categories`, `/api/provinces`, `/api/system-configs/public`, … |
 | `04. Listing` | Tin đăng, tìm kiếm, ảnh, thống kê, tổng quan chủ trọ | `/api/listings/**`, `/api/search/**`, `/api/landlord/dashboard` |
 | `05. Favorite & History` | Lưu tin, lịch sử xem/tìm kiếm | `/api/favorites/**`, `/api/history/**` |
-| `06. Contact & Chat` | Liên hệ, hội thoại, tin nhắn | `/api/listings/{id}/contact`, `/api/conversations/**` |
 | `07. Comment & Review` | Bình luận, đánh giá | `/api/comments/**`, `/api/reviews/**` |
 | `08. Report` | Báo cáo vi phạm | `/api/reports/**` |
 | `09. Payment & Promotion` | Gói dịch vụ, thanh toán, coupon | `/api/payments/**`, `/api/promotion-packages/**` |
@@ -12006,7 +11813,6 @@ frontend_webtro/src/
 │   ├── searchApi.js            # → mục 4.4.1–4.4.3 — /api/listings (search), /api/search/**
 │   ├── favoriteApi.js          # → mục 4.5.1–4.5.3 — /api/favorites/**
 │   ├── historyApi.js           # → mục 4.5.4–4.5.8 — /api/history/views, /api/search/histories
-│   ├── contactApi.js           # → mục 4.6.1–4.6.3 — /api/listings/{id}/contact, /api/landlord/contacts
 │   ├── conversationApi.js      # → mục 4.6.4–4.6.9 — /api/conversations/**
 │   ├── commentApi.js           # → mục 4.7.1–4.7.5 — /api/listings/{id}/comments, /api/comments/**
 │   ├── reviewApi.js            # → mục 4.7.6–4.7.12 — /api/listings/{id}/reviews, /api/reviews/**
@@ -12353,7 +12159,6 @@ export function handleApiError(error, { onValidation } = {}) {
 | `listingApi.js` | `/tin/:slug-:id`, `/quan-ly/tong-quan`, `/quan-ly/tin-dang`, `/quan-ly/tin-dang/tao`, `/quan-ly/tin-dang/:id/sua`, `/quan-ly/tin-dang/:id/thong-ke` | 4.4 | `LISTING_CREATE`, `LISTING_UPDATE_OWN` |
 | `favoriteApi.js` | `/tai-khoan/tin-da-luu` | 4.5.1–4.5.3 | `FAVORITE_MANAGE` |
 | `historyApi.js` | `/tai-khoan/lich-su-xem` | 4.5.4–4.5.8 | AU |
-| `contactApi.js` | `/tin/:slug-:id`, `/quan-ly/nguoi-lien-he` | 4.6.1–4.6.3 | `CONTACT_CREATE`, `LISTING_CREATE` |
 | `conversationApi.js` | `/tai-khoan/tin-nhan`, `/quan-ly/tin-nhan` | 4.6.4–4.6.9 | `CONTACT_CREATE` |
 | `commentApi.js` | `/tin/:slug-:id` | 4.7.1–4.7.5 | `COMMENT_CREATE` |
 | `reviewApi.js` | `/tin/:slug-:id`, `/tai-khoan/danh-gia-cua-toi` | 4.7.6–4.7.12 | `REVIEW_CREATE` |
@@ -12444,7 +12249,6 @@ canonical §5.
 | 4 | `BannedKeywordScope` | `LISTING_TITLE`, `LISTING_DESCRIPTION`, `LISTING_ADDRESS`, `COMMENT`, `REVIEW`, `MESSAGE`, `PROFILE` | Cùng từ cấm áp dụng khác nhau ở từng nơi — `[§11.10]` | 4.20.4 |
 | 5 | `CouponDiscountType` | `FIXED_AMOUNT`, `PERCENTAGE` | Entity `Coupon` (canonical §6) — `[§10.6]` *"Cấu hình khuyến mãi nếu cần"* | 4.9.9, 4.18.9 |
 | 6 | `PackagePurpose` | `PROMOTE`, `RENEW` | `[§3.5]` *"gói gia hạn nếu có"* vs `[§3.14]` gói đẩy tin — hai mục đích trên cùng bảng `promotion_packages` | 4.9.1, 4.18.2 |
-| 7 | `ContactType` | `VIEW_PHONE`, `SEND_FORM`, `START_CHAT` | `[§3.10]` *"hình thức liên hệ"*; entity `ContactLog` (canonical §6) | 4.6.1, 4.6.2 |
 | 8 | `CloseReason` | `RENTED_OUT`, `NO_LONGER_AVAILABLE` | `[§3.6]` *"Đã cho thuê hoặc không còn nhu cầu"*; cần cho thống kê `[§3.6]` *"tỷ lệ thành công"* | 4.4.13, 4.12.2 |
 | 9 | `RejectReasonCode` | `FAKE_IMAGE`, `WRONG_INFO`, `BANNED_CONTENT`, `DUPLICATE`, `INSUFFICIENT_INFO`, `PRICE_SUSPICIOUS`, `OTHER` | Thống kê lý do từ chối `[§10.4]`; `reason` text vẫn bắt buộc | 4.14.4 |
 | 10 | `AdministrativeUnitType` | Province: `TINH`, `THANH_PHO_TRUNG_UONG` · District: `QUAN`, `HUYEN`, `THI_XA`, `THANH_PHO_THUOC_TINH` · Ward: `PHUONG`, `XA`, `THI_TRAN` | `[§10.5]` *"Quản lý tỉnh/thành, quận/huyện, phường/xã"*; entity `Province`/`District`/`Ward` (canonical §6) | 4.3.2–4.3.4, 4.17.5 |
@@ -12510,7 +12314,6 @@ Kể cả các nhóm endpoint bổ sung ở lần rà soát này đều **tái d
 
 | Nhóm | Permission tái dùng | Ghi chú |
 |---|---|---|
-| `GET /api/landlord/dashboard` (4.4.23) | `LISTING_CREATE` | Cùng quy ước "đại diện vai trò chủ trọ" với `/api/listings/my`, `/api/landlord/contacts` |
 | `GET /api/system-configs/public` (4.3.6) | *(anonymous)* | Không cần permission — whitelist 7 key vô hại |
 | `GET /api/admin/moderation/queue` (4.14.12) | `LISTING_MODERATE` | |
 | `PUT /api/admin/listings/bulk` (4.14.13) | `LISTING_MODERATE` + `LISTING_LOCK` khi `LOCK` | Bulk **không** nới quyền — ADR-10 |
@@ -12560,7 +12363,6 @@ Kể cả các nhóm endpoint bổ sung ở lần rà soát này đều **tái d
 | `[§2.3]` Listing | LIST-01 → LIST-12 | ✔ 12/12 |
 | `[§2.4]` Search & Discovery | SRCH-01 → SRCH-09 | ✔ 9/9 |
 | `[§2.5]` Favorite, History & Follow | FAV-01→03, HIST-01→02, FOLLOW-01→02 | ✔ 7/7 |
-| `[§2.6]` Contact & Conversation | CONT-01 → CONT-05 | ✔ 5/5 |
 | `[§2.7]` Comment & Review | CMT-01→04, REV-01→03 | ✔ 7/7 |
 | `[§2.8]` Report & Moderation | RPT-01 → RPT-06 | ✔ 6/6 |
 | `[§2.9]` Payment & Promotion | PAY-01→06, PROMO-01→02 | ✔ 8/8 |
@@ -12568,11 +12370,3 @@ Kể cả các nhóm endpoint bổ sung ở lần rà soát này đều **tái d
 | `[§2.11]` AI | AI-01 → AI-08 | ✔ 8/8 |
 | `[§2.12]` Admin | ADM-01 → ADM-14 | ✔ 14/14 |
 | **Tổng** | | **✔ 96/96** |
-
-
-
-
-
-
-
-

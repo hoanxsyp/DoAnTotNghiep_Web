@@ -40,8 +40,13 @@ const mapToInitialData = (d) => ({
     contactName: d.contactName ?? '',
     contactPhone: d.contactPhone ?? '',
   },
-  images: (d.images || []).map((img) => ({ id: img.id, url: img.mediumUrl || img.url || img.originalUrl, name: img.id, isPrimary: img.isPrimary })),
-  primaryImageId: (d.images || []).find((img) => img.isPrimary)?.id ?? null,
+  images: (d.images || []).map((img) => ({
+    id: img.id,
+    url: img.mediumUrl || img.url || img.originalUrl,
+    name: img.id,
+    isPrimary: img.primary ?? img.isPrimary ?? false,
+  })),
+  primaryImageId: (d.images || []).find((img) => (img.primary ?? img.isPrimary))?.id ?? null,
   rentalUnit: d.rentalUnit || null,
 });
 

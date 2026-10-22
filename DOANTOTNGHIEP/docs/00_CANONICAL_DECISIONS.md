@@ -247,7 +247,7 @@ Từ cập nhật 2026-08-09, hệ thống **không dùng bảng `permissions` v
 
 | Role | Được phép chính |
 |---|---|
-| `ROLE_TENANT` | Xem/lưu/liên hệ/bình luận/đánh giá/báo cáo; tạo và quản lý tin của mình nhưng **chỉ** loại `ROOMMATE` (tìm người ở ghép). |
+| `ROLE_TENANT` | Xem/lưu/nhắn tin/bình luận/đánh giá/báo cáo; tạo và quản lý tin của mình nhưng **chỉ** loại `ROOMMATE` (tìm người ở ghép). |
 | `ROLE_LANDLORD` | Toàn bộ quyền người dùng cuối; tạo/quản lý mọi loại tin; thanh toán/gói đẩy tin; hồ sơ chủ trọ. |
 | `ROLE_MODERATOR` | Kiểm duyệt tin, bình luận, đánh giá, báo cáo, cảnh báo; không quản lý tài chính/cấu hình/người dùng. |
 | `ROLE_ADMIN` | Toàn quyền quản trị hệ thống. |
@@ -325,7 +325,6 @@ PaymentMethod     : SANDBOX, VNPAY, MOMO, BANK_TRANSFER                        [
 SubscriptionStatus: PENDING, ACTIVE, EXPIRED, CANCELLED
 NotificationType  : ACCOUNT_REGISTERED, LISTING_APPROVED, LISTING_REJECTED,
                     LISTING_EXPIRING, LISTING_EXPIRED, LISTING_LOCKED,
-                    NEW_CONTACT, NEW_COMMENT, NEW_REVIEW, PAYMENT_SUCCESS,
                     PAYMENT_FAILED, REPORT_THRESHOLD, AI_NEGATIVE_ALERT,
                     ACCOUNT_LOCKED, VIOLATION_WARNING, FOLLOWED_LANDLORD_NEW_LISTING,
                     NEW_MATCHING_LISTING                                       [§5.6][§9.2]
@@ -348,7 +347,6 @@ AuditActorType    : USER, SYSTEM                                               [
 
 ```java
 AmenityGroup      : FURNITURE, SECURITY, UTILITY, TRANSPORT                    [§10.5]
-ContactType       : VIEW_PHONE, FORM, CHAT                                     [§3.10]
 ConversationStatus: ACTIVE, ARCHIVED, BLOCKED                                  [§3.10]
 BannedKeywordSeverity : MILD, SEVERE                                           [§5.3]
 BannedKeywordScope    : LISTING, COMMENT, BOTH                                 [§3.3][§3.11]
@@ -362,7 +360,6 @@ AutoHideReason    : REPORT_THRESHOLD, SENTIMENT_NEGATIVE, BANNED_KEYWORD       [
 
 Lý do từng cái (ngắn gọn):
 - `AmenityGroup` — `[§10.5]` yêu cầu đúng 4 nhóm tiện ích: nội thất, an ninh, sinh hoạt, giao thông.
-- `ContactType` — `[§3.10]` liệt kê "hình thức liên hệ" là dữ liệu vào.
 - `ConversationStatus` — `[§3.10]` *"Người dùng bị report spam có thể bị hạn chế liên hệ"*.
 - `BannedKeywordSeverity` — `[§5.3]` nói riêng *"từ khóa cấm **nghiêm trọng**"*, khác từ khóa thường.
 - `BannedKeywordScope` — `[§3.3]` (tin) và `[§3.11]` (bình luận) xử lý từ khóa cấm khác nhau.
@@ -477,7 +474,6 @@ Danh sách đầy đủ theo module:
 
 **listing (3)** — `listings`, `listing_images`, `listing_amenities`
 
-**interaction (8)** — `favorites`, `view_histories`, `search_histories`, `contact_logs`,
 `conversations`, `messages`, `comments`, `reviews`
 
 **moderation (4)** — `reports`, `moderation_actions`, `violation_warnings`, `banned_keywords`
@@ -703,7 +699,6 @@ Phân trang (`data` chứa):
 | `ai.price.deviation_flag_ratio` | 0.35 | `[§3.3][§9.4]` |
 | `ai.chatbot.enabled` | `true` | `[§10.10]` |
 | `ai.chatbot.max_clarify_turns` | 3 | `[§9.3]` |
-| `contact.dedup_minutes` | 60 | `[§3.10]` |
 | `view.dedup_minutes` | 30 | `[§3.8]` |
 | `comment.edit_window_minutes` | 30 | `[§3.11]` |
 | `review.edit_window_hours` | 24 | `[§3.12]` |
@@ -839,7 +834,6 @@ Xử lý ngoại lệ **bắt buộc** `[§9.1]`:
 
 `RecommendationEngine` → `ContentBasedRecommendationEngine`. Rule-based có trọng số `[§13.2]`.
 Xây `UserPreferenceProfile` từ `ViewHistory` (w=1) + `SearchHistory` (w=2) + `Favorite` (w=3)
-+ `ContactLog` (w=5).
 
 **`UserPreferenceProfile` phải có đủ 7 chiều** — phủ 1-1 với 11 mục "Dữ liệu đầu vào" `[§9.2]`:
 
@@ -851,7 +845,7 @@ Xây `UserPreferenceProfile` từ `ViewHistory` (w=1) + `SearchHistory` (w=2) + 
 | `preferredAreaRange` | percentile 10–90 diện tích đã xem | **"Diện tích quan tâm"** |
 | `preferredOccupants` | mode(số người ở) + `user_profiles.preferred_occupants` | **"Số người ở"** |
 | `preferredGenderRequirement` | `user_profiles.preferred_gender_requirement` | **"Giới tính nếu là ở ghép"** |
-| `preferredAmenities` | tiện ích của tin đã lưu/liên hệ | "Tiện ích quan tâm" |
+| `preferredAmenities` | tiện ích của tin đã lưu | "Tiện ích quan tâm" |
 
 > 3 chiều in đậm là thứ **v1 bỏ sót**. Hai mục còn lại của `[§9.2]` ("Lịch sử xem", "Lịch sử tìm
 > kiếm") là *nguồn* chứ không phải chiều; mục "Tin đang Active" là *tập ứng viên*.
@@ -969,7 +963,6 @@ Bước 6: `|giá nhập − giá đề xuất| / giá đề xuất > 0.35` → 
 `thong-bao`, `bao-cao-cua-toi`, `danh-gia-cua-toi`, `dang-theo-doi`, `doi-mat-khau`.
 
 **Landlord** (`/quan-ly/*`): `tong-quan`, `tin-dang`, `tin-dang/tao`, `tin-dang/:id/sua`,
-`tin-dang/:id/thong-ke`, `nguoi-lien-he`, `tin-nhan`, `goi-dich-vu`, `thanh-toan`, `ho-so-chu-tro`.
 
 **Admin/Moderator** (`/admin/*`): dùng chung layout nhưng route con lọc theo role. Admin có `dashboard`, `nguoi-dung`, `danh-muc`, `khu-vuc`, `tien-ich`, `goi-dich-vu`, `thanh-toan`, `ai/cau-hinh`, `thong-ke`, `cau-hinh`, `audit-log`; Moderator có `chu-tro`, `tin-dang`, `kiem-duyet`, `bao-cao`, `binh-luan`, `danh-gia`, `ai/log`. Admin cũng truy cập được toàn bộ route của Moderator.
 
@@ -1039,7 +1032,6 @@ Một phần được coi là xong khi:
 | **Kiến trúc** | Luật phụ thuộc 7 (ApplicationEvent) và 8 (không `@ManyToOne` chéo module) | 3 |
 | | Package `statemachine/`, `engine/`, `gateway/`, `specification/`, `listener/`, `common/event/`, `storage/` | 3 |
 | | Luật phân lớp frontend F1–F6 | 12 |
-| **Enum** | +11 enum (`AmenityGroup`, `ContactType`, `AutoHideReason`…) + `NEW_MATCHING_LISTING` | 5 |
 | **Config** | 57 → **85** key (+10 rate limit, +6 AI timeout, +5 response rate, +5 notify, +2 khác) | 9 |
 | **Vận hành** | Luật viết job (idempotent, zone UTC, không nuốt lỗi) | 11 |
 | | RPO ≤ 24h / RTO ≤ 2h | 13 |

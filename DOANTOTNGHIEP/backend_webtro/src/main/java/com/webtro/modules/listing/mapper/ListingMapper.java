@@ -31,7 +31,6 @@ import com.webtro.modules.user.entity.LandlordProfile;
 import com.webtro.modules.user.entity.User;
 import com.webtro.modules.user.repository.LandlordProfileRepository;
 import com.webtro.modules.user.repository.UserRepository;
-import com.webtro.util.MaskUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -100,7 +99,6 @@ public class ListingMapper {
                     .rejectReason(l.getRejectReason())
                     .viewCount(l.getViewCount())
                     .favoriteCount(l.getFavoriteCount())
-                    .contactCount(l.getContactCount())
                     .publishedAt(l.getPublishedAt())
                     .expiredAt(l.getExpiredAt())
                     .daysRemaining(daysRemaining)
@@ -117,7 +115,7 @@ public class ListingMapper {
     /**
      * Ánh xạ tin sang chi tiết đầy đủ.
      *
-     * @param viewerAuthenticated người xem đã đăng nhập chưa (quyết định che SĐT + tọa độ)
+     * @param viewerAuthenticated người xem đã đăng nhập chưa (quyết định hiển thị tọa độ)
      * @param privileged          người xem là chủ tin hoặc admin (được xem cả thông tin nhạy cảm)
      */
     public ListingDetailResponse toDetail(Listing l, boolean viewerAuthenticated, boolean privileged) {
@@ -169,8 +167,7 @@ public class ListingMapper {
                 .amenities(amenitiesOf(l.getId()))
                 .landlord(landlordOf(l.getOwnerId()))
                 .contactName(contactName(l))
-                .contactPhone(revealSensitive ? contactPhone(l) : MaskUtil.maskPhone(contactPhone(l)))
-                .phoneMasked(!revealSensitive)
+                .contactPhone(contactPhone(l))
                 .status(l.getStatus().name())
                 .statusLabel(l.getStatus().getLabel())
                 .averageRating(l.getAverageRating())
@@ -178,7 +175,6 @@ public class ListingMapper {
                 .commentCount(l.getCommentCount())
                 .viewCount(l.getViewCount())
                 .favoriteCount(l.getFavoriteCount())
-                .contactCount(l.getContactCount())
                 .favoritedByMe(false)
                 .reviewedByMe(false)
                 .canReview(false)

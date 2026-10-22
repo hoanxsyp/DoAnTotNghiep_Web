@@ -328,7 +328,7 @@ class ReviewServiceImplTest {
         return new ListingGateway.ListingBrief(
                 id, LANDLORD_ID, title, "phong-thu-nghiem", null,
                 BigDecimal.valueOf(3_000_000), BigDecimal.valueOf(25), "Hà Nội",
-                ListingStatus.CLOSED, false, new BigDecimal("4.50"), 2, 0, UNIT_ID, Instant.now());
+                ListingStatus.CLOSED, false, new BigDecimal("4.50"), 2, UNIT_ID, Instant.now());
     }
 
     private UserGateway.UserBrief userBrief() {

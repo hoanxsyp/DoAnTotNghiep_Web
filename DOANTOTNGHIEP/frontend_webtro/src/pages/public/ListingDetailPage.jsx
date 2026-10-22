@@ -6,7 +6,6 @@ import {
   Link, IconButton, Alert, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
   Menu, MenuItem, ListItemIcon, Rating, LinearProgress, Tooltip,
 } from '@mui/material';
-import PhoneIcon from '@mui/icons-material/Phone';
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
@@ -22,7 +21,7 @@ import listingApi from '@/api/listingApi';
 import commentApi from '@/api/commentApi';
 import reviewApi from '@/api/reviewApi';
 import favoriteApi from '@/api/favoriteApi';
-import contactApi from '@/api/contactApi';
+import conversationApi from '@/api/conversationApi';
 import reportApi from '@/api/reportApi';
 import CommentThread from '@/components/interaction/CommentThread';
 import RatingStars from '@/components/interaction/RatingStars';
@@ -98,7 +97,6 @@ const ListingDetailPage = () => {
 
   const [galleryIndex, setGalleryIndex] = useState(0);
   const [favorited, setFavorited] = useState(false);
-  const [revealedPhone, setRevealedPhone] = useState(null);
 
   const [comments, setComments] = useState([]);
   const [commentsLoading, setCommentsLoading] = useState(true);
@@ -223,19 +221,6 @@ const ListingDetailPage = () => {
     }
   };
 
-  const handleRevealPhone = async () => {
-    if (!isAuthenticated) {
-      requireLogin('Đăng nhập để xem số điện thoại của chủ trọ.');
-      return;
-    }
-    try {
-      const data = await contactApi.contactListing(id, { type: 'VIEW_PHONE' });
-      setRevealedPhone(data?.phone || data?.contactPhone || null);
-    } catch (err) {
-      notify.apiError(err);
-    }
-  };
-
   const handleMessage = () => {
     if (!isAuthenticated) {
       requireLogin('Đăng nhập để nhắn tin cho chủ trọ.');
@@ -250,7 +235,7 @@ const ListingDetailPage = () => {
   const submitFirstMessage = async () => {
     setChatSubmitting(true);
     try {
-      const data = await contactApi.createConversation({
+      const data = await conversationApi.createConversation({
         listingId: Number(id),
         initialMessage: chatMessage.trim(),
       });
@@ -483,8 +468,6 @@ const ListingDetailPage = () => {
   const dist = reviews.summary?.distribution || {};
   const totalReviews = reviews.summary?.totalReviews ?? reviews.items.length;
   const avgRating = reviews.summary?.averageRating ?? 0;
-
-  const phoneToShow = revealedPhone || contactPhone;
 
   return (
     <Container maxWidth="lg" sx={{ py: { xs: 2, md: 3 } }}>
@@ -861,18 +844,10 @@ const ListingDetailPage = () => {
                     Thuê phòng
                   </Button>
                 )}
-                {phoneToShow && (
-                  <Button
-                    variant="contained"
-                    color={revealedPhone ? 'success' : 'primary'}
-                    startIcon={<PhoneIcon />}
-                    fullWidth
-                    component={revealedPhone ? 'a' : 'button'}
-                    href={revealedPhone ? `tel:${revealedPhone}` : undefined}
-                    onClick={revealedPhone ? undefined : handleRevealPhone}
-                  >
-                    {revealedPhone ? phoneToShow : `${phoneToShow}  ·  Hiện số`}
-                  </Button>
+                {contactPhone && (
+                  <Typography variant="body1" align="center" sx={{ py: 1, fontWeight: 700 }}>
+                    {contactPhone}
+                  </Typography>
                 )}
                 <Button variant="outlined" startIcon={<ChatBubbleOutlineIcon />} fullWidth onClick={handleMessage}>
                   Nhắn tin cho chủ trọ

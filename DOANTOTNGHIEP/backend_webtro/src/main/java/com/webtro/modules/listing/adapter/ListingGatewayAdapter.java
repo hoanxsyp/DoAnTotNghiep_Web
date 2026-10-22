@@ -16,7 +16,6 @@ import com.webtro.modules.listing.repository.ListingRepository;
 import com.webtro.modules.listing.repository.RentalUnitRepository;
 import com.webtro.modules.listing.service.ListingCategoryCountPublisher;
 import com.webtro.modules.listing.service.ListingOwnerStatsPublisher;
-import com.webtro.modules.listing.service.ListingService;
 import com.webtro.modules.listing.service.ListingVisibilityService;
 import com.webtro.modules.listing.statemachine.ListingEvent;
 import com.webtro.modules.listing.statemachine.ListingStateMachine;
@@ -41,7 +40,7 @@ import java.util.Set;
 /**
  * Adapter hiện thực {@link ListingGateway} (SPI do module {@code interaction} sở hữu) — canonical
  * luật 4. Bọc {@code ListingRepository} + {@code ListingImageRepository} +
- * {@link ListingVisibilityService}, ủy quyền bộ đếm liên hệ cho {@link ListingService}.
+ * {@link ListingVisibilityService}.
  */
 @Component
 @RequiredArgsConstructor
@@ -51,7 +50,6 @@ public class ListingGatewayAdapter implements ListingGateway {
     private final ListingImageRepository imageRepository;
     private final WardRepository wardRepository;
     private final ListingVisibilityService visibilityService;
-    private final ListingService listingService;
     private final ListingStateMachine stateMachine;
     private final ListingCategoryCountPublisher categoryCountPublisher;
     private final ListingOwnerStatsPublisher ownerStatsPublisher;
@@ -107,12 +105,6 @@ public class ListingGatewayAdapter implements ListingGateway {
             l.setFavoriteCount(Math.max(0, count));
             listingRepository.save(l);
         });
-    }
-
-    @Override
-    @Transactional
-    public void incrementContactCount(Long listingId) {
-        listingService.incrementContactCount(listingId);
     }
 
     @Override
@@ -254,7 +246,6 @@ public class ListingGatewayAdapter implements ListingGateway {
                 visibilityService.publiclyVisible(l),
                 l.getAverageRating(),
                 nz(l.getReviewCount()),
-                nz(l.getContactCount()),
                 l.getRentalUnitId(),
                 l.getCreatedAt());
     }

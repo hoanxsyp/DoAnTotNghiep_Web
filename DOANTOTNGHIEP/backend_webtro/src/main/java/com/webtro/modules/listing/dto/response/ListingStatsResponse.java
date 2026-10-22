@@ -38,12 +38,11 @@ public class ListingStatsResponse {
     @AllArgsConstructor
     public static class Summary {
         private Integer viewCount;
+        private Long uniqueViewerCount;
         private Integer favoriteCount;
-        private Integer contactCount;
         private Integer commentCount;
         private Integer reviewCount;
         private BigDecimal averageRating;
-        private BigDecimal conversionRatePercent;
         private Long daysActive;
         private Long daysRemaining;
     }
@@ -69,6 +68,5 @@ public class ListingStatsResponse {
         private String date;
         private Integer views;
         private Integer favorites;
-        private Integer contacts;
     }
 }

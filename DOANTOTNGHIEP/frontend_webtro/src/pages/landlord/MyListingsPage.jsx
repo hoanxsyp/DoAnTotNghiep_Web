@@ -62,6 +62,7 @@ const MyListingsPage = () => {
   const [total, setTotal] = useState(0);
   const [statusCounts, setStatusCounts] = useState({});
   const [status, setStatus] = useState(searchParams.get('status') || '');
+  const expiringWithinDays = Number(searchParams.get('expiringWithinDays')) || null;
   const [keyword, setKeyword] = useState('');
   const [search, setSearch] = useState('');
 
@@ -76,6 +77,7 @@ const MyListingsPage = () => {
       const params = { page, size, sort: 'updatedAt,desc' };
       if (status) params.status = status;
       if (search) params.keyword = search;
+      if (expiringWithinDays) params.expiringWithinDays = expiringWithinDays;
       const data = await listingApi.getMyListings(params);
       setItems(data?.items || []);
       setTotal(data?.totalElements || 0);
@@ -85,14 +87,23 @@ const MyListingsPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, size, status, search]);
+  }, [page, size, status, search, expiringWithinDays]);
 
   useEffect(() => { load(); }, [load]);
 
   const changeStatus = (val) => {
     setStatus(val);
     setPage(0);
-    setSearchParams(val ? { status: val } : {}, { replace: true });
+    const next = new URLSearchParams(searchParams);
+    if (val) next.set('status', val); else next.delete('status');
+    setSearchParams(next, { replace: true });
+  };
+
+  const clearExpiringFilter = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete('expiringWithinDays');
+    setPage(0);
+    setSearchParams(next, { replace: true });
   };
 
   const openMenu = (e, row) => { setMenuAnchor(e.currentTarget); setMenuRow(row); };
@@ -142,14 +153,25 @@ const MyListingsPage = () => {
       />
 
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 2 }} alignItems={{ md: 'center' }} justifyContent="space-between">
-        <ToggleButtonGroup value={status} exclusive size="small" onChange={(_, v) => v !== null && changeStatus(v)} sx={{ flexWrap: 'wrap' }}>
-          {STATUS_TABS.map((s) => (
-            <ToggleButton key={s || 'all'} value={s}>
-              {s ? LISTING_STATUS_META[s]?.label : 'Tất cả'}
-              {s && statusCounts[s] != null ? ` (${statusCounts[s]})` : ''}
-            </ToggleButton>
-          ))}
-        </ToggleButtonGroup>
+        <Stack spacing={1} alignItems="flex-start">
+          <ToggleButtonGroup value={status} exclusive size="small" onChange={(_, v) => v !== null && changeStatus(v)} sx={{ flexWrap: 'wrap' }}>
+            {STATUS_TABS.map((s) => (
+              <ToggleButton key={s || 'all'} value={s}>
+                {s ? LISTING_STATUS_META[s]?.label : 'Tất cả'}
+                {s && statusCounts[s] != null ? ` (${statusCounts[s]})` : ''}
+              </ToggleButton>
+            ))}
+          </ToggleButtonGroup>
+          {expiringWithinDays && (
+            <Chip
+              size="small"
+              color="warning"
+              variant="outlined"
+              label={`Sắp hết hạn trong ${expiringWithinDays} ngày`}
+              onDelete={clearExpiringFilter}
+            />
+          )}
+        </Stack>
         <TextField
           size="small" placeholder="Tìm theo tiêu đề…" value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
@@ -168,16 +190,15 @@ const MyListingsPage = () => {
                 <TableCell>Trạng thái</TableCell>
                 <TableCell align="center">Xem</TableCell>
                 <TableCell align="center">Lưu</TableCell>
-                <TableCell align="center">Liên hệ</TableCell>
                 <TableCell>Hết hạn</TableCell>
                 <TableCell align="right">Hành động</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={7} sx={{ py: 3 }}><LoadingSkeleton variant="table" columns={7} count={6} /></TableCell></TableRow>
+                <TableRow><TableCell colSpan={6} sx={{ py: 3 }}><LoadingSkeleton variant="table" columns={6} count={6} /></TableCell></TableRow>
               ) : items.length === 0 ? (
-                <TableRow><TableCell colSpan={7} sx={{ border: 0 }}>
+                <TableRow><TableCell colSpan={6} sx={{ border: 0 }}>
                   <EmptyState
                     title="Không có tin đăng"
                     description="Chưa có tin nào khớp bộ lọc hiện tại."
@@ -219,7 +240,6 @@ const MyListingsPage = () => {
                   <TableCell><StatusChip status={row.status} /></TableCell>
                   <TableCell align="center">{row.viewCount ?? 0}</TableCell>
                   <TableCell align="center">{row.favoriteCount ?? 0}</TableCell>
-                  <TableCell align="center">{row.contactCount ?? 0}</TableCell>
                   <TableCell>
                     {row.expiredAt ? (
                       <Typography variant="caption" color={row.expiringSoon ? 'error' : 'text.secondary'}>

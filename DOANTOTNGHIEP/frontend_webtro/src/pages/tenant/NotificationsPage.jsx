@@ -39,7 +39,6 @@ const LISTING_TYPES = new Set([
 ]);
 
 const INTERACTION_TYPES = new Set([
-  'NEW_CONTACT',
   'NEW_COMMENT',
   'NEW_REVIEW',
   'RENTAL_REQUEST_CREATED',

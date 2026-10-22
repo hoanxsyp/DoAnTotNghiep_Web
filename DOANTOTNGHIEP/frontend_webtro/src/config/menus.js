@@ -29,7 +29,6 @@ import LockResetIcon from '@mui/icons-material/LockReset';
 import PersonIcon from '@mui/icons-material/Person';
 import AddBoxIcon from '@mui/icons-material/AddBox';
 import MeetingRoomIcon from '@mui/icons-material/MeetingRoom';
-import ContactPhoneIcon from '@mui/icons-material/ContactPhone';
 import StorefrontIcon from '@mui/icons-material/Storefront';
 import HomeWorkOutlinedIcon from '@mui/icons-material/HomeWorkOutlined';
 import { ROLES } from '@/constants';
@@ -90,7 +89,6 @@ export const landlordMenu = [
       { label: 'Tin đăng', path: '/quan-ly/tin-dang', icon: icon(ArticleIcon) },
       { label: 'Phòng của tôi', path: '/quan-ly/phong', icon: icon(MeetingRoomIcon) },
       { label: 'Đăng tin mới', path: '/quan-ly/tin-dang/tao', icon: icon(AddBoxIcon) },
-      { label: 'Người liên hệ', path: '/quan-ly/nguoi-lien-he', icon: icon(ContactPhoneIcon) },
       { label: 'Yêu cầu thuê phòng', path: '/quan-ly/yeu-cau-thue', icon: icon(HomeWorkOutlinedIcon) },
       { label: 'Tin nhắn', path: '/quan-ly/tin-nhan', icon: icon(ChatIcon), badge: 'unreadMessages' },
     ],
@@ -113,7 +111,6 @@ export const listingManagerMenu = [
     items: [
       { label: 'Tin đăng', path: '/quan-ly/tin-dang', icon: icon(ArticleIcon) },
       { label: 'Đăng tin ở ghép', path: '/quan-ly/tin-dang/tao', icon: icon(AddBoxIcon) },
-      { label: 'Người liên hệ', path: '/quan-ly/nguoi-lien-he', icon: icon(ContactPhoneIcon) },
     ],
   },
 ];
