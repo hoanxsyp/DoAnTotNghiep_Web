@@ -10,8 +10,10 @@ import com.webtro.modules.catalog.entity.Ward;
 import com.webtro.modules.catalog.repository.WardRepository;
 import com.webtro.modules.interaction.spi.ListingGateway;
 import com.webtro.modules.listing.entity.Listing;
+import com.webtro.modules.listing.entity.RentalUnit;
 import com.webtro.modules.listing.repository.ListingImageRepository;
 import com.webtro.modules.listing.repository.ListingRepository;
+import com.webtro.modules.listing.repository.RentalUnitRepository;
 import com.webtro.modules.listing.service.ListingCategoryCountPublisher;
 import com.webtro.modules.listing.service.ListingOwnerStatsPublisher;
 import com.webtro.modules.listing.service.ListingVisibilityService;
@@ -52,6 +54,7 @@ public class ListingGatewayAdapter implements ListingGateway {
     private final ListingCategoryCountPublisher categoryCountPublisher;
     private final ListingOwnerStatsPublisher ownerStatsPublisher;
     private final SystemConfigService systemConfigService;
+    private final RentalUnitRepository rentalUnitRepository;
 
     @Override
     @Transactional(readOnly = true)
@@ -113,14 +116,83 @@ public class ListingGatewayAdapter implements ListingGateway {
         });
     }
 
+    // ==================================================================
+    //  Phòng (rental_units) — docs/DANH_GIA_THEO_PHONG_DOI_CHIEU.md mục 10
+    // ==================================================================
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<Long, ListingBrief> getBriefsIncludingDeleted(Collection<Long> listingIds) {
+        if (listingIds == null || listingIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, ListingBrief> result = new LinkedHashMap<>();
+        for (Listing l : listingRepository.findAllById(new HashSet<>(listingIds))) {
+            result.put(l.getId(), toBrief(l));
+        }
+        return result;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Long rentalUnitIdOf(Long listingId) {
+        return listingRepository.findAliveById(listingId)
+                .map(Listing::getRentalUnitId)
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.LISTING_NOT_FOUND));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public RentalUnitBrief getUnitBrief(Long rentalUnitId) {
+        return rentalUnitRepository.findAliveById(rentalUnitId)
+                .map(this::toUnitBrief)
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.RENTAL_UNIT_NOT_FOUND));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<Long, RentalUnitBrief> getUnitBriefs(Collection<Long> rentalUnitIds) {
+        if (rentalUnitIds == null || rentalUnitIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, RentalUnitBrief> result = new LinkedHashMap<>();
+        for (RentalUnit u : rentalUnitRepository.findAliveByIds(new HashSet<>(rentalUnitIds))) {
+            result.put(u.getId(), toUnitBrief(u));
+        }
+        return result;
+    }
+
     @Override
     @Transactional
-    public void updateReviewAggregate(Long listingId, BigDecimal averageRating, int reviewCount) {
-        listingRepository.findAliveById(listingId).ifPresent(l -> {
-            l.setAverageRating(averageRating == null ? BigDecimal.ZERO : averageRating);
-            l.setReviewCount(Math.max(0, reviewCount));
-            listingRepository.save(l);
-        });
+    public Long lockRentalUnitForRating(Long rentalUnitId) {
+        return rentalUnitRepository.findAliveByIdForUpdate(rentalUnitId)
+                .map(RentalUnit::getOwnerId)
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.RENTAL_UNIT_NOT_FOUND));
+    }
+
+    @Override
+    @Transactional
+    public void applyUnitRating(Long rentalUnitId, BigDecimal averageRating, int reviewCount) {
+        rentalUnitRepository.applyRating(rentalUnitId,
+                averageRating == null ? BigDecimal.ZERO : averageRating, Math.max(0, reviewCount));
+        listingRepository.copyRatingFromUnit(rentalUnitId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public long countRatingMismatch() {
+        return listingRepository.countRatingMismatchWithUnit();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Long> rentalUnitIdsNeedingRatingReconcile() {
+        return rentalUnitRepository.findIdsNeedingRatingReconcile();
+    }
+
+    private RentalUnitBrief toUnitBrief(RentalUnit u) {
+        return new RentalUnitBrief(u.getId(), u.getOwnerId(), u.getName(), u.getUnitLabel(),
+                u.getAverageRating(), nz(u.getReviewCount()), u.isAddressLocked());
     }
 
     @Override
@@ -173,7 +245,9 @@ public class ListingGatewayAdapter implements ListingGateway {
                 l.getStatus(),
                 visibilityService.publiclyVisible(l),
                 l.getAverageRating(),
-                nz(l.getReviewCount()));
+                nz(l.getReviewCount()),
+                l.getRentalUnitId(),
+                l.getCreatedAt());
     }
 
     private String thumbnailOf(Long listingId) {

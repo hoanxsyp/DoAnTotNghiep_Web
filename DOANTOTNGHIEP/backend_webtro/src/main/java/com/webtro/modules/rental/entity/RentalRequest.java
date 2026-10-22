@@ -20,7 +20,8 @@ import java.time.LocalDate;
 @Entity
 @Table(name = "rental_requests", indexes = {
         @Index(name = "idx_rental_requests_tenant_status_created", columnList = "tenant_id,status,created_at"),
-        @Index(name = "idx_rental_requests_listing_status_created", columnList = "listing_id,status,created_at")
+        @Index(name = "idx_rental_requests_listing_status_created", columnList = "listing_id,status,created_at"),
+        @Index(name = "idx_rental_requests_unit_tenant_status", columnList = "rental_unit_id,tenant_id,status")
 })
 @Getter
 @Setter
@@ -31,6 +32,10 @@ public class RentalRequest extends AuditableEntity {
 
     @Column(name = "listing_id", nullable = false)
     private Long listingId;
+
+    /** Phòng của tin tại thời điểm gửi yêu cầu; dùng để xét quyền đánh giá theo phòng (RE-1). */
+    @Column(name = "rental_unit_id", nullable = false)
+    private Long rentalUnitId;
 
     @Column(name = "tenant_id", nullable = false)
     private Long tenantId;

@@ -308,6 +308,13 @@ app:
       base-url: ${RENTAL_API_BASE_URL:http://localhost:8002}
       connect-timeout: ${RENTAL_API_CONNECT_TIMEOUT:PT2S}
       request-timeout: ${RENTAL_API_REQUEST_TIMEOUT:PT3S}
+    chatbot-api:
+      # Module AI chatbot (PhoBERT). false = dùng chatbot theo luật cũ hoàn toàn.
+      # Local JVM: http://localhost:8081 ; Docker Compose override sang http://chatbot-api:8080
+      enabled: ${CHATBOT_AI_ENABLED:true}
+      base-url: ${CHATBOT_API_BASE_URL:http://localhost:8081}
+      connect-timeout: ${CHATBOT_API_CONNECT_TIMEOUT:PT2S}
+      request-timeout: ${CHATBOT_API_REQUEST_TIMEOUT:PT12S}
 
   # --------------------------------- Admin ----------------------------
   # Tai khoan quan tri khoi tao. Neu `password` rong, AdminAccountInitializer

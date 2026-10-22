@@ -22,9 +22,12 @@ spring:
     # schema.sql/data.sql chạy SAU khi JPA khởi tạo
     defer-datasource-initialization: true
 
+  # schema.sql + data.sql (bảng room + 59 phòng demo) chỉ dành cho DB RIÊNG của
+  # chatbot. Mặc định never: trỏ vào DB của web chính sẽ không tạo bảng / seed
+  # phòng giả. Dựng DB demo riêng thì đặt SQL_INIT_MODE=always.
   sql:
     init:
-      mode: always
+      mode: ${SQL_INIT_MODE:never}
       encoding: UTF-8
 
   data:
@@ -50,12 +53,24 @@ roomfinder:
       confidence-threshold: 0.90
     # Rule "rẻ hơn nữa đi" — §4.2
     cheaper-step-percent: 20
+  # Nguồn phòng: db = 59 phòng demo trong DB riêng (data.sql); backend = tin đăng THẬT của
+  # web qua API công khai của backend_webtro (không đọc DB của web). Xem ListingSourceProperties.
+  listing:
+    source: ${LISTING_SOURCE:db}
+    backend-url: ${BACKEND_URL:http://localhost:8080}
+    timeout-ms: 3000
+    detail-cache-seconds: 300
+    catalog-cache-minutes: 60
+    pool-size: 100
   # NLU self-host (GĐ2, §11 bước 2.4) — gọi nlu-service (FastAPI, PhoBERT).
   # Chết/timeout → fallback LLM → rule-based; enabled=false để về hẳn GĐ1.
   nlu:
     enabled: ${NLU_ENABLED:true}
     url: ${NLU_URL:http://localhost:8000}
-    timeout-ms: 300
+    # SPEC gợi ý 300ms, nhưng đo thật p95 ~107ms và có lúc >300ms khi máy bận (chạy cả hệ thống
+    # trên 1 laptop) → câu chat rơi xuống rule-based, hiểu kém hẳn ("vskk" không nhận ra).
+    # 800ms vẫn dưới 1s, đủ dư địa. Chỉnh bằng NLU_TIMEOUT_MS.
+    timeout-ms: ${NLU_TIMEOUT_MS:800}
   # Geocoding fallback (TODO.md "Tầng 2") — khi bảng poi nội bộ miss.
   # OSM Nominatim, miễn phí; enabled=false để tắt hẳn (POI lạ sẽ luôn miss).
   geocoding:

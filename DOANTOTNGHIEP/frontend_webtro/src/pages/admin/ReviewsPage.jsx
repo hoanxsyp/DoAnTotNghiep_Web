@@ -73,7 +73,9 @@ const ReviewsPage = () => {
             {r.content}
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            {r.authorName} · {r.landlordName ? `chủ trọ ${r.landlordName}` : `tin #${r.listingId}`}
+            {r.authorName || r.author?.fullName}
+            {' · '}
+            {r.rentalUnitName ? `phòng "${r.rentalUnitName}"` : (r.landlordName ? `chủ trọ ${r.landlordName}` : `tin #${r.listingId}`)}
           </Typography>
         </Box>
       ),

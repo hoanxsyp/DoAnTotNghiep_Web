@@ -71,6 +71,7 @@ public class RentalRequestServiceImpl implements RentalRequestService {
         }
         RentalRequest rental = RentalRequest.builder()
                 .listingId(listing.id())
+                .rentalUnitId(listing.rentalUnitId())
                 .tenantId(tenantId)
                 .desiredViewingDate(request.getDesiredViewingDate())
                 .status(RentalRequestStatus.PENDING)
@@ -297,9 +298,12 @@ public class RentalRequestServiceImpl implements RentalRequestService {
     private PageResponse<RentalRequestResponse> mapPage(Page<RentalRequest> page) {
         Collection<Long> listingIds = page.getContent().stream().map(RentalRequest::getListingId).toList();
         Collection<Long> tenantIds = page.getContent().stream().map(RentalRequest::getTenantId).toList();
+        Collection<Long> unitIds = page.getContent().stream().map(RentalRequest::getRentalUnitId).toList();
         Map<Long, ListingGateway.ListingBrief> listings = listingGateway.getBriefs(listingIds);
         Map<Long, UserGateway.UserBrief> tenants = userGateway.getBriefs(tenantIds);
-        return PageResponse.from(page, r -> toResponse(r, listings.get(r.getListingId()), tenants.get(r.getTenantId())));
+        Map<Long, ListingGateway.RentalUnitBrief> units = listingGateway.getUnitBriefs(unitIds);
+        return PageResponse.from(page, r -> toResponse(r, listings.get(r.getListingId()),
+                tenants.get(r.getTenantId()), units.get(r.getRentalUnitId())));
     }
 
     private RentalRequestResponse toResponse(RentalRequest rental) {
@@ -308,9 +312,18 @@ public class RentalRequestServiceImpl implements RentalRequestService {
 
     private RentalRequestResponse toResponse(
             RentalRequest rental, ListingGateway.ListingBrief listing, UserGateway.UserBrief tenant) {
+        ListingGateway.RentalUnitBrief unit = rental.getRentalUnitId() == null ? null
+                : listingGateway.getUnitBriefs(java.util.List.of(rental.getRentalUnitId())).get(rental.getRentalUnitId());
+        return toResponse(rental, listing, tenant, unit);
+    }
+
+    private RentalRequestResponse toResponse(RentalRequest rental, ListingGateway.ListingBrief listing,
+                                             UserGateway.UserBrief tenant, ListingGateway.RentalUnitBrief unit) {
         return RentalRequestResponse.builder()
                 .id(rental.getId())
                 .listingId(rental.getListingId())
+                .rentalUnitId(rental.getRentalUnitId())
+                .rentalUnitName(unit == null ? null : unit.name())
                 .listingTitle(listing == null ? null : listing.title())
                 .listingSlug(listing == null ? null : listing.slug())
                 .listingThumbnailUrl(listing == null ? null : listing.thumbnailUrl())

@@ -49,6 +49,7 @@ public interface ReviewService {
      * từ khóa nội dung, phân trang; kèm thông tin ẩn.
      */
     PageResponse<AdminReviewResponse> adminListReviews(ReviewStatus status, Integer rating, Long listingId,
+                                                       Long rentalUnitId,
                                                        Long landlordId, String keyword, Pageable pageable);
 
     /**

@@ -26,6 +26,8 @@ public class AdminReviewResponse {
 
     private Long id;
     private Long listingId;
+    private Long rentalUnitId;
+    private String rentalUnitName;
     private Long landlordId;
     private Integer rating;
     private String content;

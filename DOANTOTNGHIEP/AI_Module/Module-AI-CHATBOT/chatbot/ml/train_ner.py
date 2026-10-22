@@ -10,8 +10,15 @@ Dữ liệu nguồn (`data/*.jsonl`) lưu entity theo OFFSET KÝ TỰ trên văn
 Lấy model ở epoch CUỐI (không chọn checkpoint trên bộ test — bộ test chỉ để
 xem). Cấu hình mặc định = cấu hình đã so sánh trong `compare_backbones.py`.
 
+Dữ liệu: train = synthetic (`ner_train_v2.jsonl`) + data THẬT phần train
+(`ner_train_real.jsonl`, sinh bởi `data/split_real_data.py`). Đánh giá trên 2 bộ:
+  - GOLD  (`ner_test_gold.jsonl`): câu THẬT held-out, cùng tập câu với GOLD intent
+    — tín hiệu chính cho DoD-2.
+  - PROXY (`ner_test_real.jsonl`): bộ tay viết cũ, giữ để so với các lần đo trước.
+
 Số báo cáo là **Span-F1 strict** (khớp label+start+end trên văn bản gốc) in ở
-cuối. F1 seqeval in mỗi epoch tính theo TỪ, chỉ để theo dõi.
+cuối, kèm F1 theo từng nhãn và danh sách span sai trên GOLD. F1 seqeval in mỗi
+epoch tính theo TỪ, chỉ để theo dõi.
 
 Chạy:
     python train_ner.py
@@ -80,6 +87,41 @@ def build_dataset(encoder, rows, max_length=MAX_LENGTH):
     return Dataset.from_dict(cols), all_spans
 
 
+def predict_spans(trainer, ds, rows, spans_list):
+    logits = trainer.predict(ds).predictions
+    preds = []
+    for r, spans, lg in zip(rows, spans_list, logits):
+        labels = [ID2LABEL[int(i)] for i in np.argmax(lg[: len(spans)], axis=-1)]
+        preds.append(decode_bio_offsets(r["text"], spans, labels))
+    return preds
+
+
+def per_label_f1(rows, preds):
+    out = {}
+    for lab in ENTITY_LABELS:
+        g = [{**r, "entities": [e for e in r["entities"] if e["label"] == lab]} for r in rows]
+        p = [[e for e in pr if e["label"] == lab] for pr in preds]
+        n_gold = sum(len(r["entities"]) for r in g)
+        if n_gold or any(p):
+            m = span_prf(g, p)
+            out[lab] = {"f1": round(m["f1"], 3), "gold": n_gold, "tp": m["tp"], "fp": m["fp"], "fn": m["fn"]}
+    return out
+
+
+def print_errors(rows, preds):
+    for r, pr in zip(rows, preds):
+        gold = {(e["label"], e["start"], e["end"]) for e in r["entities"]}
+        got = {(e["label"], e["start"], e["end"]) for e in pr}
+        if gold == got:
+            continue
+        t = r["text"]
+        miss = [f"{t[s:e]!r}/{l}" for l, s, e in sorted(gold - got, key=lambda x: x[1])]
+        extra = [f"{t[s:e]!r}/{l}" for l, s, e in sorted(got - gold, key=lambda x: x[1])]
+        print(f"   {t[:70]!r}")
+        print(f"      thieu: {miss}")
+        print(f"      thua : {extra}")
+
+
 def make_training_args(output_dir, num_epochs, batch_size, learning_rate, seed):
     common = dict(
         output_dir=output_dir,
@@ -104,15 +146,21 @@ def main(max_train, num_epochs, output_dir, batch_size, base_model, max_length,
     print(f"Base model: {base_model} | max_length: {max_length} | lr: {learning_rate} "
           f"| real_repeat: {real_repeat} | synth: {synth_file} | seed: {seed}")
 
-    # Train = synthetic + DU LIEU THAT da gan nhan (ner_data_md_labeled.jsonl).
+    # Train = synthetic + phan train cua DU LIEU THAT (GOLD da tach rieng).
     synth_rows = load_jsonl(DATA_DIR / synth_file)
-    real_rows = load_jsonl_optional(DATA_DIR / "ner_data_md_labeled.jsonl", "data that NER")
+    real_rows = load_jsonl_optional(DATA_DIR / "ner_train_real.jsonl", "data that NER train")
     train_rows = synth_rows + real_rows * real_repeat
-    test_rows = load_jsonl(DATA_DIR / "ner_test_real.jsonl")
+    gold_rows = load_jsonl_optional(DATA_DIR / "ner_test_gold.jsonl", "test NER that held-out")
+    proxy_rows = load_jsonl(DATA_DIR / "ner_test_real.jsonl")
+    # GOLD (data that) la bo danh gia chinh; neu chua co thi tam dung PROXY.
+    test_rows = gold_rows if gold_rows else proxy_rows
+    eval_name = "ner_test_gold.jsonl (GOLD, data that held-out)" if gold_rows else         "ner_test_real.jsonl (PROXY)"
     n_ent_synth = sum(len(r["entities"]) for r in synth_rows)
     n_ent_real = sum(len(r["entities"]) for r in real_rows)
     print(f"Train: {len(train_rows)} cau (synthetic {len(synth_rows)} + that {len(real_rows)}"
           f"x{real_repeat}) | entity: synthetic {n_ent_synth} + that {n_ent_real}x{real_repeat}")
+    print(f"Eval chinh: {eval_name} — {len(test_rows)} cau / "
+          f"{sum(len(r['entities']) for r in test_rows)} entity")
     if max_train:
         train_rows = train_rows[:max_train]
 
@@ -127,6 +175,7 @@ def main(max_train, num_epochs, output_dir, batch_size, base_model, max_length,
 
     train_ds, _ = build_dataset(encoder, train_rows, max_length)
     test_ds, test_spans = build_dataset(encoder, test_rows, max_length)
+    proxy_ds, proxy_spans = build_dataset(encoder, proxy_rows, max_length)
     if encoder.fallbacks:
         print(f"[CANH BAO] {encoder.fallbacks} cau VnCoreNLP khong do lai duoc offset -> tach theo khoang trang")
 
@@ -162,14 +211,19 @@ def main(max_train, num_epochs, output_dir, batch_size, base_model, max_length,
     )
     trainer.train()
 
-    logits = trainer.predict(test_ds).predictions
-    preds = []
-    for r, spans, lg in zip(test_rows, test_spans, logits):
-        labels = [ID2LABEL[int(i)] for i in np.argmax(lg[: len(spans)], axis=-1)]
-        preds.append(decode_bio_offsets(r["text"], spans, labels))
+    preds = predict_spans(trainer, test_ds, test_rows, test_spans)
     span = span_prf(test_rows, preds)
-    print("=== Span-F1 strict tren ner_test_real.jsonl (PROXY, xem build_proxy_testset.py) ===")
+    print(f"=== Span-F1 strict tren {eval_name} — bo danh gia CHINH ===")
     print({k: round(v, 4) if isinstance(v, float) else v for k, v in span.items()})
+    print("Theo nhan:", per_label_f1(test_rows, preds))
+    print("Cau sai:")
+    print_errors(test_rows, preds)
+
+    # Luon bao cao them tren PROXY de so voi cac lan do truoc.
+    proxy_preds = predict_spans(trainer, proxy_ds, proxy_rows, proxy_spans)
+    proxy_span = span_prf(proxy_rows, proxy_preds)
+    print("=== Span-F1 strict tren ner_test_real.jsonl (PROXY, xem build_proxy_testset.py) ===")
+    print({k: round(v, 4) if isinstance(v, float) else v for k, v in proxy_span.items()})
 
     trainer.save_model(output_dir)
     tokenizer.save_pretrained(output_dir)

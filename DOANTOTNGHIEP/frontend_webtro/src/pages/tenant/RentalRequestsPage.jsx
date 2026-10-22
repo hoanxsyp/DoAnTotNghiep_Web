@@ -110,6 +110,11 @@ const RentalRequestsPage = () => {
                       <Typography component={RouterLink} to={detailUrl} color="inherit" sx={{ fontWeight: 600, textDecoration: 'none' }}>
                         {item.listingTitle}
                       </Typography>
+                      {item.rentalUnitName && item.rentalUnitName !== item.listingTitle && (
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                          Phòng: {item.rentalUnitName}
+                        </Typography>
+                      )}
                       <Typography variant="caption" color="primary">{formatPrice(item.listingPrice)}/tháng</Typography>
                     </TableCell>
                     <TableCell>{formatDate(item.desiredViewingDate)}</TableCell>

@@ -21,18 +21,21 @@ import java.time.Instant;
 /**
  * Đánh giá (sao + nội dung) của người thuê cho tin/chủ trọ — bảng {@code reviews}.
  *
- * <p>Mỗi người chỉ có một đánh giá chưa xóa mềm cho một tin. {@code activeMarker = null} với bản
- * đã xóa giúp giải phóng khóa duy nhất để người dùng có thể đánh giá lại. FK chéo module
- * ({@code listingId}, {@code userId}, {@code hiddenBy}) giữ {@code Long}; landlord suy ra từ listing.
+ * <p>Đánh giá gắn vào <b>Phòng</b> ({@code rentalUnitId}), không gắn vào tin: đóng tin rồi đăng
+ * lại cùng phòng thì đánh giá vẫn còn (RE-1, RE-2). Mỗi người chỉ có một đánh giá chưa xóa mềm
+ * cho một phòng. {@code activeMarker = null} với bản đã xóa giúp giải phóng khóa duy nhất để người
+ * dùng có thể đánh giá lại. FK chéo module ({@code listingId}, {@code rentalUnitId},
+ * {@code userId}, {@code hiddenBy}) giữ {@code Long}; chủ trọ suy ra từ phòng.
  * Theo doc 02, {@code rating} (TINYINT UNSIGNED) map sang {@code Integer}.
  */
 @Entity
 @Table(
         name = "reviews",
         uniqueConstraints = @UniqueConstraint(
-                name = "uk_reviews_active_user_listing",
-                columnNames = {"user_id", "listing_id", "active_marker"}),
+                name = "uk_reviews_active_user_unit",
+                columnNames = {"user_id", "rental_unit_id", "active_marker"}),
         indexes = {
+                @Index(name = "idx_reviews_unit_status_created", columnList = "rental_unit_id, status, created_at"),
                 @Index(name = "idx_reviews_listing_id_status_created_at", columnList = "listing_id, status, created_at"),
                 @Index(name = "idx_reviews_rating_status", columnList = "rating, status"),
                 @Index(name = "idx_reviews_user_id", columnList = "user_id")
@@ -44,8 +47,15 @@ import java.time.Instant;
 @SuperBuilder
 public class Review extends AuditableEntity {
 
-    /** Tin được đánh giá (FK listings.id — chéo module, giữ Long). */
-    @Column(name = "listing_id", nullable = false)
+    /** Phòng được đánh giá (FK rental_units.id — chéo module, giữ Long). */
+    @Column(name = "rental_unit_id", nullable = false)
+    private Long rentalUnitId;
+
+    /**
+     * Tin mà người đánh giá đã thuê qua (FK listings.id, {@code ON DELETE SET NULL}). Dùng để hiện
+     * ghi chú "thuê qua tin tháng MM/YYYY"; có thể {@code null} nếu tin bị xoá cứng.
+     */
+    @Column(name = "listing_id")
     private Long listingId;
 
     /** Người đánh giá (FK users.id — chéo module, giữ Long). */

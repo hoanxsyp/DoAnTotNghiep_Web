@@ -34,6 +34,10 @@ public class AdminListingResponse {
     private String statusLabel;
     private Long reportCount;
     private Boolean priceDeviationFlagged;
+    /** Phòng của tin trùng địa chỉ với phòng của chủ trọ khác (RU-6) — cần kiểm tra khi duyệt. */
+    private Boolean duplicateAddress;
+    private Long rentalUnitId;
+    private String rentalUnitName;
     private Long provinceId;
     private Long districtId;
     private Long wardId;
