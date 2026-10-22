@@ -153,12 +153,72 @@ export default function ListingWizard({ mode = 'create', listingId, initialData,
     };
   };
 
-  const uploadNewImages = async (id) => {
-    const newFiles = images.filter((i) => i.file);
-    if (!newFiles.length) return;
+  const uploadNewImages = async (id, newFiles) => {
+    if (!newFiles.length) return [];
     const formData = new FormData();
     newFiles.forEach((i) => formData.append('files', i.file));
-    await listingApi.uploadImages(id, formData);
+    const selectedIndex = newFiles.findIndex((item) => item.id === primaryId);
+    const result = await listingApi.uploadImages(
+      id,
+      formData,
+      selectedIndex >= 0 ? selectedIndex : undefined,
+    );
+    return result?.uploaded || [];
+  };
+
+  const syncImages = async (id) => {
+    const originalImages = initialData?.images || [];
+    const retainedExistingIds = images.filter((item) => !item.file).map((item) => item.id);
+    const retainedSet = new Set(retainedExistingIds);
+    const removed = originalImages.filter((item) => !retainedSet.has(item.id));
+    const originalPrimaryId = initialData?.primaryImageId ?? null;
+    const primaryWasRemoved = removed.some((item) => item.id === originalPrimaryId);
+    const newFiles = images.filter((item) => item.file);
+    const uploadedByTempId = new Map();
+
+    const rememberUploaded = (batch, uploaded) => {
+      batch.forEach((item, index) => uploadedByTempId.set(item.id, uploaded[index]?.id));
+    };
+
+    // Xóa ảnh phụ trước. Nếu ảnh chính cũng bị xóa, để ảnh đó cuối cùng để backend có thể
+    // tự chuyển ảnh còn lại thành ảnh chính hoặc cho phép danh sách tạm thời về rỗng.
+    for (const item of removed.filter((image) => image.id !== originalPrimaryId)) {
+      await listingApi.deleteImage(id, item.id);
+    }
+
+    if (primaryWasRemoved && retainedExistingIds.length === 0 && newFiles.length > 0) {
+      // Tin công khai không được rơi xuống dưới số ảnh tối thiểu. Upload ít nhất một ảnh thay
+      // thế trước, rồi mới xóa ảnh chính cũ. Nếu người dùng thay 1 ảnh bằng tối đa ảnh cho phép,
+      // chia thành hai đợt để không vượt giới hạn trong thời gian chuyển tiếp.
+      const availableBeforeDelete = Math.max(1, (configs['listing.image.max'] || 10) - 1);
+      const firstBatch = newFiles.slice(0, availableBeforeDelete);
+      const firstUploaded = await uploadNewImages(id, firstBatch);
+      rememberUploaded(firstBatch, firstUploaded);
+      await listingApi.deleteImage(id, originalPrimaryId, firstUploaded[0]?.id);
+
+      const remaining = newFiles.slice(firstBatch.length);
+      if (remaining.length > 0) {
+        rememberUploaded(remaining, await uploadNewImages(id, remaining));
+      }
+    } else {
+      if (primaryWasRemoved) {
+        await listingApi.deleteImage(id, originalPrimaryId, retainedExistingIds[0]);
+      }
+      rememberUploaded(newFiles, await uploadNewImages(id, newFiles));
+    }
+
+    const orderedIds = images
+      .map((item) => (item.file ? uploadedByTempId.get(item.id) : item.id))
+      .filter((imageId) => imageId != null);
+    const desiredPrimaryId = uploadedByTempId.get(primaryId) ?? primaryId ?? orderedIds[0];
+
+    if (desiredPrimaryId != null
+      && (desiredPrimaryId !== originalPrimaryId || primaryWasRemoved)) {
+      await listingApi.setPrimaryImage(id, desiredPrimaryId);
+    }
+    if (orderedIds.length > 0) {
+      await listingApi.reorderImages(id, orderedIds);
+    }
   };
 
   const doSubmit = async (submitImmediately) => {
@@ -174,14 +234,14 @@ export default function ListingWizard({ mode = 'create', listingId, initialData,
     try {
       if (mode === 'edit') {
         await listingApi.update(listingId, buildPayload(false));
-        await uploadNewImages(listingId);
+        await syncImages(listingId);
         if (submitImmediately) await listingApi.submit(listingId);
         notify.success('Đã cập nhật tin đăng');
         onDone?.(listingId);
       } else {
         const created = await listingApi.create(buildPayload(false));
         const id = created?.id;
-        await uploadNewImages(id);
+        await syncImages(id);
         if (submitImmediately) await listingApi.submit(id);
         notify.success(submitImmediately ? 'Đã gửi tin chờ duyệt' : 'Đã lưu tin nháp');
         onDone?.(id);

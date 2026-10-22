@@ -45,7 +45,7 @@ const OverviewPage = () => {
 
   useEffect(() => { load(); }, [load]);
 
-  const isEmpty = data && (data.activeCount + data.pendingCount) === 0 && (data.topListings || []).length === 0;
+  const isEmpty = data && (data.totalListings ?? 0) === 0;
 
   const chartData = data?.chart ? {
     labels: data.chart.map((p) => formatDateTime(p.date, 'DD/MM')),

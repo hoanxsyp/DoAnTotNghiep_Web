@@ -14,6 +14,10 @@ import java.util.List;
 @Repository
 public interface ListingAmenityRepository extends JpaRepository<ListingAmenity, Long> {
 
+    /** Toàn bộ liên kết của một tin, kể cả đã xóa mềm, để có thể khôi phục mà không vi phạm UNIQUE. */
+    @Query("SELECT la FROM ListingAmenity la WHERE la.listing.id = :listingId")
+    List<ListingAmenity> findByListingIdIncludingDeleted(@Param("listingId") Long listingId);
+
     /** Danh sách liên kết tiện ích còn sống của một tin. */
     @Query("SELECT la FROM ListingAmenity la WHERE la.listing.id = :listingId "
             + "AND la.deletedAt IS NULL")

@@ -77,6 +77,7 @@ public enum ErrorCode {
     TARGET_NOT_LANDLORD(HttpStatus.UNPROCESSABLE_ENTITY, "Người dùng này không phải chủ trọ"),
     LANDLORD_PROFILE_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy hồ sơ chủ trọ"),
     LANDLORD_ALREADY_VERIFIED(HttpStatus.CONFLICT, "Chủ trọ đã được xác thực"),
+    LANDLORD_VERIFICATION_PENDING(HttpStatus.CONFLICT, "Yêu cầu xác thực chủ trọ đang chờ duyệt"),
     AVATAR_INVALID_FORMAT(HttpStatus.BAD_REQUEST, "Ảnh đại diện chỉ chấp nhận JPG, PNG hoặc WEBP"),
     AVATAR_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "Ảnh đại diện vượt quá dung lượng cho phép"),
     AVATAR_NOT_FOUND(HttpStatus.NOT_FOUND, "Không tìm thấy ảnh đại diện"),

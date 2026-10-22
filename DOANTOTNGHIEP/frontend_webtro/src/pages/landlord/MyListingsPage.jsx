@@ -58,6 +58,7 @@ const MyListingsPage = () => {
   const [total, setTotal] = useState(0);
   const [statusCounts, setStatusCounts] = useState({});
   const [status, setStatus] = useState(searchParams.get('status') || '');
+  const expiringWithinDays = Number(searchParams.get('expiringWithinDays')) || null;
   const [keyword, setKeyword] = useState('');
   const [search, setSearch] = useState('');
 
@@ -72,6 +73,7 @@ const MyListingsPage = () => {
       const params = { page, size, sort: 'updatedAt,desc' };
       if (status) params.status = status;
       if (search) params.keyword = search;
+      if (expiringWithinDays) params.expiringWithinDays = expiringWithinDays;
       const data = await listingApi.getMyListings(params);
       setItems(data?.items || []);
       setTotal(data?.totalElements || 0);
@@ -81,14 +83,23 @@ const MyListingsPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, size, status, search]);
+  }, [page, size, status, search, expiringWithinDays]);
 
   useEffect(() => { load(); }, [load]);
 
   const changeStatus = (val) => {
     setStatus(val);
     setPage(0);
-    setSearchParams(val ? { status: val } : {}, { replace: true });
+    const next = new URLSearchParams(searchParams);
+    if (val) next.set('status', val); else next.delete('status');
+    setSearchParams(next, { replace: true });
+  };
+
+  const clearExpiringFilter = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete('expiringWithinDays');
+    setPage(0);
+    setSearchParams(next, { replace: true });
   };
 
   const openMenu = (e, row) => { setMenuAnchor(e.currentTarget); setMenuRow(row); };
@@ -131,14 +142,25 @@ const MyListingsPage = () => {
       />
 
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 2 }} alignItems={{ md: 'center' }} justifyContent="space-between">
-        <ToggleButtonGroup value={status} exclusive size="small" onChange={(_, v) => v !== null && changeStatus(v)} sx={{ flexWrap: 'wrap' }}>
-          {STATUS_TABS.map((s) => (
-            <ToggleButton key={s || 'all'} value={s}>
-              {s ? LISTING_STATUS_META[s]?.label : 'Tất cả'}
-              {s && statusCounts[s] != null ? ` (${statusCounts[s]})` : ''}
-            </ToggleButton>
-          ))}
-        </ToggleButtonGroup>
+        <Stack spacing={1} alignItems="flex-start">
+          <ToggleButtonGroup value={status} exclusive size="small" onChange={(_, v) => v !== null && changeStatus(v)} sx={{ flexWrap: 'wrap' }}>
+            {STATUS_TABS.map((s) => (
+              <ToggleButton key={s || 'all'} value={s}>
+                {s ? LISTING_STATUS_META[s]?.label : 'Tất cả'}
+                {s && statusCounts[s] != null ? ` (${statusCounts[s]})` : ''}
+              </ToggleButton>
+            ))}
+          </ToggleButtonGroup>
+          {expiringWithinDays && (
+            <Chip
+              size="small"
+              color="warning"
+              variant="outlined"
+              label={`Sắp hết hạn trong ${expiringWithinDays} ngày`}
+              onDelete={clearExpiringFilter}
+            />
+          )}
+        </Stack>
         <TextField
           size="small" placeholder="Tìm theo tiêu đề…" value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
@@ -260,7 +282,7 @@ const MyListingsPage = () => {
         requireReason
         reasonLabel="Lý do đóng tin"
         reasonOptions={CLOSE_REASONS}
-        onConfirm={({ reason, note }) => runAction('CLOSE', confirm.row, { closeReason: reason, note })}
+        onConfirm={({ reason, note }) => runAction('CLOSE', confirm.row, { reason, note })}
         onCancel={() => setConfirm(null)}
       />
     </Box>

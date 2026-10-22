@@ -258,7 +258,7 @@ public class ListingServiceImpl implements ListingService {
         // ----- Trường nhạy cảm (đổi trên tin ACTIVE → duyệt lại) -----
         detect(changes, "title", listing.getTitle(), newTitle, true);
         detect(changes, "description", listing.getDescription(), newDescription, true);
-        detect(changes, "price", str(listing.getPrice()), str(req.getPrice()), true);
+        detectDecimal(changes, "price", listing.getPrice(), req.getPrice(), true);
         LocationParts currentLocation = locationOf(listing.getWardId());
         detect(changes, "provinceId", str(currentLocation.provinceId()), str(req.getProvinceId()), true);
         detect(changes, "districtId", str(currentLocation.districtId()), str(req.getDistrictId()), true);
@@ -266,7 +266,7 @@ public class ListingServiceImpl implements ListingService {
         detect(changes, "addressDetail", listing.getAddressDetail(), newAddress, true);
         // ----- Trường nhỏ (giữ nguyên trạng thái) -----
         detect(changes, "categoryId", str(listing.getCategoryId()), str(req.getCategoryId()), false);
-        detect(changes, "area", str(listing.getArea()), str(req.getArea()), false);
+        detectDecimal(changes, "area", listing.getArea(), req.getArea(), false);
         detect(changes, "maxOccupants", str(listing.getMaxOccupants()), str(req.getMaxOccupants()), false);
 
         // Áp dụng thay đổi
@@ -1190,16 +1190,26 @@ public class ListingServiceImpl implements ListingService {
     }
 
     private void replaceAmenities(Listing listing, List<Long> amenityIds) {
-        List<ListingAmenity> existing = amenityLinkRepository.findByListingIdAlive(listing.getId());
+        Set<Long> desired = amenityIds == null
+                ? Set.of()
+                : new java.util.LinkedHashSet<>(amenityIds);
+        List<ListingAmenity> existing = amenityLinkRepository
+                .findByListingIdIncludingDeleted(listing.getId());
+        Set<Long> existingIds = new HashSet<>();
         existing.forEach(link -> {
-            link.softDelete();
-            amenityLinkRepository.save(link);
+            existingIds.add(link.getAmenityId());
+            if (desired.contains(link.getAmenityId())) {
+                link.restore();
+            } else {
+                link.softDelete();
+            }
         });
-        if (amenityIds == null) {
-            return;
-        }
-        Set<Long> distinct = new java.util.LinkedHashSet<>(amenityIds);
-        for (Long amenityId : distinct) {
+        amenityLinkRepository.saveAll(existing);
+
+        for (Long amenityId : desired) {
+            if (existingIds.contains(amenityId)) {
+                continue;
+            }
             ListingAmenity link = ListingAmenity.builder()
                     .listing(listing)
                     .amenityId(amenityId)
@@ -1231,6 +1241,15 @@ public class ListingServiceImpl implements ListingService {
                         boolean sensitive) {
         if (!Objects.equals(oldValue, newValue)) {
             changes.add(new Change(field, oldValue, newValue, sensitive));
+        }
+    }
+
+    private void detectDecimal(List<Change> changes, String field, BigDecimal oldValue,
+                               BigDecimal newValue, boolean sensitive) {
+        boolean equal = oldValue == null ? newValue == null
+                : newValue != null && oldValue.compareTo(newValue) == 0;
+        if (!equal) {
+            changes.add(new Change(field, str(oldValue), str(newValue), sensitive));
         }
     }
 

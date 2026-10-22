@@ -10,8 +10,8 @@ import paymentApi from '@/api/paymentApi';
 import { formatCurrency, formatDateTime } from '@/utils/format';
 
 /**
- * Trang kết quả thanh toán. Với gateway sandbox, URL chứa token đã ký và trang sẽ gửi callback
- * mô phỏng về backend trước khi đọc lại trạng thái giao dịch từ nguồn dữ liệu chính thức.
+ * Trang kết quả thanh toán. Với gateway sandbox, người dùng chủ động chọn kết quả mô phỏng;
+ * chỉ lựa chọn thành công mới gửi callback SUCCESS và kích hoạt gói.
  */
 const pick = (sp, keys) => { for (const k of keys) { const v = sp.get(k); if (v != null) return v; } return null; };
 
@@ -23,8 +23,9 @@ const PaymentResultPage = () => {
   const signature = pick(sp, ['sig', 'signature']);
   const statusParam = (pick(sp, ['status', 'resultCode', 'vnp_ResponseCode']) || '').toUpperCase();
 
-  const isSandboxReturn = !paymentId && !!txn && !!amountParam && !!signature;
-  const [loading, setLoading] = useState(!!paymentId || isSandboxReturn);
+  const isSandboxReturn = !!txn && !!amountParam && !!signature;
+  const [loading, setLoading] = useState(!!paymentId && !isSandboxReturn);
+  const [submitting, setSubmitting] = useState(false);
   const [payment, setPayment] = useState(null);
   const [processingError, setProcessingError] = useState('');
 
@@ -33,31 +34,10 @@ const PaymentResultPage = () => {
 
     const loadPayment = async () => {
       try {
-        let resolvedPaymentId = paymentId;
-
-        if (isSandboxReturn) {
-          const now = new Date();
-          const callback = await paymentApi.processCallback({
-            transactionCode: txn,
-            gatewayTransactionId: `SANDBOX-${txn}`,
-            amount: amountParam,
-            status: 'SUCCESS',
-            responseCode: '00',
-            responseMessage: 'Thanh toán Sandbox thành công',
-            paidAt: now.toISOString(),
-            timestamp: Math.floor(now.getTime() / 1000),
-            nonce: window.crypto?.randomUUID?.()
-              || `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-            signature,
-          });
-          resolvedPaymentId = callback?.paymentId;
-        }
-
-        if (!resolvedPaymentId) {
+        if (!paymentId) {
           throw new Error('Không xác định được giao dịch thanh toán');
         }
-
-        const detail = await paymentApi.getPayment(resolvedPaymentId);
+        const detail = await paymentApi.getPayment(paymentId);
         if (alive) setPayment(detail);
       } catch (error) {
         if (alive) {
@@ -71,7 +51,7 @@ const PaymentResultPage = () => {
       }
     };
 
-    if (paymentId || isSandboxReturn) {
+    if (paymentId && !isSandboxReturn) {
       loadPayment();
     } else {
       setLoading(false);
@@ -79,6 +59,54 @@ const PaymentResultPage = () => {
 
     return () => { alive = false; };
   }, [amountParam, isSandboxReturn, paymentId, signature, txn]);
+
+  const finishSandbox = async (status) => {
+    setSubmitting(true);
+    setProcessingError('');
+    try {
+      const now = new Date();
+      const callback = await paymentApi.processCallback({
+        transactionCode: txn,
+        gatewayTransactionId: `SANDBOX-${txn}`,
+        amount: amountParam,
+        status,
+        responseCode: status === 'SUCCESS' ? '00' : '99',
+        responseMessage: status === 'SUCCESS'
+          ? 'Thanh toán Sandbox thành công'
+          : 'Thanh toán Sandbox thất bại theo lựa chọn mô phỏng',
+        paidAt: status === 'SUCCESS' ? now.toISOString() : null,
+        timestamp: Math.floor(now.getTime() / 1000),
+        nonce: window.crypto?.randomUUID?.()
+          || `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        signature,
+      });
+      const resolvedPaymentId = callback?.paymentId || paymentId;
+      if (!resolvedPaymentId) throw new Error('Không xác định được giao dịch thanh toán');
+      setPayment(await paymentApi.getPayment(resolvedPaymentId));
+    } catch (error) {
+      setProcessingError(error?.response?.data?.message
+        || error?.message
+        || 'Không thể xác nhận kết quả thanh toán');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const cancelSandbox = async () => {
+    if (!paymentId) {
+      setProcessingError('Không xác định được giao dịch để hủy');
+      return;
+    }
+    setSubmitting(true);
+    setProcessingError('');
+    try {
+      setPayment(await paymentApi.cancelPayment(paymentId));
+    } catch (error) {
+      setProcessingError(error?.response?.data?.message || 'Không thể hủy giao dịch');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const success = useMemo(() => {
     if (payment) return payment.status === 'SUCCESS';
@@ -91,6 +119,40 @@ const PaymentResultPage = () => {
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}><CircularProgress /></Box>
+    );
+  }
+
+  if (isSandboxReturn && !payment) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+        <Card sx={{ maxWidth: 520, width: '100%' }}>
+          <CardContent sx={{ p: 4 }}>
+            <Typography variant="h5" sx={{ fontWeight: 700, textAlign: 'center' }}>
+              Thanh toán Sandbox
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1, textAlign: 'center' }}>
+              Đây là môi trường thử nghiệm. Hãy chọn kết quả muốn mô phỏng cho giao dịch này.
+            </Typography>
+            {processingError && <Alert severity="error" sx={{ mt: 2 }}>{processingError}</Alert>}
+            <Divider sx={{ my: 3 }} />
+            <Stack spacing={1}>
+              <Row label="Mã giao dịch" value={<Typography variant="body2" sx={{ fontFamily: 'monospace' }}>{txn}</Typography>} />
+              <Row label="Số tiền" value={formatCurrency(Number(amountParam))} />
+            </Stack>
+            <Stack spacing={1.5} sx={{ mt: 4 }}>
+              <Button variant="contained" color="success" disabled={submitting} onClick={() => finishSandbox('SUCCESS')}>
+                Xác nhận thanh toán thành công
+              </Button>
+              <Button variant="outlined" color="error" disabled={submitting} onClick={() => finishSandbox('FAILED')}>
+                Mô phỏng thanh toán thất bại
+              </Button>
+              <Button color="inherit" disabled={submitting || !paymentId} onClick={cancelSandbox}>
+                Hủy giao dịch
+              </Button>
+            </Stack>
+          </CardContent>
+        </Card>
+      </Box>
     );
   }
 

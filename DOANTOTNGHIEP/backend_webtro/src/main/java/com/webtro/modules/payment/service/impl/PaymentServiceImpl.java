@@ -226,7 +226,11 @@ public class PaymentServiceImpl implements PaymentService {
             redisTemplate.opsForValue().set(redisIdem, payment.getTransactionCode(),
                     expiryMinutes + 5L, TimeUnit.MINUTES);
 
-            return buildCreatedResponse(payment, init.getPaymentUrl());
+            String paymentUrl = init.getPaymentUrl();
+            if ("SANDBOX".equalsIgnoreCase(paymentGateway.provider()) && paymentUrl != null) {
+                paymentUrl += (paymentUrl.contains("?") ? "&" : "?") + "paymentId=" + payment.getId();
+            }
+            return buildCreatedResponse(payment, paymentUrl);
         } catch (RuntimeException e) {
             // Thất bại -> giải phóng sentinel để user thử lại.
             safeDelete(redisIdem);

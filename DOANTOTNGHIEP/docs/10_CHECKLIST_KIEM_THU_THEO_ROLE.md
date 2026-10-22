@@ -64,29 +64,29 @@ Các vai trò đăng nhập kiểm tra nhóm này trong phạm vi quyền của 
 
 | Chức năng cần kiểm tra | Trạng thái |
 |---|:---:|
-| Xem tổng quan và số liệu tin đăng của mình | Chưa check |
-| Cập nhật hồ sơ chủ trọ, thông tin liên hệ và bật/tắt chat | Chưa check |
-| Gửi yêu cầu xác thực chủ trọ và xem kết quả | Chưa check |
-| Tạo tin theo các loại được phép, lưu nháp và gửi duyệt | Chưa check |
-| Kiểm tra các trường bắt buộc, giá, diện tích và địa chỉ trong phạm vi Hà Nội | Chưa check |
-| Thêm/xóa/sắp xếp ảnh và đổi ảnh đại diện tin | Chưa check |
-| Thêm/xóa tiện ích của tin | Chưa check |
-| Sửa tin; thay đổi nội dung nhạy cảm được đưa duyệt lại | Chưa check |
-| Sửa tin bị từ chối và gửi duyệt lại | Chưa check |
-| Ẩn/hiện, đóng, gia hạn và xóa tin đúng trạng thái | Chưa check |
-| Không sửa/xóa hoặc lách khóa đối với tin đang bị khóa/đang cho thuê | Chưa check |
-| Lọc danh sách tin và xem thống kê từng tin | Chưa check |
-| Xem, duyệt và từ chối yêu cầu thuê trên tin của mình | Chưa check |
-| Xác nhận thuê; trạng thái tin và các yêu cầu cạnh tranh cập nhật đúng | Chưa check |
-| Không xác nhận hai người thuê cùng phòng hoặc một người đang thuê hai phòng | Chưa check |
-| Xác nhận trả phòng; tin và lịch sử thuê cập nhật phù hợp | Chưa check |
-| Không xử lý yêu cầu thuê hoặc quản lý tin của chủ trọ khác | Chưa check |
-| Xem gói đẩy tin, áp dụng mã giảm giá và tạo thanh toán | Chưa check |
-| Kiểm tra thanh toán thành công, thất bại, hủy và lịch sử giao dịch | Chưa check |
-| Gói đẩy tin chỉ kích hoạt sau thanh toán hợp lệ, không kích hoạt trùng | Chưa check |
-| Gói hết hạn thì tin không còn hưởng ưu tiên sai | Chưa check |
-| Nhận thông báo kiểm duyệt, sắp hết hạn và đánh giá | Chưa check |
-| Tài khoản bị hạn chế đăng tin không vượt được hạn chế | Chưa check |
+| Xem tổng quan và số liệu tin đăng của mình | Đã check |
+| Cập nhật hồ sơ chủ trọ, thông tin liên hệ và bật/tắt chat | Đã check |
+| Gửi yêu cầu xác thực chủ trọ và xem kết quả | Đã check |
+| Tạo tin theo các loại được phép, lưu nháp và gửi duyệt | Đã check |
+| Kiểm tra các trường bắt buộc, giá, diện tích và địa chỉ trong phạm vi Hà Nội | Đã check |
+| Thêm/xóa/sắp xếp ảnh và đổi ảnh đại diện tin | Đã check |
+| Thêm/xóa tiện ích của tin | Đã check |
+| Sửa tin; thay đổi nội dung nhạy cảm được đưa duyệt lại | Đã check |
+| Sửa tin bị từ chối và gửi duyệt lại | Đã check |
+| Ẩn/hiện, đóng, gia hạn và xóa tin đúng trạng thái | Đã check |
+| Không sửa/xóa hoặc lách khóa đối với tin đang bị khóa/đang cho thuê | Đã check |
+| Lọc danh sách tin và xem thống kê từng tin | Đã check |
+| Xem, duyệt và từ chối yêu cầu thuê trên tin của mình | Đã check |
+| Xác nhận thuê; trạng thái tin và các yêu cầu cạnh tranh cập nhật đúng | Đã check |
+| Không xác nhận hai người thuê cùng phòng hoặc một người đang thuê hai phòng | Đã check |
+| Xác nhận trả phòng; tin và lịch sử thuê cập nhật phù hợp | Đã check |
+| Không xử lý yêu cầu thuê hoặc quản lý tin của chủ trọ khác | Đã check |
+| Xem gói đẩy tin, áp dụng mã giảm giá và tạo thanh toán | Đã check |
+| Kiểm tra thanh toán thành công, thất bại, hủy và lịch sử giao dịch | Đã check |
+| Gói đẩy tin chỉ kích hoạt sau thanh toán hợp lệ, không kích hoạt trùng | Đã check |
+| Gói hết hạn thì tin không còn hưởng ưu tiên sai | Đã check |
+| Nhận thông báo kiểm duyệt, sắp hết hạn và đánh giá | Đã check |
+| Tài khoản bị hạn chế đăng tin không vượt được hạn chế | Đã check |
 
 ## 5. Kiểm duyệt viên — MODERATOR
 
