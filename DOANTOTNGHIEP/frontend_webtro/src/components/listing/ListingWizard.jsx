@@ -106,18 +106,24 @@ export default function ListingWizard({ mode = 'create', listingId, initialData,
   };
   const handleBack = () => setActiveStep((s) => Math.max(s - 1, 0));
 
+  const buildPredictionPayload = (targetListingId) => {
+    const v = getValues();
+    return {
+      categoryId: Number(v.categoryId), provinceId: v.provinceId, districtId: v.districtId, wardId: v.wardId,
+      area: Number(v.area), roomCount: v.roomCount ? Number(v.roomCount) : undefined,
+      toiletCount: v.toiletCount ? Number(v.toiletCount) : undefined,
+      furnitureStatus: v.furnitureStatus, toiletType: v.toiletType,
+      amenityIds: v.amenityIds, inputPrice: v.price ? Number(v.price) : undefined,
+      listingId: targetListingId,
+    };
+  };
+
   const runPrediction = async () => {
     const v = getValues();
     if (!v.categoryId || !v.wardId || !v.area) return;
     setPredicting(true);
     try {
-      const res = await aiApi.predictPrice({
-        categoryId: Number(v.categoryId), provinceId: v.provinceId, districtId: v.districtId, wardId: v.wardId,
-        area: Number(v.area), roomCount: v.roomCount ? Number(v.roomCount) : undefined,
-        toiletCount: v.toiletCount ? Number(v.toiletCount) : undefined,
-        furnitureStatus: v.furnitureStatus, toiletType: v.toiletType,
-        amenityIds: v.amenityIds, inputPrice: v.price ? Number(v.price) : undefined,
-      });
+      const res = await aiApi.predictPrice(buildPredictionPayload(mode === 'edit' ? listingId : undefined));
       setPriceState(res);
     } catch (e) {
       setPriceState({ available: false, message: e?.message });
@@ -242,6 +248,13 @@ export default function ListingWizard({ mode = 'create', listingId, initialData,
         const created = await listingApi.create(buildPayload(false));
         const id = created?.id;
         await syncImages(id);
+        // Gắn một dự đoán vào tin vừa tạo để lịch sử và cờ lệch giá không bị thất lạc.
+        // AI là tính năng hỗ trợ: lỗi/tắt/timeout tuyệt đối không được làm hỏng luồng lưu tin.
+        try {
+          await aiApi.predictPrice(buildPredictionPayload(id));
+        } catch {
+          // Kết quả gọi trước khi tạo tin vẫn được hiển thị; việc lưu tin tiếp tục bình thường.
+        }
         if (submitImmediately) await listingApi.submit(id);
         notify.success(submitImmediately ? 'Đã gửi tin chờ duyệt' : 'Đã lưu tin nháp');
         onDone?.(id);

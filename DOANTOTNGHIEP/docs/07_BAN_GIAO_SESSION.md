@@ -6,6 +6,13 @@
 
 > **Mục đích file này:** ghi lại **thật chi tiết & tường minh** toàn bộ những gì đã trao đổi và thực hiện trong session làm việc, để **session mới đọc file này là hiểu ngay luồng dự án, trạng thái hiện tại, các quyết định kỹ thuật, những bẫy (gotcha) và việc còn lại** — không cần hỏi lại từ đầu.
 >
+
+> **Cập nhật hiện trạng 2026-10-23:** các mục 6.1–6.3 và bảng thay đổi ở cuối file là nhật ký
+> của session cũ. Luồng dự đoán giá hiện tại đã thay đổi: bean `PriceEstimator` mặc định là
+> `RentalApiLightgbmPriceEstimator` (`lgbm-api-1.0`), gọi FastAPI `rental-api` chạy
+> `model.joblib` LightGBM. `ComparableHedonicPriceEstimator` (`hedonic-1.0`) vẫn còn trong mã
+> nguồn nhưng không được chọn mặc định và không tự fallback khi FastAPI lỗi. Contract hiện hành
+> xem tại `00_CANONICAL_DECISIONS.md`, `01_KIEN_TRUC_HE_THONG.md`, `03_THIET_KE_API.md`.
 > **Cập nhật lần cuối:** 2026-08-05. Người dùng: `nguyenxuanhoa8b@gmail.com`, branch `main`.
 
 ---
@@ -135,7 +142,8 @@ Người dùng: *"Phạm vi web trong khu vực Hà Nội"*.
 - Logic tìm comparable ở `PriceEstimationServiceImpl`: nới dần **WARD → DISTRICT → PROVINCE** cho tới khi đủ `minSamples`.
 
 ### 6.3. Xác minh CÂU HỎI 3 — Đủ 4 AI chưa? → **RỒI**, đều gọi được (verify thật)
-4 AI đều **rule-based in-process** (không gọi dịch vụ ngoài). Endpoint + quyền:
+Tại thời điểm session được ghi, 4 AI đều được xác minh theo implementation in-process khi đó.
+Bảng sau là bằng chứng lịch sử, không phải contract runtime hiện tại:
 
 | AI | Endpoint | Quyền | Kết quả verify |
 |---|---|---|---|
@@ -251,7 +259,8 @@ function PostU($url,$tok,$obj){ $b=$enc.GetBytes(($obj|ConvertTo-Json -Compress)
 - **Giao tiếp chéo module:** qua **SPI Gateway** (adapter hexagonal) + ApplicationEvent — module này không phụ thuộc trực tiếp entity module kia.
 - **Mapper:** builder thủ công, không MapStruct.
 - **Cấu hình runtime:** ngưỡng nghiệp vụ ở bảng `system_configs` (Admin sửa được), không phải `application.yml`.
-- **4 AI** rule-based in-process: `SentimentAnalyzer` (từ điển tiếng Việt), `ContentBasedRecommendationEngine`, `RuleBasedChatbotEngine` (intent+slot), `ComparableHedonicPriceEstimator` (so sánh + hedonic).
+- **Ghi nhận tại thời điểm session:** 4 AI dùng implementation in-process, trong đó Price là
+  `ComparableHedonicPriceEstimator`. Trạng thái hiện tại đã được ghi ở đầu file.
 - **10 job `@Scheduled`:** DataRetention, ListingExpiry, ListingExpiryReminder, NewMatchingListingNotify, PaymentReconcile, PromotionExpiry, RecommendationPrecompute, SentimentRetry, TokenCleanup, TrustScoreRecalc.
 - **Flyway V1..V15:** V1 baseline schema · V2 roles/permissions · V3 catalog · **V4 địa giới Hà Nội** · V5 system_configs · V6 banned_keywords · V7 promotion_packages · V8 admin note · V9 amenity groups note · V10 fulltext index · V11/V12 mở rộng enum audit/notification/moderation · **V13 chuyển user↔role sang `users.role_id` và bỏ bảng `user_roles`** · **V14 xóa 2 config gây khác quyền giữa người cùng vai trò** · **V15 drop `role_permissions` và `permissions`**.
 

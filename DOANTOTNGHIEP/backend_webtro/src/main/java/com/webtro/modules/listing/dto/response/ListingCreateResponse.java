@@ -13,8 +13,8 @@ import java.util.List;
 /**
  * Kết quả tạo tin nháp (docs/03 mục 4.4.7).
  *
- * <p>Khối dự đoán giá ({@code pricePrediction}) do module AI cung cấp — khi AI chưa sẵn sàng thì
- * {@code available = false}, tin vẫn được tạo bình thường {@code [§9.4]}.
+ * <p>Dự đoán giá được frontend gọi qua module AI sau khi tạo để gắn lịch sử vào id của tin.
+ * Module AI lỗi hoặc bị tắt không làm thất bại thao tác tạo tin {@code [§9.4]}.
  */
 @Getter
 @Setter

@@ -32,7 +32,8 @@
 - **Phân trang:** `PageResponse { items, page, size, totalElements, totalPages, first, last }` — lưu ý danh sách nằm ở **`items`** (không phải `content`).
 - **Đăng nhập:** body dùng field **`emailOrPhone`** (không phải `email`).
 - **Phân quyền:** Phân quyền role-only — **4 vai trò**, kiểm soát bằng `@PreAuthorize("hasRole/hasAnyRole")`.
-- **AI:** cả 4 module là **rule-based in-process** (không gọi dịch vụ ngoài).
+- **AI:** sentiment/recommendation/chatbot chạy trong Spring Boot; dự đoán giá gọi FastAPI
+  `rental-api` và model LightGBM qua `RentalApiLightgbmPriceEstimator`.
 - **Tài khoản demo:** admin `admin@webtro.local` dùng `ADMIN_PASSWORD` trong `.env` (hiện tại `Admin@12345`); `moderator@webtro.local`, `landlordN@webtro.local` và `tenantN@webtro.local` dùng mật khẩu chung `Test@1234`.
 
 ---
@@ -1567,10 +1568,10 @@ flowchart TD
 
 ### 1. Module này dùng để làm gì?
 
-Đây là cụm 4 tính năng "AI" phục vụ khám phá tin — nhưng cần hiểu đúng bản chất: **cả 4 đều là thuật toán rule-based/thống kê chạy in-process trong JVM**, KHÔNG gọi model học máy hay service ngoài (không OpenAI/không Python service). Cụ thể:
+Phần này mô tả Recommendation và Price Estimation. Hai luồng có cách triển khai khác nhau:
 
 - **AI-04 Gợi ý cá nhân hóa (Recommendation)**: `ContentBasedRecommendationEngine` — tính điểm khớp giữa hồ sơ hành vi người dùng (xem/tìm/lưu) và từng tin ứng viên bằng công thức cộng có trọng số 9 số hạng.
-- **AI-06 Dự đoán giá (Price Estimation)**: `ComparableHedonicPriceEstimator` — lấy giá trung vị/m² của các tin tương đương (so sánh) trong cùng khu vực + điều chỉnh phần trăm theo tiện nghi (hedonic pricing).
+- **AI-06 Dự đoán giá (Price Estimation)**: `RentalApiLightgbmPriceEstimator` là bean `@Primary`; backend gọi FastAPI `rental-api` để chạy model LightGBM. `ComparableHedonicPriceEstimator` vẫn có trong mã nguồn nhưng không được chọn mặc định và không phải fallback tự động.
 
 Vai trò trong hệ thống: tăng tỷ lệ tìm được phòng phù hợp (Recommendation), và giúp chủ trọ định giá hợp lý tránh đăng giá quá lệch thị trường (Price) — **tất cả đều KHÔNG chặn hành động của người dùng** (đăng tin, nhắn tin...), chỉ hiển thị cảnh báo/gợi ý.
 
@@ -1580,7 +1581,7 @@ Vai trò trong hệ thống: tăng tỷ lệ tìm được phòng phù hợp (Re
 
 | Nơi xuất hiện | File | Chức năng |
 |---|---|---|
-| Khối "Giá AI đề xuất" trong form đăng tin | `frontend_webtro/src/components/listing/ListingWizard.jsx` (dòng ~382–419) | Card hiển thị giá đề xuất + khoảng (`priceRange.low–high`), nút "Tính lại" (`runPrediction`), cảnh báo mềm (`Alert severity="warning"`) khi `comparison.deviationFlagged=true`, luôn hiện `disclaimer` cuối card. |
+| Khối "Giá AI đề xuất" trong form đăng tin | `frontend_webtro/src/components/listing/ListingWizard.jsx` | Card hiển thị giá đề xuất + khoảng (`priceRange.low–high`), nút "Tính lại" (`runPrediction`), cảnh báo mềm khi `comparison.deviationFlagged=true`, và `disclaimer` khi response có giá trị này. |
 | Khối "Có thể bạn quan tâm" khi tìm kiếm 0 kết quả | `SearchPage.jsx` | Gọi `listingApi.getSuggested({ source: 'LOW_RESULT_SEARCH', size: 6 })`. |
 | Section gợi ý ở trang chủ | `HomePage.jsx` | > Cần bổ sung theo source code (đã xác nhận `HomePage.jsx` import `listingApi`/`searchApi`/`catalogApi`, cần đọc thêm phần thân file sau dòng 90 để xác nhận có gọi `getSuggested`/AI recommendation cho section riêng hay không). |
 
@@ -1598,15 +1599,18 @@ Vai trò trong hệ thống: tăng tỷ lệ tìm được phòng phù hợp (Re
 |---|---|---|
 | `RecommendationEngine` | `ContentBasedRecommendationEngine` | Thuần thuật toán tính điểm — không đụng DB/HTTP |
 | `RecommendationService` | `RecommendationServiceImpl` | Điều phối: đọc tín hiệu hành vi qua gateway, gọi engine, ghi log, trả response |
-| `PriceEstimator` | `ComparableHedonicPriceEstimator` | Thuần thuật toán so sánh + hedonic |
-| `PriceEstimationService` | `PriceEstimationServiceImpl` | Điều phối: validate tham chiếu, mở rộng phạm vi WARD→DISTRICT→PROVINCE, gọi estimator, lưu lịch sử |
+| `PriceEstimator` | `RentalApiLightgbmPriceEstimator` (`@Primary`) | Map catalog → payload FastAPI, gọi `/predict`, đổi đơn vị và map kết quả |
+| `PriceEstimator` | `ComparableHedonicPriceEstimator` (không mặc định) | Thuật toán so sánh + hedonic còn được giữ trong mã nguồn |
+| `PriceEstimationService` | `PriceEstimationServiceImpl` | Kiểm bật/tắt, ownership, tham chiếu; gọi estimator; lưu lịch sử và cập nhật cờ tin khi có `listingId` |
 
 **SPI Gateway** (module `ai` KHÔNG đụng trực tiếp entity của module khác — nguyên tắc kiến trúc hexagonal):
 - `ListingDataGateway` — đọc thuộc tính tin (`ListingAttr`), tìm ứng viên gợi ý (`findCandidates`), tìm tin so sánh giá (`findComparables`), ghi cờ lệch giá ngược lại (`markPriceDeviation`).
 - `InteractionSignalGateway` — đọc hành vi (`recentBehaviorRefs`: view/favorite/contact có trọng số), tín hiệu tìm kiếm (`recentSearchSignals`), tin đã xem gần đây (`recentlyViewedListingIds` — để chống gợi ý lặp).
 - `UserDataGateway` — đọc sở thích khai báo tường minh (`UserPreference`: số người ở mong muốn, giới tính ưu tiên).
 
-**`AiModuleSupport`** — tiện ích dùng chung cho cả Recommendation lẫn Price: `ensureEnabled(configKey)` (kiểm cấu hình bật/tắt tính năng, nếu tắt → chặn sớm) và `runWithTimeout(name, timeoutConfigKey, supplier)` (chạy phần tính điểm CPU thuần có giới hạn thời gian — tránh 1 request AI làm treo thread pool).
+**`AiModuleSupport`** — tiện ích dùng chung cho cả Recommendation lẫn Price: `ensureEnabled(configKey)`
+(tắt → `503 AI_MODULE_DISABLED`) và `runWithTimeout(name, timeoutConfigKey, supplier)` để giới
+hạn thời gian chạy estimator. Với Price mặc định, supplier này bao gồm lời gọi HTTP tới FastAPI.
 
 **Repository/Entity riêng của module `ai`**: `RecommendationLog`/`RecommendationLogRepository` (ghi mọi lần gợi ý), `PredictionHistory`/`PredictionHistoryRepository` (ghi mọi lần dự đoán giá, kể cả khi thiếu dữ liệu).
 
@@ -1656,18 +1660,25 @@ flowchart TD
 
 **Luồng Price Estimation (`POST /api/ai/price-prediction`)**:
 
-1. Kiểm `ai.price.enabled`; validate category/tỉnh/huyện/xã tồn tại + khu vực có hỗ trợ đăng tin (`isAreaSupported`).
-2. Tính dải diện tích so sánh: `area ± area_tolerance%` (config), cửa sổ thời gian `ai.price.comparable_days`.
-3. **Mở rộng phạm vi dần dần**: thử tìm tin so sánh ở cấp `WARD` trước; nếu số mẫu < `ai.price.min_samples` → thử `DISTRICT`; vẫn thiếu → thử `PROVINCE`. Chỉ chuyển cấp rộng hơn nếu số mẫu ở cấp đó **không ít hơn** cấp trước (tránh mở rộng vô ích).
-4. `estimator.estimate(...)` — chạy có timeout: nếu mẫu < ngưỡng tối thiểu → trả `available=false, confidence=INSUFFICIENT_DATA` (KHÔNG ước tính).
-5. Nếu đủ mẫu: giá cơ sở = **trung vị (median) giá/m²** của các tin so sánh × diện tích; cộng dồn % điều chỉnh hedonic cho 6 yếu tố (nội thất đầy đủ, toilet riêng, thang máy, chỗ để xe, giờ tự do, mặt tiền) — mỗi yếu tố có trọng số cấu hình riêng; khoảng giá = percentile 25/50/75 của **tổng giá** các tin so sánh, co giãn theo cùng hệ số hedonic; độ tin cậy (`HIGH/MEDIUM/LOW`) suy từ số mẫu + độ phân tán IQR/median.
-6. **Lưu `PredictionHistory` ở MỌI trường hợp** (kể cả thiếu dữ liệu) — quyết định này nằm TRƯỚC khi ném lỗi `AI_INSUFFICIENT_DATA`, nên dù trả 422 vẫn có bản ghi lịch sử phục vụ báo cáo chất lượng AI.
-7. Nếu có `inputPrice` (giá chủ trọ định nhập) → tính `deviationRatio = (inputPrice - suggested)/suggested`; lệch quá `ai.price.deviation_flag_ratio` → `deviationFlagged=true` — **chỉ để cảnh báo mềm, `blocksPosting` LUÔN `false`**.
-8. Nếu có `listingId` (đang sửa tin) → ghi ngược cờ `price_deviation_flag` vào bảng `listings` qua `ListingDataGateway.markPriceDeviation`.
+1. Kiểm `ai.price.enabled`. Nếu request có `listingId`, đọc owner và trả `LISTING_NOT_FOUND` hoặc `LISTING_FORBIDDEN` trước khi gọi model.
+2. Validate category/tỉnh/huyện/xã tồn tại, category active, quan hệ tỉnh–huyện–xã và khu vực được hỗ trợ; validate các amenity id khi danh sách không rỗng.
+3. Dựng `PriceInput`. Vì bean mặc định trả `usesComparables() = false`, service không gọi `findComparables`; nó chạy estimator với danh sách rỗng trong `AiModuleSupport.runWithTimeout`.
+4. `RentalApiLightgbmPriceEstimator` đọc tên quận/phường/category/amenity từ DB, map sang `district`, `ward`, `room_type`, `amenities`, `area_m2`, `floor`, `latitude`, `longitude`, rồi gọi FastAPI `POST /predict` bằng HTTP/1.1.
+5. FastAPI chạy model `model.joblib` khi Docker dùng `RENTAL_BACKEND=sklearn` và trả giá theo đơn vị triệu đồng cùng `market_*`, `model_type`, `mape_pct`.
+6. Backend đổi giá sang đồng, tính confidence, `deviationRatio` và `deviationFlagged`. FastAPI 4xx được map thành `400 AI_PRICE_INPUT_INVALID`; lỗi kết nối/5xx/timeout thành `503 AI_SERVICE_UNAVAILABLE`.
+7. Kết quả thành công được lưu thành một dòng `PredictionHistory`. Nếu có `listingId`, service cập nhật `price_deviation_flag` và `price_prediction_id`; `blocksPosting` luôn `false`.
+
+Nhánh WARD→DISTRICT→PROVINCE và `AI_INSUFFICIENT_DATA` chỉ chạy khi bean `PriceEstimator`
+được chọn trả `usesComparables() = true`; bean `@Primary` hiện tại không đi qua nhánh này.
 
 ### 5. Dữ liệu chạy như thế nào
 
-**Price**: Input (form đăng tin bước "Giá & tiện ích") → FE build object gửi `POST /api/ai/price-prediction` với `categoryId/provinceId/districtId/wardId/area/roomCount/toiletCount/furnitureStatus/toiletType/amenityIds/inputPrice` → BE validate tham chiếu → tìm comparables → `PriceEstimator` tính (thuần Java, không network ngoài) → lưu `PredictionHistory` → map `PriceEstimate` (record nội bộ) sang `PricePredictionResponse` (DTO public, có `disclaimer` bắt buộc luôn xuất hiện) → FE lưu vào state `price`, hiển thị card, và **giá trị này KHÔNG tự động điền vào field `price`** — chỉ hiển thị tham khảo, người dùng tự quyết định nhập giá.
+**Price**: Form bước "Giá & tiện ích" gửi `POST /api/ai/price-prediction` với
+`categoryId/provinceId/districtId/wardId/area/roomCount/toiletCount/furnitureStatus/toiletType/amenityIds/inputPrice`
+và `listingId` khi có → backend validate → gọi FastAPI/LightGBM → lưu `PredictionHistory` → map
+sang `PricePredictionResponse` → frontend hiển thị card. Giá đề xuất không tự ghi đè field `price`.
+Sau khi tạo tin, frontend gọi lại với id mới để liên kết lịch sử/cờ lệch giá; lỗi ở lần gọi này bị
+bắt riêng và không làm thất bại thao tác lưu/gửi tin.
 
 **Recommendation**: Input là ngữ cảnh (`source`, có thể kèm `listingId`) chứ không phải form nhập liệu → FE gọi khi mount trang hoặc khi 0 kết quả tìm kiếm → BE tổng hợp hành vi (đọc, không ghi gì vào Listing/User) → chỉ ghi mới vào `recommendation_logs` → trả danh sách `RecommendationItem` (đã map sẵn từ `Listing` sang dạng rút gọn tương tự `ListingSummaryResponse` nhưng có thêm `scoreBreakdown`/`matchReasons`) → FE render `ListingGrid`.
 
@@ -1677,7 +1688,7 @@ flowchart TD
 | Bảng | Vai trò | Quan hệ | Field quan trọng |
 |---|---|---|---|
 | `recommendation_logs` | Append-only, ghi mọi lần gợi ý (kể cả cold start) | N-1 `users` (nullable — khách vãng lai), N-1 `listings` | `session_id`, `source` (enum), `batch_id` (nhóm 1 lần gọi), `score` (DECIMAL 6,4), `rank_position`, các cột điểm thành phần (`location_score, area_size_score, price_score, category_score, amenity_score, occupant_score, gender_score, freshness_score`), `promoted_boost` (CHECK 1.000–1.150), `is_cold_start`, `context` (JSON), `clicked_at` (NULL cho tới khi người dùng click — cần xác nhận có API nào set field này không, xem mục 11) |
-| `prediction_histories` | Append-only, ghi mọi lần dự đoán giá | N-1 `users`, N-1 `listings` (nullable — có thể dự đoán trước khi tạo tin), + tham chiếu `category_id/province_id/district_id/ward_id` | `suggested_price/price_low/price_median/price_high/price_per_sqm`, `sample_size`, `scope_used` (`WARD/DISTRICT/PROVINCE`), `confidence` (`HIGH/MEDIUM/LOW/INSUFFICIENT_DATA`), `dispersion_ratio` (IQR/median), `adjustment_detail` (JSON — 6 yếu tố hedonic), `input_price/deviation_ratio/is_flagged`, `is_applied` (cần xác nhận cờ này được set khi nào — có thể đánh dấu "chủ trọ đã dùng giá gợi ý", xem mục 11), `estimator_version` (VARCHAR 20, hiện `"hedonic-1.0"`) |
+| `prediction_histories` | Append-only, ghi dự đoán thành công; nhánh estimator comparable còn có thể ghi cả kết quả thiếu dữ liệu trước khi ném lỗi | N-1 `users`, N-1 `listings` (nullable), N-1 `categories`, N-1 `wards`; không còn `province_id`/`district_id` sau V20 | `suggested_price/price_low/price_median/price_high/price_per_sqm`, `sample_size`, `scope_used`, `confidence`, `dispersion_ratio`, `adjustment_detail`, `input_price/deviation_ratio/is_flagged`, `is_applied` (hiện không có code đặt `TRUE`), `estimator_version` (`lgbm-api-1.0` mặc định; `hedonic-1.0` nếu chọn estimator còn lại) |
 | `view_histories`, `search_histories` | Nguồn tín hiệu hành vi cho Recommendation (đọc qua `InteractionSignalGatewayAdapter`, KHÔNG thuộc module `ai`) | — | Xem chi tiết ở Module 2 mục 6 — **`search_histories` hiện luôn rỗng do bug đã nêu**, ảnh hưởng trực tiếp tới chất lượng gợi ý ở đây |
 | `listings.price_prediction_id` | FK mềm (chỉ giữ Long) trỏ về `prediction_histories.id` gần nhất | — | Ghi khi `markPriceDeviation` được gọi |
 | `listings.price_deviation_flag` | Cờ lệch giá (Boolean) | — | Đọc bởi `canAutoApprove` (Module 1) và bởi màn quản trị AI (`AdminAiController`, thuộc Người 1 phụ trách theo phân công, không mô tả sâu ở đây) |
@@ -1688,8 +1699,8 @@ flowchart TD
 |---|---|---|---|---|---|---|---|
 | POST | `/api/ai/recommendations` | `RecommendationRequest{source, listingId?, size?, provinceId?, districtId?, excludeListingIds?}` + header `X-Session-Id?` | `ApiResponse<RecommendationResponse>` | Tùy chọn (khách được cold start, đăng nhập được cá nhân hóa) | — | `size` 1–24, `excludeListingIds` ≤50 phần tử, `listingId` bắt buộc khi `source∈{SIMILAR_LISTING,AFTER_FAVORITE}` | `MISSING_PARAMETER` |
 | GET | `/api/listings/suggested` | query `source?(default HOMEPAGE), size?, listingId?, provinceId?, districtId?, excludeListingIds?` + header `X-Session-Id?` | `ApiResponse<RecommendationResponse>` | Tùy chọn | — | như trên (dựng lại `RecommendationRequest` từ query rồi gọi cùng service) | như trên |
-| POST | `/api/ai/price-prediction` | `PricePredictionRequest{categoryId, provinceId, districtId, wardId, area, roomCount?, toiletCount?, furnitureStatus?, toiletType?, curfewType?, amenityIds?, isStreetFront?, latitude?, longitude?, listingId?, inputPrice?}` | `ApiResponse<PricePredictionResponse>` | Bắt buộc | `LISTING_CREATE` | tham chiếu tồn tại + khu vực hỗ trợ đăng tin; `area` 0.01–1000 | `CATEGORY_NOT_FOUND`, `PROVINCE/DISTRICT/WARD_NOT_FOUND`, `ADDRESS_HIERARCHY_MISMATCH`, `AI_INSUFFICIENT_DATA` (422) |
-| GET | `/api/ai/price-prediction/histories` | query `listingId` + `Pageable` | `ApiResponse<PageResponse<PricePredictionHistoryResponse>>` | Bắt buộc | `LISTING_UPDATE_OWN` (chủ tin) hoặc `AI_LOG_VIEW` | chủ tin đúng người xem, hoặc có quyền log | `LISTING_NOT_FOUND`, `LISTING_FORBIDDEN` |
+| POST | `/api/ai/price-prediction` | `PricePredictionRequest{categoryId, provinceId, districtId, wardId, area, roomCount?, toiletCount?, furnitureStatus?, toiletType?, curfewType?, amenityIds?, isStreetFront?, latitude?, longitude?, listingId?, inputPrice?}` | `ApiResponse<PricePredictionResponse>` | Bắt buộc | role `TENANT`, `LANDLORD` hoặc `ADMIN` | DTO: area 0.01–1000; FastAPI hiện tại: area 8–80; nếu có `listingId` phải là chủ tin | `AI_PRICE_INPUT_INVALID` (400), `LISTING_NOT_FOUND`, `LISTING_FORBIDDEN`, `AI_MODULE_DISABLED`, `AI_SERVICE_UNAVAILABLE` |
+| GET | `/api/ai/price-prediction/histories` | query `listingId` + `Pageable` | `ApiResponse<PageResponse<PricePredictionHistoryResponse>>` | Bắt buộc | role `TENANT`, `LANDLORD`, `MODERATOR` hoặc `ADMIN` | chủ tin; Moderator/Admin được xem qua `hasLogView` | `LISTING_NOT_FOUND`, `LISTING_FORBIDDEN` |
 
 `PricePredictionResponse` gồm: `available, predictionHistoryId, suggestedPrice, priceRange{low,medium,high}, confidence, confidenceScore, confidenceLabel, explanation{summary,basePrice,adjustments[],totalAdjustmentPercent,factorsInVietnamese}, comparable{sampleSize,scope,scopeLabel,scopeExpanded,periodDays,medianPricePerSqm,iqrRatio}, comparison{inputPrice,suggestedPrice,difference,deviationRatio,deviationPercent,deviationFlagged,thresholdRatio,verdict,verdictMessage,blocksPosting(luôn false)}, disclaimer, predictedAt`.
 
@@ -1712,11 +1723,14 @@ flowchart TD
 - □ Gợi ý loại trừ đúng tin của chính người dùng đang đăng nhập (`userId.equals(c.ownerId())`).
 - □ Tin `ROOMMATE` có tính điểm `genderMatch`; tin loại khác thì `scoreBreakdown.genderMatch = null` và tổng trọng số áp dụng còn 0.94.
 - □ Tắt `ai.recommendation.enabled` → toàn bộ endpoint gợi ý phải báo đúng trạng thái tắt tính năng (xác nhận hành vi của `ensureEnabled` — ném lỗi hay trả rỗng?).
-- □ Dự đoán giá khi khu vực chưa đủ mẫu ở cả 3 cấp (WARD/DISTRICT/PROVINCE) → `AI_INSUFFICIENT_DATA` (422) NHƯNG vẫn có 1 dòng mới trong `prediction_histories` với `confidence=INSUFFICIENT_DATA`.
+- □ Dự đoán giá với diện tích trong khoảng FastAPI `8..80` và địa giới/category hợp lệ → trả giá theo đồng, lưu `estimator_version=lgbm-api-1.0`.
+- □ Diện tích ngoài `8..80` nhưng vẫn qua DTO backend (ví dụ `5`) → FastAPI 4xx được map thành `400 AI_PRICE_INPUT_INVALID`.
+- □ Tắt `ai.price.enabled` → `503 AI_MODULE_DISABLED`; dừng `rental-api`/gây timeout → `503 AI_SERVICE_UNAVAILABLE`.
 - □ Dự đoán giá với `inputPrice` lệch rất xa (ví dụ gấp 5 lần giá trung vị khu vực) → `deviationFlagged=true`, `blocksPosting=false` — vẫn cho phép tiếp tục đăng tin bình thường.
 - □ Dự đoán giá không truyền `inputPrice` → `comparison` phải là `null` hoặc rỗng hợp lý (không lỗi vì thiếu field so sánh).
 - □ Dự đoán giá 2 lần liên tiếp cho cùng 1 `listingId` với `inputPrice` khác nhau → cả 2 lần đều lưu `PredictionHistory` riêng biệt (không ghi đè), và `listings.price_prediction_id`/`price_deviation_flag` phản ánh **lần gần nhất**.
-- □ Xem lịch sử dự đoán giá (`GET .../histories`) bằng tài khoản không phải chủ tin và không có `AI_LOG_VIEW` → `LISTING_FORBIDDEN`.
+- □ Gửi `listingId` không thuộc người gọi ngay trong POST dự đoán → `LISTING_FORBIDDEN`; id không tồn tại → `LISTING_NOT_FOUND`.
+- □ Xem lịch sử dự đoán giá bằng tài khoản không phải chủ tin và không phải Moderator/Admin → `LISTING_FORBIDDEN`.
 
 ### 10. Các lỗi dễ gặp
 
@@ -1727,12 +1741,12 @@ flowchart TD
 
 ### 11. Các điểm cần review
 
-- **Business**: công thức Recommendation cộng điểm tuyến tính 9 số hạng là hợp lý cho rule-based, nhưng trọng số (`0.22/0.12/0.20/...`) đang hardcode ở tầng `ContentBasedRecommendationEngine` (hằng số Java `static final BigDecimal`) thay vì đọc từ `SystemConfigService` như hầu hết ngưỡng khác trong hệ thống — nghĩa là muốn tinh chỉnh trọng số phải deploy lại, không tự chỉnh qua Admin UI được (khác với Price — trọng số hedonic (`ai.price.hedonic.*`) ĐÃ đọc từ config, có sự bất nhất giữa 2 module con trong cùng cụm AI).
+- **Business**: trọng số Recommendation (`0.22/0.12/0.20/...`) đang là hằng số Java trong `ContentBasedRecommendationEngine`.
 - **Response/API naming**: nên bỏ field `cacheHit` khỏi `RecommendationResponse` hoặc thực sự cài cache (theo đúng ý đồ `AI_RECOMMENDATION_CACHE_TTL_MINUTES`), tránh field "ma" gây hiểu lầm khi tích hợp FE/đối tác thứ 3 sau này.
 - **DB**: cột `recommendation_logs.clicked_at` và `prediction_histories.is_applied` hiện chết — cần quyết định: (a) bổ sung API để ghi nhận, hoặc (b) xóa khỏi schema nếu không dùng, tránh gây hiểu lầm khi đọc DB trong tương lai.
 - **Validation**: `PricePredictionRequest` không có ràng buộc buộc `amenityIds` phải thuộc active list ngay ở Bean Validation — việc validate `amenityIds` diễn ra gián tiếp qua `amenityService.validateAndGet` (đúng, nhưng chỉ khi `amenityIds` không rỗng) — chấp nhận được, chỉ cần lưu ý khi review test case.
-- **Security**: `POST /api/ai/price-prediction` yêu cầu quyền `LISTING_CREATE` — hợp lý (chỉ chủ trọ/admin mới cần định giá tham khảo trước khi đăng), nhưng cũng đồng nghĩa người thuê **không dùng được công cụ tham khảo giá thị trường** khi xem tin — nên xác nhận đây có đúng chủ đích sản phẩm hay là hạn chế cần mở rộng sau này.
-- **Performance**: mở rộng phạm vi so sánh giá dần WARD→DISTRICT→PROVINCE nghĩa là trường hợp xấu nhất chạy tới **3 query** `findComparables` liên tiếp (mỗi query có `COMPARABLE_FETCH_LIMIT=300` dòng) trước khi ước tính — nên đo thời gian phản hồi thực tế ở khu vực thưa dữ liệu (phường mới, ít tin).
+- **Security**: POST dự đoán cho phép `TENANT`, `LANDLORD`, `ADMIN`; khi truyền `listingId`, service bắt buộc ownership kể cả với `ADMIN`. GET histories cho phép chủ tin hoặc `MODERATOR`/`ADMIN`.
+- **Tích hợp ngoài tiến trình**: backend dùng connect timeout `PT2S`, request timeout HTTP `PT3S`; lời gọi estimator còn được bọc bởi `AI_PRICE_TIMEOUT_MS`.
 
 ### 12. Kết quả mong đợi
 

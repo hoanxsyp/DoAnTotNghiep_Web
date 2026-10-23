@@ -570,11 +570,10 @@ Cấu hình trong `CorsConfig`, origin đọc từ biến môi trường `APP_CO
 
 | errorCode | HTTP | Thông điệp tiếng Việt | Khi nào xảy ra | Căn cứ |
 |---|---|---|---|---|
-| `AI_SERVICE_UNAVAILABLE` | 503 | Dịch vụ AI tạm thời không khả dụng, vui lòng thử lại sau | Timeout / module `enabled = false` | canonical §7.2, `[§10.10]` |
+| `AI_SERVICE_UNAVAILABLE` | 503 | Dịch vụ AI tạm thời không khả dụng, vui lòng thử lại sau | Timeout, lỗi kết nối hoặc dịch vụ ngoài trả 5xx | canonical §7.2 |
 | `AI_MODULE_DISABLED` | 503 | Tính năng AI này đang được bảo trì | `ai.<module>.enabled = false` | `[§10.10]` "Bật/tắt từng module AI nếu cần bảo trì" |
-| `AI_INSUFFICIENT_DATA` | 422 | Chưa đủ dữ liệu thị trường để dự đoán giá cho khu vực này | comparable `n < ai.price.min_samples` (8) | `[§9.4]` "Nếu dữ liệu đầu vào thiếu… hệ thống không dự đoán" |
-| `AI_MISSING_INPUT_FIELD` | 400 | Cần nhập thêm: {fields} để dự đoán giá | Thiếu `categoryId`/`wardId`/`area` | `[§3.16]` "Nếu thiếu dữ liệu, hệ thống thông báo cần nhập thêm trường" |
-| `AI_PRICE_INPUT_INVALID` | 400 | Thông tin đầu vào dự đoán giá không hợp lệ | `area <= 0` hoặc `area > 1000` | `[§9.4]` |
+| `AI_INSUFFICIENT_DATA` | 422 | Chưa đủ dữ liệu thị trường để dự đoán giá cho khu vực này | Chỉ phát sinh ở nhánh `PriceEstimator.usesComparables() = true`; bean mặc định hiện trả `false` | `[§9.4]` |
+| `AI_PRICE_INPUT_INVALID` | 400 | Thông tin đầu vào dự đoán giá không hợp lệ | FastAPI trả 4xx; ví dụ `area_m2` ngoài khoảng model `8..80` | |
 | `CHATBOT_MESSAGE_EMPTY` | 400 | Vui lòng nhập câu hỏi | `message` rỗng | `[§3.15]` |
 | `CHATBOT_MESSAGE_TOO_LONG` | 400 | Câu hỏi tối đa 500 ký tự | `message.length > 500` | `[§3.15]` |
 | `CHATBOT_RATE_LIMIT` | 429 | Bạn gửi câu hỏi quá nhanh, vui lòng chậm lại | > `spam.chatbot.per_minute` (30/phút) | `[§11.10]`, canonical §8 |
@@ -2655,17 +2654,6 @@ mục phổ biến `[§9.2]`. Chi tiết thuật toán ở mục 7.2.
     "createdAt": "2026-07-17T10:00:00Z",
     "expectedExpiredAt": null,
     "displayDays": 30,
-    "pricePrediction": {
-      "available": true,
-      "suggestedPrice": 3300000.00,
-      "priceRange": { "low": 2900000.00, "medium": 3300000.00, "high": 3800000.00 },
-      "confidence": "HIGH",
-      "confidenceScore": 0.84,
-      "deviationRatio": 0.061,
-      "deviationFlagged": false,
-      "explanation": "Giá bạn nhập cao hơn 6% so với mức trung bình 3.300.000 ₫ của phòng trọ 20–24 m² tại Phường 25, Quận Bình Thạnh. Mức chênh lệch này nằm trong khoảng bình thường.",
-      "sampleSize": 23
-    },
     "nextSteps": ["Tải lên tối thiểu 1 ảnh", "Gửi duyệt tin"]
   },
   "timestamp": "2026-07-17T10:00:00Z"
@@ -2698,13 +2686,12 @@ mục phổ biến `[§9.2]`. Chi tiết thuật toán ở mục 7.2.
    `400 REQUIRED_FIELD_MISSING` với `errors[]` liệt kê từng field.
 6. **`ROOMMATE`** `[§3.3]`: bắt buộc `genderRequirement` + `maxOccupants` + `currentOccupants`;
    thiếu → `400 ROOMMATE_INFO_REQUIRED`.
-7. **Gợi ý giá AI** `[§3.3]` bước 8, `[§8.1]`: gọi `PriceEstimator` **đồng bộ** trong request
-   (timeout 2 giây). Timeout/lỗi/`ai.price.enabled = false` → `pricePrediction.available = false`
-   + `reason`, **tin vẫn được tạo bình thường** — `[§9.4]` *"Không chặn đăng tin chỉ vì giá khác dự đoán"*.
-8. **Cờ lệch giá** `[§3.3]`, `[§9.4]`: `|price − suggestedPrice| / suggestedPrice > ai.price.deviation_flag_ratio`
-   (0.35) → `deviationFlagged = true`, ghi cờ vào `prediction_histories`, cảnh báo **mềm**,
-   **tuyệt đối không chặn** (canonical §10.4 bước 6). Admin xem danh sách qua
-   `GET /api/admin/ai/price-deviations`.
+7. **Gợi ý giá AI không nằm trong transaction tạo tin.** `ListingServiceImpl.create()` không gọi
+   `PriceEstimator`; `ListingCreateResponse` chỉ gồm `id`, `slug`, `title`, `status`, `price`,
+   `area`, `imageCount`, `createdAt`, `expectedExpiredAt`, `displayDays`, `nextSteps`.
+8. `ListingWizard` gọi riêng `POST /api/ai/price-prediction`. Sau khi tạo tin, frontend gọi lại
+   endpoint này với `listingId` vừa nhận để gắn lịch sử/cờ lệch giá vào tin. Lỗi/tắt/timeout AI
+   được frontend bắt riêng và không làm thất bại thao tác lưu hoặc gửi duyệt.
 9. **Hạn mức đăng tin** `[§11.10]`, canonical §8: tài khoản `created_at > now() - 7 ngày` →
    `spam.listing.new_account_daily` (3/ngày) → `LISTING_QUOTA_NEW_ACCOUNT`; ngược lại
    `spam.listing.daily` (10/ngày) → `LISTING_QUOTA_DAILY`. Đếm tin `created_at` trong ngày,
@@ -3245,15 +3232,10 @@ nguyên trạng thái. Không ghi bảng lịch sử riêng.
 {
   "success": true,
   "message": "Đã cập nhật tiện ích của tin",
-  "data": {
-    "listingId": 1024,
-    "amenities": [
-      { "id": 1, "code": "AIR_CONDITIONER", "name": "Máy lạnh", "group": "NOI_THAT" },
-      { "id": 3, "code": "BALCONY", "name": "Ban công", "group": "SINH_HOAT" },
-      { "id": 6, "code": "PARKING", "name": "Chỗ để xe", "group": "GIAO_THONG" }
-    ],
-    "pricePredictionRecalculated": true
-  },
+  "data": [
+    { "id": 1, "code": "AIR_CONDITIONER", "name": "Máy lạnh", "group": "FURNITURE", "iconUrl": null },
+    { "id": 3, "code": "BALCONY", "name": "Ban công", "group": "UTILITY", "iconUrl": null }
+  ],
   "timestamp": "2026-07-17T10:00:00Z"
 }
 ```
@@ -3262,8 +3244,7 @@ nguyên trạng thái. Không ghi bảng lịch sử riêng.
 `VALIDATION_FAILED`, `LISTING_LOCKED_CANNOT_EDIT`.
 
 **Quy tắc:** ghi đè toàn bộ `listing_amenities`. **Không** phải thay đổi nhạy cảm → giữ `ACTIVE`
-`[§3.4]`. **Kích hoạt tính lại giá dự đoán** `[§5.9]` *"Chủ trọ thay đổi nội thất hoặc tiện ích
-quan trọng"* → chạy async, ghi `prediction_histories`.
+`[§3.4]`. Endpoint hiện chỉ trả `List<ListingAmenityResponse>` và không tự gọi module dự đoán giá.
 
 ---
 
@@ -5458,8 +5439,8 @@ Controller: `AiSentimentController`, `AiRecommendationController`, `ChatbotContr
 | 3 | `POST /api/ai/chatbot/message` | `[§2.11]` AI-05; `[§12.9]`; `[§3.15]` | anonymous | 7.3 |
 | 4 | `GET /api/ai/chatbot/conversations` | `[§6.1]` `ChatbotConversation` — **[BỔ SUNG]** | authenticated | 7.3 |
 | 5 | `GET /api/ai/chatbot/conversations/{id}/messages` | `[§6.1]` `ChatbotMessage` — **[BỔ SUNG]** | authenticated | 7.3 |
-| 6 | `POST /api/ai/price-prediction` | `[§2.11]` AI-06; `[§12.9]`; `[§3.16]` | `LISTING_CREATE` | 7.4 |
-| 7 | `GET /api/ai/price-prediction/histories` | `[§3.16]` *"lưu PredictionHistory"* — **[BỔ SUNG]** | `LISTING_UPDATE_OWN` + OWNER / `AI_LOG_VIEW` | 7.4 |
+| 6 | `POST /api/ai/price-prediction` | `[§2.11]` AI-06; `[§12.9]`; `[§3.16]` | `TENANT`, `LANDLORD`, `ADMIN` | 7.4 |
+| 7 | `GET /api/ai/price-prediction/histories` | `[§3.16]` *"lưu PredictionHistory"* — **[BỔ SUNG]** | chủ tin (`TENANT`/`LANDLORD`) hoặc `MODERATOR`/`ADMIN` | 7.4 |
 
 ---
 ### 4.12. Admin — Dashboard & Thống kê (3 endpoint)
@@ -8754,23 +8735,17 @@ cực đơn lẻ không làm khóa tin"*. `suggestedAction` là đề xuất cho
     "items": [
       {
         "listingId": 877,
-        "title": "Phòng trọ giá rẻ Quận 12, gần Đại học Ngoại ngữ Tin học",
+        "listingTitle": "Phòng trọ giá rẻ",
+        "ownerId": 117,
         "status": "NEED_REVIEW",
-        "ownerId": 117, "ownerName": "Vũ Đình Khoa",
-        "shortAddress": "Phường Tân Chánh Hiệp, Quận 12, TP. Hồ Chí Minh",
-        "categoryCode": "BOARDING_HOUSE", "area": 18.00,
+        "price": 1200000.00,
         "inputPrice": 1200000.00,
         "suggestedPrice": 2600000.00,
         "deviationRatio": -0.538,
-        "direction": "BELOW",
-        "confidence": "HIGH", "confidenceScore": 0.81, "sampleSize": 19,
-        "riskNote": "Giá thấp bất thường — [§9.4]: nếu giá thấp bất thường, có thể đánh dấu cần kiểm duyệt để tránh tin giả",
-        "reportCount": 6,
-        "predictedAt": "2026-06-28T04:00:12Z"
+        "createdAt": "2026-06-28T04:00:12Z"
       }
     ],
-    "page": 0, "size": 20, "totalElements": 29, "totalPages": 2, "first": true, "last": false,
-    "summary": { "aboveCount": 18, "belowCount": 11 }
+    "page": 0, "size": 20, "totalElements": 29, "totalPages": 2, "first": true, "last": false
   },
   "timestamp": "2026-07-17T10:00:00Z"
 }
@@ -8778,10 +8753,9 @@ cực đơn lẻ không làm khóa tin"*. `suggestedAction` là đề xuất cho
 
 **Mã lỗi:** `UNAUTHORIZED`, `FORBIDDEN`, `INVALID_SORT_FIELD`, `VALIDATION_FAILED`.
 
-**Quy tắc `[§9.4]`:** `direction = BELOW` được ưu tiên hiển thị vì *"Nếu giá thấp bất thường, có
-thể đánh dấu cần kiểm duyệt để tránh tin giả"* — kết hợp `reportCount` và trạng thái xác thực chủ trọ giúp
-Moderator/Admin phát hiện tin lừa đảo. **Danh sách này chỉ để kiểm duyệt**, tin vẫn hiển thị bình
-thường `[§3.3]` *"Tin có giá quá bất thường so với AI đề xuất không bị chặn tự động"*.
+**Quy tắc hiện tại:** repository lấy các tin có `price_deviation_flag = true`; service ghép bản ghi
+`prediction_histories` gần nhất để trả `suggestedPrice`, `inputPrice`, `deviationRatio`, `createdAt`.
+DTO không có `direction`, `confidenceScore`, `sampleSize`, `riskNote` hoặc `reportCount`.
 
 ---
 
@@ -9604,7 +9578,6 @@ Kế thừa **toàn bộ** field của `ListingSummaryResponse`, cộng thêm:
 | **`moderation`** | object | **chỉ `LISTING_VIEW_ANY`** | Khối kiểm duyệt (mục 4.14.2) |
 | **`recentComments`** | object[] | **chỉ `LISTING_VIEW_ANY`** | `[§8.7]` |
 | **`moderationImpact`** | object | **chỉ** trong response của `PUT /api/listings/{id}` | mục 4.4.8 |
-| **`pricePrediction`** | object | **chỉ** trong response của `POST /api/listings` | `[§3.3]` bước 8 |
 
 ### 5.4. `UserSummaryResponse` — người dùng rút gọn
 
@@ -10027,7 +10000,7 @@ sequenceDiagram
 | `GET /api/listings/{id}/related` | **503** | **503** | FE ẩn "Tin tương tự" |
 | `POST /api/ai/chatbot/message` | **503 `AI_SERVICE_UNAVAILABLE`** | **503 `AI_MODULE_DISABLED`** | FE hiện "Chatbot đang bảo trì" |
 | `POST /api/ai/price-prediction` | **503 `AI_SERVICE_UNAVAILABLE`** | **503 `AI_MODULE_DISABLED`** | |
-| `POST /api/listings` (gợi ý giá kèm) | **201 — tin VẪN TẠO**, `pricePrediction.available = false` | như trên | **`[§9.4]`** *"Không chặn đăng tin chỉ vì giá khác dự đoán"*, `[§3.3]` |
+| `POST /api/listings` | Không gọi AI; response tạo tin không có `pricePrediction` | Không gọi AI | `ListingWizard` gọi endpoint AI riêng và bắt lỗi riêng nên lưu/gửi tin vẫn tiếp tục |
 
 > **Nguyên tắc vàng:** AI **không bao giờ** được phép làm hỏng nghiệp vụ lõi. Bình luận phải lưu
 > được, tin phải đăng được, dù AI chết hoàn toàn.
@@ -10688,7 +10661,7 @@ TTL 24 giờ; đăng nhập → `chatbot_conversations` (canonical §6). `title`
 | Mục | Nội dung |
 |---|---|
 | Mã chức năng | `[§2.11]` **AI-06**; `[§12.9]`; `[§3.16]`; `[§9.4]`; `[§8.1]` |
-| Quyền | **`LISTING_CREATE`** — `[§3.16]` *"Người sử dụng: Chủ trọ, Admin, Hệ thống"* |
+| Quyền | `@PreAuthorize("hasAnyRole('TENANT','LANDLORD','ADMIN')")` |
 | Rate limit | 60 / phút / user |
 
 **Request body** — `PricePredictionRequest` (đúng danh sách Input `[§9.4]`)
@@ -10699,14 +10672,14 @@ TTL 24 giờ; đăng nhập → `chatbot_conversations` (canonical §6). `title`
 | `provinceId` | long | ✔ | tồn tại | **"Khu vực"** |
 | `districtId` | long | ✔ | tồn tại, thuộc `provinceId` | **"Khu vực"** |
 | `wardId` | long | ✔ | tồn tại, thuộc `districtId` | **"Khu vực"** |
-| `area` | BigDecimal | ✔ | **`> 0`**, `≤ 1000.00` | **"Diện tích"** |
-| `roomCount` | int | ✘ | `1..20`; mặc định `1` | **"Số phòng"** |
-| `toiletCount` | int | ✘ | `1..10`; mặc định `1` | **"Số toilet"** |
+| `area` | BigDecimal | ✔ | DTO backend: `0.01..1000.00`; FastAPI đang phục vụ model: `8..80` m², ngoài khoảng này trả `400 AI_PRICE_INPUT_INVALID` | **"Diện tích"** |
+| `roomCount` | int | ✘ | nếu có: `1..20` | **"Số phòng"** |
+| `toiletCount` | int | ✘ | nếu có: `1..10` | **"Số toilet"** |
 | `furnitureStatus` | enum | ✘ | ∈ `FurnitureStatus`; mặc định `NONE` | **"Nội thất"** |
 | `toiletType` | enum | ✘ | ∈ `ToiletType`; mặc định `PRIVATE` | Tình trạng phòng |
 | `amenityIds` | long[] | ✘ | mỗi id tồn tại; tối đa 30 | **"Tiện ích"** |
 | `isStreetFront` | boolean | ✘ | mặc định `false` | **"Mặt tiền/hẻm"** |
-| `latitude` / `longitude` | double | ✘ | VN bounds | **"Khoảng cách đến trung tâm"** |
+| `latitude` / `longitude` | double | ✘ | backend: `-90..90` / `-180..180`; FastAPI yêu cầu truyền cùng nhau và giới hạn theo vùng model | **"Khoảng cách đến trung tâm"** |
 | `listingId` | long | ✘ | tồn tại, OWNER | Tin đang sửa (để ghi `prediction_histories`) |
 | `inputPrice` | BigDecimal | ✘ | `> 0` | Giá chủ trọ định nhập → tính `deviationRatio` `[§9.4]` bước 5 |
 
@@ -10725,8 +10698,7 @@ TTL 24 giờ; đăng nhập → `chatbot_conversations` (canonical §6). `title`
     "priceRange": {
       "low": 2900000.00,
       "medium": 3300000.00,
-      "high": 3800000.00,
-      "percentiles": { "p25": 2900000.00, "p50": 3300000.00, "p75": 3800000.00 }
+      "high": 3800000.00
     },
 
     "confidence": "HIGH",
@@ -10734,32 +10706,19 @@ TTL 24 giờ; đăng nhập → `chatbot_conversations` (canonical §6). `title`
     "confidenceLabel": "Độ tin cậy cao",
 
     "explanation": {
-      "summary": "Giá cao hơn mức trung bình khu vực do có nội thất cơ bản, toilet riêng và chỗ để xe.",
+      "summary": "Mô hình LightGBM dự đoán 3.30 triệu/tháng; benchmark quận + phường, 23 mẫu.",
       "basePrice": 2860000.00,
-      "basePriceNote": "Giá cơ sở = trung vị 130.000 ₫/m² × 22 m², tính từ 23 tin phòng trọ tương đương tại Phường 25, Quận Bình Thạnh trong 180 ngày qua",
-      "adjustments": [
-        { "factor": "FURNITURE_BASIC",  "label": "Nội thất cơ bản",  "percent": 6.0,  "amount": 171600.00 },
-        { "factor": "TOILET_PRIVATE",   "label": "Toilet riêng",     "percent": 8.0,  "amount": 228800.00 },
-        { "factor": "PARKING",          "label": "Có chỗ để xe",     "percent": 5.0,  "amount": 143000.00 },
-        { "factor": "CURFEW_FREE",      "label": "Giờ giấc tự do",   "percent": 3.0,  "amount": 85800.00 },
-        { "factor": "DISTANCE_CENTER",  "label": "Cách trung tâm 5,2 km", "percent": -5.0, "amount": -143000.00 }
-      ],
-      "totalAdjustmentPercent": 17.0,
-      "factorsInVietnamese": [
-        "Giá cao hơn do có nội thất cơ bản và toilet riêng",
-        "Giá cao hơn do có chỗ để xe và giờ giấc tự do",
-        "Giá thấp hơn một chút do cách trung tâm 5,2 km"
-      ]
+      "adjustments": [],
+      "totalAdjustmentPercent": 0,
+      "factorsInVietnamese": []
     },
 
     "comparable": {
       "sampleSize": 23,
       "scope": "WARD",
-      "scopeLabel": "Phường 25, Quận Bình Thạnh",
+      "scopeLabel": "Phường/xã",
       "scopeExpanded": false,
-      "areaRange": { "from": 15.40, "to": 28.60, "note": "diện tích ±30% quanh 22 m²" },
       "periodDays": 180,
-      "statuses": ["ACTIVE", "CLOSED"],
       "medianPricePerSqm": 130000.00,
       "iqrRatio": 0.21
     },
@@ -10799,13 +10758,15 @@ TTL 24 giờ; đăng nhập → `chatbot_conversations` (canonical §6). `title`
     "confidenceScore": 0.66,
     "confidenceLabel": "Độ tin cậy trung bình",
     "explanation": {
-      "summary": "Giá cơ sở tính từ 11 tin tương đương tại Quận 7.",
-      "factorsInVietnamese": ["Giá cao hơn do có nội thất cơ bản", "Giá cao hơn do gần trung tâm Quận 7"]
+      "summary": "Mô hình LightGBM dự đoán 2.68 triệu/tháng; benchmark quận, 11 mẫu.",
+      "basePrice": 2600000.00,
+      "adjustments": [],
+      "totalAdjustmentPercent": 0,
+      "factorsInVietnamese": []
     },
-    "comparable": { "sampleSize": 11, "scope": "DISTRICT", "scopeLabel": "Quận 7",
-                    "scopeExpanded": true,
-                    "scopeExpandedNote": "Không đủ mẫu ở Phường Tân Phong nên đã mở rộng lên Quận 7",
-                    "periodDays": 180, "iqrRatio": 0.38 },
+    "comparable": { "sampleSize": 11, "scope": "DISTRICT", "scopeLabel": "Quận/huyện",
+                    "scopeExpanded": true, "periodDays": 180,
+                    "medianPricePerSqm": 121818.00, "iqrRatio": 0.18 },
     "comparison": {
       "inputPrice": 3800000.00,
       "suggestedPrice": 2680000.00,
@@ -10824,68 +10785,34 @@ TTL 24 giờ; đăng nhập → `chatbot_conversations` (canonical §6). `title`
 }
 ```
 
-**Response 422 — không đủ dữ liệu** (`[§9.4]` *"Nếu dữ liệu đầu vào thiếu hoặc quá khác thường, hệ
-thống **không dự đoán** hoặc báo độ tin cậy thấp"*):
+**Mã lỗi của luồng mặc định:** `UNAUTHORIZED`, `FORBIDDEN`, `VALIDATION_FAILED`,
+`AI_PRICE_INPUT_INVALID` (400), `LISTING_NOT_FOUND`, `LISTING_FORBIDDEN`,
+`AI_MODULE_DISABLED` (503), `AI_SERVICE_UNAVAILABLE` (503), `CATEGORY_NOT_FOUND`,
+`PROVINCE_NOT_FOUND`, `DISTRICT_NOT_FOUND`, `WARD_NOT_FOUND`, `AMENITY_NOT_FOUND`,
+`AREA_NOT_SUPPORTED`, `ADDRESS_HIERARCHY_MISMATCH`.
 
-```json
-{
-  "success": false,
-  "message": "Chưa đủ dữ liệu thị trường để dự đoán giá cho khu vực này",
-  "data": null,
-  "errorCode": "AI_INSUFFICIENT_DATA",
-  "errors": [
-    { "field": "wardId", "message": "Chỉ tìm được 3 tin tương đương, cần tối thiểu 8 tin" }
-  ],
-  "timestamp": "2026-07-17T10:00:00Z",
-  "path": "/api/ai/price-prediction",
-  "traceId": "3c7d9e0b-2f45-4a18-9e61-5d02b8a7c134"
-}
-```
+`AI_INSUFFICIENT_DATA` (422) chỉ có thể phát sinh khi một implementation có
+`usesComparables() = true` được chọn; `RentalApiLightgbmPriceEstimator` hiện trả `false`.
 
-**Response 400 — thiếu trường bắt buộc** (`[§3.16]` *"Nếu thiếu dữ liệu, hệ thống thông báo cần
-nhập thêm trường"*):
-
-```json
-{
-  "success": false,
-  "message": "Cần nhập thêm: Phường/xã, Diện tích để dự đoán giá",
-  "data": null,
-  "errorCode": "AI_MISSING_INPUT_FIELD",
-  "errors": [
-    { "field": "wardId", "message": "Vui lòng chọn phường/xã" },
-    { "field": "area",   "message": "Vui lòng nhập diện tích" }
-  ],
-  "timestamp": "2026-07-17T10:00:00Z",
-  "path": "/api/ai/price-prediction",
-  "traceId": "9e0b2f45-3c7d-4a18-8c62-1de5a0b93c47"
-}
-```
-
-**Mã lỗi:** `UNAUTHORIZED`, `FORBIDDEN`, **`AI_INSUFFICIENT_DATA`** (422),
-**`AI_MISSING_INPUT_FIELD`** (400), `AI_PRICE_INPUT_INVALID` (400),
-**`AI_MODULE_DISABLED`** (503), **`AI_SERVICE_UNAVAILABLE`** (503),
-`CATEGORY_NOT_FOUND`, `WARD_NOT_FOUND`, `AMENITY_NOT_FOUND`, `VALIDATION_FAILED`, `RATE_LIMIT_EXCEEDED`.
-
-**Quy tắc nghiệp vụ `[§9.4]` (canonical §10.4 — 6 bước):**
+**Luồng xử lý của implementation mặc định:**
 
 | Bước | Nội dung | Trích dẫn |
 |---|---|---|
-| 1 | **Lấy comparable**: cùng `ward` (nới dần `district` → `province` nếu thiếu mẫu), cùng `category`, **diện tích ±30%**, tin **`ACTIVE`/`CLOSED`** trong **180 ngày** | canonical §10.4 |
-| 2 | `n < ai.price.min_samples` (**8**) → **`INSUFFICIENT_DATA`**, **không dự đoán** | **`[§9.4]`**, canonical §10.4 |
-| 3 | **Giá cơ sở = median(price/m²) × diện tích** | canonical §10.4 |
-| 4 | **Điều chỉnh hedonic** (hệ số **cấu hình được**): nội thất đầy đủ **+12%**, toilet riêng **+8%**, thang máy **+7%**, chỗ để xe **+5%**, giờ tự do **+3%**, mặt tiền **+15%**, khoảng cách trung tâm | canonical §10.4 |
-| 5 | **Khoảng = percentile 25 / 50 / 75**; `confidence` theo `n` và độ phân tán (**IQR/median**) | canonical §10.4, `[§9.4]` "Khoảng giá tham khảo: thấp - trung bình - cao" |
-| 6 | `\|inputPrice − suggested\| / suggested > ai.price.deviation_flag_ratio` (**0.35**) → **ghi flag**, **cảnh báo mềm**, **TUYỆT ĐỐI KHÔNG CHẶN ĐĂNG TIN** | **`[§3.3]`**, **`[§9.4]`**, canonical §10.4 |
-| — | **Lưu `PredictionHistory` mọi lần** | `[§3.16]` bước 6, `[§9.4]` *"Kết quả dự đoán cần lưu để phục vụ báo cáo và đánh giá chất lượng AI"*, canonical §10.4 |
+| 1 | Kiểm module bật, ownership nếu có `listingId`, và toàn bộ tham chiếu catalog/địa giới | `PriceEstimationServiceImpl` |
+| 2 | Map category/quận/phường/tiện ích sang payload FastAPI | `RentalApiLightgbmPriceEstimator.buildPayload` |
+| 3 | Gọi `POST /predict` bằng HTTP/1.1; FastAPI chạy `model.joblib` khi `RENTAL_BACKEND=sklearn` | source + Docker Compose |
+| 4 | Đổi giá từ triệu đồng sang đồng; map market scope/sample; tính confidence từ sample + MAPE | `RentalApiLightgbmPriceEstimator` |
+| 5 | Tính độ lệch so với `inputPrice`; flag theo `ai.price.deviation_flag_ratio`; `blocksPosting=false` | estimator + mapper |
+| 6 | Lưu `PredictionHistory`; có `listingId` thì cập nhật prediction id/cờ lên tin | service |
 
 **Ánh xạ `confidence` (canonical §5 `PriceConfidence`):**
 
 | `confidence` | Điều kiện | `confidenceScore` |
 |---|---|---|
-| `HIGH` | `n >= 20` **và** `iqrRatio <= 0.25` | `0.80 – 1.00` |
-| `MEDIUM` | `n >= 12` **và** `iqrRatio <= 0.40` | `0.55 – 0.79` |
-| `LOW` | `n >= ai.price.min_samples` (8) | `0.30 – 0.54` |
-| `INSUFFICIENT_DATA` | `n < 8` → **422 `AI_INSUFFICIENT_DATA`** | — |
+| `HIGH` | `sampleSize >= 20` và `mape_pct <= 18` | tối thiểu `0.80` |
+| `MEDIUM` | `sampleSize >= ai.price.min_samples` và `mape_pct <= 25` | `0.55..0.79` |
+| `LOW` | Các trường hợp còn lại của response FastAPI thành công | `0.30..0.54` |
+| `INSUFFICIENT_DATA` | Không được `RentalApiLightgbmPriceEstimator` trả về | `0.0` nếu implementation khác tạo trạng thái này |
 
 **`verdict` (giải thích đơn giản cho chủ trọ — `[§9.4]` Output *"Gợi ý giải thích đơn giản"*):**
 
@@ -10904,10 +10831,9 @@ nhập thêm trường"*):
 >
 > **`disclaimer` LUÔN có mặt** — `[§9.4]` *"Không hiển thị AI như nguồn đảm bảo chính xác tuyệt đối"*.
 
-**Khi nào gọi lại `[§5.9]`** — FE gọi lại endpoint này khi chủ trọ đổi: khu vực (`wardId`),
-diện tích (`area`), loại nhà (`categoryId`), số phòng (`roomCount`), số toilet (`toiletCount`),
-nội thất (`furnitureStatus`) hoặc tiện ích quan trọng (`amenityIds`).
-Debounce **800ms** ở FE để tránh gọi liên tục.
+**Khi nào frontend gọi:** bấm **Tính lại** hoặc bấm **Tiếp tục** ở bước Giá & tiện ích. Không có
+debounce/useEffect tự gọi theo từng thay đổi field. Sau khi tạo tin, frontend gọi thêm một lần với
+`listingId` mới để liên kết lịch sử và cờ lệch giá.
 
 ---
 
@@ -10916,15 +10842,15 @@ Debounce **800ms** ở FE để tránh gọi liên tục.
 | Mục | Nội dung |
 |---|---|
 | Mã chức năng | `[§3.16]` bước 6 *"Hệ thống lưu PredictionHistory"*; `[§9.4]` *"Kết quả dự đoán cần lưu để phục vụ báo cáo"*; `[§6.2]` *"Một tin có nhiều lần dự đoán giá"* — **[BỔ SUNG NGOÀI `[§12.9]`]** |
-| Quyền | `LISTING_UPDATE_OWN` + **OWNER** của tin, hoặc `AI_LOG_VIEW` |
+| Quyền | Controller cho `TENANT`, `LANDLORD`, `MODERATOR`, `ADMIN`; service cho chủ tin hoặc Moderator/Admin |
 
 **Query params**
 
 | Param | Kiểu | Bắt buộc | Mặc định | Ràng buộc |
 |---|---|:--:|---|---|
-| `listingId` | long | ✔ | — | tồn tại; phải là tin của mình (trừ khi có `AI_LOG_VIEW`) |
-| `page` / `size` | int | ✘ | `0` / `20` | `size ≤ 100` |
-| `sort` | string | ✘ | `createdAt,desc` | ∈ {`createdAt`} |
+| `listingId` | long | ✔ | — | tồn tại; chủ tin, hoặc Moderator/Admin |
+| `page` / `size` | int | ✘ | `0` / `20` | service cắt trang sau khi đọc danh sách theo tin |
+| `sort` | string | ✘ | `createdAt` từ `@PageableDefault` | service hiện luôn dùng repository `findByListingIdOrderByCreatedAtDesc`, không áp dụng sort client |
 
 **Response 200**
 
@@ -10937,18 +10863,18 @@ Debounce **800ms** ở FE để tránh gọi liên tục.
       { "id": 33110, "listingId": 1024,
         "suggestedPrice": 3300000.00,
         "priceRange": { "low": 2900000.00, "medium": 3300000.00, "high": 3800000.00 },
-        "confidence": "HIGH", "confidenceScore": 0.84, "sampleSize": 23,
+        "confidence": "HIGH", "sampleSize": 23,
         "comparableScope": "WARD",
         "inputPrice": 3500000.00, "deviationRatio": 0.0606, "deviationFlagged": false,
-        "triggerReason": "LISTING_CREATE",
+        "applied": false,
         "createdAt": "2026-07-09T14:20:12Z" },
       { "id": 33098, "listingId": 1024,
         "suggestedPrice": 3280000.00,
         "priceRange": { "low": 2880000.00, "medium": 3280000.00, "high": 3760000.00 },
-        "confidence": "HIGH", "confidenceScore": 0.82, "sampleSize": 21,
+        "confidence": "HIGH", "sampleSize": 21,
         "comparableScope": "WARD",
         "inputPrice": 3300000.00, "deviationRatio": 0.0061, "deviationFlagged": false,
-        "triggerReason": "AMENITY_CHANGE",
+        "applied": false,
         "createdAt": "2026-07-12T03:05:40Z" }
     ],
     "page": 0, "size": 20, "totalElements": 2, "totalPages": 1, "first": true, "last": true
@@ -10957,12 +10883,11 @@ Debounce **800ms** ở FE để tránh gọi liên tục.
 }
 ```
 
-**Mã lỗi:** `UNAUTHORIZED`, `FORBIDDEN`, `LISTING_NOT_FOUND`, `LISTING_FORBIDDEN`,
-`MISSING_PARAMETER`, `INVALID_SORT_FIELD`.
+**Mã lỗi:** `UNAUTHORIZED`, `FORBIDDEN`, `LISTING_NOT_FOUND`, `LISTING_FORBIDDEN`.
 
-**Quy tắc:** `triggerReason` ∈ {`LISTING_CREATE`, `LISTING_UPDATE`, `AMENITY_CHANGE`,
-`MANUAL_REQUEST`, `CONFIG_CHANGE`} — phủ đúng `[§5.9]` "Khi nào tính lại giá dự đoán".
-Dữ liệu này phục vụ *"đánh giá chất lượng AI"* `[§9.4]`.
+`PricePredictionHistoryResponse` không có `triggerReason` hoặc `confidenceScore`; các field trả về
+đúng DTO là `id`, `listingId`, `suggestedPrice`, `priceRange`, `confidence`, `sampleSize`,
+`comparableScope`, `inputPrice`, `deviationRatio`, `deviationFlagged`, `applied`, `createdAt`.
 
 ---
 ## 8. Sequence diagram 7 luồng nghiệp vụ
@@ -10981,7 +10906,8 @@ sequenceDiagram
     participant RL as RateLimitFilter
     participant LS as ListingServiceImpl
     participant BK as BannedKeywordValidator
-    participant AI as PriceEstimator (AI Price Module)
+    participant AI as RentalApiLightgbmPriceEstimator
+    participant RA as FastAPI rental-api
     participant SM as ListingStateMachine
     participant DB as MySQL
     participant NS as NotificationService
@@ -10995,22 +10921,21 @@ sequenceDiagram
     L->>FE: Nhập thông tin + upload ảnh
     FE->>FE: Validate client (Yup) — không thay thế validate server
 
-    Note over FE,API: Bước 8 [§3.3]: gợi ý giá AI khi đủ thông tin
-    FE->>API: POST /api/ai/price-prediction {categoryId, wardId, area, ...}
+    Note over FE,API: Gợi ý giá là request riêng, không nằm trong POST /api/listings
+    FE->>API: POST /api/ai/price-prediction {categoryId, provinceId, districtId, wardId, area, ...}
     API->>AI: estimate(input)
-    AI->>DB: Lấy comparable (cùng ward -> district -> province,<br/>cùng category, diện tích ±30%, ACTIVE/CLOSED 180 ngày)
-    DB-->>AI: n mẫu
-    alt n < ai.price.min_samples (8)
-        AI-->>FE: 422 AI_INSUFFICIENT_DATA [§9.4]
-        FE-->>L: "Chưa đủ dữ liệu để gợi ý giá cho khu vực này"
-    else AI timeout / ai.price.enabled = false
+    AI->>RA: POST /predict {district, ward, area_m2, room_type, amenities, ...}
+    alt FastAPI trả 4xx
+        AI-->>FE: 400 AI_PRICE_INPUT_INVALID
+        FE-->>L: Hiện trạng thái không lấy được giá; form vẫn tiếp tục
+    else Lỗi kết nối / 5xx / timeout / module bị tắt
         AI-->>FE: 503 AI_SERVICE_UNAVAILABLE / AI_MODULE_DISABLED
-        FE-->>L: Ẩn khối gợi ý giá — KHÔNG chặn đăng tin [§9.4]
-    else Đủ mẫu
-        AI->>AI: base = median(price/m²) × area<br/>+ hedonic (nội thất +12%, toilet riêng +8%, thang máy +7%,<br/>để xe +5%, giờ tự do +3%, mặt tiền +15%, khoảng cách)
-        AI->>DB: INSERT prediction_histories [§3.16] bước 6
-        AI-->>FE: {suggestedPrice, priceRange{low,medium,high}, confidence, explanation}
-        FE-->>L: Hiển thị giá tham khảo [§8.1]
+        FE-->>L: Hiện trạng thái không lấy được giá; form vẫn tiếp tục
+    else Thành công
+        RA-->>AI: predicted_price_million + price_range + market_* + mape_pct
+        AI->>DB: INSERT prediction_histories
+        AI-->>FE: {suggestedPrice, priceRange, confidence, explanation, comparison}
+        FE-->>L: Hiển thị giá tham khảo
     end
 
     L->>FE: Bấm "Gửi duyệt"
@@ -11041,7 +10966,9 @@ sequenceDiagram
                     LS->>NS: notify(Moderator/Admin, Dashboard) [§8.1][§5.6]
                     NS-->>M: "47 tin đang chờ duyệt"
                 end
-                LS-->>FE: 201 {id, status: PENDING, pricePrediction}
+                LS-->>FE: 201 {id, status: PENDING, ...} (không có pricePrediction)
+                FE->>API: POST /api/ai/price-prediction {..., listingId: id}
+                Note over FE,API: FE bắt lỗi riêng; lỗi AI không đổi kết quả tạo/gửi tin
                 FE-->>L: "Đã gửi tin chờ duyệt"
             end
         end
@@ -11671,7 +11598,7 @@ public class ListingController {
             headers = @Header(name = "Location", description = "URI tin vừa tạo",
                               schema = @Schema(type = "string")),
             content = @Content(mediaType = "application/json",
-                schema = @Schema(implementation = ListingDetailApiResponse.class),
+                schema = @Schema(implementation = ListingCreateResponse.class),
                 examples = @ExampleObject(name = "Tạo tin nháp thành công", value = """
                     {
                       "success": true,
@@ -11682,12 +11609,10 @@ public class ListingController {
                         "status": "DRAFT",
                         "price": 3500000.00,
                         "area": 22.00,
-                        "pricePrediction": {
-                          "available": true,
-                          "suggestedPrice": 3300000.00,
-                          "confidence": "HIGH",
-                          "deviationFlagged": false
-                        }
+                        "imageCount": 0,
+                        "expectedExpiredAt": null,
+                        "displayDays": 30,
+                        "nextSteps": ["Tải lên tối thiểu 1 ảnh", "Gửi duyệt tin"]
                       },
                       "timestamp": "2026-07-17T10:00:00Z"
                     }"""))),
@@ -12165,7 +12090,7 @@ export function handleApiError(error, { onValidation } = {}) {
 | `reportApi.js` | `/tin/:slug-:id`, `/tai-khoan/bao-cao-cua-toi` | 4.8 | `REPORT_CREATE` |
 | `paymentApi.js` | `/quan-ly/goi-dich-vu`, `/quan-ly/thanh-toan` | 4.9 | `PAYMENT_VIEW_OWN` |
 | `notificationApi.js` | `/tai-khoan/thong-bao` + badge header | 4.10 | AU |
-| `aiApi.js` | `/` (gợi ý), `/tin/:slug-:id` (tương tự), chatbot widget, form đăng tin (giá) | 7 | — / `LISTING_CREATE` |
+| `aiApi.js` | `/` (gợi ý), `/tin/:slug-:id` (tương tự), chatbot widget, form đăng tin (giá) | 7 | Price: `TENANT`/`LANDLORD`/`ADMIN` |
 | `admin/adminDashboardApi.js` | `/admin/dashboard`, `/admin/thong-ke` | 4.12 | `STATISTIC_VIEW` |
 | `admin/adminUserApi.js` | `/admin/nguoi-dung`, `/admin/chu-tro` | 4.13 | `USER_MANAGE`, `LANDLORD_VERIFY` |
 | `admin/adminListingApi.js` | `/admin/tin-dang`, `/admin/kiem-duyet` | 4.14 | `LISTING_VIEW_ANY`, `LISTING_MODERATE`, `LISTING_LOCK` |
@@ -12219,7 +12144,7 @@ export default function RoleRoute({ roles, children }) {
 |---|---|---|---|---|---|
 | **ADR-01** | **Không viết cứng `status = 'ACTIVE'` trong mọi truy vấn công khai** | `[§3.7]` nói *"Chỉ hiển thị tin Active"* nhưng `[§5.1]` nói `NeedReview` *"Có thể vẫn hiển thị hoặc tạm ẩn tùy cấu hình"* — **mâu thuẫn trực tiếp** | **Một** method `ListingVisibilityService.publicStatuses()` đọc `listing.need_review.publicly_visible`; **mọi** truy vấn công khai (search, chi tiết, gợi ý, chatbot, related, sitemap) dùng nó | canonical §5.2 chốt quy tắc này là *"tối quan trọng"*. Mặc định `true` đúng tinh thần `[§3.13]` *"Report không tự động khóa tin ngay"*. Nếu viết cứng `ACTIVE`, đổi config sẽ không có tác dụng ở 6 chỗ khác nhau | Thêm một lần đọc config (đã cache Redis) mỗi truy vấn |
 | **ADR-02** | **AI không bao giờ tự khóa tin/tài khoản — chỉ `FLAG_NEED_REVIEW` + đề xuất** | `[§9.1]` đưa ngưỡng *"Tin đã NeedReview 3 lần trong 30 ngày → Đề xuất khóa tin"* — chữ **"đề xuất"** là mấu chốt | `autoActionTaken` chỉ có `FLAG_NEED_REVIEW` \| `NONE`. `accountLockSuggested`, `recommendedAction`, `recommendedResult` là **dữ liệu cho người**, không phải lệnh | canonical §10 *"AI không bao giờ tự khóa tài khoản"*; `[§10.10]` *"AI không tự khóa tài khoản nếu chưa có cấu hình rõ"*, *"Các quyết định nặng cần Admin/Moderator xác nhận"*; `[§0.2]` *"AI ở mức hỗ trợ quyết định, không thay thế hoàn toàn người kiểm duyệt"* | Moderator phải thao tác thủ công → chậm hơn, nhưng đúng nghiệp vụ và tránh khóa oan |
-| **ADR-03** | **Lỗi AI không bao giờ làm hỏng nghiệp vụ lõi** | AI chạy async có thể chết; nếu để nó chặn thì mất bình luận / mất tin | Bình luận: **vẫn lưu**, `PENDING_ANALYSIS`, `SentimentRetryJob` xử lý lại. Đăng tin: **vẫn tạo**, `pricePrediction.available = false`. Chỉ endpoint AI thuần trả 503 | **`[§9.1]`** *"AI lỗi hoặc timeout: bình luận vẫn được lưu, sentiment ở trạng thái PendingAnalysis"*; **`[§9.4]`** *"Không chặn đăng tin chỉ vì giá khác dự đoán"*; `[§3.3]` *"không bị chặn tự động"*; canonical §10.1 | Có độ trễ hiển thị nhãn cảm xúc; cần job retry |
+| **ADR-03** | **Lỗi AI không bao giờ làm hỏng nghiệp vụ lõi** | AI có thể lỗi hoặc timeout; nếu để nó chặn thì mất bình luận / mất tin | Bình luận: **vẫn lưu**, `PENDING_ANALYSIS`, `SentimentRetryJob` xử lý lại. Tạo tin không gọi AI trong backend; `ListingWizard` gọi dự đoán qua request riêng và bắt lỗi riêng. Endpoint AI trả 503 khi lỗi/tắt | **`[§9.1]`** *"AI lỗi hoặc timeout: bình luận vẫn được lưu, sentiment ở trạng thái PendingAnalysis"*; **`[§9.4]`** *"Không chặn đăng tin chỉ vì giá khác dự đoán"* | Có độ trễ hiển thị nhãn cảm xúc; dự đoán giá có thể tạm không hiển thị |
 | **ADR-04** | **JWT chỉ nhúng role, đổi role thì thu hồi refresh token** | Quyền hiện hành suy ra trực tiếp từ role, không còn bảng permission. | Access token chứa `role`; khi đổi role/lock user thì thu hồi refresh token và blacklist `jti`. | Khớp backend role-only và tránh query DB mỗi request. | Role cũ có thể còn hiệu lực tối đa 15 phút nếu chưa bị blacklist, nên các thao tác đổi role/lock phải revoke session. |
 | **ADR-05** | **Endpoint trùng nghiệp vụ → dùng chung một service method, không nhân đôi logic** | `[§12.3]` có `GET /api/listings`, `[§12.4]` có `GET /api/search/listings` — **cùng nghiệp vụ**. `[§12.8]` có `POST /api/payments` và `POST /api/listings/{id}/promote` — cũng vậy | `@GetMapping({"/api/listings", "/api/search/listings"})` cùng một method. `/promote` gọi cùng `PaymentService.createPayment()`. `/api/listings` là canonical URL cho SEO | Giữ đúng hợp đồng `[§12]` mà không vi phạm canonical §3 luật 6 (*"Không có logic nghiệp vụ trong controller"*) và §13.1 (không code trùng). Xóa một trong hai sẽ **mâu thuẫn với tài liệu nghiệp vụ** | Có hai URL cho một việc → FE phải biết dùng cái nào (đã ghi rõ ở mục 10.5) |
 | **ADR-06** | **Review luôn gắn với Listing; "đánh giá chủ trọ" = tổng hợp review trên tin của chủ trọ** | `[§3.12]` nói *"Đánh giá tin **hoặc chủ trọ**"* nhưng `[§6.3]` Review chỉ có `ListingId`, không có `LandlordId` — **tài liệu mơ hồ** | Một bảng `reviews` với `listing_id`. `GET /api/users/{id}/reviews` gom review trên mọi tin của chủ trọ. `landlord_profiles.average_rating` là trung bình có trọng số | Tránh hai bảng review song song (phức tạp, khó đồng bộ điểm). Vẫn thỏa `[§3.12]` bước 5 *"cập nhật điểm trung bình của tin **và chủ trọ**"* và `[§8.6]` *"Tính lại AverageRating của tin và chủ trọ"* | Không đánh giá được chủ trọ khi họ chưa có tin nào — tình huống không có thật trong nghiệp vụ |

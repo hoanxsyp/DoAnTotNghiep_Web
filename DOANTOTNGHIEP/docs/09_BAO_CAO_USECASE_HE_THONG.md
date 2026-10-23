@@ -493,7 +493,10 @@ Hoạt động chính:
 
 1. Gợi ý tin đăng: hệ thống trả về danh sách tin gợi ý cho trang chủ, tìm kiếm ít kết quả, trang chi tiết, sau khi yêu thích tin hoặc theo hồ sơ người dùng.
 2. Chatbot tư vấn: Khách vãng lai hoặc người dùng gửi câu hỏi; chatbot trả lời dựa trên ngữ cảnh tìm phòng. Nếu đã đăng nhập, hệ thống có thể lưu lịch sử hội thoại.
-3. Dự đoán giá phòng: khi tạo/sửa tin, actor nhập thông tin vị trí, diện tích, tiện ích, danh mục; AI trả về giá đề xuất và cảnh báo nếu giá lệch bất thường.
+3. Dự đoán giá phòng: trong wizard tạo/sửa tin, actor nhập vị trí, diện tích, tiện ích, danh mục
+   rồi bấm **Tính lại** hoặc **Tiếp tục** ở bước Giá & tiện ích; frontend gọi endpoint AI riêng để
+   nhận giá đề xuất và cảnh báo lệch giá. Sau khi tạo tin, frontend gọi lại với `listingId` mới để
+   liên kết lịch sử/cờ; lỗi AI không làm thất bại thao tác lưu/gửi tin.
 4. Phân tích cảm xúc/nội dung: khi phát sinh bình luận/đánh giá, hệ thống có thể tự động phân tích cảm xúc và gắn cảnh báo. Kiểm duyệt viên/Quản trị viên có thể xem log, cảnh báo, giá lệch và yêu cầu phân tích lại.
 5. Quản trị viên cấu hình tham số AI, bật/tắt một số cấu hình vận hành và theo dõi nhật ký AI.
 

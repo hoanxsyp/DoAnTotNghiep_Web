@@ -65,7 +65,8 @@ public class PriceMapper {
     }
 
     public PricePredictionResponse toResponse(PredictionHistory saved, PriceEstimate est,
-                                              boolean scopeExpanded, int periodDays) {
+                                              boolean scopeExpanded, int periodDays,
+                                              BigDecimal deviationFlagRatio) {
         PricePredictionResponse.PriceRange range = PricePredictionResponse.PriceRange.builder()
                 .low(est.priceLow())
                 .medium(est.priceMedian())
@@ -101,7 +102,7 @@ public class PriceMapper {
                 .iqrRatio(est.dispersionRatio())
                 .build();
 
-        PricePredictionResponse.Comparison comparison = buildComparison(est);
+        PricePredictionResponse.Comparison comparison = buildComparison(est, deviationFlagRatio);
 
         return PricePredictionResponse.builder()
                 .available(true)
@@ -119,7 +120,8 @@ public class PriceMapper {
                 .build();
     }
 
-    private PricePredictionResponse.Comparison buildComparison(PriceEstimate est) {
+    private PricePredictionResponse.Comparison buildComparison(PriceEstimate est,
+                                                               BigDecimal deviationFlagRatio) {
         if (est.deviationRatio() == null) {
             return null;
         }
@@ -134,7 +136,7 @@ public class PriceMapper {
                 .deviationRatio(ratio)
                 .deviationPercent(ratio.multiply(new BigDecimal("100")).setScale(2, RoundingMode.HALF_UP))
                 .deviationFlagged(est.deviationFlagged())
-                .thresholdRatio(null)
+                .thresholdRatio(deviationFlagRatio)
                 .verdict(verdict)
                 .verdictMessage(verdictMessage(verdict, ratio))
                 .blocksPosting(false)

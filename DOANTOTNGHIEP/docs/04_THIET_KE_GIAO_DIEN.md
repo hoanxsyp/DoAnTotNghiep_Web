@@ -48,7 +48,7 @@ dark theme.
 | *"Mobile ưu tiên tìm kiếm nhanh"* | Ô tìm kiếm là thành phần nổi bật nhất trên hero trang chủ; ở `xs` header thu gọn còn logo + icon tìm kiếm + `NotificationBell`; trang `/tim-kiem` có sticky search bar ở đỉnh | Trang chủ, Kết quả tìm kiếm |
 | *"bộ lọc dễ dùng"* | `SearchFilterPanel` là sidebar cố định ở `md+`, nhưng ở `xs/sm` biến thành **bottom Drawer** full-height mở bằng FAB "Bộ lọc" có badge đếm số filter đang bật; nút "Áp dụng"/"Xóa lọc" dính đáy drawer | Kết quả tìm kiếm |
 | *"nút liên hệ rõ"* | Ở `xs/sm`, chi tiết tin có **sticky bottom action bar** (Gọi / Nhắn tin / Lưu) luôn hiện, cao 64px, nằm trên mọi nội dung | Chi tiết tin |
-| *"Form đăng tin cần chia bước để dễ nhập trên mobile"* | Form tạo/sửa tin dùng **Stepper 6 bước** (mục 5.3.3), `orientation="horizontal"` ở `md+` và `orientation="vertical"` ở `xs`; mỗi bước validate độc lập; auto-save nháp | Tạo tin, Sửa tin |
+| *"Form đăng tin cần chia bước để dễ nhập trên mobile"* | Form tạo/sửa tin dùng **Stepper 6 bước**; Stepper ngang hiện từ `sm`, còn `xs` hiện dòng `Bước n/6`; mỗi bước validate nhóm field tương ứng; hiện không có auto-save | Tạo tin, Sửa tin |
 
 **Thứ tự viết CSS:** style mặc định là style của `xs`; các breakpoint lớn hơn chỉ *thêm vào*
 qua `theme.breakpoints.up(...)`. Không dùng `breakpoints.down()` làm style gốc.
@@ -1436,12 +1436,10 @@ number/array/boolean).
   ```
   Nút "Gọi" là `secondary` (cam) — nổi nhất trên màn hình. `ChatbotWidget` đẩy lên `bottom:88`.
 - Gallery: full-bleed (tràn mép), swipe ngang, đếm `3/8` góc dưới phải, bấm → full-screen viewer.
-- Khối "Giá tham khảo khu vực" đặt ngay sau khối thông số.
 
 **Component:** `ImageGallery`, `RichTextViewer`, `RatingStars`,
 `CommentThread`, `ListingCard` (compact), `EmptyState`, `LoadingSkeleton`, `ConfirmDialog`,
-`ReportDialog`, `FavoriteButton`, `SpecGrid`, `AmenityChipGroup`,
-`PriceReferenceCard`, `StaticMap`.
+`ReportDialog`, `FavoriteButton`, `SpecGrid`, `AmenityChipGroup`, `StaticMap`.
 
 **API**
 
@@ -1457,7 +1455,6 @@ number/array/boolean).
 | Lưu / bỏ lưu | `POST /api/favorites` body `{ listingId }` · `DELETE /api/favorites/{listingId}` | cần `FAVORITE_MANAGE` |
 | Nhắn tin | `POST /api/conversations` body `{ listingId }` → nhận `conversationId` | rồi `navigate('/tai-khoan/tin-nhan/' + id)` |
 | Báo cáo | `POST /api/reports` body `{ targetType: 'LISTING', targetId, reason, description, evidenceImageUrl }` | `ReportTargetType.LISTING`, `ReportReason` (canonical mục 5) |
-| Giá tham khảo | trả kèm trong `GET /api/listings/{id}` field `priceReference` | không gọi `POST /api/ai/price-prediction` ở màn công khai — endpoint đó dành cho form đăng tin của chủ trọ `[§3.16]` |
 
 **Hiển thị theo quyền — bảng quyết định**
 
@@ -3063,13 +3060,17 @@ biểu đồ (hành động quan trọng hơn số liệu trên màn hình nhỏ
 
 | | |
 |---|---|
-| **Route** | `/quan-ly/tin-dang/tao` · **Quyền** `LISTING_CREATE` |
+| **Route** | `/quan-ly/tin-dang/tao` · backend cho role `TENANT`, `LANDLORD`, `ADMIN`; Tenant chỉ tạo `ROOMMATE` |
 | **Use case** | `[§3.3]`; `[§7.3]` *"Tạo tin nháp"*, *"Xem giá AI đề xuất"*, *"Gửi duyệt tin"*, *"Quản lý ảnh"*; `[§8.1]` sequence đăng tin; `[§11.7]` *"Form đăng tin cần chia bước để dễ nhập trên mobile"*; `[§9.4]` |
 
-Đây là màn hình phức tạp nhất hệ thống. **6 bước**, chia theo đúng thứ tự luồng chính `[§3.3]`
-(bước 2→7 của tài liệu nghiệp vụ ánh xạ 1–1 vào các step).
+Màn hình hiện có **6 bước**: Loại tin → Thông tin cơ bản → Địa chỉ → Giá & tiện ích → Hình ảnh
+→ Xem lại.
 
-**Wireframe (desktop) — Bước 3: Giá & Chi tiết (bước có AI giá)**
+**Wireframe thiết kế ban đầu (không phải UI hiện tại)**
+
+> Wireframe dưới đây từng mô tả panel sticky, nút áp dụng giá và auto-save. Source hiện tại dùng
+> card AI nội tuyến ở bước 4, không có nút áp dụng giá và không auto-save; contract hiện hành nằm
+> ở phần **Nội dung 6 bước**, **Khi nào gọi AI giá** và **Luồng lưu hiện tại** bên dưới.
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────┐
@@ -3137,7 +3138,7 @@ biểu đồ (hành động quan trọng hơn số liệu trên màn hình nhỏ
 └────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Cảnh báo lệch giá** — hiện **ngay dưới ô "Giá thuê"** khi
+**Cảnh báo lệch giá trong UI hiện tại** — hiện trong card giá AI khi
 `|giá nhập − giá đề xuất| / giá đề xuất > ai.price.deviation_flag_ratio` (0.35):
 
 ```
@@ -3157,29 +3158,25 @@ cảnh báo mềm, **tuyệt đối không chặn đăng tin**"*. Cảnh báo l�
 
 | # | Tên bước | Trường | Nguồn |
 |---|---|---|---|
-| 1 | **Loại tin** | `categoryCode` — 7 thẻ lớn chọn 1 (`CategoryCode`, canonical mục 5) | `[§3.3]` bước 2; `[§0.3]` |
-| 2 | **Thông tin cơ bản** | `title`, `description`, `provinceId`/`districtId`/`wardId` (`AddressSelector`), `addressDetail`, `latitude`/`longitude` (tùy chọn), `contactName`, `contactPhone` | `[§3.3]` bước 3–4 |
-| 3 | **Giá & Chi tiết** | `price`, `depositAmount`, `area`, `roomCount`, `toiletCount`, `toiletType`, `furnitureStatus`, `maxOccupants`, `currentOccupants`*, `genderRequirement`*, `curfewType`, `petAllowed`, `parkingAvailable`, `electricityPrice`, `waterPrice`, `availableFrom` + **`PriceSuggestionPanel`** | `[§3.3]` bước 5, 8; `[§9.4]` |
-| 4 | **Tiện ích** | `amenityIds[]` — `AmenityPicker` nhóm theo `[§10.5]` | `[§3.3]` bước 6; `[§2.3]` LIST-12 |
+| 1 | **Loại tin** | `categoryId` — các thẻ danh mục lấy từ API; Tenant chỉ thấy `ROOMMATE` | `ListingWizard.jsx` |
+| 2 | **Thông tin cơ bản** | `title`, `description`, `maxOccupants`, `currentOccupants`*, `genderRequirement`*, `roomCount` theo loại tin, `toiletCount`, `furnitureStatus`, `toiletType`, `curfewType`, `availableFrom`, `petAllowed`, `parkingAvailable` | `ListingWizard.jsx` |
+| 3 | **Địa chỉ** | `provinceId`/`districtId`/`wardId` (`AddressSelector`), `addressDetail` | `ListingWizard.jsx` |
+| 4 | **Giá & tiện ích** | `price`, `area`, `depositAmount`, `electricityPrice`, `waterPrice`, card giá AI và `amenityIds[]` | `ListingWizard.jsx` |
 | 5 | **Hình ảnh** | `images[]` — `ImageUploader` | `[§3.3]` bước 7; `[§11.9]`; `[§2.3]` LIST-11 |
-| 6 | **Xem lại & Gửi** | Xem trước tin đúng như người thuê thấy + 2 nút: "Lưu nháp" / "Gửi duyệt" | `[§3.3]` bước 9–10 |
+| 6 | **Xem lại** | `contactName`, `contactPhone`, bảng tóm tắt + 2 nút "Lưu nháp" / "Gửi duyệt" | `ListingWizard.jsx` |
 
-`*` = chỉ hiện khi `categoryCode = ROOMMATE` — `[§3.3]` *"Tin ở ghép phải có thông tin giới
+`*` = chỉ hiện khi category được chọn có `code = ROOMMATE` — `[§3.3]` *"Tin ở ghép phải có thông tin giới
 tính chấp nhận, số người hiện tại hoặc số người cần tìm"*. Đây là **trường bắt buộc có điều
 kiện**, khớp `[§10.5]` *"Cấu hình trường bắt buộc theo loại tin"*.
 
 **Mobile (`xs`)**
-- `Stepper orientation="vertical"` — hiện thực trực tiếp `[§11.7]`.
-- Chỉ hiện **một** bước tại một thời điểm; các bước khác thu gọn thành dòng tiêu đề + ✓.
-- `PriceSuggestionPanel` **không** sticky ở cạnh — chuyển thành `Accordion` mở sẵn **ngay dưới ô
-  giá** (giữ đúng ý `[§9.4]` bước 5: hiển thị *"Giá bạn nhập / Giá AI đề xuất / Chênh lệch"*
-  cạnh nhau).
-- Thanh nút `[← Quay lại] [Tiếp tục →]` **dính đáy**, `[Lưu nháp]` chuyển thành icon 💾 ở header.
-- `ImageUploader`: nút "Chụp ảnh" (`capture="environment"`) + "Chọn từ thư viện".
+- Stepper ngang bị ẩn; UI hiện dòng `Bước n/6: <tên bước>`.
+- Mỗi thời điểm chỉ render nội dung của một bước.
+- Card giá AI nằm trong bước **Giá & tiện ích**, ngay dưới các ô giá/diện tích/chi phí.
 
-**Component:** `Stepper`, `CategoryPicker`, `TextField`, `AddressSelector`, `AmenityPicker`,
-`ImageUploader`, `PriceSuggestionPanel`, `RadioGroup`, `Checkbox`, `DatePicker`, `Alert`,
-`ConfirmDialog`, `ListingPreview`, `LoadingSkeleton`.
+**Component dùng trực tiếp:** MUI `Stepper`, `Card`, `TextField`, `Chip`, `Switch`, `Alert`,
+`DatePicker`; component dự án `AddressSelector`, `ImageUploader`. Card giá AI được viết trực tiếp
+trong `ListingWizard`, không có component `PriceSuggestionPanel` riêng.
 
 **API**
 
@@ -3190,46 +3187,35 @@ kiện**, khớp `[§10.5]` *"Cấu hình trường bắt buộc theo loại tin
 | Upload ảnh | `POST /api/listings/{id}/images` (multipart, nhiều file) `[§12.3]` |
 | Xóa ảnh | `DELETE /api/listings/{id}/images/{imageId}` `[§12.3]` |
 | Sắp xếp ảnh / đặt ảnh đại diện | `PUT /api/listings/{id}/images/order` body `{ imageIds: [...], primaryImageId }` **[BỔ SUNG NGOÀI CANONICAL]** — `[§7.3]` *"Quản lý ảnh: Thêm, xóa, **sắp xếp** ảnh"* + `[§11.9]` *"Có ảnh đại diện chính"*; `[§12.3]` chỉ có thêm/xóa |
-| Giá AI đề xuất | `POST /api/ai/price-prediction` body `{ categoryCode, provinceId, districtId, wardId, area, roomCount, toiletCount, toiletType, furnitureStatus, amenityIds, latitude, longitude }` `[§12.9]` |
+| Giá AI đề xuất | `POST /api/ai/price-prediction` body `{ categoryId, provinceId, districtId, wardId, area, roomCount?, toiletCount?, furnitureStatus, toiletType, amenityIds, inputPrice?, listingId? }` |
 | Gửi duyệt | `POST /api/listings/{id}/submit` `[§12.3]` → `PENDING` |
 | Danh mục/khu vực/tiện ích | `catalog` slice (đã cache) |
 
-**Khi nào gọi AI giá** — `[§5.9]` liệt kê đúng các trigger:
+**Khi nào gọi AI giá trong code hiện tại:**
 
-| Trigger `[§5.9]` | Hiện thực |
-|---|---|
-| *"thay đổi khu vực"* | `wardId` đổi |
-| *"thay đổi diện tích"* | `area` đổi |
-| *"thay đổi loại nhà"* | `categoryCode` đổi |
-| *"thay đổi số phòng, số toilet"* | `roomCount` / `toiletCount` đổi |
-| *"thay đổi nội thất hoặc tiện ích quan trọng"* | `furnitureStatus` / `amenityIds` đổi |
+- Người dùng bấm **Tính lại** trên card giá AI.
+- Người dùng bấm **Tiếp tục** khi đang ở bước 4 (`activeStep === 3`); request chạy và wizard
+  chuyển sang bước ảnh.
+- Điều kiện tối thiểu trước khi gọi là có `categoryId`, `wardId`, `area`.
+- Ở chế độ sửa, request mang `listingId` hiện tại. Ở chế độ tạo, lần gọi tại bước giá chưa có
+  `listingId`; sau khi `POST /api/listings` thành công, frontend gọi lại với id vừa tạo.
+- Không có `useEffect` debounce hoặc `AbortController` cho luồng này trong `ListingWizard` hiện tại.
 
-Hiện thực: `useEffect` theo dõi đúng 7 field trên, **debounce 800ms**, chỉ gọi khi **đủ tối
-thiểu** `categoryCode` + `wardId` + `area > 0` (`[§9.4]` bước 2 *"Hệ thống xác định đã đủ thông
-tin"*). Hủy request cũ bằng `AbortController` khi có thay đổi mới.
-
-**Trạng thái `PriceSuggestionPanel`**
+**Trạng thái card giá AI trong `ListingWizard`**
 
 | Trạng thái | Thể hiện |
 |---|---|
-| Chưa đủ dữ liệu | *"Nhập loại tin, khu vực và diện tích để xem giá tham khảo."* `[§9.4]` luồng phụ *"Nếu thiếu dữ liệu, hệ thống thông báo cần nhập thêm trường"* |
-| Loading | Skeleton panel + *"Đang phân tích giá khu vực…"* |
-| `HIGH` / `MEDIUM` / `LOW` | Hiện khoảng giá + `Chip` độ tin cậy (màu theo 2.1.3). Với `LOW` thêm dòng *"Độ tin cậy thấp do ít dữ liệu tương tự."* `[§9.4]` *"Không hiển thị AI như nguồn đảm bảo chính xác tuyệt đối"* |
-| Error 503 `AI_SERVICE_UNAVAILABLE` | Panel hiện *"Không lấy được giá tham khảo lúc này."* + nút "Thử lại". **Không** chặn form — `ai.price.enabled = false` cũng vào nhánh này. |
-| `ai.price.enabled = false` | Ẩn hẳn panel. |
+| Chưa có kết quả | *"Nhập giá & diện tích rồi bấm \"Tính lại\" để xem gợi ý."* |
+| Loading | `CircularProgress` ở nút + *"Đang phân tích thị trường…"* |
+| Kết quả thành công | Hiện `suggestedPrice`, khoảng `priceRange.low–high`; nếu `comparison.deviationFlagged=true` thì hiện cảnh báo; cuối card hiện `disclaimer` khi response có giá trị này. UI hiện tại không render `confidence`/`confidenceLabel`. |
+| Lỗi API / kết quả `available=false` | `Alert severity="info"` hiển thị message lỗi hoặc câu fallback; nút **Tính lại** vẫn có thể bấm. Không chặn form. |
 
-**Auto-save nháp** — quyết định thiết kế quan trọng cho `[§11.7]`:
-- Sau bước 1 hoàn tất → tự `POST /api/listings` tạo `DRAFT`, lấy `id`, `navigate` sang
-  `/quan-ly/tin-dang/:id/sua?step=2` bằng `replace: true`.
-- Từ đó auto-save `PUT` mỗi khi chuyển bước **và** sau 30s không thao tác (nếu `isDirty`).
-- Hiện trạng thái ở header: *"💾 Đã lưu nháp lúc 14:32"* / *"Đang lưu…"* / *"⚠ Chưa lưu được"*.
-- **Lý do:** người dùng mobile rất dễ mất form giữa chừng (cuộc gọi đến, hết pin, chuyển app).
-  Form 6 bước mà mất trắng là trải nghiệm không chấp nhận được. Vì đã có `DRAFT` trong state
-  machine (canonical 5.1: `SAVE_DRAFT` từ `(none)` → `DRAFT`), auto-save không thêm trạng thái
-  mới nào.
-- **Bắt buộc:** ảnh chỉ upload được **sau khi** có `listing.id` (endpoint là
-  `/api/listings/{id}/images`) → đây là lý do thứ hai buộc tạo `DRAFT` sớm, và là lý do bước
-  "Hình ảnh" nằm ở vị trí 5 chứ không sớm hơn.
+**Luồng lưu hiện tại:** không có auto-save khi đổi bước hoặc theo chu kỳ. Ở bước cuối:
+
+- Chế độ tạo: `POST /api/listings` tạo nháp → đồng bộ ảnh → gọi dự đoán giá với `listingId`
+  trong `try/catch` riêng → nếu chọn gửi duyệt thì gọi `/api/listings/{id}/submit`.
+- Chế độ sửa: `PUT /api/listings/{id}` → đồng bộ ảnh → tùy chọn gửi duyệt. Việc lưu ở chế độ
+  sửa không tự gọi lại AI; request AI xảy ra khi bấm **Tính lại** hoặc **Tiếp tục** ở bước giá.
 
 **Validation từng bước** (khớp `[§3.3]` + canonical mục 9)
 
@@ -3352,9 +3338,8 @@ message: '...' }]` → hiện lỗi field-level ở đúng ô, đưa người d�
 | Trạng thái | Thể hiện |
 |---|---|
 | Loading (vào trang) | Skeleton stepper + form (chờ `catalog` + `system-configs/public`). |
-| Loading (chuyển bước) | Không có (validate ở client, tức thì). Nếu auto-save đang chạy → nút "Tiếp tục" vẫn bấm được, lưu chạy nền. |
+| Loading (chuyển bước) | Không có; validate ở client. Khi rời bước Giá & tiện ích, request AI có thể tiếp tục trong lúc wizard chuyển sang bước ảnh. |
 | Loading (gửi duyệt) | Nút "Gửi duyệt" spinner + toàn form disabled. |
-| Error (auto-save thất bại) | Chip header đổi *"⚠ Chưa lưu được — Thử lại"*, **không** toast (auto-save là nền, toast liên tục sẽ phiền). Nếu thất bại 3 lần liên tiếp → toast error 1 lần. |
 | Error 400 `VALIDATION_FAILED` | Map `errors[]` → field; `navigate` tới bước chứa field lỗi đầu tiên + cuộn tới field đó + focus. |
 | Error 429 | Toast error *"Bạn đã đăng quá số tin cho phép trong ngày. Vui lòng thử lại vào ngày mai."* — canonical mục 8: `spam.listing.daily` = 10, `spam.listing.new_account_daily` = 3 với tài khoản <7 ngày. |
 | Success (lưu nháp) | Toast success *"Đã lưu nháp."* → `/quan-ly/tin-dang?status=DRAFT`. |
@@ -3362,13 +3347,10 @@ message: '...' }]` → hiện lỗi field-level ở đúng ô, đưa người d�
 
 **Tương tác & điều hướng**
 - Chỉ được sang bước sau khi bước hiện tại **valid** (`trigger()` của React Hook Form).
-- **Được** quay lại bước trước bất kỳ lúc nào; **được** bấm thẳng vào số bước **đã hoàn tất**
-  trên Stepper (không cho nhảy tới bước chưa mở khóa).
-- Rời trang khi `isDirty` → `ConfirmDialog` *"Bạn có thay đổi chưa lưu. Lưu nháp trước khi
-  rời?"* với 3 lựa chọn: "Lưu nháp và rời" / "Rời không lưu" / "Ở lại".
-- Bấm "Áp dụng giá" ở `PriceSuggestionPanel` → set `price` = giá trung bình đề xuất →
-  `[§9.4]` bước 6 *"Chủ trọ tự quyết định dùng giá nào"*. Sau khi áp dụng, cảnh báo lệch giá
-  biến mất.
+- **Được** quay lại bước trước bằng nút **Quay lại**. `StepLabel` hiện tại không có handler để
+  bấm nhảy trực tiếp giữa các bước.
+- Không có xác nhận `isDirty` khi rời trang trong `ListingWizard` hiện tại.
+- Không có nút **Áp dụng giá**; giá AI chỉ hiển thị tham khảo và không tự ghi đè field `price`.
 
 ---
 
@@ -5783,10 +5765,8 @@ Admin/Moderator 18 · Chatbot 1.
 | 32 | `CaptchaField` | `name` (str, mặc định `'captchaToken'`), `visible` (bool), `error` (str), `onRefresh` (fn), `autoFocus` (bool) | Khối captcha: ảnh PNG base64 (`<img alt="Mã xác nhận bằng hình ảnh">`), nút `[⟳]` làm mới, nút `[🔊]` nghe mã (a11y), ô nhập mã. Tự gọi `GET /api/auth/captcha` khi `visible` chuyển `false → true` và khi bấm `[⟳]`; giữ `captchaId` trong state nội bộ, trả ra `"{captchaId}:{mã nhập}"` qua `react-hook-form`. `visible = false` → render `null` **và** xóa giá trị field (tránh gửi token cũ). Ảnh hết hạn sau `expiresIn` (300s) → hiện lớp phủ *"Mã đã hết hạn — bấm ⟳ để lấy mã mới"*. | 5.1.5 |
 | 33 | `NotificationPreferencesSection` | trong `NotificationsPage` | Tab "Thiết lập" của trang thông báo `[§11.12]`: bảng các `NotificationType` do BE trả về × 2 cột `Switch` (Trên app / Email), nhóm theo Tin đăng / Tương tác / Hệ thống. Loại `optional = false` → `Switch` `disabled` + chip "Bắt buộc" + Tooltip *"Thông báo bắt buộc"*. `GET /api/notifications/preferences` khi mở tab, `PUT` khi lưu — chỉ gửi phần đã đổi. Đủ trạng thái loading/empty/error/success. | 5.2.5 |
 
-**Tổng: 33 component dùng lại** — đủ 22 component bắt buộc theo đề bài + 11 component bổ trợ
-(`PriceSuggestionPanel`, `FavoriteButton`, `ReportDialog`, `Can`,
-`PageHeader`, `ErrorState`, `PasswordField`, `ErrorBoundary`, `CaptchaField`,
-`NotificationPreferencesSection`).
+> `PriceSuggestionPanel` không tồn tại trong source hiện tại; card giá AI nằm trực tiếp trong
+> `ListingWizard`. Số thứ tự cũ trong bảng được giữ để không làm lệch các tham chiếu khác.
 
 ### 6.2. `RichTextViewer` — chống XSS, KHÔNG `dangerouslySetInnerHTML`
 
@@ -7036,7 +7016,6 @@ tử thật → CLS ≈ 0. Không dùng spinner giữa màn hình cho việc t�
 | Ô tìm kiếm từ khóa (`/tim-kiem`) | **400ms** | Gõ "phòng trọ quận 10" = 18 ký tự → 18 request nếu không debounce. 400ms đủ để gõ xong một từ. |
 | `PriceRangeSlider` / diện tích | **400ms** | Kéo slider bắn hàng chục sự kiện/giây. |
 | Đếm kết quả trong Drawer lọc mobile | **400ms** | Như trên. |
-| Gọi AI dự đoán giá (5.3.3) | **800ms** | Dài hơn vì tính toán nặng ở BE (lấy comparable + hedonic) và không cấp thiết theo từng phím. |
 | Tìm nhanh admin (`Ctrl+K`) | **300ms** | Admin gõ nhanh, cần phản hồi sát. |
 | Ô tìm trong `Autocomplete` (`AddressSelector`) | **0ms** | Lọc **client-side** trên dữ liệu đã cache → không có request, không cần debounce. |
 
@@ -7111,7 +7090,7 @@ vô hạn cho kết quả tìm kiếm.
 | **ADR-06** | **Không optimistic update cho mọi thao tác đổi trạng thái tin và thao tác admin — luôn refetch** | Optimistic toàn bộ cho UI mượt | Trạng thái tin do `ListingStateMachine` ở BE quyết (canonical 5.1) với các luật FE không thể biết trước: `LOCKED` chặn `RENEW`/`SUBMIT`/`SOFT_DELETE`; `UNLOCK` → `HIDDEN` (**không** phải `ACTIVE`); `RESUBMIT_AFTER_EDIT` phụ thuộc trường nào bị sửa. Đoán ở FE sẽ hiển thị sai rồi giật về — tệ hơn chờ 200ms. Optimistic **chỉ** dùng cho thao tác đơn giản, có thể đảo ngược: lưu tin, đọc thông báo, theo dõi, gửi tin nhắn (mục 7.2). |
 | **ADR-07** | **`content` của đánh giá là BẮT BUỘC khi `rating ≤ 2`** | Luôn tùy chọn | `[§3.12]` viết *"Nội dung đánh giá **có thể** bắt buộc nếu rating <= 2"* — mơ hồ. Quyết định của Senior Architect: **bắt buộc**. Căn cứ: (a) `[§3.12]` cũng nói *"Đánh giá quá tiêu cực vẫn được hiển thị nếu không vi phạm nội dung, nhưng được AI và Admin theo dõi"* → Moderator cần **lý do** mới xử lý được, 1 sao trống rỗng không hành động được gì; (b) đánh giá thấp kéo giảm số sao trung bình của tin và chủ trọ — phải kèm giải trình; (c) buộc viết lý do làm giảm đánh giá bốc đồng/phá hoại, đúng tinh thần `[§3.12]` *"giảm đánh giá ảo"*. |
 | **ADR-08** | **Menu admin lọc theo permission qua cấu hình khai báo (`ADMIN_MENU` + `filterMenu`), không `if role === 'ADMIN'` rải rác** | Kiểm tra role trực tiếp trong JSX từng mục | Canonical mục 12 yêu cầu *"menu render theo permission — Moderator không thấy mục tài chính/cấu hình"*. Kiểm tra rải rác trong JSX: thêm permission mới phải sửa 10 chỗ, sót một chỗ là rò rỉ. Cấu hình khai báo tập trung → đối chiếu trực tiếp với bảng permission canonical mục 4.2 khi review, và group rỗng tự biến mất (không còn tiêu đề nhóm trống). Vẫn **không** thay thế `@PreAuthorize` ở BE `[§11.2]`. |
-| **ADR-09** | **Form tạo tin auto-save thành `DRAFT` ngay sau bước 1** | Chỉ lưu khi bấm nút; giữ toàn bộ trong local state tới bước 6 | Hai lý do bắt buộc: (a) **kỹ thuật** — endpoint ảnh là `/api/listings/{id}/images` (`[§12.3]`), phải có `listing.id` mới upload được → buộc tạo record trước bước ảnh; (b) **UX** — `[§11.7]` nhấn mạnh form chia bước cho mobile, mà mobile hay bị gián đoạn (cuộc gọi, hết pin, chuyển app). Mất form 6 bước là không chấp nhận được. `DRAFT` đã có sẵn trong state machine (canonical 5.1 `SAVE_DRAFT`) → auto-save **không** thêm trạng thái mới nào. |
+| **ADR-09 — không còn là hiện trạng** | Thiết kế ban đầu đề xuất auto-save `DRAFT` sau bước 1 | `ListingWizard` hiện giữ form trong state tới bước cuối. Khi submit chế độ tạo: tạo `DRAFT` → đồng bộ ảnh → gọi AI với id mới → tùy chọn gửi duyệt. Không có auto-save theo bước hoặc thời gian. |
 | **ADR-10** | **Chat dùng polling 10s, không WebSocket** | STOMP/SockJS; SSE | `[§13.2]` nói thẳng: *"Chat nội bộ: Chỉ cần nhắn tin cơ bản, **không cần realtime phức tạp** nếu thiếu thời gian"*. Canonical mục 1.2 **không** có dependency WebSocket → thêm là vi phạm hợp đồng kỹ thuật. Polling 10s (chỉ khi tab hiển thị) đủ cho nghiệp vụ hỏi-đáp thuê trọ, không ai cần độ trễ dưới giây. Chi phí: vài request/phút/người dùng đang mở chat — chấp nhận được ở quy mô đồ án. |
 | **ADR-11** | **`AdminLayout` tối ưu cho `md+`; `xs` dùng được nhưng không phải trải nghiệm chính** | Thiết kế mobile-first đầy đủ cho cả 18 trang admin | `[§11.7]` yêu cầu responsive nhưng nêu rõ ưu tiên: *"Mobile ưu tiên **tìm kiếm nhanh, bộ lọc dễ dùng, nút liên hệ rõ**"* và *"Form **đăng tin** cần chia bước"* — toàn bộ là nghiệp vụ **người thuê và chủ trọ**. `[§4.3]` mô tả quy trình Admin là công việc bàn giấy (duyệt tin, xem dashboard, đối soát). Đầu tư 18 trang admin cho mobile là phân bổ công sức sai chỗ. Vẫn đảm bảo: `xs` **không vỡ layout**, bảng → card (mục 9.2), thao tác cốt lõi (duyệt/từ chối) làm được trên điện thoại. |
 | **ADR-12** | **Font `Be Vietnam Pro` self-host qua `@fontsource`, không Google Fonts CDN** | Roboto mặc định MUI; Google Fonts CDN | Roboto có tiếng Việt nhưng dấu mũ + dấu thanh chồng nhau (`ế`, `ộ`, `ữ`) bị chật ở 14px — cỡ chữ chính trên mobile, mà `[§11.7]` ưu tiên mobile. Be Vietnam Pro thiết kế riêng cho tiếng Việt, đủ 134 ký tự có dấu, SIL OFL. Self-host vì canonical 13.5 yêu cầu `docker compose up --build` chạy được toàn hệ thống — phụ thuộc CDN thì máy chấm offline sẽ fallback font xấu. Chi phí: +2 dependency asset (`@fontsource/*`), đã ghi **[BỔ SUNG NGOÀI CANONICAL]** ở mục 2.2. |
@@ -7189,7 +7168,6 @@ phải có để hiện thực chức năng đã nêu trong tài liệu nghiệp
 | `canReview`, `rentalVerified`, `canEdit`, `editableUntil` | listing detail, comment, review | FE không tự suy ra quan hệ thuê hoặc các cửa sổ `review.edit_window_hours`, `comment.edit_window_minutes` |
 | `freeRenewRemaining` | `GET /api/listings/my` | FE không tự đếm `listing.renew.free_per_month` |
 | `autoHideRemaining` | admin report list | FE không tự tính `moderation.autohide.*` |
-| `priceReference` | `GET /api/listings/{id}` | Giá tham khảo ở màn công khai (không gọi endpoint dự đoán của chủ trọ) |
 | `personalized` (bool) | `POST /api/ai/recommendations` | ADR-16 — đổi tiêu đề section |
 | `maskedPhone` | listing detail (khách), contact list (chủ trọ) | `[§3.8]` che số; `[§11.1]` không lộ dữ liệu nhạy cảm |
 

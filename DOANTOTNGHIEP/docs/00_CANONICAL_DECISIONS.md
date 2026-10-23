@@ -373,7 +373,7 @@ RejectReasonCode       : MISSING_INFO, WRONG_PRICE, FAKE_IMAGE, BANNED_CONTENT,
                          WRONG_AREA, DUPLICATE, OTHER                            [§3.3]  (listings.reject_reason_code)
 PackagePurpose         : PUSH_TOP, HIGHLIGHT, BOTH                               [§2.9]  (promotion_packages.purpose)
 PriceTriggerReason     : CREATE, EDIT_AREA, EDIT_CATEGORY, EDIT_LOCATION,
-                         EDIT_AMENITY, ADMIN_RECALC                             [§5.9]  (prediction_histories.trigger_reason)
+                         EDIT_AMENITY, ADMIN_RECALC                             [§5.9]  (enum còn trong code; không có cột trigger_reason trong prediction_histories)
 AdministrativeUnitType : PROVINCE, DISTRICT, WARD                               [§10.5] (dùng chung cho import khu vực)
 ChatbotMessageRole     : = ChatbotSender (USER, BOT) — alias, KHÔNG tạo enum thứ hai. Dùng ChatbotSender.
 AiLogModule            : = AiModule (SENTIMENT, RECOMMENDATION, CHATBOT, PRICE) — alias, dùng AiModule.
@@ -892,16 +892,21 @@ hướng về chức năng tìm trọ. Ghi log câu hỏi phổ biến để c�
 
 ### 10.4. Price Prediction `[§9.4]`
 
-`PriceEstimator` → `ComparableHedonicPriceEstimator`.
-Bước 1: lấy comparable — cùng `ward` (nới dần lên `district` → `province` nếu thiếu mẫu),
-cùng `category`, diện tích ±30%, tin `ACTIVE`/`CLOSED` trong 180 ngày.
-Bước 2: nếu `n < ai.price.min_samples` → `INSUFFICIENT_DATA`, **không dự đoán** `[§9.4]`.
-Bước 3: giá cơ sở = median(price/m²) × diện tích.
-Bước 4: điều chỉnh hedonic theo hệ số cấu hình được: nội thất đầy đủ (+12%), toilet riêng (+8%),
-thang máy (+7%), chỗ để xe (+5%), giờ tự do (+3%), mặt tiền (+15%), khoảng cách trung tâm.
-Bước 5: khoảng = percentile 25 / 50 / 75. Confidence theo `n` và độ phân tán (IQR/median).
-Bước 6: `|giá nhập − giá đề xuất| / giá đề xuất > 0.35` → **ghi flag**, cảnh báo mềm,
-**tuyệt đối không chặn đăng tin** `[§3.3][§9.4]`. Lưu `PredictionHistory` mọi lần.
+`PriceEstimator` đang được Spring chọn qua `@Primary` là `RentalApiLightgbmPriceEstimator`
+(`estimator_version = "lgbm-api-1.0"`). Backend kiểm tra tham chiếu catalog, map quận/phường,
+loại tin và tiện ích sang request của FastAPI rồi gọi `POST /predict` trên `rental-api` bằng
+HTTP/1.1. Docker Compose cấu hình `RENTAL_BACKEND=sklearn`; artifact `model.joblib` được phục vụ
+bởi backend LightGBM.
+
+`ComparableHedonicPriceEstimator` (`estimator_version = "hedonic-1.0"`) vẫn tồn tại trong mã
+nguồn nhưng không phải bean mặc định và không phải fallback tự động khi `rental-api` lỗi.
+`PriceEstimationServiceImpl` chỉ tìm comparable WARD → DISTRICT → PROVINCE khi implementation
+được chọn trả `usesComparables() = true`; implementation LightGBM hiện tại trả `false`.
+
+Mọi dự đoán thành công được lưu vào `prediction_histories`. Khi request có `listingId`, service
+kiểm tra tin thuộc người gọi trước khi dự đoán và cập nhật `listings.price_prediction_id` cùng
+`price_deviation_flag`. Ngưỡng cờ lấy từ `ai.price.deviation_flag_ratio`; cờ chỉ cảnh báo và
+không chặn đăng tin.
 
 ---
 

@@ -146,9 +146,9 @@ Phân công cho người phụ trách module tương ứng. Kiểm tra demo AI �
 | Rebuild index/retrain model và kiểm tra chất lượng với baseline | Chưa check |
 | Chatbot cho khách/người đăng nhập, hội thoại nhiều lượt và tách đúng phiên | Chưa check |
 | RoomFinder tìm/lọc/so sánh/reset và không bịa phòng/giá | Chưa check |
-| Dự đoán giá có đầu vào, đơn vị, kết quả và lịch sử đúng | Chưa check |
-| AI tắt/lỗi/timeout không làm hỏng luồng chính của website | Chưa check |
-| Xác nhận module AI nào đã nối dữ liệu thật của website, module nào còn độc lập | Chưa check |
+| Dự đoán giá có đầu vào, đơn vị, kết quả và lịch sử đúng | Đã check |
+| AI tắt/lỗi/timeout không làm hỏng luồng chính của website | Đã check (dự đoán giá) |
+| Xác nhận module AI nào đã nối dữ liệu thật của website, module nào còn độc lập | Đã check (dự đoán giá) |
 | Đăng ký → đăng tin → duyệt → khách tìm thấy tin | Chưa check |
 | Tìm phòng → kiểm tra số điện thoại hiển thị trực tiếp/chat → yêu cầu thuê → xác nhận thuê → đánh giá | Chưa check |
 | Trả phòng → cập nhật tin → người thuê có thể thuê tiếp | Chưa check |

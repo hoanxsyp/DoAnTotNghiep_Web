@@ -70,6 +70,7 @@ public class PriceEstimationServiceImpl implements PriceEstimationService {
     @Override
     public PricePredictionResponse predict(PricePredictionRequest request, Long userId) {
         support.ensureEnabled(ConfigKey.AI_PRICE_ENABLED);
+        validateListingOwnership(request.getListingId(), userId);
         validateReferences(request);
 
         boolean hasElevator = false;
@@ -160,7 +161,7 @@ public class PriceEstimationServiceImpl implements PriceEstimationService {
                     estimate.deviationFlagged(), saved.getId());
         }
 
-        return mapper.toResponse(saved, estimate, scopeExpanded, comparableDays);
+        return mapper.toResponse(saved, estimate, scopeExpanded, comparableDays, deviationFlagRatio);
     }
 
     @Override
@@ -182,6 +183,17 @@ public class PriceEstimationServiceImpl implements PriceEstimationService {
     }
 
     // ------------------------------------------------------------------
+
+    private void validateListingOwnership(Long listingId, Long userId) {
+        if (listingId == null) {
+            return;
+        }
+        Long ownerId = listingGateway.ownerOf(listingId)
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.LISTING_NOT_FOUND));
+        if (!ownerId.equals(userId)) {
+            throw new ForbiddenException(ErrorCode.LISTING_FORBIDDEN);
+        }
+    }
 
     private void validateReferences(PricePredictionRequest r) {
         if (!categoryService.existsActiveCategory(r.getCategoryId())) {

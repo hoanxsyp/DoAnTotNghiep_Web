@@ -748,8 +748,8 @@ backend_webtro/
     │   │       │   │   │                   UserPreferenceProfileBuilder · ListingScorer · ColdStartStrategy
     │   │       │   │   ├── chatbot/        ChatbotEngine (interface) · RuleBasedChatbotEngine
     │   │       │   │   │                   IntentClassifier · SlotExtractor · ChatbotResponseBuilder · FaqKnowledgeBase
-    │   │       │   │   └── price/          PriceEstimator (interface) · ComparableHedonicPriceEstimator
-    │   │       │   │                       ComparableFinder · HedonicAdjuster · ConfidenceCalculator
+    │   │       │   │   └── price/          PriceEstimator (interface) · RentalApiLightgbmPriceEstimator (@Primary)
+    │   │       │   │                       ComparableHedonicPriceEstimator (không mặc định)
     │   │       │   ├── listener/      CommentSentimentListener
     │   │       │   ├── repository/    SentimentResultRepository · RecommendationLogRepository
     │   │       │   │                  PredictionHistoryRepository · ChatbotConversationRepository
@@ -1336,7 +1336,7 @@ graph TB
         SA["<b>SentimentAnalyzer</b><br/>→ VietnameseLexiconSentimentAnalyzer<br/>ASYNC"]
         RE["<b>RecommendationEngine</b><br/>→ ContentBasedRecommendationEngine<br/>SYNC + cache 15'"]
         CB["<b>ChatbotEngine</b><br/>→ RuleBasedChatbotEngine<br/>SYNC"]
-        PE["<b>PriceEstimator</b><br/>→ ComparableHedonicPriceEstimator<br/>SYNC"]
+        PE["<b>PriceEstimator</b><br/>→ RentalApiLightgbmPriceEstimator (@Primary)<br/>SYNC → FastAPI rental-api /predict"]
     end
 
     subgraph OUT["Hệ quả — CHỈ đề xuất, KHÔNG quyết định [§10.10]"]
@@ -1707,50 +1707,43 @@ Bảng `recommendation_logs` (02_THIET_KE_DATABASE.md) lưu **từng** điểm t
 | Hạng mục | Nội dung |
 |---|---|
 | **Interface** | `PriceEstimator` — `PriceEstimate estimate(PriceEstimateInput input)` |
-| **Impl** | `ComparableHedonicPriceEstimator` (canonical §10.4) |
-| **Thành phần phụ** | `ComparableFinder`, `HedonicAdjuster`, `ConfidenceCalculator`, `StatisticsUtil` |
+| **Impl mặc định** | `RentalApiLightgbmPriceEstimator` — `@Primary`, version `lgbm-api-1.0`, gọi FastAPI `rental-api` |
+| **Impl còn trong mã nguồn** | `ComparableHedonicPriceEstimator` — version `hedonic-1.0`, không được chọn mặc định và không tự chạy khi FastAPI lỗi |
+| **Hạ tầng** | Docker Compose: `rental-api:8000`; backend ngoài Docker mặc định gọi `localhost:8002`; connect timeout `PT2S`, request timeout `PT3S` |
 
 **Input** `[§9.4]`: khu vực (`wardId`/`districtId`/`provinceId`), diện tích, loại nhà (`categoryId`), số phòng, số toilet, nội thất (`FurnitureStatus`), mặt tiền/hẻm, khoảng cách tới trung tâm (`GeoUtil`), tiện ích, tình trạng phòng.
+
+**Input** được backend map sang FastAPI: `districtId`/`wardId` → tên địa giới đã bỏ tiền tố;
+`categoryId` → `room_type`; `amenityIds`, `furnitureStatus`, `toiletType` → danh sách tiện ích;
+`area` → `area_m2`; tọa độ lấy từ request hoặc từ phường.
 
 **Output** `[§9.4]`:
 
 | Trường | Ghi chú |
 |---|---|
-| `suggestedPrice` | `BigDecimal` — giá đề xuất (median) |
-| `priceLow` / `priceMedium` / `priceHigh` | Percentile **25 / 50 / 75** (canonical §10.4) |
-| `confidence` | `PriceConfidence`: `HIGH`, `MEDIUM`, `LOW`, `INSUFFICIENT_DATA` (canonical §5) |
-| `sampleSize` | Số comparable dùng — minh bạch với chủ trọ |
-| `explanation` | `[§9.4]` *"Giá cao hơn do gần trung tâm và có nội thất"* — sinh từ hệ số hedonic đã áp dụng |
+| `suggestedPrice` | Giá `predicted_price_million` từ FastAPI, đổi từ triệu đồng sang đồng |
+| `priceLow` / `priceMedium` / `priceHigh` | `price_range[0]` / giá dự đoán / `price_range[1]`, đổi sang đồng |
+| `confidence` | `HIGH`/`MEDIUM`/`LOW`, tính từ `market_sample_count`, `mape_pct` và `ai.price.min_samples` |
+| `sampleSize` | `market_sample_count` do FastAPI trả về |
+| `explanation` | Chuỗi gồm loại model, giá dự đoán, phạm vi benchmark, số mẫu và độ mới nếu có |
 | `deviationRatio` | `|giá nhập − giá đề xuất| / giá đề xuất` |
 | `flagged` | `deviationRatio > ai.price.deviation_flag_ratio` (0.35) |
 
-**Thuật toán 6 bước (canonical §10.4):**
+**Luồng implementation đang hoạt động:**
 
 | Bước | Nội dung |
 |---|---|
-| 1 | Lấy **comparable**: cùng `ward` (nới dần `district` → `province` nếu thiếu mẫu), cùng `category`, diện tích **±30%**, tin `ACTIVE`/`CLOSED` trong **180 ngày** |
-| 2 | Nếu `n < ai.price.min_samples` (=8) → **`INSUFFICIENT_DATA`, KHÔNG dự đoán** `[§9.4]` |
-| 3 | Giá cơ sở = `median(price/m²) × diện tích` |
-| 4 | Điều chỉnh **hedonic** (hệ số cấu hình được): nội thất đầy đủ **+12%**, toilet riêng **+8%**, thang máy **+7%**, chỗ để xe **+5%**, giờ tự do **+3%**, mặt tiền **+15%**, khoảng cách trung tâm |
-| 5 | Khoảng = percentile **25 / 50 / 75**. Confidence theo `n` và độ phân tán (**IQR/median**) |
-| 6 | `deviationRatio > 0.35` → **ghi flag**, cảnh báo **mềm**, **TUYỆT ĐỐI KHÔNG CHẶN ĐĂNG TIN** `[§3.3]` `[§9.4]`. Lưu `PredictionHistory` **mọi lần** |
+| 1 | Kiểm `ai.price.enabled`; nếu có `listingId`, kiểm tra tin tồn tại và thuộc người gọi |
+| 2 | Kiểm tra category/province/district/ward tồn tại, đúng quan hệ cha-con và khu vực được hỗ trợ |
+| 3 | `RentalApiLightgbmPriceEstimator` map input và gọi `POST /predict` bằng HTTP/1.1 |
+| 4 | FastAPI validate input và chạy model từ `model.joblib` với `RENTAL_BACKEND=sklearn` |
+| 5 | Backend đổi đơn vị triệu đồng → đồng, tính confidence và độ lệch so với `inputPrice` |
+| 6 | Lưu `PredictionHistory`; nếu có `listingId`, cập nhật cờ lệch giá và prediction id gần nhất |
 
-> **Vì sao dùng median chứ không phải mean:** thị trường thuê trọ có outlier mạnh (một căn hộ cao cấp lẫn trong dãy trọ). Mean bị outlier kéo lệch; median không. Tương tự, dùng **IQR/median** đo phân tán thay vì độ lệch chuẩn. Đây là lý do `min_samples` = 8 là đủ — với thống kê thứ hạng, 8 mẫu cho median ổn định hơn nhiều so với mean.
->
-> **Vì sao `n < 8` thì KHÔNG dự đoán thay vì dự đoán kèm "độ tin cậy thấp":** `[§9.4]` *"Nếu dữ liệu đầu vào thiếu hoặc quá khác thường, hệ thống **không dự đoán** hoặc báo độ tin cậy thấp"*. Chọn "không dự đoán" vì một con số hiện lên màn hình sẽ được chủ trọ tin, bất kể nhãn cảnh báo bên cạnh. Thà không nói còn hơn nói sai — đúng `[§9.4]` *"Không hiển thị AI như nguồn đảm bảo chính xác tuyệt đối"*.
-
-**Điều kiện kích hoạt `[§5.5]` + `[§5.9]`:**
-
-| Sự kiện | Nguồn |
-|---|---|
-| Chủ trọ nhập đủ thông tin tin đăng | `[§5.5]`, `[§3.3]` bước 8 |
-| Sửa các trường ảnh hưởng giá | `[§5.5]` |
-| Đổi **khu vực** | `[§5.9]` |
-| Đổi **diện tích** | `[§5.9]` |
-| Đổi **loại nhà** | `[§5.9]` |
-| Đổi **số phòng / số toilet** | `[§5.9]` |
-| Đổi **nội thất hoặc tiện ích quan trọng** | `[§5.9]` |
-| Admin cập nhật mô hình / cấu hình vùng giá | `[§5.9]` — đổi `ai.price.*` |
+**Điểm gọi trong frontend hiện tại:** `ListingWizard` gọi khi người dùng bấm **Tính lại** hoặc
+**Tiếp tục** tại bước Giá & tiện ích. Chế độ sửa gửi `listingId`; chế độ tạo gọi một lần trước khi
+có id và gọi lại sau `POST /api/listings` với id vừa tạo. Không có cơ chế debounce/useEffect tự
+gọi lại theo từng thay đổi field.
 
 **Quy tắc bất khả xâm phạm** `[§3.16]` `[§9.4]`:
 
@@ -1759,15 +1752,15 @@ Bảng `recommendation_logs` (02_THIET_KE_DATABASE.md) lưu **từng** điểm t
 | Giá AI **chỉ là tham khảo**, không bắt buộc | `PricePredictionResponse` là dữ liệu hiển thị; `CreateListingRequest.price` **không** validate theo giá AI |
 | **Không chặn đăng tin** chỉ vì giá khác dự đoán | Không có `@AssertTrue` nào so `price` với `suggestedPrice`. `ListingServiceImpl` **không** gọi `PriceEstimator` trong đường ghi |
 | Giá lệch lớn → **đánh dấu cần kiểm duyệt** | Ghi `flagged` + `deviationRatio` → Admin lọc `[§9.4]` *"Admin có thể dùng danh sách tin lệch giá lớn để kiểm duyệt"* |
-| Lưu `PredictionHistory` mọi lần | `[§3.16]` *"Kết quả dự đoán cần lưu để phục vụ báo cáo và đánh giá chất lượng AI"* |
+| Lưu `PredictionHistory` | Lưu sau khi estimator trả về kết quả (kể cả kết quả `available=false` của implementation comparable); lỗi validation/kết nối/timeout xảy ra trước đó không tạo dòng lịch sử |
 
 **Timeout & lỗi:**
 
 | Tình huống | Xử lý |
 |---|---|
-| Không đủ mẫu | `INSUFFICIENT_DATA` → FE hiện "Chưa đủ dữ liệu khu vực này để đưa giá tham khảo" `[§3.16]` |
-| Engine lỗi / timeout `ai.price.timeout_ms` = 2000 — **[BỔ SUNG NGOÀI CANONICAL]** | `PricePredictionPanel` hiện trạng thái lỗi nhẹ. **Form đăng tin vẫn submit được** — đây là điểm bắt buộc |
-| `ai.price.enabled = false` `[§10.10]` | Panel ẩn; endpoint trả `503 AI_SERVICE_UNAVAILABLE` |
+| FastAPI trả lỗi 4xx | Backend trả `400 AI_PRICE_INPUT_INVALID` |
+| Không kết nối được, lỗi 5xx hoặc timeout | Backend trả `503 AI_SERVICE_UNAVAILABLE`; `ListingWizard` bắt lỗi và vẫn cho lưu/gửi tin |
+| `ai.price.enabled = false` `[§10.10]` | Endpoint trả `503 AI_MODULE_DISABLED`; `ListingWizard` vẫn cho lưu/gửi tin |
 
 ### 6.6. Nguyên tắc: AI hỗ trợ, KHÔNG thay thế kiểm duyệt con người `[§0.2]` `[§10.10]` `[§15]`
 
@@ -1805,44 +1798,21 @@ Canonical §10 chốt: *"AI **không bao giờ** tự khóa tài khoản; chỉ 
 
 > **Ghi chú về `listing.auto_approve.trusted_landlord`** (canonical §9, mặc định `false`): `[§3.3]` luồng phụ có nêu *"Nếu chủ trọ đã được xác thực, hệ thống có thể tự động duyệt tin ít rủi ro"*. Đây là **rule cấu hình do Admin bật**, dựa trên trạng thái xác thực thủ công + `trust_score` — **không** phải AI quyết định. Mặc định `false` đúng tinh thần `[§15]` trục 3. Khi bật, `ModerationAction` vẫn được ghi với actor `SYSTEM` để truy vết.
 
-### 6.7. Vì sao rule-based/thống kê trong Java thay vì service ML riêng
+### 6.7. Ranh giới triển khai AI hiện tại
 
-**Quyết định: cả 4 module AI hiện thực bằng rule-based/thống kê, viết bằng Java, chạy trong tiến trình Spring Boot.** Không có service Python/ML, không có model training pipeline, không có container thứ 6.
+Các engine vẫn nằm sau interface (`SentimentAnalyzer`, `RecommendationEngine`, `ChatbotEngine`,
+`PriceEstimator`), nhưng cách triển khai không còn đồng nhất hoàn toàn:
 
-**Căn cứ 1 — `[§13.2]` nói thẳng ra mức triển khai:**
+| Module | Implementation đang dùng | Tiến trình |
+|---|---|---|
+| Sentiment | `VietnameseLexiconSentimentAnalyzer` | Spring Boot |
+| Recommendation | `ContentBasedRecommendationEngine` | Spring Boot |
+| Chatbot | `RuleBasedChatbotEngine` | Spring Boot |
+| Price Prediction | `RentalApiLightgbmPriceEstimator` → FastAPI `/predict` → `model.joblib` LightGBM | Spring Boot + container `rental-api` |
 
-| Trích dẫn `[§13.2]` | Ý nghĩa |
-|---|---|
-| Recommendation: *"Dùng **rule-based kết hợp điểm hành vi**, không cần thuật toán phức tạp"* | Chốt luôn phương pháp |
-| Price Prediction: *"Hiển thị **khoảng giá tham khảo**, không cần giải thích **ML sâu**"* | Chốt luôn đầu ra |
-
-Đây không phải suy diễn — tài liệu nghiệp vụ đã chọn sẵn.
-
-**Căn cứ 2 — `[§0.2]` phạm vi:** *"AI ở mức hỗ trợ quyết định"*. Giá trị của đồ án nằm ở **nghiệp vụ AI được tích hợp đúng chỗ, đúng ngưỡng, có log, tắt được, không vượt quyền** — không nằm ở độ tinh vi của mô hình.
-
-**Căn cứ 3 — vấn đề dữ liệu lạnh (quyết định nhất):** ML giám sát cần **dữ liệu huấn luyện có nhãn**. Hệ thống mới triển khai có **0 bình luận đã gán nhãn cảm xúc**, **0 giao dịch thuê thành công**. Không có tập huấn luyện thì không có mô hình — bất kể chọn thuật toán gì. Rule-based/thống kê **chạy đúng từ ngày đầu tiên với 0 dữ liệu lịch sử**, và cải thiện dần khi dữ liệu tích lũy (`ComparableFinder` càng nhiều comparable càng chính xác). Đây là lập luận kỹ thuật, không phải lập luận "cho dễ".
-
-**Căn cứ 4 — ràng buộc "không bịa" là ràng buộc kiến trúc:** `[§3.15]` cấm chatbot tạo thông tin ngoài DB; `[§9.4]` cấm trình bày AI như nguồn chính xác tuyệt đối. Rule-based cho **đảm bảo cứng**; mô hình sinh chỉ cho **xác suất**. Với hệ thống mà người dùng ra quyết định thuê nhà, đảm bảo cứng thắng.
-
-**Căn cứ 5 — giải thích được `[§9.2]` `[§9.4]` `[§10.10]`:** yêu cầu gốc đòi *"RecommendationLog để **giải thích** và đánh giá hiệu quả"* và *"Gợi ý **giải thích đơn giản**: 'Giá cao hơn do gần trung tâm và có nội thất'"*. Với công thức có trọng số tường minh, `reason` sinh ra **trực tiếp từ các số hạng của công thức**. Với mạng nơ-ron, phải thêm cả LIME/SHAP — nhiều công sức hơn để đạt kết quả kém trực quan hơn.
-
-**Căn cứ 6 — chi phí vận hành trong `[§0.2]`:** canonical §1.3 chốt `docker compose up --build` dựng **5 service**. Service ML riêng = +1 container, +runtime Python, +HTTP client, +xử lý timeout/retry liên tiến trình, +versioning model — đổi lại lợi ích gần bằng 0 khi không có dữ liệu huấn luyện.
-
-**Bảng so sánh:**
-
-| Tiêu chí | Rule-based/thống kê trong Java (**chọn**) | Service ML riêng (Python) | LLM API bên ngoài |
-|---|---|---|---|
-| Chạy được với 0 dữ liệu lịch sử | ✔ | ✘ (cần tập huấn luyện) | ✔ |
-| Thỏa `[§13.2]` "rule-based", "không ML sâu" | ✔ | ✘ (vượt mức) | ✘ (vượt mức) |
-| Đảm bảo cứng "không bịa" `[§3.15]` | ✔ (kiến trúc) | ◐ | ✘ (hallucination) |
-| Giải thích được `[§9.2]` `[§9.4]` | ✔ (trọng số tường minh) | ◐ (cần XAI) | ✘ |
-| Số container thêm | 0 | +1 | 0 (nhưng phụ thuộc mạng ngoài) |
-| Độ trễ | ms (in-process) | +HTTP round-trip | +mạng ngoài, biến động |
-| Chi phí tiền | 0 | 0 | Trả theo token |
-| Hoạt động offline / khi chấm đồ án không có mạng | ✔ | ✔ | ✘ **rủi ro chí mạng** |
-| Đường nâng cấp | Thay impl sau interface (mục 12) | — | — |
-
-**Đường nâng cấp được giữ mở (`[§11.6]`):** cả 4 engine nằm **sau interface** (`SentimentAnalyzer`, `RecommendationEngine`, `ChatbotEngine`, `PriceEstimator`). Nâng cấp sang ML thật = viết impl mới (VD `PhoBertSentimentAnalyzer` gọi HTTP tới service Python) + đổi `@Primary`/config. **Không** phải sửa `CommentServiceImpl`, không phải sửa controller, không phải sửa DB. Đây chính là giá trị của việc canonical §10 chốt "interface + impl" ngay từ đầu — kiến trúc đã trả trước chi phí cho khả năng thay thế.
+`ComparableHedonicPriceEstimator` vẫn implement cùng interface để có thể được chọn bằng cấu hình
+bean/code, nhưng hiện không có cơ chế tự động chuyển sang implementation này khi `rental-api` lỗi.
+Lỗi dịch vụ ngoài được chuẩn hóa thành `AI_SERVICE_UNAVAILABLE`.
 
 ---
 

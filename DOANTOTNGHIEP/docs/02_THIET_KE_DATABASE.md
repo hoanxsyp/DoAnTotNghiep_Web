@@ -3776,22 +3776,22 @@ lại quá nhiều một tin"* `[§9.2]` (kiểm tra tin đã gợi ý gần đ�
 | `room_count` / `toilet_count` | `TINYINT UNSIGNED` | Y | `NULL` | | Input *"Số phòng, Số toilet"* | `[§9.4]` |
 | `furniture_status` | `VARCHAR(10)` | Y | `NULL` | | Input *"Nội thất"* | `[§9.4]` |
 | `amenity_ids` | `JSON` | Y | `NULL` | | Input *"Tiện ích"* | `[§9.4]` |
-| `suggested_price` | `DECIMAL(15,2)` | Y | `NULL` | | *"Giá thuê đề xuất"*; `NULL` khi `INSUFFICIENT_DATA` | `[§9.4]` Output |
-| `price_low` | `DECIMAL(15,2)` | Y | `NULL` | | Percentile 25 — *"khoảng giá tham khảo: thấp"* | `[§9.4]` + canonical 10.4 bước 5 |
-| `price_median` | `DECIMAL(15,2)` | Y | `NULL` | | Percentile 50 — *"trung bình"* | `[§9.4]` |
-| `price_high` | `DECIMAL(15,2)` | Y | `NULL` | | Percentile 75 — *"cao"* | `[§9.4]` |
-| `price_per_sqm` | `DECIMAL(15,2)` | Y | `NULL` | | Median giá/m² của comparable — cơ sở bước 3 | canonical 10.4 |
-| `sample_size` | `INT UNSIGNED` | N | `0` | IDX | Số comparable; < `ai.price.min_samples` (8) → `INSUFFICIENT_DATA` | `[§9.4]` + canonical 10.4 bước 2 |
-| `scope_used` | `VARCHAR(10)` | N | — | | `WARD` / `DISTRICT` / `PROVINCE` — cấp đã nới để đủ mẫu | canonical 10.4 bước 1 |
-| `confidence` | `VARCHAR(20)` | N | — | IDX | `PriceConfidence`: `HIGH`/`MEDIUM`/`LOW`/`INSUFFICIENT_DATA` | `[§9.4]` *"Mức độ tin cậy"* + canonical 5 |
-| `dispersion_ratio` | `DECIMAL(6,4)` | Y | `NULL` | | `IQR/median` — cơ sở tính confidence | canonical 10.4 bước 5 |
-| `adjustment_detail` | `JSON` | Y | `NULL` | | Các hệ số hedonic đã áp: `{"FULL_FURNITURE":0.12,"PRIVATE_TOILET":0.08,...}` | `[§9.4]` bước 4 |
+| `suggested_price` | `DECIMAL(15,2)` | Y | `NULL` | | Giá đề xuất; implementation mặc định lấy từ `predicted_price_million` và đổi sang đồng | `[§9.4]` Output |
+| `price_low` | `DECIMAL(15,2)` | Y | `NULL` | | Cận thấp; implementation mặc định lấy từ `price_range[0]` | `[§9.4]` |
+| `price_median` | `DECIMAL(15,2)` | Y | `NULL` | | Implementation mặc định lưu bằng `suggested_price` | `[§9.4]` |
+| `price_high` | `DECIMAL(15,2)` | Y | `NULL` | | Cận cao; implementation mặc định lấy từ `price_range[1]` | `[§9.4]` |
+| `price_per_sqm` | `DECIMAL(15,2)` | Y | `NULL` | | `market_unit_price_million_m2` đổi sang đồng; nếu thiếu thì lấy giá đề xuất chia diện tích | |
+| `sample_size` | `INT UNSIGNED` | N | `0` | IDX | `market_sample_count` của FastAPI với implementation mặc định | |
+| `scope_used` | `VARCHAR(10)` | N | — | | `WARD` / `DISTRICT` / `PROVINCE`; map từ `market_scope_level` với implementation mặc định | |
+| `confidence` | `VARCHAR(20)` | N | — | IDX | `PriceConfidence`: `HIGH`/`MEDIUM`/`LOW`/`INSUFFICIENT_DATA`; implementation mặc định tính từ số mẫu và MAPE | `[§9.4]` |
+| `dispersion_ratio` | `DECIMAL(6,4)` | Y | `NULL` | | Implementation mặc định lưu `mape_pct / 100` | |
+| `adjustment_detail` | `JSON` | Y | `NULL` | | Implementation mặc định lưu danh sách rỗng; implementation hedonic lưu các điều chỉnh đã áp dụng | |
 | `explanation` | `VARCHAR(500)` | Y | `NULL` | | *"Gợi ý giải thích đơn giản: 'Giá cao hơn do gần trung tâm và có nội thất'"* | `[§9.4]` Output |
 | `input_price` | `DECIMAL(15,2)` | Y | `NULL` | | Giá chủ trọ nhập | `[§9.4]` bước 5 *"Giá bạn nhập"* |
 | `deviation_ratio` | `DECIMAL(6,4)` | Y | `NULL` | | `|input − suggested| / suggested` — *"Chênh lệch"* | `[§9.4]` bước 5 |
 | `is_flagged` | `BOOLEAN` | N | `FALSE` | IDX | `deviation_ratio > ai.price.deviation_flag_ratio` (0.35) → *"hệ thống ghi flag"*. **Không chặn** | `[§3.3][§9.4]` bước 7 |
-| `is_applied` | `BOOLEAN` | N | `FALSE` | | Chủ trọ có bấm "áp dụng giá đề xuất" không → đo chất lượng AI | `[§3.16]` bước 5 |
-| `estimator_version` | `VARCHAR(20)` | N | — | IDX | Phiên bản `ComparableHedonicPriceEstimator` | `[§9.4]` *"đánh giá chất lượng AI"* |
+| `is_applied` | `BOOLEAN` | N | `FALSE` | | Hiện chưa có luồng code đặt thành `TRUE` | |
+| `estimator_version` | `VARCHAR(20)` | N | — | IDX | `lgbm-api-1.0` với implementation mặc định; `hedonic-1.0` nếu chọn implementation hedonic | `[§9.4]` *"đánh giá chất lượng AI"* |
 | `created_at` | `DATETIME(6)` | N | `CURRENT_TIMESTAMP(6)` | IDX | Append-only (§1.8) | |
 
 **Index** `idx_prediction_histories_listing_id_created_at (listing_id, created_at)` — *"Xem lịch sử
@@ -5176,10 +5176,9 @@ Tổng: 9 + 5 + 8 + 7 = **29 amenity**.
 > `STREET_FRONT=+15%` khớp **chính xác** giá trị canonical mục 10.4 bước 4. Ba hệ số còn lại của
 > canonical (*"nội thất đầy đủ +12%"*, *"toilet riêng +8%"*, *"giờ tự do +3%"*) **không** nằm ở
 > `amenities` vì chúng dựa trên **cột phẳng** (`furniture_status='FULL'`, `toilet_type='PRIVATE'`,
-> `curfew_type='FREE'`) — chúng được seed vào `ai_configs / PRICE / hedonic.coefficients` (§7.3, V8)
-> dưới các key `FULL_FURNITURE`, `PRIVATE_TOILET`, `FREE_CURFEW`. `ComparableHedonicPriceEstimator`
-> cộng gộp **cả hai nguồn**: hệ số từ `ai_configs` (thuộc tính cột) + `SUM(amenities.price_impact_ratio)`
-> của tiện ích đã gắn.
+> `curfew_type='FREE'`). Các hệ số này được dùng bởi `ComparableHedonicPriceEstimator`, là
+> implementation còn trong mã nguồn nhưng không được chọn mặc định. Luồng mặc định map thuộc tính
+> và tiện ích sang feature của FastAPI/LightGBM qua `RentalApiLightgbmPriceEstimator`.
 
 ### 8.6. V5 — Toàn bộ `system_configs` (sao chép nguyên văn canonical mục 9 — 100%)
 
@@ -5436,6 +5435,10 @@ SELECT COUNT(*) FROM listings l WHERE /* ... cùng điều kiện ... */;
 
 ### 9.3. Tìm comparable cho dự đoán giá `[§9.4]`
 
+> **Phạm vi áp dụng:** toàn bộ mục 9.3 mô tả nhánh `ComparableHedonicPriceEstimator` khi
+> implementation này được chọn. Bean `@Primary` hiện tại là `RentalApiLightgbmPriceEstimator`
+> và không chạy các truy vấn comparable dưới đây.
+
 Canonical mục 10.4 bước 1: *"lấy comparable — cùng `ward` (nới dần lên `district` → `province` nếu
 thiếu mẫu), cùng `category`, diện tích ±30%, tin `ACTIVE`/`CLOSED` trong 180 ngày"*.
 
@@ -5478,7 +5481,8 @@ kiến trúc, ghi ở ADR-10 (§11).
 **Bước 6 — ghi flag lệch giá** (canonical 10.4 bước 6, `[§3.3][§9.4]`):
 
 ```sql
--- Trong cùng transaction lưu/sửa tin. TUYỆT ĐỐI KHÔNG chặn đăng tin [§9.4].
+-- Được ListingDataGateway.markPriceDeviation gọi sau khi đã lưu PredictionHistory.
+-- Đây là request dự đoán giá riêng, không nằm trong transaction POST/PUT listing.
 UPDATE listings
 SET price_deviation_flag = :isFlagged,          -- |input - suggested| / suggested > 0.35
     price_prediction_id  = :predictionId
