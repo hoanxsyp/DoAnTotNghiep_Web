@@ -9,16 +9,18 @@ import {
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import listingApi from '@/api/listingApi';
+import rentalUnitApi from '@/api/rentalUnitApi';
 import aiApi from '@/api/aiApi';
 import catalogApi from '@/api/catalogApi';
-import AddressSelector from '@/components/filter/AddressSelector';
+import RentalUnitStep from '@/components/listing/RentalUnitStep';
 import ImageUploader from '@/components/listing/ImageUploader';
 import notify from '@/utils/toast';
 import { formatPrice, formatCurrency } from '@/utils/format';
 import { CATEGORY_CODES, FURNITURE_STATUS, GENDER_REQUIREMENT, ROLES } from '@/constants';
 import { selectRole } from '@/redux/authSlice';
 
-const STEPS = ['Loại tin', 'Thông tin cơ bản', 'Địa chỉ', 'Giá & tiện ích', 'Hình ảnh', 'Xem lại'];
+// "Phòng & địa chỉ" là bước đầu: tin luôn thuộc một phòng (RU-1), chọn phòng có sẵn sẽ điền sẵn địa chỉ.
+const STEPS = ['Phòng & địa chỉ', 'Loại tin', 'Thông tin cơ bản', 'Giá & tiện ích', 'Hình ảnh', 'Xem lại'];
 
 const CURFEW = { FREE: 'Giờ giấc tự do', CURFEW: 'Có giờ giới nghiêm', UNKNOWN: 'Không rõ' };
 const TOILET_TYPE = { PRIVATE: 'Vệ sinh riêng', SHARED: 'Vệ sinh chung' };
@@ -27,7 +29,7 @@ const ROOM_REQUIRED = ['WHOLE_HOUSE', 'APARTMENT', 'MINI_APARTMENT'];
 const DEFAULTS = {
   categoryId: '', title: '', description: '', price: '', area: '', depositAmount: '',
   electricityPrice: '', waterPrice: '', provinceId: null, districtId: null, wardId: null,
-  addressDetail: '', roomCount: '', toiletCount: 1, maxOccupants: 1, currentOccupants: '',
+  addressDetail: '', unitLabel: '', unitName: '', roomCount: '', toiletCount: 1, maxOccupants: 1, currentOccupants: '',
   genderRequirement: 'ANY', petAllowed: false, parkingAvailable: false, curfewType: 'UNKNOWN',
   furnitureStatus: 'NONE', toiletType: 'PRIVATE', availableFrom: null, amenityIds: [],
   contactName: '', contactPhone: '',
@@ -36,9 +38,18 @@ const DEFAULTS = {
 /**
  * Trình đăng/sửa tin nhiều bước (docs/04 §11.7, docs/03 mục 4.4.7/4.4.8).
  * mode: 'create' | 'edit'. Ở 'edit' truyền listingId + initialData (đã map từ chi tiết tin).
+ * initialUnitId: chọn sẵn phòng khi đăng tin từ màn "Phòng của tôi".
  */
-export default function ListingWizard({ mode = 'create', listingId, initialData, onDone }) {
+export default function ListingWizard({ mode = 'create', listingId, initialData, initialUnitId, onDone }) {
   const role = useSelector(selectRole);
+  // Người thuê đăng tin ở ghép không có màn quản lý phòng: phòng được tạo/dùng lại tự động.
+  const canPickUnit = role === ROLES.LANDLORD || role === ROLES.ADMIN;
+  const [units, setUnits] = useState([]);
+  const [unitMode, setUnitMode] = useState('new');
+  const [selectedUnit, setSelectedUnit] = useState(null);
+  const [duplicate, setDuplicate] = useState(null);
+  const rentalUnit = initialData?.rentalUnit || null;
+  const addressLocked = mode === 'edit' && !!rentalUnit?.addressLocked && role !== ROLES.ADMIN;
   const [activeStep, setActiveStep] = useState(0);
   const [categories, setCategories] = useState([]);
   const [amenities, setAmenities] = useState([]);
@@ -50,7 +61,7 @@ export default function ListingWizard({ mode = 'create', listingId, initialData,
   const [submitting, setSubmitting] = useState(false);
 
   const {
-    control, trigger, watch, getValues, formState: { errors },
+    control, trigger, watch, getValues, setValue, formState: { errors },
   } = useForm({ defaultValues: { ...DEFAULTS, ...(initialData?.values || {}) }, mode: 'onTouched' });
 
   const categoryId = watch('categoryId');
@@ -74,6 +85,80 @@ export default function ListingWizard({ mode = 'create', listingId, initialData,
     });
   }, []);
 
+  /** Chọn phòng: địa chỉ của tin lấy từ phòng (RU-3). */
+  const applyUnit = (u) => {
+    setSelectedUnit(u);
+    setDuplicate(null);
+    if (!u) return;
+    setValue('provinceId', u.provinceId);
+    setValue('districtId', u.districtId);
+    setValue('wardId', u.wardId);
+    setValue('addressDetail', u.addressDetail || '');
+    setValue('unitLabel', u.unitLabel || '');
+  };
+
+  // Phòng có sẵn để đăng tin: còn dùng và chưa có tin "sống" (RU-2).
+  useEffect(() => {
+    if (mode !== 'create' || !canPickUnit) return;
+    rentalUnitApi.getMine({ status: 'ACTIVE', size: 200 })
+      .then((page) => {
+        const free = (page?.items || []).filter((u) => !u.liveListing);
+        setUnits(free);
+        const preset = initialUnitId && free.find((u) => String(u.id) === String(initialUnitId));
+        if (preset) {
+          setUnitMode('existing');
+          applyUnit(preset);
+        } else if (free.length) {
+          setUnitMode('existing');
+        }
+      })
+      .catch(() => setUnits([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, canPickUnit, initialUnitId]);
+
+  const changeUnitMode = (m) => {
+    setUnitMode(m);
+    setDuplicate(null);
+    if (m === 'new') {
+      setSelectedUnit(null);
+      ['provinceId', 'districtId', 'wardId'].forEach((k) => setValue(k, null));
+      setValue('addressDetail', '');
+      setValue('unitLabel', '');
+    }
+  };
+
+  const useDuplicateUnit = (u) => {
+    if (u.liveListing) {
+      notify.warning('Phòng này đang có tin đăng, hãy sửa hoặc gia hạn tin đó.');
+      return;
+    }
+    if (!units.some((x) => x.id === u.id)) setUnits((prev) => [u, ...prev]);
+    setUnitMode('existing');
+    applyUnit(u);
+  };
+
+  /** Dò trùng địa chỉ trước khi rời bước phòng (RU-6). Trả false nếu phải dừng lại. */
+  const checkUnitStep = async () => {
+    if (mode !== 'create' || !canPickUnit) return true;
+    if (unitMode === 'existing') {
+      if (!selectedUnit) {
+        notify.warning('Vui lòng chọn phòng');
+        return false;
+      }
+      return true;
+    }
+    const v = getValues();
+    try {
+      const res = await rentalUnitApi.checkDuplicate({
+        wardId: v.wardId, addressDetail: v.addressDetail.trim(), unitLabel: v.unitLabel?.trim() || undefined,
+      });
+      setDuplicate(res);
+      return !res?.duplicate;
+    } catch {
+      return true; // Không chặn vì lỗi mạng; backend vẫn kiểm tra lại khi lưu.
+    }
+  };
+
   const amenityGroups = useMemo(() => {
     const groups = {};
     (amenities || []).forEach((a) => {
@@ -85,14 +170,14 @@ export default function ListingWizard({ mode = 'create', listingId, initialData,
 
   const stepFields = useCallback((step) => {
     switch (step) {
-      case 0: return ['categoryId'];
-      case 1: {
+      case 0: return ['provinceId', 'districtId', 'wardId', 'addressDetail', 'unitLabel', 'unitName'];
+      case 1: return ['categoryId'];
+      case 2: {
         const f = ['title', 'description', 'maxOccupants'];
         if (needRoomCount) f.push('roomCount');
         if (isRoommate) f.push('currentOccupants', 'genderRequirement');
         return f;
       }
-      case 2: return ['provinceId', 'districtId', 'wardId', 'addressDetail'];
       case 3: return ['price', 'area'];
       default: return [];
     }
@@ -101,6 +186,7 @@ export default function ListingWizard({ mode = 'create', listingId, initialData,
   const handleNext = async () => {
     const ok = await trigger(stepFields(activeStep));
     if (!ok) return;
+    if (activeStep === 0 && !(await checkUnitStep())) return;
     if (activeStep === 3) runPrediction();
     setActiveStep((s) => Math.min(s + 1, STEPS.length - 1));
   };
@@ -145,6 +231,13 @@ export default function ListingWizard({ mode = 'create', listingId, initialData,
       waterPrice: v.waterPrice ? Number(v.waterPrice) : undefined,
       provinceId: v.provinceId, districtId: v.districtId, wardId: v.wardId,
       addressDetail: v.addressDetail.trim(),
+      ...(mode === 'create'
+        ? {
+          rentalUnitId: canPickUnit && unitMode === 'existing' ? selectedUnit?.id : undefined,
+          unitLabel: v.unitLabel?.trim() || undefined,
+          unitName: v.unitName?.trim() || undefined,
+        }
+        : { unitLabel: addressLocked ? undefined : (v.unitLabel?.trim() ?? '') }),
       roomCount: v.roomCount ? Number(v.roomCount) : undefined,
       toiletCount: v.toiletCount ? Number(v.toiletCount) : undefined,
       maxOccupants: Number(v.maxOccupants),
@@ -280,8 +373,8 @@ export default function ListingWizard({ mode = 'create', listingId, initialData,
 
       <Card>
         <CardContent>
-          {/* ---- Bước 1: Loại tin ---- */}
-          {activeStep === 0 && (
+          {/* ---- Bước 2: Loại tin ---- */}
+          {activeStep === 1 && (
             <Grid container spacing={2}>
               {visibleCategories.map((c) => (
                 <Grid item xs={6} sm={4} md={3} key={c.id}>
@@ -304,8 +397,8 @@ export default function ListingWizard({ mode = 'create', listingId, initialData,
             </Grid>
           )}
 
-          {/* ---- Bước 2: Thông tin cơ bản ---- */}
-          {activeStep === 1 && (
+          {/* ---- Bước 3: Thông tin cơ bản ---- */}
+          {activeStep === 2 && (
             <Grid container spacing={2}>
               <Grid item xs={12}>
                 <Controller name="title" control={control}
@@ -396,36 +489,23 @@ export default function ListingWizard({ mode = 'create', listingId, initialData,
             </Grid>
           )}
 
-          {/* ---- Bước 3: Địa chỉ ---- */}
-          {activeStep === 2 && (
-            <Grid container spacing={2}>
-              <Grid item xs={12} md={7}>
-                <Controller name="provinceId" control={control} rules={{ required: true }} render={({ field: pField }) => (
-                  <Controller name="districtId" control={control} rules={{ required: true }} render={({ field: dField }) => (
-                    <Controller name="wardId" control={control} rules={{ required: true }} render={({ field: wField }) => (
-                      <AddressSelector
-                        required
-                        value={{ provinceId: pField.value, districtId: dField.value, wardId: wField.value }}
-                        onChange={(val) => { pField.onChange(val.provinceId); dField.onChange(val.districtId); wField.onChange(val.wardId); }}
-                        error={{
-                          provinceId: errors.provinceId ? 'Vui lòng chọn tỉnh/thành' : undefined,
-                          districtId: errors.districtId ? 'Vui lòng chọn quận/huyện' : undefined,
-                          wardId: errors.wardId ? 'Vui lòng chọn phường/xã' : undefined,
-                        }}
-                      />
-                    )} />
-                  )} />
-                )} />
-              </Grid>
-              <Grid item xs={12} md={5}>
-                <Controller name="addressDetail" control={control}
-                  rules={{ required: 'Vui lòng nhập địa chỉ', minLength: { value: 5, message: 'Tối thiểu 5 ký tự' } }}
-                  render={({ field }) => (
-                    <TextField {...field} label="Số nhà, tên đường" fullWidth required multiline minRows={2}
-                      error={!!errors.addressDetail} helperText={errors.addressDetail?.message || 'Ví dụ: 45/12 Đường D2'} />
-                  )} />
-              </Grid>
-            </Grid>
+          {/* ---- Bước 1: Phòng & địa chỉ ---- */}
+          {activeStep === 0 && (
+            <RentalUnitStep
+              control={control}
+              errors={errors}
+              mode={mode}
+              canPickUnit={canPickUnit}
+              unitMode={unitMode}
+              onUnitModeChange={changeUnitMode}
+              units={units}
+              selectedUnit={selectedUnit}
+              onSelectUnit={applyUnit}
+              duplicate={duplicate}
+              onUseDuplicate={useDuplicateUnit}
+              rentalUnit={rentalUnit}
+              addressLocked={addressLocked}
+            />
           )}
 
           {/* ---- Bước 4: Giá & tiện ích ---- */}
@@ -559,7 +639,12 @@ export default function ListingWizard({ mode = 'create', listingId, initialData,
                 </Grid>
               </Grid>
               <Divider sx={{ my: 2 }} />
-              <ReviewSummary values={getValues()} category={selectedCategory} imageCount={images.length} amenities={amenities} />
+              <ReviewSummary
+                values={getValues()} category={selectedCategory} imageCount={images.length} amenities={amenities}
+                unitName={mode === 'create'
+                  ? (unitMode === 'existing' && selectedUnit ? selectedUnit.name : 'Phòng mới')
+                  : rentalUnit?.name}
+              />
             </Box>
           )}
 
@@ -585,11 +670,13 @@ export default function ListingWizard({ mode = 'create', listingId, initialData,
   );
 }
 
-const ReviewSummary = ({ values, category, imageCount, amenities }) => {
+const ReviewSummary = ({ values, category, imageCount, amenities, unitName }) => {
   const amenityNames = (amenities || []).filter((a) => values.amenityIds?.includes(a.id)).map((a) => a.name);
   const rows = [
     ['Loại tin', category?.name || '—'],
     ['Tiêu đề', values.title],
+    ['Phòng', [unitName, values.unitLabel].filter(Boolean).join(' · ') || '—'],
+    ['Địa chỉ', values.addressDetail || '—'],
     ['Giá thuê', values.price ? `${formatCurrency(values.price)}/tháng` : '—'],
     ['Diện tích', values.area ? `${values.area} m²` : '—'],
     ['Tiền cọc', values.depositAmount ? formatCurrency(values.depositAmount) : 'Không'],

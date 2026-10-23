@@ -6,6 +6,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -42,6 +43,20 @@ public interface ListingRepository
 
     /** Kiểm tra slug đã tồn tại (chưa xóa mềm) để đảm bảo duy nhất khi tạo/sửa tin. */
     boolean existsBySlugAndDeletedAtIsNull(String slug);
+
+    /**
+     * CHỈ dùng cho dữ liệu demo: lùi {@code created_at} của tin demo (chủ là tài khoản {@code @webtro.local})
+     * tạo từ {@code since} về ngày đăng giả lập; tin chưa đăng thì lùi 1 ngày. Không đụng {@code updated_at}.
+     */
+    @Modifying(flushAutomatically = true)
+    @Query(value = "UPDATE listings SET created_at = CASE WHEN published_at IS NOT NULL AND published_at < created_at "
+            + "THEN published_at ELSE created_at - INTERVAL 1 DAY END, updated_at = updated_at "
+            + "WHERE created_at >= :since AND owner_id IN (SELECT u.id FROM users u WHERE u.email LIKE '%@webtro.local')",
+            nativeQuery = true)
+    int backdateDemoListingsCreatedSince(@Param("since") Instant since);
+
+    /** Slug đã có ở bất kỳ tin nào, kể cả tin đã xoá mềm (khớp phạm vi của uk_listings_slug). */
+    boolean existsBySlug(String slug);
 
     /**
      * Đếm số tin đang bị {@code LOCKED} của một chủ trọ kể từ mốc {@code since} — phục vụ ngưỡng
@@ -164,4 +179,40 @@ public interface ListingRepository
      */
     @Query("SELECT l FROM Listing l WHERE l.priceDeviationFlag = true AND l.deletedAt IS NULL")
     Page<Listing> findPriceDeviationFlagged(Pageable pageable);
+
+    // ==================================================================
+    //  Phòng (rental_units) — docs/DANH_GIA_THEO_PHONG_DOI_CHIEU.md mục 3, 10
+    // ==================================================================
+
+    /** Mọi tin của một phòng, kể cả tin đã đóng/xoá mềm (lịch sử đăng tin của phòng). */
+    @Query("SELECT l FROM Listing l WHERE l.rentalUnitId = :unitId ORDER BY l.createdAt DESC")
+    List<Listing> findAllByRentalUnit(@Param("unitId") Long unitId);
+
+    /** Tin chưa xoá mềm của nhiều phòng — dùng khi dựng danh sách "Phòng của tôi". */
+    @Query("SELECT l FROM Listing l WHERE l.rentalUnitId IN :unitIds AND l.deletedAt IS NULL "
+            + "ORDER BY l.createdAt DESC")
+    List<Listing> findAliveByRentalUnits(@Param("unitIds") Collection<Long> unitIds);
+
+    /** Tin "sống" của phòng (RU-2: tối đa một). */
+    @Query("SELECT l FROM Listing l WHERE l.rentalUnitId = :unitId AND l.status IN :statuses "
+            + "AND l.deletedAt IS NULL ORDER BY l.createdAt DESC")
+    List<Listing> findByRentalUnitAndStatuses(@Param("unitId") Long unitId,
+                                             @Param("statuses") Collection<ListingStatus> statuses);
+
+    /**
+     * Chép điểm phòng sang MỌI tin của phòng (kể cả tin đã đóng/xoá mềm) — mục 10.2 bước 4.
+     * Đọc thẳng từ {@code rental_units} nên tin và phòng luôn mang cùng một giá trị. Giữ nguyên
+     * {@code updated_at} vì đây không phải chủ tin sửa tin.
+     */
+    @Modifying(flushAutomatically = true)
+    @Query(value = "UPDATE listings l JOIN rental_units u ON u.id = l.rental_unit_id "
+            + "SET l.average_rating = u.average_rating, l.review_count = u.review_count, "
+            + "l.updated_at = l.updated_at WHERE l.rental_unit_id = :unitId", nativeQuery = true)
+    int copyRatingFromUnit(@Param("unitId") Long unitId);
+
+    /** Số tin có điểm lệch với phòng của nó — phải luôn bằng 0 (mục 10.4). */
+    @Query(value = "SELECT COUNT(*) FROM listings l JOIN rental_units u ON u.id = l.rental_unit_id "
+            + "WHERE l.average_rating <> u.average_rating OR l.review_count <> u.review_count",
+            nativeQuery = true)
+    long countRatingMismatchWithUnit();
 }

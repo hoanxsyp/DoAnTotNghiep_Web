@@ -104,6 +104,8 @@ const ChangePasswordPage = () => import('@/pages/tenant/ChangePasswordPage');
 // ================= LANDLORD =================
 const OverviewPage = () => import('@/pages/landlord/OverviewPage');
 const MyListingsPage = () => import('@/pages/landlord/MyListingsPage');
+const RentalUnitsPage = () => import('@/pages/landlord/RentalUnitsPage');
+const RentalUnitDetailPage = () => import('@/pages/landlord/RentalUnitDetailPage');
 const CreateListingPage = () => import('@/pages/landlord/CreateListingPage');
 const EditListingPage = () => import('@/pages/landlord/EditListingPage');
 const ListingStatsPage = () => import('@/pages/landlord/ListingStatsPage');
@@ -210,6 +212,8 @@ const router = createBrowserRouter([
     children: [
       { path: '/quan-ly/tong-quan', element: loadForRoles([ROLES.LANDLORD, ROLES.ADMIN], OverviewPage) },
       { path: '/quan-ly/tin-dang', element: load(MyListingsPage) },
+      { path: '/quan-ly/phong', element: loadForRoles([ROLES.LANDLORD, ROLES.ADMIN], RentalUnitsPage) },
+      { path: '/quan-ly/phong/:id', element: loadForRoles([ROLES.LANDLORD, ROLES.ADMIN], RentalUnitDetailPage) },
       { path: '/quan-ly/tin-dang/tao', element: load(CreateListingPage) },
       { path: '/quan-ly/tin-dang/:id/sua', element: load(EditListingPage) },
       { path: '/quan-ly/tin-dang/:id/thong-ke', element: load(ListingStatsPage) },

@@ -70,6 +70,12 @@ const ModerationQueuePage = () => {
           <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
             {r.categoryName || CATEGORY_CODES[r.categoryCode] || ''} · {r.ownerName || ''}
           </Typography>
+          {r.duplicateAddress && (
+            <Chip
+              size="small" color="warning" variant="outlined" sx={{ mt: 0.5 }}
+              label="Trùng địa chỉ với phòng của chủ trọ khác"
+            />
+          )}
         </Box>
       ),
     },

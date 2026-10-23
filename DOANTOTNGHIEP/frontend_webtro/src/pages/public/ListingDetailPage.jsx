@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import dayjs from 'dayjs';
 import { useParams, useNavigate, useLocation, Link as RouterLink } from 'react-router-dom';
 import {
   Container, Grid, Box, Typography, Stack, Chip, Button, Paper, Divider, Avatar, Breadcrumbs,
@@ -444,7 +445,7 @@ const ListingDetailPage = () => {
     title, price, depositAmount, area, description, fullAddress, shortAddress,
     provinceName, districtName, wardName, addressDetail, images = [], amenities = [],
     landlord, contactName, contactPhone,
-    viewCount, favoriteCount, commentCount, latitude, longitude, electricityPrice, waterPrice,
+    viewCount, favoriteCount, commentCount, latitude, longitude, locationSource, electricityPrice, waterPrice,
     roomCount, toiletCount, currentOccupants, maxOccupants, availableFrom, furnitureStatus,
     curfewType, toiletType, petAllowed, parkingAvailable, genderRequirement, categoryCode,
     canReview, reviewedByMe, publishedAt, status,
@@ -611,10 +612,18 @@ const ListingDetailPage = () => {
               <Typography variant="h6" component="h2" sx={{ fontWeight: 700, mt: 3, mb: 1 }}>
                 Vị trí
               </Typography>
+              {/* WARD = tọa độ tâm phường: chỉ hiện khu vực, không cắm ghim như vị trí thật */}
+              {locationSource === 'WARD' && (
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                  Vị trí gần đúng theo khu vực {wardName ? `phường ${wardName}` : 'phường'} — liên hệ chủ trọ để biết địa chỉ chính xác.
+                </Typography>
+              )}
               <Box
                 component="iframe"
                 title="Bản đồ vị trí"
-                src={`https://www.openstreetmap.org/export/embed.html?bbox=${longitude - 0.008}%2C${latitude - 0.006}%2C${longitude + 0.008}%2C${latitude + 0.006}&layer=mapnik&marker=${latitude}%2C${longitude}`}
+                src={locationSource === 'WARD'
+                  ? `https://www.openstreetmap.org/export/embed.html?bbox=${longitude - 0.016}%2C${latitude - 0.012}%2C${longitude + 0.016}%2C${latitude + 0.012}&layer=mapnik`
+                  : `https://www.openstreetmap.org/export/embed.html?bbox=${longitude - 0.008}%2C${latitude - 0.006}%2C${longitude + 0.008}%2C${latitude + 0.006}&layer=mapnik&marker=${latitude}%2C${longitude}`}
                 sx={{ width: '100%', height: 300, border: 0, borderRadius: 2 }}
                 loading="lazy"
               />
@@ -622,13 +631,19 @@ const ListingDetailPage = () => {
           )}
 
           {/* Đánh giá */}
-          <Typography variant="h6" component="h2" sx={{ fontWeight: 700, mt: 3, mb: 1 }}>
+          <Typography variant="h6" component="h2" sx={{ fontWeight: 700, mt: 3, mb: 0.5 }}>
             Đánh giá {totalReviews > 0 ? `(${totalReviews})` : ''}
           </Typography>
+          {/* Đánh giá thuộc về phòng: gồm cả đánh giá từ các lần đăng tin trước của cùng phòng (RE-2). */}
+          {(reviews.summary?.rentalUnitName || listing?.rentalUnit?.name) && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+              Đánh giá của phòng &quot;{reviews.summary?.rentalUnitName || listing?.rentalUnit?.name}&quot; qua mọi lần đăng tin
+            </Typography>
+          )}
           {reviewsLoading ? (
             <LoadingSkeleton variant="comment" count={2} />
           ) : totalReviews === 0 ? (
-            <EmptyState size="sm" title="Chưa có đánh giá nào cho tin này" />
+            <EmptyState size="sm" title="Chưa có đánh giá nào cho phòng này" />
           ) : (
             <Box>
               <Stack direction="row" spacing={2} alignItems="center">
@@ -676,6 +691,11 @@ const ListingDetailPage = () => {
                             {fromNow(r.createdAt)}
                           </Typography>
                         </Stack>
+                        {r.rentedViaListingCreatedAt && String(r.listingId) !== String(listing?.id) && (
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                            Thuê qua tin đăng tháng {dayjs(r.rentedViaListingCreatedAt).format('MM/YYYY')}
+                          </Typography>
+                        )}
                         {r.content && <RichTextViewer content={r.content} variant="body2" />}
                       </Box>
                       {isAuthenticated && String(r.author?.id) === String(user?.id) && (

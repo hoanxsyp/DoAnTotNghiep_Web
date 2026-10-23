@@ -1,10 +1,12 @@
 package com.webtro.modules.listing.entity;
 
 import com.webtro.common.AuditableEntity;
+import com.webtro.common.enums.CloseReason;
 import com.webtro.common.enums.CurfewType;
 import com.webtro.common.enums.FurnitureStatus;
 import com.webtro.common.enums.GenderRequirement;
 import com.webtro.common.enums.ListingStatus;
+import com.webtro.common.enums.LocationSource;
 import com.webtro.common.enums.ReportSeverity;
 import com.webtro.common.enums.ToiletType;
 import jakarta.persistence.Column;
@@ -48,6 +50,13 @@ public class Listing extends AuditableEntity {
     /** Chủ tin (users.id). */
     @Column(name = "owner_id", nullable = false)
     private Long ownerId;
+
+    /**
+     * Phòng mà tin này đăng cho thuê (rental_units.id). Địa chỉ của tin (ward/address/toạ độ) là
+     * bản sao địa chỉ của phòng, chỉ {@code RentalUnitSupport} được đồng bộ (RU-3).
+     */
+    @Column(name = "rental_unit_id", nullable = false)
+    private Long rentalUnitId;
 
     /** Danh mục (categories.id). */
     @Column(name = "category_id", nullable = false)
@@ -97,6 +106,11 @@ public class Listing extends AuditableEntity {
 
     @Column(name = "longitude", precision = 10, scale = 7)
     private BigDecimal longitude;
+
+    /** Nguồn gốc tọa độ; {@code null} khi tin chưa có tọa độ. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "location_source", length = 10)
+    private LocationSource locationSource;
 
     // ----- Đặc điểm phòng -----
 
@@ -166,13 +180,36 @@ public class Listing extends AuditableEntity {
     @Column(name = "auto_hide_reason", length = 500)
     private String autoHideReason;
 
+    /** Lý do chủ tin đóng tin; {@code null} khi tin chưa đóng. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "close_reason", length = 25)
+    private CloseReason closeReason;
+
+    /**
+     * Phòng của tin trùng địa chỉ với phòng của một chủ trọ khác (RU-6). Hàng duyệt hiện nhãn cảnh
+     * báo để kiểm duyệt viên kiểm tra; không chặn đăng tin.
+     */
+    @Column(name = "duplicate_address", nullable = false)
+    @lombok.Builder.Default
+    private Boolean duplicateAddress = false;
+
     // ----- Điểm số & bộ đếm (denormalized, job/transaction cập nhật) -----
 
-    @Column(name = "average_rating", nullable = false, precision = 3, scale = 2)
+    /**
+     * Bản sao CHỈ ĐỌC của điểm phòng ({@code rental_units.average_rating}). Chỉ
+     * {@code ReviewRatingRecalculator} ghi, qua {@code ListingRepository.copyRatingFromUnit}
+     * (docs/DANH_GIA_THEO_PHONG_DOI_CHIEU.md mục 10). {@code updatable = false} để việc lưu tin vì
+     * lý do khác không bao giờ ghi đè điểm.
+     */
+    @Setter(lombok.AccessLevel.NONE)
+    @Column(name = "average_rating", nullable = false, precision = 3, scale = 2,
+            insertable = false, updatable = false)
     @lombok.Builder.Default
     private BigDecimal averageRating = new BigDecimal("0.00");
 
-    @Column(name = "review_count", nullable = false)
+    /** Bản sao CHỈ ĐỌC của {@code rental_units.review_count}. Xem {@link #averageRating}. */
+    @Setter(lombok.AccessLevel.NONE)
+    @Column(name = "review_count", nullable = false, insertable = false, updatable = false)
     @lombok.Builder.Default
     private Integer reviewCount = 0;
 

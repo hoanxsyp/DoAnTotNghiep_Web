@@ -31,6 +31,17 @@ public final class LocationNormalizer {
         return span.trim();
     }
 
+    /** Span là (một cách viết của) tên quận đã biết — dùng để phân biệt quận với địa danh/điểm mốc. */
+    public static boolean isDistrict(String span) {
+        if (span == null || span.isBlank()) return false;
+        String needle = stripAccent(span.trim().toLowerCase());
+        for (String d : DISTRICTS) {
+            String hay = stripAccent(d.toLowerCase());
+            if (hay.equals(needle) || hay.contains(needle) || needle.contains(hay)) return true;
+        }
+        return false;
+    }
+
     private static String stripAccent(String s) {
         String n = Normalizer.normalize(s, Normalizer.Form.NFD);
         return n.replaceAll("\\p{M}", "").replace("đ", "d");

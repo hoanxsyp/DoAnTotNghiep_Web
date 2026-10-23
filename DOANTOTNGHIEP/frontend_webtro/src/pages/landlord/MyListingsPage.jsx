@@ -17,7 +17,10 @@ import BarChartIcon from '@mui/icons-material/BarChart';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import SendIcon from '@mui/icons-material/Send';
 import AddBoxIcon from '@mui/icons-material/AddBox';
+import ReplayIcon from '@mui/icons-material/Replay';
+import MeetingRoomOutlinedIcon from '@mui/icons-material/MeetingRoomOutlined';
 import listingApi from '@/api/listingApi';
+import rentalUnitApi from '@/api/rentalUnitApi';
 import PageHeader from '@/components/dashboard/PageHeader';
 import LoadingSkeleton from '@/components/common/LoadingSkeleton';
 import EmptyState from '@/components/common/EmptyState';
@@ -38,6 +41,7 @@ const ACTION_META = {
   RENEW: { label: 'Gia hạn', icon: <AutorenewIcon fontSize="small" /> },
   PROMOTE: { label: 'Đẩy tin', icon: <CampaignIcon fontSize="small" /> },
   VIEW_STATS: { label: 'Xem thống kê', icon: <BarChartIcon fontSize="small" /> },
+  RELIST: { label: 'Đăng lại phòng này', icon: <ReplayIcon fontSize="small" /> },
   DELETE: { label: 'Xóa tin', icon: <DeleteOutlineIcon fontSize="small" />, danger: true },
 };
 
@@ -114,6 +118,13 @@ const MyListingsPage = () => {
       else if (action === 'SUBMIT') await listingApi.submit(row.id);
       else if (action === 'CLOSE') await listingApi.close(row.id, payload);
       else if (action === 'DELETE') await listingApi.remove(row.id);
+      else if (action === 'RELIST') {
+        // Tạo tin nháp mới cho phòng (giữ đánh giá của phòng) rồi mở để chỉnh sửa.
+        const created = await rentalUnitApi.relist(row.rentalUnitId);
+        notify.success('Đã tạo tin nháp mới cho phòng. Hãy kiểm tra lại rồi gửi duyệt.');
+        navigate(`/quan-ly/tin-dang/${created.id}/sua`);
+        return;
+      }
       notify.success('Thao tác thành công');
       setConfirm(null);
       load();
@@ -206,6 +217,16 @@ const MyListingsPage = () => {
                         >
                           {row.title}
                         </Typography>
+                        {row.rentalUnitName && (
+                          <Typography
+                            component={RouterLink} to={`/quan-ly/phong/${row.rentalUnitId}`}
+                            variant="caption" color="text.secondary"
+                            sx={{ display: 'flex', alignItems: 'center', gap: 0.5, textDecoration: 'none', maxWidth: 320, '&:hover': { color: 'primary.main' } }}
+                            noWrap
+                          >
+                            <MeetingRoomOutlinedIcon sx={{ fontSize: 14 }} /> {row.rentalUnitName}
+                          </Typography>
+                        )}
                         <Typography variant="caption" color="primary" sx={{ fontWeight: 600 }}>{formatPrice(row.price)}</Typography>
                         {row.promoted && <Chip size="small" color="secondary" label="Nổi bật" sx={{ ml: 1, height: 18 }} />}
                         {row.status === 'REJECTED' && row.rejectReason && (

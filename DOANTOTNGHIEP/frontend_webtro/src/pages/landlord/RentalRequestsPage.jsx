@@ -117,7 +117,12 @@ const LandlordRentalRequestsPage = () => {
                         </Box>
                       </Stack>
                     </TableCell>
-                    <TableCell>{item.listingTitle}</TableCell>
+                    <TableCell>
+                      <Typography variant="body2">{item.listingTitle}</Typography>
+                      {item.rentalUnitName && item.rentalUnitName !== item.listingTitle && (
+                        <Typography variant="caption" color="text.secondary">Phòng: {item.rentalUnitName}</Typography>
+                      )}
+                    </TableCell>
                     <TableCell>{formatDate(item.desiredViewingDate)}</TableCell>
                     <TableCell><Chip size="small" color={meta.color} label={meta.label} /></TableCell>
                     <TableCell align="right">

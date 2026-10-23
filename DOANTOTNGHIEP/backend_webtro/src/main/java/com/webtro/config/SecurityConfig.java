@@ -55,6 +55,7 @@ public class SecurityConfig {
             "/api/promotion-packages/**",
             "/api/users/*/public",
             "/api/users/*/listings",
+            "/api/users/*/reviews",
             "/api/files/**",
             "/api/content/**",
     };

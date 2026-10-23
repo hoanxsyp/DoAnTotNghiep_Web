@@ -50,4 +50,8 @@ public class ListingSummaryResponse {
     private Long daysRemaining;
     private Boolean expiringSoon;
     private List<String> availableActions;
+
+    // ----- Phòng (chỉ có ở danh sách của chủ tin) -----
+    private Long rentalUnitId;
+    private String rentalUnitName;
 }

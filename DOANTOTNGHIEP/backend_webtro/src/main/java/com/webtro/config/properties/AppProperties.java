@@ -88,6 +88,21 @@ public class AppProperties {
     @Setter
     public static class Ai {
         private RentalPrice rentalPrice = new RentalPrice();
+        private ChatbotApi chatbotApi = new ChatbotApi();
+    }
+
+    /**
+     * Module AI chatbot ({@code chatbot-api}: PhoBERT NLU + tìm tin thật + Gemini NLG có guardrail).
+     * {@code enabled=false} → quay về chatbot theo luật cũ hoàn toàn (công tắc kỹ thuật cho demo).
+     */
+    @Getter
+    @Setter
+    public static class ChatbotApi {
+        private boolean enabled = true;
+        private String baseUrl = "http://localhost:8081";
+        private Duration connectTimeout = Duration.ofSeconds(2);
+        /** Đủ cho lượt có Gemini (timeout 8s phía chatbot) — lượt thường ~0,1–1,5s. */
+        private Duration requestTimeout = Duration.ofSeconds(12);
     }
 
     @Getter

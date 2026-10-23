@@ -8,6 +8,8 @@ import com.roomfinder.chat.normalizer.PriceNormalizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.context.annotation.Primary;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
@@ -24,7 +26,7 @@ import java.util.regex.Pattern;
  * Class này KHÔNG phụ thuộc base model: hợp đồng JSON của nlu-service là span thô
  * + intent, nên thay model bên Python không phải sửa gì ở tầng Java.
  * @Primary thay cho LlmNluServiceImpl; chuỗi fallback 2 tầng:
- * nlu-service chết/timeout(300ms) → LLM → rule-based. Hệ thống không bao giờ
+ * nlu-service chết/timeout (NLU_TIMEOUT_MS, mặc định 800ms) → LLM → rule-based. Hệ thống không bao giờ
  * sập vì NLU. Tắt bằng roomfinder.nlu.enabled=false (NLU_ENABLED).
  *
  * nlu-service trả entity là SPAN THÔ ({label,text,start,end,score}) — class này
@@ -53,6 +55,27 @@ public class LocalNluServiceImpl implements NluService {
         this.http = RestClient.builder().baseUrl(props.getUrl()).requestFactory(f).build();
     }
 
+    /**
+     * Khởi động nóng: lần gọi ĐẦU TIÊN từ JVM mới (nạp class Jackson/RestClient, mở kết nối)
+     * vượt timeout 300ms → câu chat đầu tiên sau mỗi lần khởi động luôn rơi xuống LLM/rule-based.
+     * Gọi thử vài lần lúc app sẵn sàng; lỗi (nlu-service chưa lên) thì bỏ qua.
+     */
+    @EventListener(ApplicationReadyEvent.class)
+    public void warmUp() {
+        if (!props.isEnabled()) return;
+        for (int i = 0; i < 3; i++) {
+            try {
+                http.post().uri("/nlu").header("Content-Type", "application/json")
+                        .body(Map.of("text", "tìm phòng trọ")).retrieve().body(NluServiceResponse.class);
+                log.info("Khởi động nóng nlu-service xong (lần {})", i + 1);
+                return;
+            } catch (Exception e) {
+                log.debug("Khởi động nóng nlu-service lần {} lỗi: {}", i + 1, e.getMessage());
+            }
+        }
+        log.warn("Không khởi động nóng được nlu-service — câu đầu tiên có thể rơi xuống fallback");
+    }
+
     @Override
     public NluResult parse(String message) {
         if (!props.isEnabled()) return fallback.parse(message);
@@ -66,9 +89,13 @@ public class LocalNluServiceImpl implements NluService {
             if (r == null || r.intent() == null) {
                 throw new IllegalStateException("nlu-service trả response rỗng");
             }
-            return toNluResult(r);
+            return toNluResult(r, message == null ? "" : message);
         } catch (Exception e) {
-            log.warn("NLU self-host lỗi ({}), fallback LLM", e.getMessage());
+            // Ghi NGUYÊN NHÂN GỐC: timeout khi đang đọc header bị Spring báo thành "content type
+            // [application/octet-stream]" — dễ hiểu lầm là nlu-service trả sai định dạng.
+            Throwable root = e;
+            while (root.getCause() != null && root.getCause() != root) root = root.getCause();
+            log.warn("NLU self-host lỗi ({}: {}), fallback LLM", root.getClass().getSimpleName(), root.getMessage());
             return fallback.parse(message);
         }
     }
@@ -81,7 +108,29 @@ public class LocalNluServiceImpl implements NluService {
 
     // --- Span → Filters ---------------------------------------------------
 
-    private NluResult toNluResult(NluServiceResponse r) {
+    /** Từ đứng TRƯỚC giá → giá tối thiểu ("từ 4 triệu", "trên 3tr"). */
+    private static final Pattern MIN_BEFORE = Pattern.compile(
+            "(?:^|\\s)(?:tu|tren|hon|toi thieu|it nhat|>=?)\\s*$");
+    /** "rẻ hơn 3 củ", "thấp hơn 3tr", "nhỏ hơn" → tối ĐA dù có chữ "hơn" (xét trước MIN_BEFORE). */
+    private static final Pattern MAX_BEFORE = Pattern.compile(
+            "(?:^|\\s)(?:re|thap|nho|it|kem|duoi)\\s+hon\\s*$");
+    /** Từ đứng SAU giá: "4tr trở lên" → tối thiểu; "3tr đổ lại/trở xuống" → tối đa (thắng). */
+    private static final Pattern MIN_AFTER = Pattern.compile("^\\s*(?:tro len|do len)\\b");
+    private static final Pattern MAX_AFTER = Pattern.compile("^\\s*(?:do lai|do ve|tro xuong|do xuong|tro lai)\\b");
+
+    /**
+     * NER gán mọi mức giá là PRICE_MAX (như dữ liệu train) kể cả "từ 4 triệu" — xét từ đứng quanh
+     * span để biết là giá TỐI THIỂU. Span là khoảng ("2tr5-3tr") thì giữ PRICE_MAX.
+     */
+    static boolean isMinPrice(String message, int start, int end, String span) {
+        if (span.matches(".*\\d\\s*(?:-|–|~|đến|den)\\s*\\d.*")) return false;
+        String before = strip(message.substring(Math.max(0, start - 12), Math.max(0, Math.min(start, message.length()))));
+        String after = strip(message.substring(Math.min(end, message.length()), Math.min(message.length(), end + 12)));
+        if (MAX_AFTER.matcher(after).find() || MAX_BEFORE.matcher(before).find()) return false;
+        return MIN_BEFORE.matcher(before).find() || MIN_AFTER.matcher(after).find();
+    }
+
+    private NluResult toNluResult(NluServiceResponse r, String message) {
         NluResult out = new NluResult();
         out.setIntent(Intent.fromCode(r.intent()));
         out.setConfidence(r.confidence());
@@ -91,14 +140,23 @@ public class LocalNluServiceImpl implements NluService {
             String text = s.text();
             if (text == null || text.isBlank()) continue;
             switch (s.label()) {
-                case "PRICE_MAX" -> f.setPriceMax(PriceNormalizer.normalize(text));
+                case "PRICE_MAX" -> {
+                    Long price = PriceNormalizer.normalize(text);
+                    if (isMinPrice(message, s.start(), s.end(), text)) f.setPriceMin(price);
+                    else f.setPriceMax(price);
+                }
                 case "PRICE_MIN" -> f.setPriceMin(PriceNormalizer.normalize(text));
                 case "LOCATION"  -> f.setLocation(text);
                 case "POI"       -> f.setPoi(text);
                 case "RADIUS"    -> f.setRadiusM(parseRadiusM(text));
                 case "AREA_MIN"  -> f.setAreaMin(parseFirstNumber(text));
                 case "UTILITY"   -> f.getUtilities().add(text);
-                case "ROOM_TYPE" -> f.setRoomType(mapRoomType(text));
+                case "ROOM_TYPE" -> {
+                    f.setRoomType(mapRoomType(text));
+                    // "phòng khép kín": NER gán cả cụm là ROOM_TYPE (như dữ liệu train), nhưng
+                    // "khép kín" là yêu cầu vệ sinh khép kín — giữ lại thành tiện ích.
+                    if (strip(text).contains("khep kin")) f.getUtilities().add("khép kín");
+                }
                 case "DATETIME"  -> f.setDatetime(text);
                 case "ROOM_REF"  -> {
                     Integer ord = parseRoomRef(text);
@@ -106,6 +164,12 @@ public class LocalNluServiceImpl implements NluService {
                 }
                 default -> log.debug("Bỏ qua entity label lạ: {}", s.label());
             }
+        }
+        // NER đôi khi bỏ sót "phòng 1" khi câu còn mốc giờ ("đặt lịch xem phòng 1 chiều mai lúc 3h")
+        // → câu hỏi về 1 phòng cụ thể mà không có phòng: dò bằng regex của rule-based.
+        if (f.getRoomRefs().isEmpty() && (out.getIntent() == Intent.ROOM_DETAIL
+                || out.getIntent() == Intent.COMPARE_ROOMS || out.getIntent() == Intent.BOOK_APPOINTMENT)) {
+            f.setRoomRefs(new java.util.ArrayList<>(RuleBasedNluService.detectRoomRefs(message.toLowerCase())));
         }
         out.setEntities(f);
         return out;
@@ -154,7 +218,7 @@ public class LocalNluServiceImpl implements NluService {
         return null;
     }
 
-    private String strip(String s) {
+    private static String strip(String s) {
         String n = Normalizer.normalize(s.toLowerCase().trim(), Normalizer.Form.NFD);
         return n.replaceAll("\\p{M}", "").replace("đ", "d");
     }

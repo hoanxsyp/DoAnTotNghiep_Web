@@ -11,9 +11,10 @@
 | Giai đoạn | Phạm vi | Trạng thái | Ghi chú |
 |---|---|---|---|
 | **GĐ1 — MVP** | NLU(LLM)→Normalizer→Context→Retrieval→NLG+Guardrail, multi-turn, geo | ✅ **Xong** | Chạy e2e, đủ intent (6 nhãn NLU, 8 nhánh xử lý), đủ demo §15 |
-| **GĐ2 — NLU PhoBERT + Fast-path** | Train intent/NER, FastAPI service, nối Spring, fast-path, so sánh các phương án NLU | 🟢 **Đã train + đo** | Intent GOLD 0.929 (đạt DoD-1); NER Span-F1 0.743 (chưa đạt DoD-2, chưa có test NER thật) |
+| **GĐ2 — NLU PhoBERT + Fast-path** | Train intent/NER, FastAPI service, nối Spring, fast-path, so sánh các phương án NLU | 🟢 **Đã train + đo** | Intent GOLD 0.929 (đạt DoD-1); NER GOLD Span-F1 0.935 (đạt DoD-2) |
 | **GĐ3 — Semantic + Recommendation** | Semantic rerank (embedding), Content-Based+KNN recommend | ✅ **Xong** | Không dùng Elasticsearch (có chủ đích, catalog ~60 phòng) |
 | **Phụ — Geocoding fallback** | POI miss → Nominatim → cache | ✅ **Xong** | Tầng 2 hybrid geo |
+| **Tích hợp web** (2026-10-18) | Widget của web → `backend_webtro` → `chatbot-api`; tìm trên **tin đăng thật** qua API công khai của backend | ✅ **Chạy e2e** | Luật cũ chỉ còn nhạy cảm / thuật ngữ / câu mẫu; AI sập → báo lỗi. Recall@5 trên tin thật **chưa đo lại** (bộ vàng hiện gán trên 59 phòng demo) |
 
 **Kết luận:** Cả 3 giai đoạn code đã hoàn thành và chạy được đầu-cuối. **Việc còn thiếu chủ yếu KHÔNG phải code, mà là phần ĐÁNH GIÁ (§14) và DỮ LIỆU THẬT (§13.3)** — đây mới là chỗ quyết định điểm khi bảo vệ.
 
@@ -78,20 +79,23 @@ vào `room_detail`. `ChatOrchestrator` tách lại theo từ khóa nên người
 
 ### Kết quả đo được (2026-10-17)
 
-Train: intent 3650 câu (2500 synthetic v2 + 115 câu thật ×10); NER 2131 câu
-(2075 synthetic v2 + 56 câu thật). Model lấy ở epoch cuối.
+Train: intent 3650 câu (2500 synthetic v2 + 115 câu thật ×10); NER 2190 câu
+(2075 synthetic v2 + 115 câu thật, gồm 87 câu chat `data2.md` gán nhãn NER tay
+ngày 2026-10-17). Model lấy ở epoch cuối.
 
 | Model | Metric | Giá trị | Ngưỡng DoD |
 |---|---|---|---|
 | Intent | Accuracy (GOLD thật, 28 câu) | **0.929** (26/28) | DoD-1 ≥ 0.90 ✅ |
 | Intent | Macro-F1 (GOLD thật) | 0.916 | — |
 | Intent | Accuracy (PROXY tay viết, 142 câu) | 0.775 | — |
-| NER | Span-F1 strict (PROXY, 87 câu) | **0.743** (P 0.690 / R 0.805) | DoD-2 ≥ 0.85 ❌ |
-| NER | Slot-F1 sau chuẩn hoá (PROXY) | 0.962 | — |
+| NER | Span-F1 strict (GOLD thật, 28 câu / 69 entity) | **0.935** (P 0.929 / R 0.942) | DoD-2 ≥ 0.85 ✅ |
+| NER | Span-F1 strict (PROXY, 87 câu) | 0.759 | — |
+| NER | Slot-F1 sau chuẩn hoá (PROXY, model NER trước) | 0.962 | — |
 
 GOLD giờ phủ đủ cả 6 intent. 2 câu GOLD còn sai: *"Còn ko em ở luôn ạ"* (thiếu
 intent kiểu hỏi tình trạng phòng — `TODO.md`) và *"em cần vào luôn đầu tuần sau nhé
-mọi người"*. NER vẫn **chưa có bộ test THẬT** nên số NER là trên proxy.
+mọi người"*. NER GOLD dùng **cùng 28 câu** với GOLD intent; model NER trước đo trên
+cùng bộ này chỉ được 0.720 (chi tiết + việc sửa quy ước nhãn: `ml/README.md`).
 
 **So sánh 3 phương án (§14.4) — `ml/eval-results/REPORT.md`:**
 
@@ -108,12 +112,14 @@ intent, hơn cả A lẫn C về slot**, nhanh hơn ~10× và chi phí ≈0. GOL
 
 ### Còn thiếu ❌ (quan trọng cho bảo vệ)
 
-1. **DoD-2 chưa đạt (Span-F1 0.743 < 0.85)** và NER **chưa có bộ test thật** — gán
-   nhãn NER cho `data2.md` (87 câu chat) vừa có bộ test thật vừa thêm data train.
+1. ~~DoD-2 chưa đạt~~ — **xong 2026-10-17**: gán nhãn NER cho `data2.md`, có GOLD
+   NER thật, Span-F1 0.935. Còn: GOLD nhỏ (69 entity), nhãn chưa có người thứ hai rà.
 2. **Data thật còn ít**: 143 câu intent / 56 câu NER; GOLD 28 câu, `out_of_scope` chỉ 1 câu.
 3. **Chưa đo tỉ lệ fast-path trên log thật** — SPEC §11 bước 2.4 muốn chạy thật ≥1 tuần rồi `SELECT path, COUNT(*), AVG(latency_ms) FROM chat_log GROUP BY path`. Query đã sẵn (README §7), chỉ thiếu **dữ liệu chạy thật đủ lâu**.
-4. Khoảng giá "1tr5-2tr" ra 1 span `PRICE_MAX` — normalizer Java cần tách min/max;
-   `UtilityNormalizer` mới map 4 nhóm trong khi data v2 có 51 biến thể tiện ích.
+4. Khoảng giá "1tr5-2tr" ra 1 span `PRICE_MAX` — normalizer Java cần tách min/max.
+   ~~`UtilityNormalizer` mới map 4 nhóm~~ — **xong 2026-10-18**: 28 key theo danh mục tiện ích
+   của web, nhận diện **91%** span UTILITY thật (trước 20%; phần còn lại cố ý không map), có
+   xử lý phủ định ("không cần X", "có X thì tốt, không có cũng được").
 
 ---
 
@@ -153,7 +159,7 @@ intent, hơn cả A lẫn C về slot**, nhanh hơn ~10× và chi phí ≈0. GOL
 | DoD | Tiêu chí | Ngưỡng | Trạng thái | Việc còn thiếu |
 |---|---|---|---|---|
 | DoD-1 | Intent Accuracy (test thật) | ≥0.90 | ✅ **ĐẠT — 0.929** (GOLD 28 câu thật, 26/28) | GOLD còn nhỏ (1 câu = 3,6 điểm) — thu thêm câu thật để con số vững hơn |
-| DoD-2 | Entity F1 macro (test thật) | ≥0.85 | ❌ **0.743** Span-F1 strict trên PROXY (chưa có test thật) | Gán nhãn NER thật (`data2.md`) để có test thật + thêm data train |
+| DoD-2 | Entity F1 macro (test thật) | ≥0.85 | ✅ **ĐẠT — 0.935** Span-F1 strict (GOLD thật 28 câu / 69 entity) | GOLD nhỏ; nhờ người thứ hai rà nhãn; thu thêm câu thật |
 | DoD-3 | **Recall@5 của retrieval** | ≥0.80 | ✅ **ĐẠT — Recall@5 = 1.000** (30 câu) | Harness JUnit `RetrievalRecallEvalTest` + bộ vàng `retrieval_eval.jsonl`; báo cáo `ml/eval-results/retrieval_recall.md`. (Mở rộng lên ~50 câu + thêm data thật nếu muốn) |
 | DoD-4 | Hallucination rate | =0 sau guardrail | ✅ Validator đã cài + có `hallucination_flag` | Chỉ cần chạy query báo cáo trên log thật |
 | DoD-5 | Latency p95 | ≤2.5s LLM / ≤400ms fast | ⚠️ Đo được từ `chat_log`, chưa tổng hợp trên log thật đủ lớn | Chạy thật rồi query p50/p95 |
@@ -189,7 +195,7 @@ intent, hơn cả A lẫn C về slot**, nhanh hơn ~10× và chi phí ≈0. GOL
 
 Xếp theo mức độ ảnh hưởng tới điểm số:
 
-1. 🔴 **Gán nhãn NER thật (§13.3)** → có bộ test NER thật + thêm data train → train lại → đo lại DoD-2 (hiện 0.743 trên proxy).
+1. ~~Gán nhãn NER thật → đo lại DoD-2~~ — **xong 2026-10-17** (0.935 trên GOLD thật).
 2. 🟠 **Thu thêm câu intent thật** cho GOLD (28 câu, 1 câu = 3,6 điểm acc), nhất là `out_of_scope` và câu hỏi tình trạng phòng.
 3. ~~Train intent + NER~~ — **xong 2026-10-17** (PhoBERT). ~~Harness Recall@5/MRR~~ — **xong** (DoD-3).
 4. 🟠 **Chạy hệ thống thật đủ lâu** (bạn bè gõ thử) để có log → tính fast-path %, latency p50/p95, hallucination rate. Đây cũng là nguồn câu thật cho mục 1.

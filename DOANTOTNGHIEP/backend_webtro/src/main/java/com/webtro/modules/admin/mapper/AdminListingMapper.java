@@ -6,6 +6,8 @@ import com.webtro.modules.catalog.entity.Province;
 import com.webtro.modules.catalog.entity.Ward;
 import com.webtro.modules.catalog.repository.WardRepository;
 import com.webtro.modules.listing.entity.Listing;
+import com.webtro.modules.listing.entity.RentalUnit;
+import com.webtro.modules.listing.repository.RentalUnitRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -20,6 +22,7 @@ import java.math.BigDecimal;
 public class AdminListingMapper {
 
     private final WardRepository wardRepository;
+    private final RentalUnitRepository rentalUnitRepository;
 
     public AdminListingResponse toResponse(Listing l, Long reportCount) {
         LocationParts location = locationOf(l.getWardId());
@@ -35,6 +38,10 @@ public class AdminListingMapper {
                 .statusLabel(l.getStatus() != null ? l.getStatus().getLabel() : null)
                 .reportCount(reportCount)
                 .priceDeviationFlagged(l.getPriceDeviationFlag())
+                .duplicateAddress(Boolean.TRUE.equals(l.getDuplicateAddress()))
+                .rentalUnitId(l.getRentalUnitId())
+                .rentalUnitName(rentalUnitRepository.findById(l.getRentalUnitId())
+                        .map(RentalUnit::getName).orElse(null))
                 .provinceId(location.province() == null ? null : location.province().getId())
                 .districtId(location.district() == null ? null : location.district().getId())
                 .wardId(l.getWardId())

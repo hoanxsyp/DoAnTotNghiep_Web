@@ -112,13 +112,19 @@ public class LandlordProfile extends AuditableEntity {
     private Integer responseConversationCount = 0;
 
     /** Điểm đánh giá trung bình (0-5). */
+    // Điểm chủ trọ: CHỈ ReviewRatingRecalculator ghi, qua LandlordProfileRepository.applyRating
+    // (docs/DANH_GIA_THEO_PHONG_DOI_CHIEU.md mục 10). updatable = false để việc lưu hồ sơ vì lý do
+    // khác (sửa thông tin, bộ đếm tin) không ghi đè điểm vừa tính.
     @Builder.Default
-    @Column(name = "average_rating", nullable = false, precision = 3, scale = 2)
+    @lombok.Setter(lombok.AccessLevel.NONE)
+    @Column(name = "average_rating", nullable = false, precision = 3, scale = 2,
+            insertable = false, updatable = false)
     private BigDecimal averageRating = BigDecimal.valueOf(0.00);
 
-    /** Số lượt đánh giá. */
+    /** Số lượt đánh giá. Xem {@link #averageRating}. */
     @Builder.Default
-    @Column(name = "review_count", nullable = false)
+    @lombok.Setter(lombok.AccessLevel.NONE)
+    @Column(name = "review_count", nullable = false, insertable = false, updatable = false)
     private Integer reviewCount = 0;
 
     /** Tổng số tin đã đăng. */

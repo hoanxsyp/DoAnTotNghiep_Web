@@ -51,6 +51,15 @@ public interface UserGateway {
     /** Đọc tổng hợp đánh giá hiện tại của chủ trọ (để tính lại trung bình khi thêm/sửa/xóa review). */
     LandlordAggregate getLandlordAggregate(Long landlordId);
 
-    /** Cập nhật {@code landlord_profiles.average_rating} + {@code review_count} (canonical 4.7.8 quy tắc 5). */
+    /**
+     * Cập nhật {@code landlord_profiles.average_rating} + {@code review_count}. Chủ phòng không có
+     * hồ sơ chủ trọ (ví dụ người thuê đăng tin ở ghép) thì bỏ qua.
+     */
     void updateLandlordReviewAggregate(Long landlordId, BigDecimal averageRating, int reviewCount);
+
+    /**
+     * Khoá dòng hồ sơ chủ trọ ({@code SELECT … FOR UPDATE}) trước khi tính lại điểm chủ trọ
+     * (mục 10.2 bước 1). Trả về {@code false} nếu người này không có hồ sơ chủ trọ.
+     */
+    boolean lockLandlordProfile(Long landlordId);
 }

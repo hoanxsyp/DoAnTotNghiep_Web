@@ -3,7 +3,9 @@ package com.webtro.modules.interaction.spi;
 import com.webtro.common.enums.ListingStatus;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -39,6 +41,8 @@ public interface ListingGateway {
      * @param publiclyVisible  tin có đang hiển thị công khai không (theo publicStatuses)
      * @param averageRating    điểm đánh giá trung bình hiện lưu (denormalized)
      * @param reviewCount      số đánh giá hiển thị hiện lưu (denormalized)
+     * @param rentalUnitId     phòng của tin (rental_units.id)
+     * @param createdAt        thời điểm tạo tin (dùng cho ghi chú "thuê qua tin tháng MM/YYYY")
      */
     record ListingBrief(
             Long id,
@@ -52,7 +56,23 @@ public interface ListingGateway {
             ListingStatus status,
             boolean publiclyVisible,
             BigDecimal averageRating,
-            int reviewCount) {
+            int reviewCount,
+            Long rentalUnitId,
+            Instant createdAt) {
+    }
+
+    /**
+     * Thông tin tóm tắt của Phòng. Đánh giá gắn vào phòng nên module interaction đọc chủ trọ và
+     * điểm từ đây, không qua tin (tin có thể đã đóng hoặc đã xoá mềm).
+     */
+    record RentalUnitBrief(
+            Long id,
+            Long ownerId,
+            String name,
+            String unitLabel,
+            BigDecimal averageRating,
+            int reviewCount,
+            boolean addressLocked) {
     }
 
     /** Lấy tóm tắt tin còn sống; ném {@code ResourceNotFoundException(LISTING_NOT_FOUND)} nếu không có. */
@@ -73,8 +93,37 @@ public interface ListingGateway {
     /** Đặt lại {@code listings.comment_count} theo số đếm chính xác từ module interaction. */
     void setCommentCount(Long listingId, int count);
 
-    /** Cập nhật {@code listings.average_rating} + {@code listings.review_count} (canonical 4.7.8 quy tắc 5). */
-    void updateReviewAggregate(Long listingId, BigDecimal averageRating, int reviewCount);
+    /**
+     * Tóm tắt tin kể cả tin đã xoá mềm — chỉ để hiển thị ghi chú "thuê qua tin…" trên đánh giá.
+     */
+    Map<Long, ListingBrief> getBriefsIncludingDeleted(Collection<Long> listingIds);
+
+    /** Phòng của một tin còn sống; ném {@code LISTING_NOT_FOUND} nếu tin không có. */
+    Long rentalUnitIdOf(Long listingId);
+
+    /** Tóm tắt phòng; ném {@code RENTAL_UNIT_NOT_FOUND} nếu không có. */
+    RentalUnitBrief getUnitBrief(Long rentalUnitId);
+
+    /** Nạp hàng loạt tóm tắt phòng (tránh N+1). */
+    Map<Long, RentalUnitBrief> getUnitBriefs(Collection<Long> rentalUnitIds);
+
+    /**
+     * Khoá dòng phòng ({@code SELECT … FOR UPDATE}) trước khi thay đổi đánh giá của phòng
+     * (mục 10.2 bước 1). Trả về chủ phòng để người gọi khoá tiếp hồ sơ chủ trọ.
+     */
+    Long lockRentalUnitForRating(Long rentalUnitId);
+
+    /**
+     * Ghi điểm phòng rồi chép sang MỌI tin của phòng (mục 10.2 bước 3, 4) — đường ghi duy nhất
+     * vào {@code rental_units.average_rating} và {@code listings.average_rating}.
+     */
+    void applyUnitRating(Long rentalUnitId, BigDecimal averageRating, int reviewCount);
+
+    /** Số tin có điểm lệch với phòng của nó; phải luôn bằng 0 (mục 10.4). */
+    long countRatingMismatch();
+
+    /** Các phòng cần đối soát điểm (đang có điểm hoặc có đánh giá). */
+    List<Long> rentalUnitIdsNeedingRatingReconcile();
 
     void markRented(Long listingId, Long ownerId);
 

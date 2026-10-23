@@ -112,8 +112,13 @@ const MyReviewsPage = () => {
                     <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
                       <Box sx={{ minWidth: 0 }}>
                         <Link component={RouterLink} to={`/tin/${r.listingId}`} variant="subtitle1" sx={{ fontWeight: 600 }}>
-                          {r.listingTitle}
+                          {r.listingTitle || r.rentalUnitName}
                         </Link>
+                        {r.rentalUnitName && (
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                            Đánh giá cho phòng: {r.rentalUnitName}
+                          </Typography>
+                        )}
                         <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.5, flexWrap: 'wrap' }}>
                           <RatingStars value={r.rating} readOnly showValue={false} size="small" />
                           {r.listingStatus && <StatusChip status={r.listingStatus} />}

@@ -2,6 +2,7 @@ package com.roomfinder.chat.model;
 
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
+import com.roomfinder.chat.normalizer.UtilityNormalizer;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -30,7 +31,7 @@ public class Filters {
     private String poi;
     private Integer radiusM;
     private Double areaMin;
-    private List<String> utilities = new ArrayList<>();   // keys: air_conditioner, parking, wifi, washing_machine
+    private List<String> utilities = new ArrayList<>();   // key chuẩn của UtilityNormalizer (air_conditioner, water_heater...)
     private String roomType;
     private String datetime;                              // ISO
     private List<Integer> roomRefs = new ArrayList<>();
@@ -44,6 +45,11 @@ public class Filters {
         if (in == null) return;
         if (in.priceMin != null) this.priceMin = in.priceMin;
         if (in.priceMax != null) this.priceMax = in.priceMax;
+        // Mức giá mới mâu thuẫn mức cũ ("từ 3tr" rồi "rẻ hơn 3 củ") → bỏ mức cũ, không để khoảng rỗng.
+        if (this.priceMin != null && this.priceMax != null && this.priceMin >= this.priceMax) {
+            if (in.priceMax != null && in.priceMin == null) this.priceMin = null;
+            else if (in.priceMin != null && in.priceMax == null) this.priceMax = null;
+        }
         if (in.location != null) this.location = in.location;
         if (in.poi != null)      this.poi = in.poi;
         if (in.radiusM != null)  this.radiusM = in.radiusM;
@@ -97,22 +103,12 @@ public class Filters {
         if (poi != null) parts.add("gần " + poi);
         if (areaMin != null) parts.add("trên " + areaMin + "m²");
         if (utilities != null && !utilities.isEmpty())
-            parts.add("có " + String.join(", ", utilities.stream().map(Filters::utilityVi).toList()));
+            parts.add("có " + String.join(", ", utilities.stream().map(UtilityNormalizer::label).toList()));
         return parts.isEmpty() ? "mọi tiêu chí" : String.join(", ", parts);
     }
 
     private static String formatVnd(long v) {
         if (v % 1_000_000 == 0) return (v / 1_000_000) + " triệu";
         return String.format("%,d", v).replace(',', '.') + "đ";
-    }
-
-    private static String utilityVi(String key) {
-        return switch (key) {
-            case "air_conditioner" -> "điều hòa";
-            case "parking" -> "chỗ để xe";
-            case "wifi" -> "wifi";
-            case "washing_machine" -> "máy giặt";
-            default -> key;
-        };
     }
 }

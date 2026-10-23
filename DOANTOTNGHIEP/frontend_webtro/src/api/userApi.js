@@ -9,6 +9,8 @@ const userApi = {
   updateMe: (payload) => unwrap(axiosClient.put('/users/me', payload)),
   getPublicProfile: (id) => unwrap(axiosClient.get(`/users/${id}`)),
   getPublicListings: (id, params) => unwrap(axiosClient.get(`/users/${id}/listings`, { params })),
+  /** Đánh giá về chủ trọ (mọi phòng của chủ trọ), mỗi đánh giá kèm tên phòng. */
+  getReviews: (id, params) => unwrap(axiosClient.get(`/users/${id}/reviews`, { params })),
   follow: (id) => unwrap(axiosClient.post(`/users/${id}/follow`)),
   unfollow: (id) => unwrap(axiosClient.delete(`/users/${id}/follow`)),
   getFollowing: (params) => unwrap(axiosClient.get('/users/me/following', { params })),
