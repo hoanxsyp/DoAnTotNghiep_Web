@@ -171,8 +171,6 @@ class UserServiceImplTenantTest {
     }
 
     @Test
-    @Disabled("BUG-04: đổi SĐT ghi đè users.phone ngay và GIỮ phone_verified_at cũ → số mới chưa xác thực vẫn hiện "
-            + "'đã xác thực' (docs/03 mục 4.2.3: SĐT mới cần OTP xác thực lại). Bỏ @Disabled sau khi fix.")
     @DisplayName("UT-USR-08 [BUG-04] Đổi sang SĐT mới → trạng thái 'đã xác thực SĐT' phải bị reset")
     void changingPhoneResetsVerification() {
         service.updateContact(TENANT_ID, contact(null, "0987654321"));

@@ -169,8 +169,6 @@ class TenantRoommateListingIT extends TenantItSupport {
 
     @Test
     @DisplayName("IT-RM-10 [BUG-09] Tenant khác nhắn tin cho người đăng tin ở ghép → phải tạo được hội thoại")
-    @Disabled("BUG-09: isLandlordChatEnabled() trả false khi người đăng không có hồ sơ chủ trọ → 422 "
-            + "CHAT_DISABLED_BY_LANDLORD; tin ở ghép của tenant không liên hệ được qua chat. Bỏ @Disabled sau khi fix.")
     void chatWithRoommatePoster() throws Exception {
         Actor poster = newTenant();
         Actor seeker = newTenant();

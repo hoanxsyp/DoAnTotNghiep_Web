@@ -94,8 +94,6 @@ class RuleBasedChatbotEngineTest {
 
     @Test
     @DisplayName("UT-BOT-08 [BUG-16] Câu ngoài phạm vi không được chèn nội dung lạc đề về 'pháp lý hợp đồng'; câu ví dụ không dùng 'Quận 1' (web chỉ có Hà Nội)")
-    @Disabled("BUG-16: câu mẫu OUT_OF_SCOPE luôn kèm câu khuyên tham khảo luật sư; câu UNKNOWN gợi ý 'Quận 1'. "
-            + "Bỏ @Disabled sau khi fix.")
     void cannedRepliesOnTopic() {
         ChatbotResult r = ask("thời tiết hôm nay thế nào");
         assertEquals(ChatbotIntent.OUT_OF_SCOPE, r.intent());

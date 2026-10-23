@@ -45,7 +45,6 @@ class TenantInteractionIT extends TenantItSupport {
 
     @Test
     @DisplayName("IT-FAV-02 [BUG-03] Lưu tin chưa công khai (nháp của người khác) → phải 422 LISTING_NOT_ACTIVE")
-    @Disabled("BUG-03: hiện trả 201 và lộ tiêu đề/giá tin nháp trong /api/favorites. Bỏ @Disabled sau khi fix.")
     void favoriteDraftOfOthersRejected() throws Exception {
         Actor landlord = newLandlord();
         Actor tenant = newTenant();
@@ -342,7 +341,6 @@ class TenantInteractionIT extends TenantItSupport {
 
     @Test
     @DisplayName("IT-PRO-02 [BUG-04] Đổi sang SĐT mới → phoneVerified phải về false")
-    @Disabled("BUG-04: SĐT mới chưa xác thực vẫn hiển thị phoneVerified=true. Bỏ @Disabled sau khi fix.")
     void changingPhoneResetsVerification() throws Exception {
         Actor tenant = newTenant();
         sql("update users set phone_verified_at = now() where id = ?", tenant.id());

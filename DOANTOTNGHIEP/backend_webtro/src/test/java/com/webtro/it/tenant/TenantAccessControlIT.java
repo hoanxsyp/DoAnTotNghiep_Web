@@ -139,8 +139,6 @@ class TenantAccessControlIT extends TenantItSupport {
 
     @Test
     @DisplayName("IT-SEC-08 [BUG-12] Khách chưa đăng nhập xem hồ sơ công khai chủ trọ (GET /api/users/{id}) → phải 200")
-    @Disabled("BUG-12 (luồng khách): SecurityConfig chỉ mở '/api/users/*/public' nhưng frontend gọi '/api/users/{id}' → "
-            + "khách nhận 401. Bỏ @Disabled sau khi fix.")
     void guestCanViewLandlordProfile() throws Exception {
         Actor landlord = newLandlord();
         call(HttpMethod.GET, "/api/users/" + landlord.id(), null, null, 200);

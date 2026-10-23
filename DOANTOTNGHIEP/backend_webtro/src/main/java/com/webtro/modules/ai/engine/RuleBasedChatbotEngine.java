@@ -191,10 +191,9 @@ public class RuleBasedChatbotEngine implements ChatbotEngine {
             case FAQ -> "Mình có thể giúp giải thích cách dùng website: tìm phòng, lưu tin, liên hệ chủ "
                     + "trọ, báo cáo tin sai. Bạn muốn hỏi về việc gì ạ?";
             case OUT_OF_SCOPE -> "Mình chỉ hỗ trợ tìm phòng trọ, giải thích thuật ngữ và hướng dẫn sử "
-                    + "dụng website thôi ạ. Về các vấn đề pháp lý hợp đồng thuê nhà, bạn nên tham khảo ý "
-                    + "kiến luật sư hoặc cơ quan có thẩm quyền. Mình có thể giúp bạn tìm phòng không?";
+                    + "dụng website thôi ạ. Mình có thể giúp bạn tìm phòng không?";
             case UNKNOWN -> "Xin lỗi, mình chưa hiểu ý bạn. Bạn thử nói rõ khu vực và khoảng giá muốn "
-                    + "tìm, ví dụ \"tìm phòng trọ Quận 1 dưới 4 triệu\" nhé.";
+                    + "tìm, ví dụ \"tìm phòng trọ Cầu Giấy dưới 4 triệu\" nhé.";
             default -> null; // FIND_ROOM / GLOSSARY / SENSITIVE xử lý riêng
         };
     }

@@ -103,8 +103,6 @@ class FavoriteServiceImplTest {
 
     @Test
     @DisplayName("UT-FAV-04 [BUG-03] Lưu tin KHÔNG công khai (nháp/ẩn/khóa của người khác) → phải bị chặn LISTING_NOT_ACTIVE")
-    @org.junit.jupiter.api.Disabled("BUG-03: FavoriteServiceImpl.addFavorite chỉ kiểm tra tin còn sống, không kiểm tra public "
-            + "(docs/03 mục 4.5.1 yêu cầu 422 LISTING_NOT_ACTIVE). Bỏ @Disabled sau khi fix.")
     void addFavoriteOnNonPublicListingMustBeRejected() {
         when(listingGateway.getBrief(LISTING_ID)).thenReturn(brief(ListingStatus.DRAFT, false));
 

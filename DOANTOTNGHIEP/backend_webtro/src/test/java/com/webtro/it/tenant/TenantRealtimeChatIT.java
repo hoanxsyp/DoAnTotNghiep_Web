@@ -174,8 +174,6 @@ class TenantRealtimeChatIT extends TenantItSupport {
 
     @Test
     @DisplayName("IT-WS-08 [BUG-14] Gửi chuỗi không phải JSON → kết nối KHÔNG bị server đóng")
-    @Disabled("BUG-14: objectMapper.readTree ném lỗi trong handleTextMessage → Spring đóng kết nối 1011 SERVER_ERROR. "
-            + "Bỏ @Disabled sau khi fix.")
     void malformedJsonKeepsConnection() throws Exception {
         Client c = connect(newTenant());
         c.session.sendMessage(new TextMessage("not-json{"));
