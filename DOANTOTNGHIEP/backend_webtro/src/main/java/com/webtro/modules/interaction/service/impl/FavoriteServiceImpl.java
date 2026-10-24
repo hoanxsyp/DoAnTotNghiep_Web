@@ -2,6 +2,7 @@ package com.webtro.modules.interaction.service.impl;
 
 import com.webtro.common.PageResponse;
 import com.webtro.constant.ErrorCode;
+import com.webtro.exception.BusinessRuleException;
 import com.webtro.exception.ConflictException;
 import com.webtro.exception.ResourceNotFoundException;
 import com.webtro.modules.interaction.dto.request.CreateFavoriteRequest;
@@ -44,8 +45,10 @@ public class FavoriteServiceImpl implements FavoriteService {
     @Transactional
     public FavoriteToggleResponse addFavorite(CreateFavoriteRequest request, Long userId) {
         Long listingId = request.getListingId();
-        // Tin phải tồn tại (còn sống). Ném LISTING_NOT_FOUND nếu không có.
-        listingGateway.getBrief(listingId);
+        // Tin phải tồn tại (còn sống) và đang công khai — không cho lưu tin nháp/ẩn/khóa (docs/03 §4.5.1).
+        if (!listingGateway.getBrief(listingId).publiclyVisible()) {
+            throw new BusinessRuleException(ErrorCode.LISTING_NOT_ACTIVE);
+        }
 
         if (favoriteRepository.existsByUserIdAndListingIdAndDeletedAtIsNull(userId, listingId)) {
             throw new ConflictException(ErrorCode.FAVORITE_ALREADY_EXISTS);

@@ -137,6 +137,8 @@ public class UserServiceImpl implements UserService {
                 }
             });
             user.setPhone(normalizedPhone);
+            // Số mới chưa được xác thực → phải nhập OTP lại (docs/03 §4.2.3).
+            user.setPhoneVerifiedAt(null);
             userRepository.save(user);
         }
 

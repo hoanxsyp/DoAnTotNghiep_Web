@@ -66,13 +66,13 @@ public class UserGatewayAdapter implements UserGateway {
         return result;
     }
 
-    /** Chủ trọ có bật chat không; false nếu không có hồ sơ chủ trọ. */
+    /** Người đăng tin có bật chat không; không có hồ sơ chủ trọ (tenant đăng tin ở ghép) thì mặc định bật. */
     @Override
     @Transactional(readOnly = true)
     public boolean isLandlordChatEnabled(Long landlordId) {
         return landlordProfileRepository.findByUser_IdAndDeletedAtIsNull(landlordId)
                 .map(lp -> Boolean.TRUE.equals(lp.getAllowChat()))
-                .orElse(false);
+                .orElse(true);
     }
 
     /** Đang bị hạn chế liên hệ không ({@code users.contact_restricted_until} còn hiệu lực). */
