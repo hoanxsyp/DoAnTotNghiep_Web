@@ -15,6 +15,7 @@ import { logout } from '@/redux/authSlice';
 import NotificationBell from '@/components/common/NotificationBell';
 import MessagesButton from '@/components/common/MessagesButton';
 import ThemeToggle from '@/components/common/ThemeToggle';
+import { PUBLIC_HOME_PATH } from '@/routes/roleNavigation';
 
 const DRAWER_WIDTH = 264;
 
@@ -44,10 +45,22 @@ const DashboardLayout = ({ menu = [], title = 'Bảng điều khiển' }) => {
   const drawerContent = (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Toolbar sx={{ gap: 1 }}>
-        <HomeIcon color="primary" />
-        <Typography variant="h6" color="primary" fontWeight={700}>
-          Webtro
-        </Typography>
+        <Box
+          component={RouterLink}
+          to={PUBLIC_HOME_PATH}
+          aria-label="Webtro — Về trang chủ"
+          onClick={() => setMobileOpen(false)}
+          sx={{
+            display: 'flex', alignItems: 'center', gap: 1,
+            color: 'primary.main', textDecoration: 'none', borderRadius: 1,
+            '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 4 },
+          }}
+        >
+          <HomeIcon />
+          <Typography variant="h6" fontWeight={700}>
+            Webtro
+          </Typography>
+        </Box>
       </Toolbar>
       <Divider />
       <Box sx={{ overflowY: 'auto', flexGrow: 1, py: 1 }}>
@@ -116,8 +129,8 @@ const DashboardLayout = ({ menu = [], title = 'Bảng điều khiển' }) => {
           <Typography variant="h6" sx={{ flexGrow: 1, fontSize: 18 }}>
             {title}
           </Typography>
-          <Tooltip title="Về trang chủ">
-            <IconButton component={RouterLink} to="/">
+          <Tooltip title="Xem website">
+            <IconButton component={RouterLink} to={PUBLIC_HOME_PATH} aria-label="Xem website">
               <HomeIcon />
             </IconButton>
           </Tooltip>

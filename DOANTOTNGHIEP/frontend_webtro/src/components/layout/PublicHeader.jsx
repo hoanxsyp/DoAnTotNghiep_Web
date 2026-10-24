@@ -16,6 +16,7 @@ import { ROLES } from '@/constants';
 import ThemeToggle from '@/components/common/ThemeToggle';
 import NotificationBell from '@/components/common/NotificationBell';
 import MessagesButton from '@/components/common/MessagesButton';
+import { getRoleHome, PUBLIC_HOME_PATH } from '@/routes/roleNavigation';
 
 /** Header công khai: logo, tìm kiếm nhanh, hành động theo trạng thái đăng nhập. */
 const PublicHeader = () => {
@@ -42,7 +43,7 @@ const PublicHeader = () => {
     >
       <Container maxWidth="lg">
         <Toolbar disableGutters sx={{ gap: 1 }}>
-          <Box component={RouterLink} to="/" sx={{ display: 'flex', alignItems: 'center', gap: 1, textDecoration: 'none', color: 'primary.main', mr: 2 }}>
+          <Box component={RouterLink} to={PUBLIC_HOME_PATH} sx={{ display: 'flex', alignItems: 'center', gap: 1, textDecoration: 'none', color: 'primary.main', mr: 2 }}>
             <HomeIcon />
             <Typography variant="h6" fontWeight={800} sx={{ display: { xs: 'none', sm: 'block' } }}>
               Webtro
@@ -95,7 +96,7 @@ const PublicHeader = () => {
                   </MenuItem>
                 )}
                 {isStaff && (
-                  <MenuItem component={RouterLink} to="/admin/dashboard" onClick={() => setAnchorEl(null)}>
+                  <MenuItem component={RouterLink} to={getRoleHome(user?.role)} onClick={() => setAnchorEl(null)}>
                     <ListItemIcon><DashboardIcon fontSize="small" /></ListItemIcon> Trang quản trị
                   </MenuItem>
                 )}

@@ -12,7 +12,8 @@ import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import { login } from '@/redux/authSlice';
 import authApi from '@/api/authApi';
-import { ROLES } from '@/constants';
+import { getLoginDestination } from '@/routes/roleNavigation';
+import { canAccessRoute } from '@/routes/router';
 import { notify } from '@/utils/toast';
 
 const schema = yup.object({
@@ -20,21 +21,10 @@ const schema = yup.object({
   password: yup.string().required('Vui lòng nhập mật khẩu'),
 });
 
-/** Đích đến sau đăng nhập (docs/04 mục 5.1.5): from -> admin -> landlord -> trang chủ. */
-const resolveDestination = (user, from) => {
-  if (from) return from;
-  const role = user?.role ?? null;
-  if (role === ROLES.ADMIN) return '/admin/dashboard';
-  if (role === ROLES.MODERATOR) return '/admin/kiem-duyet';
-  if (role === ROLES.LANDLORD) return '/quan-ly/tong-quan';
-  return '/';
-};
-
 const LoginPage = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const location = useLocation();
-  const from = location.state?.from;
 
   const [showPassword, setShowPassword] = useState(false);
   const [formError, setFormError] = useState(null);
@@ -58,7 +48,7 @@ const LoginPage = () => {
     const result = await dispatch(login(values));
     if (login.fulfilled.match(result)) {
       notify.success('Đăng nhập thành công.');
-      navigate(resolveDestination(result.payload, from), { replace: true });
+      navigate(getLoginDestination(result.payload?.role, location.state, canAccessRoute), { replace: true });
       return;
     }
     const err = result.payload || {};

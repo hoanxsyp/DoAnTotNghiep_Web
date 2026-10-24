@@ -25,7 +25,7 @@ const RoleRoute = ({ roles = [], children }) => {
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/dang-nhap" state={{ from: location }} replace />;
+    return <Navigate to="/dang-nhap" state={{ from: location, allowedRoles: roles }} replace />;
   }
 
   const allowed = roles.includes(userRole);
