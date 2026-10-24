@@ -26,6 +26,10 @@ Các vai trò đăng nhập kiểm tra nhóm này trong phạm vi quyền của 
 | Chức năng cần kiểm tra | Trạng thái |
 |---|:---:|
 | Đăng nhập đúng vai trò, hiển thị đúng menu và trang đích | Chưa check |
+| Khi truy cập `/` (localhost), mở tab mới hoặc tải lại trang: kiểm tra phiên đăng nhập còn hợp lệ và tự điều hướng theo role — ADMIN → `/admin/dashboard`, MODERATOR → `/admin/kiem-duyet`, LANDLORD → `/quan-ly/tong-quan`, TENANT/khách → trang tìm phòng `/` | Chưa check |
+| Chờ khôi phục/xác thực phiên trước khi điều hướng; không dựa riêng vào role lưu cũ, không chuyển nhầm trang hoặc lặp điều hướng khi token hết hạn, bị thu hồi hay role đã thay đổi | Chưa check |
+| Mở link cụ thể thì giữ đúng trang được phép; sau đăng nhập quay lại trang yêu cầu nếu đúng role, nếu không về trang mặc định theo role | Chưa check |
+| Từ dashboard chọn “Xem website” mở `/trang-chu`, tải lại vẫn xem được trang công khai; menu “Trang quản trị” đưa Admin/Moderator về đúng trang của mình | Chưa check |
 | Xem, chỉnh sửa hồ sơ và thay/xóa ảnh đại diện | Chưa check |
 | Cập nhật thông tin liên hệ và xác thực số điện thoại theo cơ chế hiện có | Chưa check |
 | Đổi mật khẩu | Chưa check |

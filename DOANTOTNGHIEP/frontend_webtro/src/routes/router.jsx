@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { lazy, Suspense } from 'react';
-import { createBrowserRouter } from 'react-router-dom';
+import { createBrowserRouter, matchRoutes } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 
 import PublicLayout from '@/layouts/PublicLayout';
@@ -9,6 +9,8 @@ import DashboardLayout from '@/layouts/DashboardLayout';
 
 import ProtectedRoute from '@/routes/ProtectedRoute';
 import RoleRoute from '@/routes/RoleRoute';
+import RoleHomeRoute from '@/routes/RoleHomeRoute';
+import { PUBLIC_HOME_PATH } from '@/routes/roleNavigation';
 
 import PageLoader from '@/components/common/PageLoader';
 import { ROLES } from '@/constants';
@@ -159,7 +161,8 @@ const router = createBrowserRouter([
   {
     element: <PublicLayout />,
     children: [
-      { path: '/', element: load(HomePage) },
+      { path: '/', element: <RoleHomeRoute>{load(HomePage)}</RoleHomeRoute> },
+      { path: PUBLIC_HOME_PATH, element: load(HomePage) },
       { path: '/tim-kiem', element: load(SearchPage) },
       { path: '/tin/:slugId', element: load(ListingDetailPage) },
       { path: '/chu-tro/:id', element: load(LandlordProfilePage) },
@@ -259,5 +262,14 @@ const router = createBrowserRouter([
   { path: '/403', element: load(ForbiddenPage) },
   { path: '*', element: load(NotFoundPage) },
 ]);
+
+// Kiểm cả guard cha và guard của trang con trước khi quay lại sau đăng nhập.
+export const canAccessRoute = (pathname, role) => {
+  const matches = matchRoutes(router.routes, pathname);
+  return Boolean(matches) && matches.every(({ route }) => {
+    const roles = route.element?.props?.roles;
+    return !roles || roles.includes(role);
+  });
+};
 
 export default router;
