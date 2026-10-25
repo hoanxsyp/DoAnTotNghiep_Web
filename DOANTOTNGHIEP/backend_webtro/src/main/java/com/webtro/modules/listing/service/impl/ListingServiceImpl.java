@@ -1,6 +1,7 @@
 package com.webtro.modules.listing.service.impl;
 
 import com.webtro.common.PageResponse;
+import com.webtro.common.event.ListingViewedEvent;
 import com.webtro.common.event.ListingWithdrawnEvent;
 import com.webtro.common.enums.CategoryCode;
 import com.webtro.common.enums.ListingStatus;
@@ -693,6 +694,9 @@ public class ListingServiceImpl implements ListingService {
 
         if (countView && visibilityService.publiclyVisible(listing)) {
             maybeCountView(listing, viewerId, clientIp);
+            if (!owner) {
+                eventPublisher.publishEvent(new ListingViewedEvent(listing.getId(), viewerId, clientIp));
+            }
         }
 
         boolean authenticated = viewerId != null;

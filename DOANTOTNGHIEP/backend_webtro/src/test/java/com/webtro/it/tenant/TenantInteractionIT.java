@@ -1,7 +1,6 @@
 package com.webtro.it.tenant;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
@@ -262,8 +261,6 @@ class TenantInteractionIT extends TenantItSupport {
 
     @Test
     @DisplayName("IT-HIS-01 [BUG-05] Tenant xem chi tiết tin → tin phải xuất hiện trong 'Lịch sử xem'")
-    @Disabled("BUG-05: HistoryService.recordView() không được gọi ở đâu (GET /api/listings/{id} chỉ tăng view_count) → "
-            + "lịch sử xem luôn rỗng, tín hiệu gợi ý & thống kê lượt xem duy nhất cũng mất. Bỏ @Disabled sau khi fix.")
     void viewDetailIsRecordedInHistory() throws Exception {
         Actor landlord = newLandlord();
         Actor tenant = newTenant();

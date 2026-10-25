@@ -1,7 +1,6 @@
 package com.webtro.it.tenant;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
@@ -75,8 +74,6 @@ class TenantAuthIT extends TenantItSupport {
 
     @Test
     @DisplayName("IT-AUTH-04 Số lần nhập sai OTP phải được LƯU vào DB (verifications.attempt_count)")
-    @Disabled("BUG-02: AuthServiceImpl tăng attemptCount rồi ném BusinessException trong @Transactional → rollback, "
-            + "attempt_count luôn = 0, giới hạn 5 lần sai OTP không có hiệu lực. Bỏ @Disabled sau khi fix.")
     void wrongOtpAttemptsArePersisted() throws Exception {
         String email = "otp." + uniq() + "@it.local";
         assertStatus(register("TENANT", email, randomPhone(), randomIp()), 201);

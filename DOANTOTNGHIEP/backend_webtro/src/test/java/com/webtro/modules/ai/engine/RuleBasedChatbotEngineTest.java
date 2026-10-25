@@ -4,7 +4,6 @@ import com.webtro.common.enums.CategoryCode;
 import com.webtro.common.enums.ChatbotIntent;
 import com.webtro.modules.ai.engine.ChatbotEngine.ChatSlots;
 import com.webtro.modules.ai.engine.ChatbotEngine.ChatbotResult;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -81,8 +80,6 @@ class RuleBasedChatbotEngineTest {
     }
 
     @ParameterizedTest(name = "UT-BOT-07 [BUG-19] \"{0}\" → khu vực phải là \"{1}\"")
-    @Disabled("BUG-19: regex LOCATION không có ranh giới từ và lấy group(0) → 'phòng trọ ở Cầu Giấy' ra 'o o cau'. "
-            + "Bỏ @Disabled sau khi fix.")
     @CsvSource({
             "tìm phòng trọ ở Cầu Giấy dưới 3 triệu, cau giay",
             "phòng ở Đống Đa, dong da",

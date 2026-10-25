@@ -7,6 +7,7 @@ import { unwrap } from './apiHelper';
 const userApi = {
   getMe: () => unwrap(axiosClient.get('/users/me')),
   updateMe: (payload) => unwrap(axiosClient.put('/users/me', payload)),
+  updateContact: (payload) => unwrap(axiosClient.patch('/users/me/contact', payload)),
   getPublicProfile: (id) => unwrap(axiosClient.get(`/users/${id}`)),
   getPublicListings: (id, params) => unwrap(axiosClient.get(`/users/${id}/listings`, { params })),
   /** Đánh giá về chủ trọ (mọi phòng của chủ trọ), mỗi đánh giá kèm tên phòng. */
