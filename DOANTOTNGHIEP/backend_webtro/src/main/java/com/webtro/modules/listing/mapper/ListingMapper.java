@@ -277,17 +277,27 @@ public class ListingMapper {
     //  Helper
     // ==================================================================
 
-    /** Tên liên hệ ưu tiên hồ sơ chủ trọ (tin đăng không lưu contactName riêng). */
+    /**
+     * Tên liên hệ ưu tiên hồ sơ chủ trọ (tin đăng không lưu contactName riêng); người đăng không có
+     * hồ sơ chủ trọ (tenant đăng tin ở ghép) hoặc hồ sơ để trống thì lấy họ tên tài khoản.
+     */
     private String contactName(Listing l) {
         return landlordProfileRepository.findByUser_IdAndDeletedAtIsNull(l.getOwnerId())
                 .map(LandlordProfile::getContactName)
-                .orElse(null);
+                .filter(s -> !s.isBlank())
+                .orElseGet(() -> userRepository.findByIdAndDeletedAtIsNull(l.getOwnerId())
+                        .map(User::getFullName)
+                        .orElse(null));
     }
 
+    /** SĐT liên hệ: hồ sơ chủ trọ trước, không có thì SĐT tài khoản (bắt buộc khi đăng ký). */
     private String contactPhone(Listing l) {
         return landlordProfileRepository.findByUser_IdAndDeletedAtIsNull(l.getOwnerId())
                 .map(LandlordProfile::getContactPhone)
-                .orElse(null);
+                .filter(s -> !s.isBlank())
+                .orElseGet(() -> userRepository.findByIdAndDeletedAtIsNull(l.getOwnerId())
+                        .map(User::getPhone)
+                        .orElse(null));
     }
 
     private String primaryThumbnail(Long listingId) {

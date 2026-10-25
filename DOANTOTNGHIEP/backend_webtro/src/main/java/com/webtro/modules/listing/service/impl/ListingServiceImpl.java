@@ -606,13 +606,16 @@ public class ListingServiceImpl implements ListingService {
 
         int displayDays = config.getInt(ConfigKey.LISTING_DISPLAY_DAYS);
         int freeLimit = config.getInt(ConfigKey.LISTING_RENEW_FREE_PER_MONTH);
-        LandlordProfile profile = landlordProfileRepository.findByUser_IdAndDeletedAtIsNull(userId)
-                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.LANDLORD_PROFILE_NOT_FOUND));
-        resetFreeRenewIfNewMonth(profile);
-        int freeUsed = nz(profile.getFreeRenewUsedThisMonth());
+        // Tenant (tin ở ghép) không có hồ sơ chủ trọ → không tính lượt, luôn gia hạn miễn phí
+        LandlordProfile profile = landlordProfileRepository.findByUser_IdAndDeletedAtIsNull(userId).orElse(null);
+        int freeUsed = 0;
+        if (profile != null) {
+            resetFreeRenewIfNewMonth(profile);
+            freeUsed = nz(profile.getFreeRenewUsedThisMonth());
+        }
 
         // ----- Chọn gói trả phí → tạo giao dịch (kích hoạt ở callback), không gia hạn ngay -----
-        if (req.getPackageId() != null) {
+        if (profile != null && req.getPackageId() != null) {
             PromotionPackage pkg = promotionPackageRepository.findByIdAndDeletedAtIsNull(req.getPackageId())
                     .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.PACKAGE_NOT_FOUND));
             if (!Boolean.TRUE.equals(pkg.getIsActive())) {
@@ -622,7 +625,7 @@ public class ListingServiceImpl implements ListingService {
         }
 
         // ----- Hết lượt miễn phí → hướng sang thanh toán (200, không phải lỗi) -----
-        if (freeUsed >= freeLimit) {
+        if (profile != null && freeUsed >= freeLimit) {
             return paymentRequiredResponse(listing, freeUsed, freeLimit,
                     promotionPackageRepository.findByIsActiveTrueAndDeletedAtIsNullOrderByDisplayOrderAsc());
         }
@@ -643,11 +646,7 @@ public class ListingServiceImpl implements ListingService {
         categoryCountPublisher.publishIfChanged(categoryCountBefore, listing);
         ownerStatsPublisher.publishIfChanged(ownerStatsBefore, listing);
 
-        profile.setFreeRenewUsedThisMonth(freeUsed + 1);
-        landlordProfileRepository.save(profile);
-
-        int used = freeUsed + 1;
-        return RenewResponse.builder()
+        RenewResponse.RenewResponseBuilder response = RenewResponse.builder()
                 .id(listing.getId())
                 .status(target.name())
                 .previousStatus(before.name())
@@ -655,10 +654,19 @@ public class ListingServiceImpl implements ListingService {
                 .expiredAt(listing.getExpiredAt())
                 .displayDays(displayDays)
                 .free(true)
+                .paymentRequired(false);
+        if (profile == null) {
+            return response.build(); // không giới hạn lượt → bỏ trống các trường freeRenew*
+        }
+
+        profile.setFreeRenewUsedThisMonth(freeUsed + 1);
+        landlordProfileRepository.save(profile);
+
+        int used = freeUsed + 1;
+        return response
                 .freeRenewUsed(used)
                 .freeRenewLimit(freeLimit)
                 .freeRenewRemaining(Math.max(0, freeLimit - used))
-                .paymentRequired(false)
                 .build();
     }
 

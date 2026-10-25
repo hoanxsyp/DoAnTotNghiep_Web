@@ -93,8 +93,6 @@ class TenantInteractionIT extends TenantItSupport {
 
     @Test
     @DisplayName("IT-FOL-03 [BUG-06] Link của thông báo 'chủ trọ theo dõi có tin mới' phải mở được trang chi tiết (/tin/...)")
-    @Disabled("BUG-06: FollowListener đặt link '/listings/{id}', frontend chỉ có route '/tin/:slugId' → bấm thông báo ra 404. "
-            + "Bỏ @Disabled sau khi fix.")
     void followerNotificationLinkOpensListing() throws Exception {
         Actor landlord = newLandlord();
         Actor tenant = newTenant();

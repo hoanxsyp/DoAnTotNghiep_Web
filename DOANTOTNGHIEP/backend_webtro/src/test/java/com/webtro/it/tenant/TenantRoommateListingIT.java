@@ -145,7 +145,6 @@ class TenantRoommateListingIT extends TenantItSupport {
 
     @Test
     @DisplayName("IT-RM-08 [BUG-01] Tenant gia hạn miễn phí tin ở ghép đang ACTIVE → phải 200 free=true")
-    @Disabled("BUG-01: trả 404 LANDLORD_PROFILE_NOT_FOUND vì renew() đòi hồ sơ chủ trọ. Bỏ @Disabled sau khi fix.")
     void tenantRenewRoommate() throws Exception {
         Actor tenant = newTenant();
         long id = createActiveListing(tenant, "ROOMMATE");
@@ -156,8 +155,6 @@ class TenantRoommateListingIT extends TenantItSupport {
 
     @Test
     @DisplayName("IT-RM-09 [BUG-08] Tin ở ghép do tenant đăng phải hiển thị SĐT liên hệ (form bắt buộc nhập contactPhone)")
-    @Disabled("BUG-08: contactName/contactPhone trong request bị bỏ, mapper chỉ lấy từ hồ sơ chủ trọ → tin ở ghép của "
-            + "tenant có contactPhone = null. Bỏ @Disabled sau khi fix.")
     void roommateListingShowsContactPhone() throws Exception {
         Actor poster = newTenant();
         Actor viewer = newTenant();

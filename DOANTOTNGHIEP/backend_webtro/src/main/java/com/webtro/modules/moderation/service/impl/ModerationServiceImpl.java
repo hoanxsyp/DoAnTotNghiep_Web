@@ -909,7 +909,7 @@ public class ModerationServiceImpl implements ModerationService {
         boolean accountLockSuggested = locked60 >= systemConfig.getInt(ConfigKey.MOD_THRESHOLD_LOCKED_LISTING_COUNT);
 
         notificationService.notifyUser(request.getUserId(), NotificationType.VIOLATION_WARNING,
-                "Bạn nhận được một cảnh báo vi phạm", message, "/tai-khoan/canh-bao", null);
+                "Bạn nhận được một cảnh báo vi phạm", message, "/tai-khoan/thong-bao", null);
 
         String issuerName = userGateway.findRef(issuerId).map(UserModerationGateway.UserRef::fullName).orElse(null);
         return WarningResponse.builder()
@@ -1032,7 +1032,7 @@ public class ModerationServiceImpl implements ModerationService {
                             .previousStatus(prev == null ? null : prev.name())
                             .newStatus(ListingStatus.LOCKED.name()).severity(severity.name()).build();
                     notificationService.notifyUser(ownerId, NotificationType.LISTING_LOCKED,
-                            "Tin đăng của bạn đã bị khóa", actionReason, "/quan-ly/tin-dang/" + targetId, null);
+                            "Tin đăng của bạn đã bị khóa", actionReason, "/quan-ly/tin-dang?status=LOCKED", null);
                 } else {
                     // Không thể khóa bình luận/đánh giá/tài khoản trực tiếp: ẩn nội dung (nếu có) và
                     // đề xuất khóa tài khoản cho Admin (không tự khóa — canonical §10).
@@ -1056,7 +1056,7 @@ public class ModerationServiceImpl implements ModerationService {
             warningIssued = true;
             warningId = w.getId();
             notificationService.notifyUser(ownerId, NotificationType.VIOLATION_WARNING,
-                    "Bạn nhận được một cảnh báo vi phạm", warningMessage, "/tai-khoan/canh-bao", null);
+                    "Bạn nhận được một cảnh báo vi phạm", warningMessage, "/tai-khoan/thong-bao", null);
         }
         return new TargetOutcome(targetAction, action.getId(), warningIssued, warningId);
     }
