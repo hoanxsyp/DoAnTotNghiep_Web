@@ -10,40 +10,11 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import SendIcon from '@mui/icons-material/Send';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
+import { useSelector } from 'react-redux';
 import chatbotApi from '@/api/chatbotApi';
+import { selectCurrentUser } from '@/redux/authSlice';
+import { getChatSessionId } from '@/utils/chatSession';
 import { formatPrice } from '@/utils/format';
-
-const SESSION_KEY = 'webtro.chatbot.sessionId';
-
-/** UUID v4 — crypto.randomUUID chỉ có trên HTTPS/localhost, nên có phương án dự phòng. */
-const newUuid = () => {
-  if (window.crypto?.randomUUID) return window.crypto.randomUUID();
-  const b = window.crypto?.getRandomValues ? window.crypto.getRandomValues(new Uint8Array(16))
-    : Uint8Array.from({ length: 16 }, () => Math.floor(Math.random() * 256));
-  b[6] = (b[6] & 0x0f) | 0x40;
-  b[8] = (b[8] & 0x3f) | 0x80;
-  const h = [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
-  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
-};
-
-/**
- * Định danh phiên chat của khách — backend BẮT BUỘC khi chưa đăng nhập (thiếu thì mọi tin
- * nhắn của khách bị từ chối). Giữ qua các lần tải trang; storage bị chặn thì dùng tạm trong bộ nhớ.
- */
-let memorySessionId = null;
-const getChatSessionId = () => {
-  try {
-    let id = window.localStorage.getItem(SESSION_KEY);
-    if (!id) {
-      id = newUuid();
-      window.localStorage.setItem(SESSION_KEY, id);
-    }
-    return id;
-  } catch {
-    memorySessionId = memorySessionId || newUuid();
-    return memorySessionId;
-  }
-};
 
 /**
  * Widget chatbot nổi ở góc phải [§9.3]. Gửi câu hỏi tự nhiên, nhận trả lời + danh sách tin gợi ý
@@ -70,9 +41,12 @@ const ChatbotWidget = () => {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [conversationId, setConversationId] = useState(null);
-  // Bấm "Bắt đầu lại" → tin kế tiếp gửi resetContext để backend (và AI) bỏ điều kiện cũ.
-  const [pendingReset, setPendingReset] = useState(false);
+  // Khung chat trống thì bot cũng bắt đầu lại: tin đầu tiên (sau khi mở trang / "Bắt đầu lại")
+  // gửi resetContext để backend (và AI) bỏ điều kiện cũ của phiên.
+  const [pendingReset, setPendingReset] = useState(true);
   const endRef = useRef(null);
+  const userId = useSelector(selectCurrentUser)?.id ?? null;
+  const prevUserId = useRef(userId);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -83,6 +57,17 @@ const ChatbotWidget = () => {
     setInput('');
     setPendingReset(true);
   };
+
+  // Đăng xuất / đổi tài khoản → xóa hội thoại đang hiện. Khách vừa đăng nhập thì giữ nguyên để
+  // chat tiếp (backend gắn phiên vào tài khoản).
+  useEffect(() => {
+    if (prevUserId.current !== null && prevUserId.current !== userId) {
+      restart();
+      setConversationId(null);
+    }
+    prevUserId.current = userId;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
 
   const openSearch = (url) => {
     setOpen(false);

@@ -1,6 +1,7 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import authApi from '@/api/authApi';
 import tokenService from '@/services/tokenService';
+import { clearChatSession } from '@/utils/chatSession';
 
 /**
  * State xác thực toàn cục. Chỉ giữ thông tin cần nhiều trang (canonical luật F4). Token KHÔNG nằm
@@ -49,6 +50,7 @@ export const logout = createAsyncThunk('auth/logout', async () => {
     await authApi.logout({ refreshToken: tokenService.getRefresh() });
   } finally {
     tokenService.clear();
+    clearChatSession(); // người dùng sau trên cùng trình duyệt có phiên chatbot riêng
   }
 });
 
@@ -70,6 +72,7 @@ const authSlice = createSlice({
       state.isAuthenticated = false;
       state.bootstrapped = true;
       tokenService.clear();
+      clearChatSession();
     },
     setUser(state, action) {
       state.user = action.payload;
