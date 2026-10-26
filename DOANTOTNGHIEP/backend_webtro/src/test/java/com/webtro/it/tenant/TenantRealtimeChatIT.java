@@ -2,7 +2,6 @@ package com.webtro.it.tenant;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -217,8 +216,6 @@ class TenantRealtimeChatIT extends TenantItSupport {
 
     @Test
     @DisplayName("IT-WS-11 [BUG-13] Admin khóa tenant → kết nối WebSocket đang mở phải bị đóng/ngừng nhận tin")
-    @Disabled("BUG-13: token chỉ được kiểm lúc bắt tay; khóa tài khoản (hoặc đăng xuất ở thiết bị khác) không đóng "
-            + "kết nối đang mở → vẫn nhận tin nhắn riêng vô thời hạn. Bỏ @Disabled sau khi fix.")
     void lockedTenantSocketStopsReceiving() throws Exception {
         Actor landlord = newLandlord();
         Actor tenant = newTenant();

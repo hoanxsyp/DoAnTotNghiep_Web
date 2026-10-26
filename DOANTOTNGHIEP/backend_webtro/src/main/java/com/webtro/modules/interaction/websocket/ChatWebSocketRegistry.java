@@ -6,10 +6,13 @@ import com.webtro.modules.interaction.dto.response.MessageResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -68,6 +71,31 @@ public class ChatWebSocketRegistry implements ChatRealtimePublisher {
         if (userId != null) {
             removeFromIndex(sessionsByUser, userId, session);
         }
+    }
+
+    /**
+     * Đóng mọi kết nối đang mở của một người dùng (tài khoản bị khóa / bị thu hồi phiên).
+     * Gỡ khỏi sổ trước khi đóng để không còn gói tin nào lọt tới kết nối đó.
+     *
+     * @return số kết nối đã đóng
+     */
+    public int closeUserSessions(Long userId, CloseStatus status) {
+        Set<WebSocketSession> sessions = sessionsByUser.get(userId);
+        if (sessions == null || sessions.isEmpty()) {
+            return 0;
+        }
+        List<WebSocketSession> snapshot = new ArrayList<>(sessions);
+        for (WebSocketSession session : snapshot) {
+            remove(session);
+            try {
+                synchronized (session) {
+                    session.close(status);
+                }
+            } catch (IOException | IllegalStateException ex) {
+                log.warn("Khong dong duoc WebSocket chat session={}: {}", session.getId(), ex.getMessage());
+            }
+        }
+        return snapshot.size();
     }
 
     @Override
