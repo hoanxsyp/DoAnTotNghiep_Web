@@ -26,6 +26,8 @@ public class LandlordSummaryResponse {
     private BigDecimal averageRating;
     private Integer totalActiveListings;
     private Boolean chatEnabled;
+    /** Người đăng có nhận yêu cầu thuê không (false khi tenant đăng tin ở ghép). */
+    private Boolean rentalRequestEnabled;
     private Instant memberSince;
     private Boolean followedByMe;
 }

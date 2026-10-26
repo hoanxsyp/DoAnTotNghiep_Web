@@ -13,6 +13,7 @@ import com.webtro.modules.interaction.mapper.FavoriteMapper;
 import com.webtro.modules.interaction.repository.FavoriteRepository;
 import com.webtro.modules.interaction.service.FavoriteService;
 import com.webtro.modules.interaction.spi.ListingGateway;
+import com.webtro.modules.interaction.spi.UserGateway;
 import com.webtro.util.HtmlSanitizer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,8 +22,10 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Hiện thực nghiệp vụ lưu tin (FAV) — canonical 4.5.1–4.5.3.
@@ -40,6 +43,7 @@ public class FavoriteServiceImpl implements FavoriteService {
     private final FavoriteRepository favoriteRepository;
     private final ListingGateway listingGateway;
     private final FavoriteMapper favoriteMapper;
+    private final UserGateway userGateway;
 
     @Override
     @Transactional
@@ -81,7 +85,17 @@ public class FavoriteServiceImpl implements FavoriteService {
         Page<Favorite> page = favoriteRepository.findByUserIdAndDeletedAtIsNull(userId, pageable);
         List<Long> listingIds = page.getContent().stream().map(Favorite::getListingId).toList();
         Map<Long, ListingGateway.ListingBrief> briefs = listingGateway.getBriefs(listingIds);
-        return PageResponse.from(page, f -> favoriteMapper.toResponse(f, briefs.get(f.getListingId())));
+        // Người đăng không có hồ sơ chủ trọ (tenant đăng tin ở ghép) thì không nhận yêu cầu thuê (BUG-10).
+        Map<Long, Boolean> rentalEnabledByOwner = new HashMap<>();
+        briefs.values().stream().map(ListingGateway.ListingBrief::ownerId).filter(Objects::nonNull).distinct()
+                .forEach(ownerId -> rentalEnabledByOwner.put(ownerId, userGateway.hasLandlordProfile(ownerId)));
+        return PageResponse.from(page, f -> {
+            ListingGateway.ListingBrief brief = briefs.get(f.getListingId());
+            FavoriteResponse response = favoriteMapper.toResponse(f, brief);
+            response.setRentalRequestEnabled(brief != null
+                    && rentalEnabledByOwner.getOrDefault(brief.ownerId(), false));
+            return response;
+        });
     }
 
     /** Đồng bộ {@code listings.favorite_count} theo số đếm chính xác; trả về số mới. */

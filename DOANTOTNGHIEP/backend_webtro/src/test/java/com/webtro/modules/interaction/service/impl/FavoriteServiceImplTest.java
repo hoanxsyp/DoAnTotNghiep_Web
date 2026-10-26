@@ -10,6 +10,7 @@ import com.webtro.modules.interaction.entity.Favorite;
 import com.webtro.modules.interaction.mapper.FavoriteMapper;
 import com.webtro.modules.interaction.repository.FavoriteRepository;
 import com.webtro.modules.interaction.spi.ListingGateway;
+import com.webtro.modules.interaction.spi.UserGateway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -49,12 +50,14 @@ class FavoriteServiceImplTest {
     private FavoriteRepository favoriteRepository;
     @Mock
     private ListingGateway listingGateway;
+    @Mock
+    private UserGateway userGateway;
 
     private FavoriteServiceImpl service;
 
     @BeforeEach
     void setUp() {
-        service = new FavoriteServiceImpl(favoriteRepository, listingGateway, new FavoriteMapper());
+        service = new FavoriteServiceImpl(favoriteRepository, listingGateway, new FavoriteMapper(), userGateway);
         when(favoriteRepository.save(any(Favorite.class))).thenAnswer(inv -> {
             Favorite f = inv.getArgument(0);
             f.setId(1L);

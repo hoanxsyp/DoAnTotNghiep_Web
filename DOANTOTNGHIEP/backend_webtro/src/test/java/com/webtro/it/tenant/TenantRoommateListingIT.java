@@ -1,7 +1,6 @@
 package com.webtro.it.tenant;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
@@ -176,20 +175,32 @@ class TenantRoommateListingIT extends TenantItSupport {
     }
 
     @Test
-    @DisplayName("IT-RM-11 [BUG-10] Yêu cầu thuê vào tin ở ghép của tenant không được 'treo' (người đăng không có màn hình xử lý)")
-    @Disabled("BUG-10 (cần chốt nghiệp vụ): tenant B gửi được yêu cầu thuê (201) vào tin ở ghép của tenant A, nhưng A là "
-            + "TENANT nên /api/landlord/rental-requests trả 403 → yêu cầu PENDING mãi. Hoặc chặn tạo, hoặc cho người đăng xử lý.")
-    void rentalRequestOnRoommateIsNotStuck() throws Exception {
+    @DisplayName("IT-RM-11 [BUG-10] Tin ở ghép của tenant không nhận yêu cầu thuê → 422, chi tiết tin báo rentalRequestEnabled=false")
+    void rentalRequestOnRoommateIsRejected() throws Exception {
         Actor poster = newTenant();
         Actor seeker = newTenant();
         long id = createActiveListing(poster, "ROOMMATE");
 
-        var created = raw(HttpMethod.POST, "/api/rental-requests", seeker, Map.of("listingId", id, "desiredViewingDate", today(2)));
-        if (created.getResponse().getStatus() == 201) {
-            call(HttpMethod.GET, "/api/landlord/rental-requests", poster, null, 200);
-        } else {
-            assertTrue(created.getResponse().getStatus() >= 400 && created.getResponse().getStatus() < 500);
-        }
+        JsonNode detail = call(HttpMethod.GET, "/api/listings/" + id, seeker, null, 200);
+        assertFalse(detail.at("/data/landlord/rentalRequestEnabled").asBoolean(true), () -> "Phải tắt thuê phòng: " + detail);
+
+        JsonNode res = call(HttpMethod.POST, "/api/rental-requests", seeker,
+                Map.of("listingId", id, "desiredViewingDate", today(2)), 422);
+        assertEquals("RENTAL_NOT_SUPPORTED_FOR_ROOMMATE", errorCode(res));
+    }
+
+    @Test
+    @DisplayName("IT-RM-12 [BUG-10] Tin ở ghép do chủ trọ đăng vẫn nhận yêu cầu thuê")
+    void rentalRequestOnLandlordRoommateIsAllowed() throws Exception {
+        Actor landlord = newLandlord();
+        Actor seeker = newTenant();
+        long id = createActiveListing(landlord, "ROOMMATE");
+
+        JsonNode detail = call(HttpMethod.GET, "/api/listings/" + id, seeker, null, 200);
+        assertTrue(detail.at("/data/landlord/rentalRequestEnabled").asBoolean(false), () -> "Phải bật thuê phòng: " + detail);
+
+        call(HttpMethod.POST, "/api/rental-requests", seeker,
+                Map.of("listingId", id, "desiredViewingDate", today(2)), 201);
     }
 
     private java.util.List<String> notificationTypesRaw(Actor a) throws Exception {

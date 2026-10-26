@@ -268,6 +268,7 @@ public class ListingMapper {
                 .averageRating(profile == null ? BigDecimal.ZERO : profile.getAverageRating())
                 .totalActiveListings(profile == null ? 0 : profile.getTotalActiveListings())
                 .chatEnabled(profile == null || Boolean.TRUE.equals(profile.getAllowChat()))
+                .rentalRequestEnabled(profile != null)
                 .memberSince(user == null ? null : user.getCreatedAt())
                 .followedByMe(false)
                 .build();
