@@ -1,7 +1,6 @@
 package com.webtro.it.tenant;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
@@ -93,8 +92,6 @@ class TenantInteractionIT extends TenantItSupport {
 
     @Test
     @DisplayName("IT-FOL-03 [BUG-06] Link của thông báo 'chủ trọ theo dõi có tin mới' phải mở được trang chi tiết (/tin/...)")
-    @Disabled("BUG-06: FollowListener đặt link '/listings/{id}', frontend chỉ có route '/tin/:slugId' → bấm thông báo ra 404. "
-            + "Bỏ @Disabled sau khi fix.")
     void followerNotificationLinkOpensListing() throws Exception {
         Actor landlord = newLandlord();
         Actor tenant = newTenant();
@@ -264,8 +261,6 @@ class TenantInteractionIT extends TenantItSupport {
 
     @Test
     @DisplayName("IT-HIS-01 [BUG-05] Tenant xem chi tiết tin → tin phải xuất hiện trong 'Lịch sử xem'")
-    @Disabled("BUG-05: HistoryService.recordView() không được gọi ở đâu (GET /api/listings/{id} chỉ tăng view_count) → "
-            + "lịch sử xem luôn rỗng, tín hiệu gợi ý & thống kê lượt xem duy nhất cũng mất. Bỏ @Disabled sau khi fix.")
     void viewDetailIsRecordedInHistory() throws Exception {
         Actor landlord = newLandlord();
         Actor tenant = newTenant();

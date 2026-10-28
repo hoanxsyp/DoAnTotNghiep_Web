@@ -86,6 +86,7 @@ class RentalRequestServiceImplTenantTest {
         when(userGateway.getBrief(TENANT_ID)).thenReturn(
                 new UserGateway.UserBrief(TENANT_ID, "Người thuê A", null, "0912345678", null));
         when(listingGateway.getUnitBriefs(anyCollection())).thenReturn(Map.of());
+        when(userGateway.hasLandlordProfile(OWNER_ID)).thenReturn(true);
         when(repository.saveAndFlush(any(RentalRequest.class))).thenAnswer(inv -> {
             RentalRequest r = inv.getArgument(0);
             if (r.getId() == null) {
@@ -152,6 +153,20 @@ class RentalRequestServiceImplTenantTest {
 
         assertEquals(ErrorCode.RENTAL_LISTING_UNAVAILABLE, ex.getErrorCode());
         verify(repository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    @DisplayName("UT-RR-04b Tin ở ghép do tenant đăng (không có hồ sơ chủ trọ) → RENTAL_NOT_SUPPORTED_FOR_ROOMMATE")
+    void createOnTenantRoommateListingIsRejected() {
+        stubListingOwnedBy(OTHER_TENANT_ID, ListingStatus.ACTIVE, true);
+        when(userGateway.hasLandlordProfile(OTHER_TENANT_ID)).thenReturn(false);
+
+        BusinessException ex = assertThrows(BusinessRuleException.class,
+                () -> service.create(createRequest(today().plusDays(1)), TENANT_ID));
+
+        assertEquals(ErrorCode.RENTAL_NOT_SUPPORTED_FOR_ROOMMATE, ex.getErrorCode());
+        verify(repository, never()).saveAndFlush(any());
+        verify(notificationService, never()).notifyUser(any(), any(), anyString(), anyString(), any(), any());
     }
 
     @Test

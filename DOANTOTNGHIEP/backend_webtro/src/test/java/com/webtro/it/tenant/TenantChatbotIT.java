@@ -1,7 +1,6 @@
 package com.webtro.it.tenant;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
@@ -113,8 +112,6 @@ class TenantChatbotIT extends TenantItSupport {
 
     @Test
     @DisplayName("IT-BOT-08 [BUG-18] Trình duyệt dùng chung: A dùng chatbot rồi đăng xuất → khách/B dùng chatbot phải được (không 403)")
-    @Disabled("BUG-18: widget gửi CÙNG sessionId (localStorage) cho mọi tài khoản; phiên tạo khi A đăng nhập thuộc A nên "
-            + "khách/B sau đó luôn nhận 403 → widget báo 'đang gặp sự cố' vĩnh viễn trên trình duyệt đó. Bỏ @Disabled sau khi fix.")
     void sharedBrowserSession() throws Exception {
         String browserSession = UUID.randomUUID().toString();
         Actor a = newTenant();
@@ -127,8 +124,6 @@ class TenantChatbotIT extends TenantItSupport {
 
     @Test
     @DisplayName("IT-BOT-09 [BUG-18b] Khách chat rồi đăng nhập (cùng sessionId) → phiên phải vào lịch sử tài khoản và đọc lại được")
-    @Disabled("BUG-18: phiên tạo khi là khách (user_id NULL) không được gắn vào tài khoản sau đăng nhập; vẫn chat tiếp được "
-            + "nhưng không hiện trong /conversations và đọc lịch sử → 403. Bỏ @Disabled sau khi fix.")
     void guestConversationAttachedAfterLogin() throws Exception {
         String browserSession = UUID.randomUUID().toString();
         long conv = ask(null, "xin chào", null, browserSession, 200).at("/data/conversationId").asLong();

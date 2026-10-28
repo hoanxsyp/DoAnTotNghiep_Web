@@ -52,7 +52,8 @@ public class FollowListener {
                 .orElse("Chủ trọ");
         String title = "Chủ trọ bạn theo dõi có tin mới";
         String content = landlordName + " vừa đăng một tin cho thuê mới.";
-        String actionUrl = "/listings/" + event.listingId();
+        // Route frontend /tin/:slugId lấy id ở phần sau dấu '-' cuối nên chỉ cần id là mở được tin.
+        String actionUrl = "/tin/" + event.listingId();
 
         for (Follow follow : followers) {
             if (!Boolean.TRUE.equals(follow.getNotifyNewListing())) {

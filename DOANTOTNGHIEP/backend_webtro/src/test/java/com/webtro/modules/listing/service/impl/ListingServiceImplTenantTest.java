@@ -30,7 +30,6 @@ import com.webtro.security.CustomUserDetails;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -365,8 +364,6 @@ class ListingServiceImplTenantTest {
     }
 
     @Test
-    @Disabled("BUG-01: renew() bắt buộc LandlordProfile; tenant không có hồ sơ chủ trọ nên luôn nhận 404 "
-            + "LANDLORD_PROFILE_NOT_FOUND, không gia hạn được tin ở ghép (checklist docs/10 mục 3). Bỏ @Disabled sau khi fix.")
     @DisplayName("UT-RM-17 [BUG-01] Tenant gia hạn miễn phí tin ở ghép ACTIVE → phải thành công")
     void tenantCanRenewRoommateListing() {
         Listing l = listing(TENANT_ID, ListingStatus.ACTIVE);

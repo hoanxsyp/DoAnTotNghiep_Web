@@ -256,6 +256,7 @@ flowchart TD
 - **Vị trí:** `modules/rental/service/impl/RentalRequestServiceImpl.java:62` không chặn loại tin; `LandlordRentalRequestController` chỉ cho `LANDLORD/ADMIN`.
 - **Thực tế:** tenant B gửi yêu cầu thuê tin ở ghép của tenant A → `201 PENDING`; A nhận thông báo trỏ `/quan-ly/yeu-cau-thue` (route chỉ cho chủ trọ) và `GET /api/landlord/rental-requests` → 403 → yêu cầu không ai xử lý, B cũng không thể gửi lại (409 `RENTAL_REQUEST_ALREADY_OPEN`) cho tới khi tự hủy.
 - **Cần nhóm chốt:** (a) chặn gửi yêu cầu thuê vào tin ROOMMATE của tenant, hoặc (b) cho người đăng ở ghép xử lý yêu cầu. Test IT-RM-11 chấp nhận cả hai cách.
+- **Đã chốt và sửa — phương án (a):** người đăng không có hồ sơ chủ trọ → `422 RENTAL_NOT_SUPPORTED_FOR_ROOMMATE`; chi tiết tin và tin đã lưu trả cờ `rentalRequestEnabled=false` để ẩn nút "Thuê phòng"; nút nhắn tin đổi thành "Nhắn tin cho người đăng". Tin ở ghép của chủ trọ vẫn thuê được (IT-RM-12).
 
 ### BUG-11 — Tài khoản bị khóa vẫn dùng được access token cũ
 - **Vị trí:** `security/JwtAuthenticationFilter.java:47` dựng principal từ claims, luôn `ACTIVE`, không kiểm DB; `AdminUserServiceImpl.java:163` chỉ thu hồi refresh token.

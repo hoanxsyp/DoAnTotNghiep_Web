@@ -29,6 +29,7 @@ import com.webtro.modules.ai.mapper.ChatbotMapper;
 import com.webtro.modules.ai.repository.ChatbotConversationRepository;
 import com.webtro.modules.ai.repository.ChatbotMessageRepository;
 import com.webtro.modules.ai.service.ChatbotService;
+import com.webtro.modules.ai.spi.ListingDataGateway;
 import com.webtro.modules.listing.dto.response.ListingSummaryResponse;
 import com.webtro.modules.search.dto.request.ListingSearchRequest;
 import com.webtro.modules.search.service.ListingSearchService;
@@ -74,12 +75,18 @@ public class ChatbotServiceImpl implements ChatbotService {
     private static final int RESULT_LIMIT = 5;
     private static final String DISCLAIMER =
             "Thông tin lấy trực tiếp từ tin đăng. Bạn vui lòng liên hệ chủ trọ để xác nhận phòng còn trống.";
+    private static final String ROOMS_GONE_NOTE =
+            "(Một số phòng mình gợi ý trước đó không còn hiển thị nên đã được bỏ khỏi danh sách.)";
+    private static final String ROOMS_GONE_REPLY =
+            "Các phòng bạn đang hỏi không còn hiển thị trên Webtro nữa. Bạn cho mình biết khu vực và tầm giá "
+                    + "để mình tìm phòng khác nhé.";
 
     private final ChatbotEngine engine;
     private final AiChatbotClient aiChatbot;
     private final ChatbotConversationRepository conversationRepository;
     private final ChatbotMessageRepository messageRepository;
     private final ListingSearchService listingSearchService;
+    private final ListingDataGateway listingData;
     private final SystemConfigService config;
     private final RateLimitService rateLimitService;
     private final ChatbotMapper mapper;
@@ -172,8 +179,11 @@ public class ChatbotServiceImpl implements ChatbotService {
             confidence = ai.confidence() == null ? null
                     : ai.confidence().max(BigDecimal.ZERO).min(BigDecimal.ONE).setScale(3, RoundingMode.HALF_UP);
             reply = ai.reply();
-            for (AiRoom room : ai.rooms()) {
-                listings.add(toItem(room));
+            // chatbot-api giữ phòng của lượt trước trong ngữ cảnh nên có thể trả lại tin đã ẩn/khóa:
+            // đối chiếu DB, chỉ giữ tin còn công khai và lấy tiêu đề/giá từ DB thay vì số liệu AI.
+            listings.addAll(visibleItems(ai.rooms()));
+            if (listings.size() < ai.rooms().size()) {
+                reply = listings.isEmpty() ? ROOMS_GONE_REPLY : reply + " " + ROOMS_GONE_NOTE;
             }
             totalResults = listings.size();
             boolean clarify = "CLARIFY".equals(ai.path());
@@ -340,15 +350,31 @@ public class ChatbotServiceImpl implements ChatbotService {
         return v instanceof Number n ? new BigDecimal(n.toString()) : null;
     }
 
-    private ChatbotListingItem toItem(AiRoom r) {
+    /** Phòng AI trả về (giữ thứ tự) còn công khai, dựng thẻ từ dữ liệu DB. */
+    private List<ChatbotListingItem> visibleItems(List<AiRoom> rooms) {
+        if (rooms == null || rooms.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, ListingDataGateway.ListingAttr> attrs = listingData.getAttributes(
+                rooms.stream().map(AiRoom::id).filter(java.util.Objects::nonNull).toList());
+        return rooms.stream()
+                .map(r -> r.id() == null ? null : attrs.get(r.id()))
+                .filter(a -> a != null && a.publiclyVisible())
+                .map(this::toItem)
+                .toList();
+    }
+
+    private ChatbotListingItem toItem(ListingDataGateway.ListingAttr a) {
         return ChatbotListingItem.builder()
-                .id(r.id())
-                .slug(r.slug())
-                .title(r.title())
-                .price(r.price())
-                .area(r.area())
-                .shortAddress(r.address())
-                .thumbnailUrl(r.thumbnailUrl())
+                .id(a.id())
+                .slug(a.slug())
+                .title(a.title())
+                .price(a.price())
+                .area(a.area())
+                .shortAddress(a.shortAddress())
+                .thumbnailUrl(a.thumbnailUrl())
+                .averageRating(a.averageRating())
+                .promoted(a.promoted())
                 .build();
     }
 
@@ -386,6 +412,7 @@ public class ChatbotServiceImpl implements ChatbotService {
                     .filter(c -> c.getDeletedAt() == null)
                     .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.CHATBOT_CONVERSATION_NOT_FOUND));
             assertOwnership(conv, userId, sessionId);
+            claimGuestConversation(conv, userId);
             if (reset) {
                 conv.setClarifyTurnCount(0);
             }
@@ -395,11 +422,38 @@ public class ChatbotServiceImpl implements ChatbotService {
             var existing = conversationRepository.findBySessionIdAndDeletedAtIsNull(sessionId);
             if (existing.isPresent()) {
                 ChatbotConversation conv = existing.get();
-                assertOwnership(conv, userId, sessionId);
-                return conv;
+                // sessionId gắn với trình duyệt: phiên của khách thì dùng tiếp (đăng nhập → gắn vào
+                // tài khoản), phiên của tài khoản khác (dùng chung trình duyệt) thì không chặn 403.
+                if (conv.getUserId() == null || conv.getUserId().equals(userId)) {
+                    claimGuestConversation(conv, userId);
+                    return conv;
+                }
+                releaseSessionId(conv);
             }
         }
         return createConversation(userId, sessionId);
+    }
+
+    /** Khách chat rồi đăng nhập (cùng sessionId) → phiên vào lịch sử của tài khoản. */
+    private void claimGuestConversation(ChatbotConversation conv, Long userId) {
+        if (conv.getUserId() == null && userId != null) {
+            conv.setUserId(userId);
+        }
+    }
+
+    /**
+     * Nhả sessionId khỏi phiên của tài khoản khác để người đang dùng trình duyệt có phiên mới cùng
+     * sessionId (cột unique). Chủ phiên cũ vẫn mở lại được theo conversationId; ngữ cảnh AI của
+     * sessionId này bị xóa để không lộ sang người mới.
+     */
+    private void releaseSessionId(ChatbotConversation conv) {
+        String sessionId = conv.getSessionId();
+        conv.setSessionId(UUID.randomUUID().toString());
+        // flush ngay: Hibernate chạy INSERT trước UPDATE, không flush thì phiên mới trùng khóa unique.
+        conversationRepository.saveAndFlush(conv);
+        if (aiChatbot.isEnabled()) {
+            aiChatbot.reset(sessionId);
+        }
     }
 
     private ChatbotConversation createConversation(Long userId, String sessionId) {

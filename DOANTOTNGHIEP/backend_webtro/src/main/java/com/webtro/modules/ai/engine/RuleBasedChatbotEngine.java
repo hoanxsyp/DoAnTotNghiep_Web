@@ -67,7 +67,8 @@ public class RuleBasedChatbotEngine implements ChatbotEngine {
     private static final Pattern AREA_UNDER = Pattern.compile("(?:duoi|<=?|nho hon)\\s*(\\d+(?:[.,]\\d+)?)\\s*(?:m2|met|met vuong)");
     private static final Pattern AREA_PLAIN = Pattern.compile("(\\d+(?:[.,]\\d+)?)\\s*(?:m2|met vuong)");
     private static final Pattern OCCUPANTS = Pattern.compile("(?:o|ở|cho)\\s*(\\d+)\\s*nguoi");
-    private static final Pattern LOCATION = Pattern.compile("(?:quan|quận|huyen|huyện|phuong|phường|tp|thanh pho|o|ở|gan|gần|tai|tại)\\s+([\\p{L}\\d]+(?:\\s+[\\p{L}\\d]+)?)");
+    // Giới từ phải đứng riêng một từ (không khớp chữ "o" cuối của "tro"); group(1) là tên khu vực.
+    private static final Pattern LOCATION = Pattern.compile("(?<![\\p{L}\\d])(?:quan|quận|huyen|huyện|phuong|phường|tp|thanh pho|o|ở|gan|gần|tai|tại)\\s+([\\p{L}\\d]+(?:\\s+[\\p{L}\\d]+)?)");
 
     @Override
     public String version() {
@@ -320,7 +321,7 @@ public class RuleBasedChatbotEngine implements ChatbotEngine {
         // Khu vực (keyword).
         Matcher ml = LOCATION.matcher(t);
         if (ml.find()) {
-            String loc = ml.group(0).trim();
+            String loc = ml.group(1).trim();
             if (loc.length() >= 3) {
                 location = loc;
             }

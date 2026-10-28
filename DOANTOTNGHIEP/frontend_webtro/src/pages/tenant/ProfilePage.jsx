@@ -16,6 +16,7 @@ import userApi from '@/api/userApi';
 import { bootstrapAuth } from '@/redux/authSlice';
 import PageHeader from '@/components/dashboard/PageHeader';
 import LoadingSkeleton from '@/components/common/LoadingSkeleton';
+import ChangePhoneDialog from '@/components/user/ChangePhoneDialog';
 import notify from '@/utils/toast';
 import { formatDateTime } from '@/utils/format';
 
@@ -43,6 +44,7 @@ const ProfilePage = () => {
   const [profile, setProfile] = useState(null);
   const [avatarUrl, setAvatarUrl] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [changePhoneOpen, setChangePhoneOpen] = useState(false);
 
   const {
     control, handleSubmit, reset, formState: { errors, isSubmitting, isDirty },
@@ -88,6 +90,17 @@ const ProfilePage = () => {
       dispatch(bootstrapAuth());
     } catch (e) {
       notify.apiError(e, 'Cập nhật hồ sơ thất bại');
+    }
+  };
+
+  // Chỉ nạp lại SĐT, không reset form đang sửa dở.
+  const refreshPhone = async () => {
+    try {
+      const data = await userApi.getMe();
+      setProfile((p) => ({ ...p, phone: data?.phone }));
+      dispatch(bootstrapAuth());
+    } catch (e) {
+      notify.apiError(e, 'Không tải lại được hồ sơ');
     }
   };
 
@@ -180,7 +193,12 @@ const ProfilePage = () => {
               <Divider sx={{ my: 2 }} />
               <Stack spacing={1}>
                 <InfoRow label="Email" value={profile?.email} verified={profile?.emailVerified} />
-                <InfoRow label="Số điện thoại" value={profile?.phone || 'Chưa cập nhật'} verified={profile?.phoneVerified} />
+                <InfoRow label="Số điện thoại" value={profile?.phone || 'Chưa cập nhật'} />
+                <Stack direction="row" justifyContent="flex-end">
+                  <Button size="small" onClick={() => setChangePhoneOpen(true)}>
+                    {profile?.phone ? 'Đổi số' : 'Thêm số'}
+                  </Button>
+                </Stack>
                 <InfoRow label="Vai trò" value={roleLabel(profile?.role)} />
                 <InfoRow label="Tham gia" value={formatDateTime(profile?.createdAt, 'DD/MM/YYYY')} />
               </Stack>
@@ -262,6 +280,13 @@ const ProfilePage = () => {
           </Card>
         </Grid>
       </Grid>
+
+      <ChangePhoneDialog
+        open={changePhoneOpen}
+        currentPhone={profile?.phone}
+        onClose={() => setChangePhoneOpen(false)}
+        onSuccess={refreshPhone}
+      />
     </Box>
   );
 };

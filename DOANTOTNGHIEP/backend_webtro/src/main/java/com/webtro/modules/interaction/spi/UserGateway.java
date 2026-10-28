@@ -39,6 +39,9 @@ public interface UserGateway {
     /** Chủ trọ có bật chat không ({@code landlord_profiles.allow_chat}); false nếu không có hồ sơ chủ trọ. */
     boolean isLandlordChatEnabled(Long landlordId);
 
+    /** Người dùng có hồ sơ chủ trọ không; tenant đăng tin ở ghép thì không có. */
+    boolean hasLandlordProfile(Long userId);
+
     /**
      * Người dùng có đang bị hạn chế liên hệ không ({@code users.contact_restricted_until} còn hiệu
      * lực, hoặc bị report SPAM đã xử lý) — canonical 4.6.1 quy tắc 5.

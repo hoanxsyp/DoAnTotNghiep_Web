@@ -458,6 +458,9 @@ const ListingDetailPage = () => {
   const currentImage = gallery[galleryIndex];
   const displayAddress = fullAddress || [addressDetail, wardName, districtName, provinceName].filter(Boolean).join(', ') || shortAddress;
   const landlordId = landlord?.id;
+  // Tin ở ghép do tenant đăng không nhận yêu cầu thuê, chỉ liên hệ qua chat/SĐT (BUG-10).
+  const rentalRequestEnabled = landlord?.rentalRequestEnabled !== false;
+  const messageLabel = rentalRequestEnabled ? 'Nhắn tin cho chủ trọ' : 'Nhắn tin cho người đăng';
 
   const amenityGroups = amenities.reduce((acc, a) => {
     const g = a.group || 'UTILITY';
@@ -827,7 +830,7 @@ const ListingDetailPage = () => {
 
               {/* Hành động */}
               <Stack spacing={1}>
-                {(role === ROLES.TENANT || !isAuthenticated) && status === 'ACTIVE' && (
+                {(role === ROLES.TENANT || !isAuthenticated) && status === 'ACTIVE' && rentalRequestEnabled && (
                   <Button
                     variant="contained"
                     color="success"
@@ -850,7 +853,7 @@ const ListingDetailPage = () => {
                   </Typography>
                 )}
                 <Button variant="outlined" startIcon={<ChatBubbleOutlineIcon />} fullWidth onClick={handleMessage}>
-                  Nhắn tin cho chủ trọ
+                  {messageLabel}
                 </Button>
                 <Stack direction="row" spacing={1}>
                   <Button
@@ -1013,7 +1016,7 @@ const ListingDetailPage = () => {
 
       {/* Dialog tin nhắn đầu tiên gửi chủ trọ */}
       <Dialog open={chatOpen} onClose={() => !chatSubmitting && setChatOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Nhắn tin cho chủ trọ</DialogTitle>
+        <DialogTitle>{messageLabel}</DialogTitle>
         <DialogContent>
           <TextField
             label="Tin nhắn"

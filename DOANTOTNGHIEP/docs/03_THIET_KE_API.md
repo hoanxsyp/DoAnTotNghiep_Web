@@ -9483,6 +9483,8 @@ Một tenant được gửi nhiều yêu cầu cho các listing khác nhau. Ch�
 ràng buộc đồng thời: một listing chỉ có một tenant đang thuê và một tenant chỉ đang thuê một listing.
 Các unique key generated trong V23 bảo vệ quy tắc này cả khi hai request chạy đồng thời.
 
+Tin do người **không có hồ sơ chủ trọ** đăng (tenant đăng tin ở ghép) không nhận yêu cầu thuê: `POST /api/rental-requests` trả `422 RENTAL_NOT_SUPPORTED_FOR_ROOMMATE`, người tìm phòng liên hệ qua chat/SĐT. Tin ở ghép do chủ trọ đăng vẫn dùng luồng thuê bình thường. Frontend dựa vào cờ `landlord.rentalRequestEnabled` (chi tiết tin) và `rentalRequestEnabled` (tin đã lưu) để ẩn nút "Thuê phòng".
+
 ## 5. Chuẩn hóa DTO
 
 ### 5.1. Nguyên tắc

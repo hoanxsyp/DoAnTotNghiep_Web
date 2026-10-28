@@ -105,8 +105,6 @@ class TenantChatbotE2EIT {
 
     @Test
     @DisplayName("E2E-BOT-05 [BUG-17] Tin bị ẩn sau khi bot đã gợi ý → câu hỏi tiếp theo trong hội thoại KHÔNG được trả lại tin đó")
-    @Disabled("BUG-17: chatbot giữ phòng cũ trong ngữ cảnh (Redis của chatbot-api), backend không lọc lại → trả tin đã ẩn. "
-            + "Bỏ @Disabled sau khi fix.")
     void hiddenListingNotReturnedFromContext() throws Exception {
         JsonNode first = ask("tìm phòng trọ ở Cầu Giấy dưới 3 triệu", null);
         long conv = first.get("conversationId").asLong();

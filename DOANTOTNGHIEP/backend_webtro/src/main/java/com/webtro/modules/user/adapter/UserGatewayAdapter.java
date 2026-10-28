@@ -75,6 +75,12 @@ public class UserGatewayAdapter implements UserGateway {
                 .orElse(true);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public boolean hasLandlordProfile(Long userId) {
+        return landlordProfileRepository.findByUser_IdAndDeletedAtIsNull(userId).isPresent();
+    }
+
     /** Đang bị hạn chế liên hệ không ({@code users.contact_restricted_until} còn hiệu lực). */
     @Override
     @Transactional(readOnly = true)

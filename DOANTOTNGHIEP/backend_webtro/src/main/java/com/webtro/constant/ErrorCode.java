@@ -180,6 +180,8 @@ public enum ErrorCode {
     RENTAL_LISTING_OCCUPIED(HttpStatus.CONFLICT, "Phòng này đã có người thuê"),
     RENTAL_TENANT_ALREADY_RENTING(HttpStatus.CONFLICT, "Bạn đang thuê một phòng khác"),
     RENTAL_CONCURRENCY_CONFLICT(HttpStatus.CONFLICT, "Phòng hoặc người thuê vừa được xác nhận ở một giao dịch khác"),
+    RENTAL_NOT_SUPPORTED_FOR_ROOMMATE(HttpStatus.UNPROCESSABLE_ENTITY,
+            "Tin ở ghép không hỗ trợ gửi yêu cầu thuê, vui lòng nhắn tin hoặc gọi người đăng"),
     REVIEW_RENTAL_REQUIRED(HttpStatus.UNPROCESSABLE_ENTITY, "Chỉ người đang thuê hoặc đã trả phòng mới được đánh giá phòng này"),
 
     // ===== Nhóm: Interaction - Bình luận & đánh giá =====

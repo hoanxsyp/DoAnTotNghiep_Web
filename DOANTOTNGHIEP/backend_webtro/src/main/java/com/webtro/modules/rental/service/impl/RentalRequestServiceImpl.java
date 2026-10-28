@@ -62,6 +62,10 @@ public class RentalRequestServiceImpl implements RentalRequestService {
         if (listing.status() != ListingStatus.ACTIVE || !listing.publiclyVisible()) {
             throw new ConflictException(ErrorCode.RENTAL_LISTING_UNAVAILABLE);
         }
+        // Tenant đăng tin ở ghép không có màn duyệt yêu cầu thuê → liên hệ qua chat/SĐT (BUG-10).
+        if (!userGateway.hasLandlordProfile(listing.ownerId())) {
+            throw new BusinessRuleException(ErrorCode.RENTAL_NOT_SUPPORTED_FOR_ROOMMATE);
+        }
         if (request.getDesiredViewingDate().isBefore(businessToday())) {
             throw new BusinessRuleException(ErrorCode.RENTAL_VIEWING_DATE_INVALID);
         }

@@ -106,7 +106,7 @@ const SavedListingsPage = () => {
                   showFavorite
                   unavailable={!!it.notAvailable}
                   onFavoriteToggle={() => setRemoving(it)}
-                  actions={role === ROLES.TENANT && !it.notAvailable ? (
+                  actions={role === ROLES.TENANT && !it.notAvailable && it.rentalRequestEnabled !== false ? (
                     <Button
                       size="small"
                       variant="contained"
