@@ -113,7 +113,7 @@ mô đồ án (>10.000 phòng) thì chuyển sang Elasticsearch `dense_vector` n
    `nlu-service` chưa khởi động được và mọi bảng số liệu NLU còn "chưa đo":
    - `python train_intent.py --epochs 5 --output-dir out-intent`
    - `python train_ner.py --epochs 8 --output-dir out-ner`
-   - dựng `nlu-service`, kiểm `GET /health`
+   - dựng `nlu-service`, kiểm `GET /health` để chẩn đoán và `GET /ready` để xác nhận readiness
    - `python eval_nlu_compare.py --side visobert` + `python eval_local_intent_gold.py`
      + `python eval_nlu_compare.py --report` → điền dòng B vào `eval-results/REPORT.md`
    - chạy smoke test 10 câu của `nlu-service/README.md`

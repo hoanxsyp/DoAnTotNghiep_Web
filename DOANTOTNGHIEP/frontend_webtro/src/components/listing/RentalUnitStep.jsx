@@ -122,7 +122,7 @@ export default function RentalUnitStep({
             render={({ field }) => (
               <TextField {...field} label="Số nhà, tên đường" fullWidth required multiline minRows={2}
                 disabled={fieldsDisabled}
-                error={!!errors.addressDetail} helperText={errors.addressDetail?.message || 'Ví dụ: 45/12 Đường D2'} />
+                error={!!errors.addressDetail} helperText={errors.addressDetail?.message || 'Ví dụ: Số 12 ngõ 68 Cầu Giấy'} />
             )} />
           <Controller name="unitLabel" control={control}
             rules={{ maxLength: { value: 50, message: 'Tối đa 50 ký tự' } }}

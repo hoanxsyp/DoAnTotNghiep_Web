@@ -16,6 +16,7 @@ import usePagedResource from '@/hooks/usePagedResource';
 import AdminPageHeader from '@/components/admin/AdminPageHeader';
 import AdminDataTable from '@/components/admin/AdminDataTable';
 import ConfirmDialog from '@/components/admin/ConfirmDialog';
+import { buildAdminPaymentFilters } from '@/utils/adminContracts';
 
 const STATUS_OPTIONS = ['PENDING', 'SUCCESS', 'FAILED', 'CANCELLED', 'REFUNDED'];
 const METHOD_OPTIONS = Object.keys(PAYMENT_METHOD_META);
@@ -38,12 +39,7 @@ const PaymentsPage = () => {
   const [submitting, setSubmitting] = useState(false);
 
   const applyFilters = (next = {}) => {
-    setParams({
-      keyword: keyword.trim() || undefined,
-      status: status || undefined,
-      method: method || undefined,
-      ...next,
-    });
+    setParams(buildAdminPaymentFilters({ keyword, status, paymentMethod: method }, next));
   };
 
   const openMenu = (e, row) => { setMenuAnchor(e.currentTarget); setActive(row); };
@@ -78,13 +74,13 @@ const PaymentsPage = () => {
     {
       key: 'user', label: 'Người mua', render: (r) => (
         <Box sx={{ minWidth: 0 }}>
-          <Typography variant="body2" noWrap>{r.userName || r.buyerName || '—'}</Typography>
-          <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>{r.packageName || ''}</Typography>
+          <Typography variant="body2" noWrap>{r.buyerName || '—'}</Typography>
+          <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>{r.buyerEmail || r.packageName || ''}</Typography>
         </Box>
       ),
     },
     { key: 'amount', label: 'Số tiền', align: 'right', render: (r) => formatCurrency(r.amount) },
-    { key: 'method', label: 'Phương thức', render: (r) => PAYMENT_METHOD_META[r.method] || r.method },
+    { key: 'method', label: 'Phương thức', render: (r) => PAYMENT_METHOD_META[r.paymentMethod] || r.paymentMethod },
     {
       key: 'status', label: 'Trạng thái', render: (r) => {
         const m = metaChip(PAYMENT_STATUS_META, r.status);
@@ -119,7 +115,7 @@ const PaymentsPage = () => {
           <MenuItem value="">Tất cả</MenuItem>
           {STATUS_OPTIONS.map((s) => <MenuItem key={s} value={s}>{PAYMENT_STATUS_META[s].label}</MenuItem>)}
         </TextField>
-        <TextField select size="small" label="Phương thức" value={method} onChange={(e) => { setMethod(e.target.value); applyFilters({ method: e.target.value || undefined }); }} sx={{ minWidth: 160 }}>
+        <TextField select size="small" label="Phương thức" value={method} onChange={(e) => { setMethod(e.target.value); applyFilters({ paymentMethod: e.target.value || undefined }); }} sx={{ minWidth: 160 }}>
           <MenuItem value="">Tất cả</MenuItem>
           {METHOD_OPTIONS.map((m) => <MenuItem key={m} value={m}>{PAYMENT_METHOD_META[m]}</MenuItem>)}
         </TextField>

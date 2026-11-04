@@ -41,6 +41,7 @@ import com.webtro.modules.payment.service.PaymentService;
 import com.webtro.modules.payment.service.PromotionService;
 import com.webtro.modules.payment.spi.AuditGateway;
 import com.webtro.modules.payment.spi.ListingPromotionGateway;
+import com.webtro.modules.payment.spi.PaymentUserGateway;
 import com.webtro.common.enums.AuditAction;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
@@ -66,6 +67,7 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -114,6 +116,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final ApplicationEventPublisher eventPublisher;
     private final StringRedisTemplate redisTemplate;
     private final AppProperties appProperties;
+    private final PaymentUserGateway paymentUserGateway;
 
     // =========================== Tạo giao dịch ===========================
 
@@ -434,6 +437,10 @@ public class PaymentServiceImpl implements PaymentService {
     @Override
     @Transactional(readOnly = true)
     public PaymentHistoryResponse adminListPayments(AdminPaymentFilter filter, Pageable pageable) {
+        String keyword = filter.keyword() == null ? null : filter.keyword().trim();
+        Set<Long> matchedBuyerIds = keyword == null || keyword.isBlank()
+                ? Set.of()
+                : paymentUserGateway.searchBuyerIds(keyword);
         Specification<Payment> base = (root, query, cb) -> {
             List<Predicate> ps = new ArrayList<>();
             ps.add(cb.isNull(root.get("deletedAt")));
@@ -442,6 +449,14 @@ public class PaymentServiceImpl implements PaymentService {
                     filter.packageId(), filter.amountFrom(), filter.amountTo(), filter.from(), filter.to());
             if (filter.transactionCode() != null && !filter.transactionCode().isBlank()) {
                 ps.add(cb.equal(root.get("transactionCode"), filter.transactionCode().trim()));
+            }
+            if (keyword != null && !keyword.isBlank()) {
+                Predicate transactionMatch = cb.like(
+                        cb.lower(root.get("transactionCode")), "%" + keyword.toLowerCase(java.util.Locale.ROOT) + "%");
+                Predicate buyerMatch = matchedBuyerIds.isEmpty()
+                        ? cb.disjunction()
+                        : root.get("userId").in(matchedBuyerIds);
+                ps.add(cb.or(transactionMatch, buyerMatch));
             }
             return cb.and(ps.toArray(new Predicate[0]));
         };
@@ -547,8 +562,12 @@ public class PaymentServiceImpl implements PaymentService {
         PromotionSubscriptionResponse subscription = subscriptionRepository
                 .findByPaymentIdAndDeletedAtIsNull(payment.getId())
                 .map(subscriptionMapper::toBrief).orElse(null);
-        return paymentMapper.toResponse(payment, listingTitle, packageName, couponCode,
+        PaymentResponse response = paymentMapper.toResponse(payment, listingTitle, packageName, couponCode,
                 subscription, includeGatewayId);
+        if (includeGatewayId) {
+            enrichBuyers(List.of(response));
+        }
+        return response;
     }
 
     private PaymentHistoryResponse pageWithSummary(Specification<Payment> base, Pageable pageable,
@@ -560,10 +579,28 @@ public class PaymentServiceImpl implements PaymentService {
                         packageRepository.findById(p.getPackageId())
                                 .map(PromotionPackage::getName).orElse(null),
                         includeGatewayId));
+        if (includeGatewayId) {
+            enrichBuyers(mapped.getItems());
+        }
         return PaymentHistoryResponse.builder()
                 .page(mapped)
                 .summary(buildSummary(base))
                 .build();
+    }
+
+    private void enrichBuyers(List<PaymentResponse> payments) {
+        Set<Long> userIds = payments.stream()
+                .map(PaymentResponse::getUserId)
+                .filter(Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+        Map<Long, PaymentUserGateway.Buyer> buyers = paymentUserGateway.findBuyers(userIds);
+        for (PaymentResponse payment : payments) {
+            PaymentUserGateway.Buyer buyer = buyers.get(payment.getUserId());
+            if (buyer != null) {
+                payment.setBuyerName(buyer.fullName());
+                payment.setBuyerEmail(buyer.email());
+            }
+        }
     }
 
     private PaymentHistoryResponse.Summary buildSummary(Specification<Payment> base) {

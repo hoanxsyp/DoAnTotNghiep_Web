@@ -92,13 +92,13 @@ const FilterPanel = ({ filters, onChange, onReset, categories, provinces, distri
             <TextField
               select
               size="small"
-              label="Tỉnh/TP"
+              label="Khu vực Hà Nội"
               value={filters.provinceId || ''}
               onChange={(e) => {
                 onChange({ provinceId: e.target.value, districtId: '' });
               }}
             >
-              <MenuItem value="">Toàn quốc</MenuItem>
+              <MenuItem value="">Toàn Hà Nội</MenuItem>
               {provinces.map((p) => (
                 <MenuItem key={p.id} value={p.id}>
                   {p.name}
@@ -418,7 +418,7 @@ const SearchPage = () => {
       splitList(value).map((v) => nameOf(list, v, field) || v).join(', ');
     switch (key) {
       case 'categoryCode': return names(categories, 'code');
-      case 'provinceId': return nameOf(provinces, value) || 'Tỉnh/TP';
+      case 'provinceId': return nameOf(provinces, value) || 'Khu vực Hà Nội';
       case 'districtId': return nameOf(districts, value) || 'Quận/huyện';
       case 'priceFrom': return `Giá từ ${formatPrice(value)}`;
       case 'priceTo': return `Giá đến ${formatPrice(value)}`;

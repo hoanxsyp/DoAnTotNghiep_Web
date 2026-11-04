@@ -292,7 +292,7 @@ services:
     ports:
       - "${CHATBOT_NLU_EXPOSED_PORT:-8003}:8000"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3)"]
       interval: 10s
       timeout: 5s
       retries: 12

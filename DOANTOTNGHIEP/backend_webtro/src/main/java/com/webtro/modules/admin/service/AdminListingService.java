@@ -3,6 +3,7 @@ package com.webtro.modules.admin.service;
 import com.webtro.common.BulkActionResponse;
 import com.webtro.common.PageResponse;
 import com.webtro.common.enums.ListingStatus;
+import com.webtro.common.enums.CategoryCode;
 import com.webtro.modules.admin.dto.request.ApproveListingRequest;
 import com.webtro.modules.admin.dto.request.BulkListingActionRequest;
 import com.webtro.modules.admin.dto.request.LockListingRequest;
@@ -24,7 +25,8 @@ public interface AdminListingService {
 
     /** Danh sách tin đăng có lọc (canonical 4.14.1) — cần {@code LISTING_VIEW_ANY}. */
     PageResponse<AdminListingResponse> searchListings(List<ListingStatus> statuses, String keyword,
-                                                      Long ownerId, Long categoryId, Long provinceId,
+                                                      Long ownerId, Long categoryId, CategoryCode categoryCode,
+                                                      Long provinceId,
                                                       Long districtId, Long wardId,
                                                       Boolean priceDeviationFlagged,
                                                       Instant from, Instant to, Pageable pageable);
@@ -33,7 +35,7 @@ public interface AdminListingService {
      * Hàng đợi kiểm duyệt: tin đang chờ xử lý ({@code PENDING} + {@code NEED_REVIEW}), ưu tiên tin cũ
      * trước (canonical 4.14) — cần {@code LISTING_VIEW_ANY}.
      */
-    PageResponse<AdminListingResponse> moderationQueue(Pageable pageable);
+    PageResponse<AdminListingResponse> moderationQueue(ListingStatus status, Pageable pageable);
 
     /** Chi tiết một tin cho Admin/Moderator, gồm cả tin không công khai — cần {@code LISTING_VIEW_ANY}. */
     AdminListingResponse getListingDetail(Long id);

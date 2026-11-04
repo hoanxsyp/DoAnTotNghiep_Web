@@ -39,6 +39,8 @@ public class PaymentResponse {
 
     @Schema(description = "Người thanh toán (users.id)", example = "42")
     private Long userId;
+    private String buyerName;
+    private String buyerEmail;
 
     @Schema(description = "Id tin được đẩy", example = "1024")
     private Long listingId;

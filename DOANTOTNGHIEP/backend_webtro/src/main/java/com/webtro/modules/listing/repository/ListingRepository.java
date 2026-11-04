@@ -180,6 +180,8 @@ public interface ListingRepository
     @Query("SELECT l FROM Listing l WHERE l.priceDeviationFlag = true AND l.deletedAt IS NULL")
     Page<Listing> findPriceDeviationFlagged(Pageable pageable);
 
+    Page<Listing> findByStatusAndDeletedAtIsNull(ListingStatus status, Pageable pageable);
+
     // ==================================================================
     //  Phòng (rental_units) — docs/DANH_GIA_THEO_PHONG_DOI_CHIEU.md mục 3, 10
     // ==================================================================

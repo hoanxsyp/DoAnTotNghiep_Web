@@ -54,13 +54,14 @@ public class AdminPaymentController {
             @RequestParam(required = false) Long listingId,
             @RequestParam(required = false) Long packageId,
             @RequestParam(required = false) String transactionCode,
+            @RequestParam(required = false) String keyword,
             @RequestParam(required = false) BigDecimal amountFrom,
             @RequestParam(required = false) BigDecimal amountTo,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         PaymentService.AdminPaymentFilter filter = new PaymentService.AdminPaymentFilter(
-                status, paymentMethod, userId, listingId, packageId, transactionCode,
+                status, paymentMethod, userId, listingId, packageId, transactionCode, keyword,
                 amountFrom, amountTo, from, to);
         PaymentHistoryResponse data = paymentService.adminListPayments(filter, pageable);
         return ResponseEntity.ok(ApiResponse.success(data, "Lấy danh sách giao dịch thành công"));

@@ -5,7 +5,6 @@ import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CachingConfigurer;
 import org.springframework.cache.interceptor.CacheErrorHandler;
 import org.springframework.context.annotation.Bean;
@@ -28,19 +27,22 @@ import java.time.Duration;
  * log WARN rồi để ứng dụng đọc thẳng DB — cache là tối ưu, không phải phụ thuộc sống còn. (Rate
  * limit và JWT blacklist có chính sách riêng, xử lý trong filter tương ứng, không qua đây.)
  */
-@Slf4j
 @Configuration
 public class RedisConfig implements CachingConfigurer {
 
     /** ObjectMapper riêng cho Redis: giữ kiểu để deserialize object cache đúng lớp. */
-    private ObjectMapper redisObjectMapper() {
+    ObjectMapper redisObjectMapper() {
         ObjectMapper mapper = new ObjectMapper();
         mapper.registerModule(new JavaTimeModule());
         mapper.setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.ANY);
         mapper.activateDefaultTyping(
                 BasicPolymorphicTypeValidator.builder().allowIfSubType(Object.class).build(),
-                ObjectMapper.DefaultTyping.NON_FINAL);
+                ObjectMapper.DefaultTyping.EVERYTHING);
         return mapper;
+    }
+
+    GenericJackson2JsonRedisSerializer redisValueSerializer() {
+        return new GenericJackson2JsonRedisSerializer(redisObjectMapper());
     }
 
     @Bean
@@ -54,8 +56,7 @@ public class RedisConfig implements CachingConfigurer {
         template.setConnectionFactory(factory);
         template.setKeySerializer(new StringRedisSerializer());
         template.setHashKeySerializer(new StringRedisSerializer());
-        GenericJackson2JsonRedisSerializer valueSerializer =
-                new GenericJackson2JsonRedisSerializer(redisObjectMapper());
+        GenericJackson2JsonRedisSerializer valueSerializer = redisValueSerializer();
         template.setValueSerializer(valueSerializer);
         template.setHashValueSerializer(valueSerializer);
         template.afterPropertiesSet();
@@ -70,7 +71,7 @@ public class RedisConfig implements CachingConfigurer {
                 .serializeKeysWith(RedisSerializationContext.SerializationPair
                         .fromSerializer(new StringRedisSerializer()))
                 .serializeValuesWith(RedisSerializationContext.SerializationPair
-                        .fromSerializer(new GenericJackson2JsonRedisSerializer(redisObjectMapper())));
+                        .fromSerializer(redisValueSerializer()));
         return RedisCacheManager.builder(factory)
                 .cacheDefaults(config)
                 .transactionAware()
@@ -82,26 +83,6 @@ public class RedisConfig implements CachingConfigurer {
      */
     @Override
     public CacheErrorHandler errorHandler() {
-        return new CacheErrorHandler() {
-            @Override
-            public void handleCacheGetError(RuntimeException e, org.springframework.cache.Cache cache, Object key) {
-                log.warn("Redis cache GET lỗi (bỏ qua, đọc DB) cache={} key={}: {}", cache.getName(), key, e.getMessage());
-            }
-
-            @Override
-            public void handleCachePutError(RuntimeException e, org.springframework.cache.Cache cache, Object key, Object value) {
-                log.warn("Redis cache PUT lỗi (bỏ qua) cache={} key={}: {}", cache.getName(), key, e.getMessage());
-            }
-
-            @Override
-            public void handleCacheEvictError(RuntimeException e, org.springframework.cache.Cache cache, Object key) {
-                log.warn("Redis cache EVICT lỗi (bỏ qua) cache={} key={}: {}", cache.getName(), key, e.getMessage());
-            }
-
-            @Override
-            public void handleCacheClearError(RuntimeException e, org.springframework.cache.Cache cache) {
-                log.warn("Redis cache CLEAR lỗi (bỏ qua) cache={}: {}", cache.getName(), e.getMessage());
-            }
-        };
+        return new EvictingCacheErrorHandler();
     }
 }

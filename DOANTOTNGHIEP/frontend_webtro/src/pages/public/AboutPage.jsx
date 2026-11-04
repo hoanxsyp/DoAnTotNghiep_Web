@@ -14,7 +14,7 @@ const SECTIONS = [
     id: 'gioi-thieu',
     heading: '1. Về Webtro',
     body:
-      'Webtro là nền tảng kết nối người thuê và chủ trọ trên toàn quốc. Chúng tôi giúp bạn tìm ' +
+      'Webtro là nền tảng kết nối người thuê và chủ trọ tại Hà Nội. Chúng tôi giúp bạn tìm ' +
       'phòng trọ, nhà nguyên căn, căn hộ, chung cư mini, ở ghép và mặt bằng nhỏ một cách nhanh ' +
       'chóng, minh bạch và an toàn.',
   },

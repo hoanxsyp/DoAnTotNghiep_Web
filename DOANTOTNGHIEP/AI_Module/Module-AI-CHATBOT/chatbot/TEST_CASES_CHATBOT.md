@@ -7,8 +7,10 @@ Kết quả mong đợi bên dưới đã được **chạy thật và kiểm ch
 
 ## 1. Chuẩn bị
 
-1. Chạy cả hệ thống: `docker compose up -d` (thư mục `DOANTOTNGHIEP/`). Đợi `backend` và
-   `chatbot-nlu` báo `healthy` (`docker compose ps`).
+1. Chạy cả hệ thống: `docker compose up -d` (thư mục `DOANTOTNGHIEP/`). Đợi `backend` báo
+   `healthy` (`docker compose ps`). Với NLU, kiểm `GET http://localhost:8003/ready`: HTTP 200 khi
+   model sẵn sàng; HTTP 503 khi thiếu/lỗi model. Trường hợp 503 vẫn tiếp tục test chatbot để xác
+   nhận nhánh fallback, không chờ container NLU thành `healthy` vô hạn.
 2. Dữ liệu: **dữ liệu demo do backend tự gieo** — 52 tin gốc + tin bổ sung theo khu vực
    (`DemoDataInitializer.topUpAreas`: mỗi phường ≥ 5 tin, mỗi đường tiêu biểu ≥ 2 tin → ~450 tin,
    12 quận × 33–44 tin công khai). ⚠️ Mã tin (`#29`, `#37`…) trong bảng được kiểm chứng trên bộ

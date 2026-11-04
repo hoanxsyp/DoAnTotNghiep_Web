@@ -9,7 +9,9 @@ Cấu hình phía Spring: khối `roomfinder.nlu` trong `application.yml`
 ## API
 
 ```
-GET  /health   → {"status":"ok", ..., "max_length":{"intent":128,"ner":128}}
+GET  /live     → HTTP 200 {"status":"ok"}
+GET  /health   → HTTP 200 {"status":"ok|degraded", ..., "max_length":{"intent":128,"ner":128}}
+GET  /ready    → cùng payload với `/health`; HTTP 200 khi model sẵn sàng, HTTP 503 khi degraded
 POST /nlu      {"text": "tìm phòng tầm 2tr ở cầu giấy"}
 → {
     "intent": "search_room",
@@ -20,9 +22,14 @@ POST /nlu      {"text": "tìm phòng tầm 2tr ở cầu giấy"}
     ]
   }
 
-POST /embed    {"texts": ["phòng yên tĩnh, mới xây", ...]}
-→ {"vectors": [[...768d...], ...]}     # keepitreal/vietnamese-sbert
+POST /embed    {"text": "phòng yên tĩnh, mới xây"}
+→ {"vector": [...768d...]}             # keepitreal/vietnamese-sbert
 ```
+
+`/live` chỉ phản ánh process FastAPI còn sống. `/health` phục vụ chẩn đoán và luôn trả HTTP 200
+để có thể đọc `startup_error`. `/ready` là readiness thật; Docker Compose kiểm endpoint này nên
+container không được đánh dấu healthy khi thiếu hoặc lỗi model. Chatbot API vẫn khởi động độc lập
+và dùng chuỗi fallback LLM → rule-based khi NLU local chưa sẵn sàng.
 
 `max_length` trong `/health` đọc từ khoá `nlu_max_length` trong `config.json` của
 model đã train (ghi đè bằng biến môi trường `NLU_MAX_LENGTH`). **Lệch giá trị này
@@ -69,9 +76,19 @@ docker compose up chatbot-nlu
 ```
 
 Model mount qua volume `./ml/out-*` (không bake vào image — ~390MB/model). Image
-không cần JRE (pipeline thuần Python) và cũng không cần `sentencepiece`/`protobuf`:
-`ml/out-*` đã chứa `tokenizer.json` dạng fast do `tokenizer.save_pretrained()` lúc
-train ghi ra.
+có JRE để VnCoreNLP word-segment hoạt động; `ml/out-*` đã chứa `tokenizer.json` dạng fast do
+`tokenizer.save_pretrained()` lúc train ghi ra.
+
+Sau khi khởi động, kiểm tra riêng liveness, chẩn đoán và readiness:
+
+```bash
+curl -i http://localhost:8003/live
+curl -i http://localhost:8003/health
+curl -i http://localhost:8003/ready
+```
+
+Khi hai thư mục model còn trống, `/live` và `/health` vẫn trả HTTP 200, còn `/ready` trả HTTP 503;
+đây là trạng thái mong đợi để monitoring báo chưa sẵn sàng mà không làm mất fallback chatbot.
 
 ## Smoke test — CHƯA CHẠY
 

@@ -27,9 +27,12 @@ public class AdminListingResponse {
     private String title;
     private String slug;
     private Long categoryId;
+    private String categoryCode;
+    private String categoryName;
     private BigDecimal price;
     private BigDecimal area;
     private Long ownerId;
+    private String ownerName;
     private String status;
     private String statusLabel;
     private Long reportCount;
@@ -39,6 +42,7 @@ public class AdminListingResponse {
     private Long rentalUnitId;
     private String rentalUnitName;
     private Long provinceId;
+    private String provinceName;
     private Long districtId;
     private Long wardId;
     private Instant publishedAt;

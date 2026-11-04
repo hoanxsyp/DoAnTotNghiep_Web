@@ -43,6 +43,7 @@ public class AdminListingMapper {
                 .rentalUnitName(rentalUnitRepository.findById(l.getRentalUnitId())
                         .map(RentalUnit::getName).orElse(null))
                 .provinceId(location.province() == null ? null : location.province().getId())
+                .provinceName(location.province() == null ? null : location.province().getName())
                 .districtId(location.district() == null ? null : location.district().getId())
                 .wardId(l.getWardId())
                 .publishedAt(l.getPublishedAt())

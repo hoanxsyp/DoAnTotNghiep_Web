@@ -8309,13 +8309,16 @@ Quyền: **`PAYMENT_MANAGE`** (chỉ Admin).
 | `userId` | long | ✘ | — | `[§10.7]` *"Lọc theo ... chủ trọ"* |
 | `listingId` / `packageId` | long | ✘ | — | |
 | `transactionCode` | string | ✘ | — | Tìm chính xác |
+| `keyword` | string | ✘ | — | Tìm chứa trong mã giao dịch hoặc khớp tên/email người mua |
 | `amountFrom` / `amountTo` | BigDecimal | ✘ | — | `from <= to` |
 | `from` / `to` | date | ✘ | `today-30d` / `today` | `[§10.7]` *"Lọc theo ... ngày"*; ≤ 365 ngày |
 | `page` / `size` | int | ✘ | `0` / `20` | `size ≤ 100` |
 | `sort` | string | ✘ | `createdAt,desc` | ∈ {`createdAt`, `paidAt`, `amount`} |
 
-Response **200** — `PageResponse` giao dịch (như mục 4.9.5 + `user`, `gatewayTransactionId`,
-`gatewayResponseCode`, `callbackReceivedAt`) + `summary` (`totalAmount`, `successCount`, …).
+Response **200** — `PaymentHistoryResponse` gồm `page: PageResponse<PaymentResponse>` và
+`summary`. Mỗi giao dịch quản trị có `userId`, `buyerName`, `buyerEmail`, `paymentMethod`,
+`gatewayTransactionId` cùng các trường thanh toán dùng chung. `summary` gồm `totalPaid`,
+`successCount`, `failedCount`, `pendingCount`, `refundedCount`, `cancelledCount` trong phạm vi lọc.
 
 **`PUT /api/admin/payments/{id}/refund`** — Request body:
 
@@ -8466,14 +8469,59 @@ Mã chức năng: `[§2.11]` **AI-07** (quản lý log), **AI-08** (cấu hình 
 
 | Param | Kiểu | Bắt buộc | Mặc định | Ràng buộc |
 |---|---|:--:|---|---|
-| `module` | enum | ✔ | — | **`SENTIMENT`** \| **`RECOMMENDATION`** \| **`CHATBOT`** \| **`PRICE`** |
-| `status` | enum | ✘ | tất cả | `SUCCESS` \| `FAILED` \| `PENDING` |
-| `userId` / `listingId` / `commentId` | long | ✘ | — | |
+| `module` | enum | ✘ | `ALL` | **`RECOMMENDATION`** \| **`CHATBOT`** \| **`PRICE`**; bỏ trống để hợp nhất cả 3 module |
 | `from` / `to` | date | ✘ | `today-7d` / `today` | khoảng ≤ 90 ngày |
 | `page` / `size` | int | ✘ | `0` / `20` | `size ≤ 100` |
-| `sort` | string | ✘ | `createdAt,desc` | ∈ {`createdAt`, `processingTimeMs`} |
+| `sort` | string | ✘ | `createdAt,desc` | `createdAt,asc` hoặc `createdAt,desc` |
 
-**Response 200 — `module=SENTIMENT`** (nguồn: `sentiment_results` — canonical §6):
+**Response 200 hiện hành** — `data.module` là module đã chọn hoặc `ALL`; `data.results` là
+`PageResponse<AiLogItemResponse>`. Các field chung của mỗi item gồm `id`, `createdAt`, `module`,
+`userId?`, `listingId?`. Field riêng theo module:
+
+- `RECOMMENDATION`: `source`, `recommendationScore`, `rankPosition`, `batchId`.
+- `PRICE`: `suggestedPrice`, `inputPrice`, `deviationRatio`, `priceConfidence`, `sampleSize`.
+- `CHATBOT`: `conversationId`, `content`, `intent`, `resultCount`.
+
+Các field không thuộc module hiện tại bị loại khỏi JSON. Khi `module` bị bỏ trống, backend lấy dữ
+liệu từ cả ba nguồn, sắp xếp toàn cục theo `createdAt`, `module`, `id` theo chiều yêu cầu, sau đó
+phân trang trên kết quả hợp nhất; `totalElements` là tổng của cả ba nguồn.
+
+```json
+{
+  "success": true,
+  "message": "Lấy log AI thành công",
+  "data": {
+    "module": "ALL",
+    "results": {
+      "items": [
+        {
+          "id": 77301,
+          "createdAt": "2026-07-17T09:50:00Z",
+          "module": "RECOMMENDATION",
+          "userId": 88,
+          "listingId": 1203,
+          "source": "HOMEPAGE",
+          "recommendationScore": 0.81,
+          "rankPosition": 1,
+          "batchId": "batch-20260717-01"
+        }
+      ],
+      "page": 0,
+      "size": 20,
+      "totalElements": 13518,
+      "totalPages": 676,
+      "first": true,
+      "last": false
+    }
+  },
+  "timestamp": "2026-07-17T10:00:00Z"
+}
+```
+
+<details>
+<summary>Ví dụ thiết kế cũ đã thay thế — chỉ lưu để đối chiếu lịch sử, không phải hợp đồng API hiện hành</summary>
+
+**Ví dụ cũ — `module=SENTIMENT`** (module này không còn thuộc `AiModule` hiện hành):
 
 ```json
 {
@@ -8628,13 +8676,13 @@ Mã chức năng: `[§2.11]` **AI-07** (quản lý log), **AI-08** (cấu hình 
 }
 ```
 
-**Mã lỗi:** `UNAUTHORIZED`, `FORBIDDEN`, `MISSING_PARAMETER` (thiếu `module`),
-`INVALID_SORT_FIELD`, `AUDIT_LOG_RANGE_TOO_LARGE`, `VALIDATION_FAILED`.
+</details>
 
-**Quy tắc `[§10.10]`:** phủ *"Xem log phân tích sentiment"*, *"Xem log gợi ý tin đăng"*,
-*"Xem lịch sử dự đoán giá"*. `matchedTokens` và `topScores` làm AI **giải thích được**
-`[§9.2]` *"lưu RecommendationLog để giải thích và đánh giá hiệu quả"* — đây là yêu cầu chất lượng
-của đồ án, không phải hộp đen.
+**Mã lỗi:** `UNAUTHORIZED`, `FORBIDDEN`, `INVALID_SORT_FIELD`,
+`AUDIT_LOG_RANGE_TOO_LARGE`, `STATISTIC_RANGE_INVALID`, `VALIDATION_FAILED`.
+
+**Quy tắc `[§10.10]`:** endpoint hiện hành đọc log gợi ý tin đăng, lịch sử dự đoán giá và tin
+nhắn chatbot. Phân tích sentiment không thuộc contract `/api/admin/ai/logs` hiện hành.
 
 ---
 
@@ -9380,10 +9428,10 @@ Mỗi `/export` nhận **đúng bộ filter** của endpoint danh sách cùng c�
 |---|---|
 | `/api/payments/my/export` | mục 4.9.6 (`status`, `purpose`, `from`, `to`) |
 | `/api/admin/users/export` | mục 4.13.1 (`keyword`, `status`, `role`, `verified`, `from`, `to`) |
-| `/api/admin/payments/export` | mục 4.18.5 (`status`, `method`, `userId`, `from`, `to`) |
+| `/api/admin/payments/export` | mục 4.18.5 (`keyword`, `status`, `paymentMethod`, `userId`, `listingId`, `packageId`, `transactionCode`, `amountFrom`, `amountTo`, `from`, `to`) |
 | `/api/admin/statistics/export` | mục 4.12.2 (`from`, `to`, `groupBy`) |
 | `/api/admin/audit-logs/export` | mục 4.20.3 (`actorId`, `action`, `entityType`, `from`, `to`) |
-| `/api/admin/ai/logs/export` | mục 4.19.1 (`module`, `status`, `from`, `to`) |
+| `/api/admin/ai/logs/export` | mục 4.19.1 (`module`, `from`, `to`); `module` bỏ trống nghĩa là `ALL` |
 
 Thêm **một** param chung:
 
@@ -10556,7 +10604,7 @@ hướng về chức năng tìm trọ"*):
 | **Không tạo tin thay chủ trọ** | Intent `HOW_TO_POST` chỉ **hướng dẫn**, không tạo tin | `[§9.3]` |
 | **Hỏi lại tối đa 3 lượt** | `ai.chatbot.max_clarify_turns` (3) — canonical §9 | `[§9.3]` *"hỏi lại tối đa 2-3 câu"* |
 | **Không kết quả → đề xuất mở rộng** | `expansionSuggestions` | `[§3.15]`, `[§9.3]` |
-| **Ghi log câu hỏi phổ biến** | `chatbot_messages` → `GET /api/admin/ai/logs?module=CHATBOT` → `topQuestions` | `[§3.15]` *"ghi log câu hỏi phổ biến để cải thiện FAQ"* |
+| **Ghi log câu hỏi** | `chatbot_messages` → `GET /api/admin/ai/logs?module=CHATBOT`; response hiện trả từng item `content`, `intent`, `resultCount`, chưa có `topQuestions` tổng hợp | `[§3.15]` *"ghi log câu hỏi phổ biến để cải thiện FAQ"* |
 
 **8 intent** — đúng `ChatbotIntent` canonical §5:
 `FIND_ROOM`, `HOW_TO_POST`, `GLOSSARY`, `FAQ`, `GREETING`, `OUT_OF_SCOPE`, `SENSITIVE`, `UNKNOWN`.

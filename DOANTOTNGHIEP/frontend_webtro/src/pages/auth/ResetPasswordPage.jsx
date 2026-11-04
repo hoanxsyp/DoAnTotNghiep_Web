@@ -11,6 +11,7 @@ import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import LinkOffIcon from '@mui/icons-material/LinkOff';
 import authApi from '@/api/authApi';
 import { notify } from '@/utils/toast';
+import { buildResetPasswordPayload } from '@/utils/adminContracts';
 
 const schema = yup.object({
   newPassword: yup
@@ -47,7 +48,7 @@ const ResetPasswordPage = () => {
 
   const submit = async (values) => {
     try {
-      await authApi.resetPassword({ token, newPassword: values.newPassword });
+      await authApi.resetPassword(buildResetPasswordPayload(token, values));
       notify.success('Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại.');
       navigate('/dang-nhap', { replace: true });
     } catch (err) {

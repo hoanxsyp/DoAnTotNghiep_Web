@@ -202,7 +202,7 @@ Luồng một tin nhắn:
 4. Thiếu thông tin thì hỏi lại; đủ thì tìm phòng trong MySQL, lọc theo bán kính nếu có địa điểm.
 5. Trả danh sách phòng và câu trả lời, ghi `chat_log`.
 
-`nlu-service` đã chạy local với model PhoBERT: `/health` trả `ok`, `max_length` intent và NER
+Trong lần đo ngày 17/10/2026, `nlu-service` đã chạy local với model PhoBERT: `/health` trả `ok`, `max_length` intent và NER
 đều `128`. Service làm một lượt "khởi động" ngay khi bật: nếu không, tin nhắn đầu tiên mất khoảng
 `1.4 s` (Java và PyTorch khởi tạo lần đầu), vượt timeout `300 ms` của `chatbot-api` và bị chuyển
 sang Gemini. Sau khi thêm bước này, tin nhắn đầu tiên còn `167 ms`.
@@ -251,10 +251,15 @@ docker compose up --build chatbot-api chatbot-nlu chatbot-mysql chatbot-redis
 Kiểm tra NLU service:
 
 ```text
+http://localhost:8003/live
 http://localhost:8003/health
+http://localhost:8003/ready
 ```
 
-Chưa có model hoặc model không phải PhoBERT thì `/health` trả `degraded`. Có model thì trả `ok`.
+`/live` luôn trả HTTP 200 khi process còn sống. Chưa có model hoặc model không phải PhoBERT thì
+`/health` trả HTTP 200 với `status=degraded` để đọc chẩn đoán, còn `/ready` trả HTTP 503. Có model
+và nạp thành công thì `/health` và `/ready` đều trả `status=ok`, HTTP 200. Docker Compose dùng
+`/ready` cho healthcheck; chatbot API vẫn dùng fallback khi NLU chưa sẵn sàng.
 
 Gửi tin nhắn:
 

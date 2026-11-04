@@ -9,6 +9,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
+import java.time.Instant;
 
 /**
  * Truy vấn lịch sử dự đoán giá ({@code prediction_histories}, append-only). Không có xóa mềm.
@@ -30,4 +31,6 @@ public interface PredictionHistoryRepository
 
     /** Các dự đoán bị đánh cờ lệch giá (danh sách tin nghi ngờ cho Admin). */
     Page<PredictionHistory> findByIsFlaggedTrueOrderByCreatedAtDesc(Pageable pageable);
+
+    Page<PredictionHistory> findByCreatedAtBetween(Instant from, Instant to, Pageable pageable);
 }

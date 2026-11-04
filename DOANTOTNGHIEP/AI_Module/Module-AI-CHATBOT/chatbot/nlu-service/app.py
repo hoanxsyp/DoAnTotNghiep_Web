@@ -41,7 +41,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import torch
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from pydantic import BaseModel
 
 ROOT = Path(__file__).parent
@@ -140,6 +140,19 @@ def health():
         # Lộ ra để debug: sai max_length là cắt câu mà không báo lỗi.
         "max_length": {"intent": _M.get("intent_len"), "ner": _M.get("ner_len")},
     }
+
+
+@app.get("/live")
+def live():
+    return {"status": "ok"}
+
+
+@app.get("/ready")
+def ready(response: Response):
+    payload = health()
+    if not _M.get("ready"):
+        response.status_code = 503
+    return payload
 
 
 @app.post("/embed", response_model=EmbedResponse)

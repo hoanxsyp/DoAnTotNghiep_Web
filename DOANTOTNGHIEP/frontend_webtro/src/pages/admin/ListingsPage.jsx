@@ -21,6 +21,7 @@ import AdminPageHeader from '@/components/admin/AdminPageHeader';
 import AdminDataTable from '@/components/admin/AdminDataTable';
 import ConfirmDialog from '@/components/admin/ConfirmDialog';
 import StatusChip from '@/components/common/StatusChip';
+import { buildAdminListingFilters, listingDetailPath } from '@/utils/adminContracts';
 
 const STATUS_LIST = Object.values(LISTING_STATUS);
 
@@ -35,19 +36,14 @@ const ListingsPage = () => {
 
   const [keyword, setKeyword] = useState('');
   const [status, setStatus] = useState('');
-  const [category, setCategory] = useState('');
+  const [categoryCode, setCategoryCode] = useState('');
   const [menuAnchor, setMenuAnchor] = useState(null);
   const [active, setActive] = useState(null);
   const [dialog, setDialog] = useState(null); // reject | hide | lock | flag
   const [submitting, setSubmitting] = useState(false);
 
   const applyFilters = (next = {}) => {
-    setParams({
-      keyword: keyword.trim() || undefined,
-      status: status || undefined,
-      category: category || undefined,
-      ...next,
-    });
+    setParams(buildAdminListingFilters({ keyword, status, categoryCode }, next));
   };
 
   const openMenu = (e, row) => { setMenuAnchor(e.currentTarget); setActive(row); };
@@ -81,7 +77,7 @@ const ListingsPage = () => {
     {
       key: 'title', label: 'Tin đăng', render: (r) => (
         <Box sx={{ minWidth: 0, maxWidth: 320 }}>
-          <Link href={`/admin/tin-dang/${r.id}`} underline="hover" color="inherit">
+          <Link href={listingDetailPath(r)} underline="hover" color="inherit">
             <Typography variant="body2" fontWeight={600} noWrap>{r.title}</Typography>
           </Link>
           <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
@@ -130,7 +126,7 @@ const ListingsPage = () => {
           <MenuItem value="">Tất cả</MenuItem>
           {STATUS_LIST.map((st) => <MenuItem key={st} value={st}><StatusChip status={st} /></MenuItem>)}
         </TextField>
-        <TextField select size="small" label="Loại tin" value={category} onChange={(e) => { setCategory(e.target.value); applyFilters({ category: e.target.value || undefined }); }} sx={{ minWidth: 170 }}>
+        <TextField select size="small" label="Loại tin" value={categoryCode} onChange={(e) => { setCategoryCode(e.target.value); applyFilters({ categoryCode: e.target.value || undefined }); }} sx={{ minWidth: 170 }}>
           <MenuItem value="">Tất cả</MenuItem>
           {Object.entries(CATEGORY_CODES).map(([code, label]) => <MenuItem key={code} value={code}>{label}</MenuItem>)}
         </TextField>

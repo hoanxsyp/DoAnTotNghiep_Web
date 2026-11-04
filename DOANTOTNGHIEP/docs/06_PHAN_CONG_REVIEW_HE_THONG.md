@@ -1852,8 +1852,8 @@ flowchart TD
 
 | Method | URL | Request | Response | Auth | Permission | Validation | Error tiêu biểu |
 |---|---|---|---|---|---|---|---|
-| GET | `/api/admin/listings` | query `status[], keyword, ownerId, categoryId, provinceId, districtId, wardId, priceDeviationFlagged, from, to` + `Pageable` | `ApiResponse<PageResponse<AdminListingResponse>>` | Bắt buộc | `LISTING_VIEW_ANY` | — | — |
-| GET | `/api/admin/moderation-queue` | `Pageable` (mặc định sort `createdAt ASC`) | `ApiResponse<PageResponse<AdminListingResponse>>` | Bắt buộc | `LISTING_VIEW_ANY` | luôn lọc cứng `status IN (PENDING, NEED_REVIEW)` | — |
+| GET | `/api/admin/listings` | query `status[], keyword, ownerId, categoryId, categoryCode, provinceId, districtId, wardId, priceDeviationFlagged, from, to` + `Pageable` | `ApiResponse<PageResponse<AdminListingResponse>>` | Bắt buộc | `LISTING_VIEW_ANY` | `categoryCode` nhận mã danh mục chuẩn | — |
+| GET | `/api/admin/moderation-queue` | query `status` (mặc định `PENDING`) + `Pageable` (mặc định sort `createdAt ASC`) | `ApiResponse<PageResponse<AdminListingResponse>>` | Bắt buộc | `LISTING_VIEW_ANY` | `status` chỉ nhận `PENDING` hoặc `NEED_REVIEW`; mỗi request trả riêng một hàng đợi | `VALIDATION_FAILED` nếu trạng thái khác |
 | GET | `/api/admin/moderation-actions` | query `targetType?, listingId?` + `Pageable` (mặc định `createdAt DESC`) | `ApiResponse<PageResponse<AdminModerationActionResponse>>` | Bắt buộc | `LISTING_VIEW_ANY` | — | — |
 | GET | `/api/admin/listings/{id}` | — | `ApiResponse<AdminListingResponse>` | Bắt buộc | `LISTING_VIEW_ANY` | — | `LISTING_NOT_FOUND` |
 | PUT | `/api/admin/listings/{id}/approve` | `ApproveListingRequest{displayDays?, note?}?` | `ApiResponse<AdminListingActionResponse>` | Bắt buộc | `LISTING_MODERATE` | trạng thái nguồn = `PENDING` | `LISTING_ALREADY_APPROVED`, `LISTING_INVALID_TRANSITION` |
@@ -1896,14 +1896,21 @@ flowchart TD
 
 ### 10. Các lỗi dễ gặp
 
-- **[Nghi vấn] Response quản trị thiếu field mà FE đang kỳ vọng** — `ModerationQueuePage.jsx` render `r.categoryName`, `r.ownerName`, `r.submittedAt`, `r.needReviewReason`/`r.autoHideReason`, nhưng `AdminListingResponse` (DTO thật, đã đọc trực tiếp) chỉ có `id, title, slug, categoryId, price, area, ownerId, status, statusLabel, reportCount, priceDeviationFlagged, provinceId, districtId, wardId, publishedAt, expiredAt, createdAt, updatedAt` — **không có `categoryName/ownerName/submittedAt/needReviewReason/autoHideReason`**. Hệ quả: cột "Tin đăng" trong hàng đợi kiểm duyệt sẽ hiển thị tên danh mục/chủ trọ **rỗng** (fallback `''`), cột "Chờ từ" âm thầm dùng `createdAt` thay vì thời điểm submit thật (không lỗi nhưng sai ý nghĩa hiển thị nếu tin có nhiều lần sửa/gửi lại), và cột "Lý do cần kiểm tra" ở tab NEED_REVIEW **luôn hiện text mặc định "Cần kiểm tra"** thay vì lý do cụ thể vì `needReviewReason`/`autoHideReason` luôn `undefined`. Đây là điểm cần verify UI thật đầu tiên khi review Module 5.
+- **Response quản trị đã có metadata hiển thị cơ bản** — `AdminListingResponse` hiện trả
+  `categoryCode`, `categoryName`, `ownerName`, `provinceName` bên cạnh các ID, nên danh sách và
+  hàng đợi không còn rỗng tên loại tin/chủ trọ/khu vực. DTO vẫn chưa có `submittedAt`,
+  `needReviewReason`/`autoHideReason`; UI tiếp tục dùng `createdAt` cho “Chờ từ” và text mặc định
+  cho lý do cần kiểm tra. Đây là phạm vi còn lại cần xác nhận nếu nghiệp vụ yêu cầu thời điểm gửi
+  duyệt/lý do cụ thể.
 - **`reason` là `VARCHAR(500) NOT NULL` ở DB nhưng không phải lúc nào tầng service cũng nhận `reason` bắt buộc từ request** (vd `hide`/`unhide`/`flag-need-review`/`clear-need-review` cho phép `reason` optional) — code xử lý đúng bằng hàm `sanitize(reason, defaultText)` để không bao giờ gửi NULL xuống DB, nhưng đây là điểm dễ quên khi thêm hành động mới trong tương lai (phải luôn nhớ `sanitize`, nếu quên sẽ vỡ ràng buộc NOT NULL ở DB ngay khi test).
 - **Nhầm giữa quyền `LISTING_MODERATE` và `LISTING_LOCK`**: dev mới dễ gán nhầm cả 2 quyền cho cùng 1 role Moderator, phá vỡ chủ đích thiết kế "chỉ Admin mới khóa được tin" (Moderator chỉ duyệt/từ chối/ẩn/gắn cờ).
 - **Self-invocation transaction**: nếu sau này có refactor gọi trực tiếp `this.approve(...)` thay vì qua `self.approve(...)` bên trong `bulkModerate`, transaction riêng theo từng tin sẽ **mất hiệu lực âm thầm** (không lỗi biên dịch, không lỗi runtime rõ ràng — chỉ phát hiện khi test 1 tin lỗi giữa lô và thấy toàn bộ lô bị rollback theo).
 
 ### 11. Các điểm cần review
 
-- **Ưu tiên xác minh mismatch field ở mục 10** — bổ sung `categoryName/ownerName/submittedAt/needReviewReason/autoHideReason` vào `AdminListingResponse`/`AdminListingMapper` (hoặc sửa FE bỏ kỳ vọng các field này) để hàng đợi kiểm duyệt hiển thị đủ thông tin cho Moderator ra quyết định nhanh — thiếu tên chủ trọ/danh mục ngay trong bảng buộc Moderator phải bấm vào từng tin mới biết, làm chậm tốc độ xử lý hàng đợi.
+- **Phần metadata còn lại ở mục 10** — chỉ bổ sung `submittedAt`, `needReviewReason`/
+  `autoHideReason` khi nghiệp vụ chốt cần phân biệt lần gửi duyệt gần nhất và hiển thị lý do cụ thể;
+  `categoryName`/`ownerName` đã được cung cấp, không còn là finding mở.
 - **Business**: cân nhắc thêm cột `submitted_at` riêng trên `listings` (khác `created_at`) nếu muốn "Chờ từ" phản ánh đúng lần submit gần nhất (tin có thể tạo từ lâu, sửa nhiều lần, mỗi lần gửi lại nên tính lại thời gian chờ).
 - **API naming**: `reasonCode` (trong `RejectListingRequest`) là optional và không thấy dùng để rẽ nhánh logic nghiệp vụ nào trong `AdminListingServiceImpl.reject()` (chỉ được gán thẳng vào response) — nên xác nhận `reasonCode` có ý nghĩa thống kê (nhóm lý do từ chối phổ biến) hay là field dư thừa.
 - **DB**: `moderation_actions.reason NOT NULL` — nên cân nhắc đổi thành nullable ở DB để khớp đúng ngữ nghĩa "một số hành động không bắt buộc lý do", thay vì luôn phải có `sanitize()` với text mặc định ở tầng code (giảm rủi ro quên sanitize khi thêm hành động mới).
@@ -2045,7 +2052,7 @@ Module này không sở hữu bảng riêng — chỉ đọc:
 - □ Test UI — thao tác trực tiếp trên FE (không chỉ đọc code) cho: `ListingWizard` (đủ 6 bước, cả nhánh lỗi validate từng bước), `SearchPage` (đủ tổ hợp filter + sort), `ModerationQueuePage` (2 tab, duyệt/từ chối/ẩn/gỡ cờ), `AreasPage`/`CategoriesPage`/`AmenitiesPage` (toggle + import), `OverviewPage` (đổi khoảng ngày).
 - □ Kiểm tra DB — sau mỗi hành động UI, đối chiếu trực tiếp bảng `listings`, `moderation_actions`, `audit_logs`, `recommendation_logs`, `prediction_histories`, `search_histories` để chắc chắn dữ liệu ghi đúng, đủ.
 - □ So sánh Business — đối chiếu hành vi thực tế với các quy tắc đã tài liệu hóa ở mục 4/5 mỗi module (đặc biệt bảng luật `ListingStateMachine`, công thức Recommendation, mở rộng phạm vi Price WARD→DISTRICT→PROVINCE).
-- □ Ghi Bug — các lỗi dashboard, sort Search, toggle/import Catalog và listener lịch sử tìm kiếm trong bản review ban đầu đã được xử lý; tiếp tục kiểm tra mismatch `AdminListingResponse` ở hàng đợi kiểm duyệt.
+- □ Ghi Bug — các lỗi dashboard, sort Search, toggle/import Catalog, listener lịch sử tìm kiếm và metadata cơ bản của `AdminListingResponse` đã được xử lý; tiếp tục kiểm tra riêng `submittedAt`/lý do kiểm duyệt nếu nghiệp vụ chốt cần hiển thị các field này.
 - □ Ghi Improvement — các điểm ở mục 11 mỗi module không phải bug chặn nhưng đáng cải thiện (đồng bộ ngưỡng validate FE/BE, đưa trọng số Recommendation vào SystemConfig, bổ sung field còn thiếu, dọn cột DB chết `clicked_at`/`is_applied`...).
 - □ Tổng hợp báo cáo — gộp toàn bộ finding theo mẫu chung của nhóm, kèm mức độ ưu tiên và module ảnh hưởng, gửi lại cho Technical Lead trước khi merge.
 
@@ -2490,7 +2497,7 @@ Xử lý toàn bộ vòng đời **mua gói đẩy tin**: xem danh sách gói (`
 | Lịch sử thanh toán | `frontend_webtro/src/pages/landlord/PaymentsPage.jsx` | > Cần bổ sung theo source code (chưa đọc chi tiết) — dựa theo API `GET /payments/my` có filter status/listingId/from/to, khả năng cao dùng bảng + `TablePagination` giống `ContactsPage`. |
 | Kết quả thanh toán (sau redirect từ cổng) | `frontend_webtro/src/pages/landlord/PaymentResultPage.jsx` | `Card` trung tâm hiển thị thành công/thất bại, nút "Xem lịch sử thanh toán" và nút điều hướng tiếp theo (tới quản lý tin nếu thành công, quay lại gói dịch vụ nếu thất bại). |
 | Quản trị gói dịch vụ | `frontend_webtro/src/pages/admin/PackagesPage.jsx` | > Cần bổ sung theo source code — CRUD gói (code bất biến khi sửa), bật/tắt bán. |
-| Quản trị giao dịch | `frontend_webtro/src/pages/admin/PaymentsPage.jsx` | `AdminDataTable` + filter (status/method/user/listing/package/transactionCode/amount/date), menu hành động **"Hoàn tiền"** mở `ConfirmDialog` (`refundDialog`), `Chip` trạng thái theo `PAYMENT_METHOD_META`/`PAYMENT_STATUS_META`. |
+| Quản trị giao dịch | `frontend_webtro/src/pages/admin/PaymentsPage.jsx` | `AdminDataTable` + ô tìm mã giao dịch/tên/email người mua, filter trạng thái/phương thức; menu **"Hoàn tiền"** cho `SUCCESS` và **"Đối soát"** cho `PENDING`; hiển thị tên/email người mua và `paymentMethod` từ response quản trị. |
 
 **API client FE**: `frontend_webtro/src/api/paymentApi.js` (bao gồm `getPackages`, `createPayment`, `promote`, `getMyPayments`, `getPayment`, `cancelPayment`, `getMySubscriptions`, `validateCoupon`) — có ghi chú rõ `POST /payments` và `POST /listings/{id}/promote` **bắt buộc truyền header `Idempotency-Key`** (UUID) qua `config` thứ hai của hàm.
 
@@ -2603,7 +2610,7 @@ flowchart TD
 | POST | `/api/admin/promotion-packages` | `PackageRequest` | `PromotionPackageResponse` (201) | JWT | `PACKAGE_MANAGE` | `PACKAGE_CODE_DUPLICATE`, `PACKAGE_PRIORITY_EXCEEDED` |
 | PUT | `/api/admin/promotion-packages/{id}` | `PackageRequest` (code bất biến, bị bỏ qua) | `PromotionPackageResponse` | JWT | `PACKAGE_MANAGE` | `PACKAGE_NOT_FOUND` |
 | PUT | `/api/admin/promotion-packages/{id}/toggle` | `TogglePackageRequest{active, reason}` | `PromotionPackageResponse` | JWT | `PACKAGE_MANAGE` | — |
-| GET | `/api/admin/payments` | Nhiều filter (status/method/user/listing/package/txnCode/amount/date) + `Pageable` | `PaymentHistoryResponse` | JWT | `PAYMENT_MANAGE` (chỉ Admin) | `INVALID_SORT_FIELD` nếu sort khác `createdAt/paidAt/amount/finalAmount` |
+| GET | `/api/admin/payments` | Query `keyword?` (mã giao dịch hoặc tên/email người mua), `status[]?`, `paymentMethod[]?`, `userId?`, `listingId?`, `packageId?`, `transactionCode?`, `amountFrom?`, `amountTo?`, `from?`, `to?` + `Pageable` | `PaymentHistoryResponse{page, summary}`; item có `buyerName`, `buyerEmail`, `paymentMethod` | JWT | `PAYMENT_MANAGE` (chỉ Admin) | `INVALID_SORT_FIELD` nếu sort khác `createdAt/paidAt/amount/finalAmount` |
 | GET | `/api/admin/payments/{id}` | — | `PaymentResponse` (kèm `gatewayTxnRef`) | JWT | `PAYMENT_MANAGE` | — |
 | PUT | `/api/admin/payments/{id}/refund` | `RefundPaymentRequest{refundAmount?, reason, cancelSubscription?}` | `PaymentResponse` | JWT | `PAYMENT_MANAGE` | `PAYMENT_REFUND_NOT_ALLOWED`, `PAYMENT_ALREADY_REFUNDED` |
 | POST | `/api/admin/payments/{id}/reconcile` | — | `PaymentCallbackResponse` | JWT | `PAYMENT_MANAGE` | — |
@@ -2668,14 +2675,24 @@ flowchart TD
 
 ## Module: AI Cảm xúc + Chatbot + AI Log/Config
 
+> **Cập nhật hiện hành:** module cảm xúc đã bị xóa bởi `V21__drop_sentiment_module.sql`.
+> Các mô tả `sentiment_results`, endpoint sentiment và job sentiment ở phần lịch sử bên dưới chỉ
+> dùng để đối chiếu trước migration, không phải chức năng đang chạy. Contract quản trị hiện hành
+> chỉ gồm Recommendation, Price và Chatbot; xem `docs/TEMP_XOA_MODULE_CAM_XUC.md`.
+
 ### 1. Module này dùng để làm gì?
 
-Đây là 1 trong 4 tính năng AI rule-based **chạy in-process** (không gọi service ngoài, không cần GPU/API key) trong phạm vi Người 3:
+Phạm vi Người 3 gồm các tính năng AI chạy trong hệ thống và phần quản trị log/cấu hình:
 
-- **AI-01 Sentiment (cảm xúc)**: phân tích cảm xúc bình luận bằng từ điển tiếng Việt có trọng số (`VietnameseLexiconSentimentAnalyzer`) — tự động chạy sau mỗi bình luận mới/sửa, gắn nhãn `POSITIVE/NEUTRAL/NEGATIVE/MIXED`, phát hiện rủi ro (lừa đảo, đòi cọc...), và đề xuất hành động (`NONE/WATCH/NEED_REVIEW`).
+- **AI-01 Sentiment (lịch sử, đã xóa)**: nội dung liên quan chỉ còn để đối chiếu migration V21;
+  endpoint và bảng sentiment không còn trong hệ thống hiện hành.
 - **AI-05 Chatbot**: trợ lý hội thoại tìm phòng theo luật (`RuleBasedChatbotEngine`) — nhận diện 8 intent (FIND_ROOM, HOW_TO_POST, GLOSSARY, FAQ, GREETING, OUT_OF_SCOPE, SENSITIVE, UNKNOWN), trích xuất 11 loại slot (giá, diện tích, số người ở, khu vực...) qua regex, hỏi lại tối đa 3 lượt khi thiếu thông tin quan trọng, chỉ trả **tin công khai thật** (qua `ListingSearchService`, không bịa dữ liệu), kèm disclaimer bắt buộc.
-- **AI-07 Log AI**: lưu vết mọi lần chạy AI (bảng `sentiment_results` append-only có versioning `is_latest`, `chatbot_messages`) phục vụ audit/debug/thống kê — Admin xem qua `GET /api/admin/ai/logs`.
-- **AI-08 Cấu hình ngưỡng AI**: các tham số điều khiển hành vi AI (ngưỡng độ dài tối thiểu, ngưỡng tin cậy thấp, trọng số tài khoản mới, ngưỡng tỷ lệ tiêu cực L1/L2...) lưu ở bảng `ai_configs` (không lẫn với `system_configs`), quản lý qua `AdminAiController`.
+- **AI-07 Log AI**: endpoint quản trị hiện hợp nhất ba nguồn `recommendation_logs`,
+  `prediction_histories`, `chatbot_messages`; bỏ trống `module` để xem tất cả hoặc chọn
+  `RECOMMENDATION`/`PRICE`/`CHATBOT`.
+- **AI-08 Cấu hình ngưỡng AI**: `AdminAiController` đọc/ghi các khóa `ai.*` trong
+  `system_configs` và trả bốn nhóm `modules`, `recommendation`, `price`, `chatbot`; không còn nhóm
+  sentiment.
 
 **Vai trò trong hệ thống**: AI là lớp "giám sát tự động" giúp phát hiện sớm tin có vấn đề (nhiều bình luận tiêu cực) và hỗ trợ người dùng tìm phòng nhanh hơn qua hội thoại tự nhiên, **KHÔNG thay thế quyết định của con người** — nguyên tắc cứng: AI chỉ đề xuất/gắn cờ, không tự khóa tài khoản hay tự ẩn tin.
 
@@ -2686,8 +2703,8 @@ flowchart TD
 | Màn hình / Component | File | Mô tả |
 |---|---|---|
 | Widget chatbot nổi | `frontend_webtro/src/components/chatbot/ChatbotWidget.jsx` | `Fab` góc phải màn hình mở/đóng khung chat (`Paper` 380×520px), giữ `conversationId` trong state để duy trì ngữ cảnh qua nhiều lượt, render danh sách tin nhắn (`Card`/`CardActionArea` cho từng tin gợi ý kèm ảnh/giá), `TextField` + `IconButton Send`. |
-| Cấu hình AI (admin) | `frontend_webtro/src/pages/admin/AiConfigPage.jsx` | Trang xem/sửa ngưỡng 4 module AI (form theo nhóm), có `Alert` báo lỗi kèm nút "Thử lại". |
-| Log AI (admin) | `frontend_webtro/src/pages/admin/AiLogsPage.jsx` | Xem log theo module AI (`sentiment/recommendation/chatbot/price`), lọc theo khoảng ngày, phân trang — dùng chung pattern `AdminDataTable`. |
+| Cấu hình AI (admin) | `frontend_webtro/src/pages/admin/AiConfigPage.jsx` | Trang xem/sửa cấu hình Recommendation, Price, Chatbot và công tắc module; có `Alert` báo lỗi kèm nút "Thử lại". |
+| Log AI (admin) | `frontend_webtro/src/pages/admin/AiLogsPage.jsx` | Hai tab “Log gọi AI” và “Tin lệch giá”; tab log chọn `RECOMMENDATION`/`CHATBOT`/`PRICE` hoặc “Tất cả module”, phân trang bằng `AdminDataTable`. |
 
 **API client FE**: `frontend_webtro/src/api/aiApi.js` (`analyzeSentiment` — công cụ chẩn đoán cho admin/mod, không phải luồng người dùng thường), `frontend_webtro/src/api/chatbotApi.js` (`sendMessage`). Trang admin dùng `adminApi.js` cho cấu hình/log (endpoint `/api/admin/ai/*`).
 
@@ -2809,16 +2826,13 @@ flowchart TD
 
 | Method | URL | Request | Response | Auth | Permission | Error chính |
 |---|---|---|---|---|---|---|
-| POST | `/api/ai/sentiment/analyze` | `SentimentAnalyzeRequest{commentId? \| text?, persist?}` (đúng 1 trong 2) | `SentimentResponse` | JWT | `AI_LOG_VIEW` | `VALIDATION_FAILED`, `SENTIMENT_COMMENT_NOT_FOUND` |
 | POST | `/api/ai/chatbot/message` | `ChatbotMessageRequest{message, sessionId?, conversationId?, resetContext?}` | `ChatbotMessageResponse` | Public (JWT optional) | — | `CHATBOT_MESSAGE_EMPTY`, `CHATBOT_MESSAGE_TOO_LONG`, `CHATBOT_RATE_LIMIT` |
 | GET | `/api/ai/chatbot/conversations` | `Pageable` | `PageResponse<ChatbotConversationResponse>` | JWT | `isAuthenticated()` | — |
 | GET | `/api/ai/chatbot/conversations/{id}/messages` | `Pageable` | `PageResponse<ChatbotMessageHistoryResponse>` | JWT | `isAuthenticated()` + chủ phiên | `CHATBOT_CONVERSATION_NOT_FOUND`, `FORBIDDEN` |
 | GET | `/api/admin/ai/config` | — | `AiConfigResponse` | JWT | `AI_CONFIG_MANAGE` | — |
 | PUT | `/api/admin/ai/config` | `UpdateConfigRequest{configs[], reason}` | `UpdateConfigResponse` | JWT | `AI_CONFIG_MANAGE` | `CONFIG_KEY_UNKNOWN`, `CONFIG_VALUE_INVALID` |
-| GET | `/api/admin/ai/logs` | Query `module` (bắt buộc), `from?, to?, Pageable` | `AiLogResponse` | JWT | `AI_LOG_VIEW` | — |
-| GET | `/api/admin/ai/alerts` | `Pageable` | `PageResponse<AiAlertResponse>` | JWT | `AI_LOG_VIEW` | — |
+| GET | `/api/admin/ai/logs` | Query `module?` (`RECOMMENDATION`/`CHATBOT`/`PRICE`; bỏ trống = `ALL`), `from?, to?, Pageable` | `AiLogResponse{module, results: PageResponse<AiLogItemResponse>}`; khi `ALL` sort/phân trang sau khi hợp nhất 3 nguồn | JWT | `AI_LOG_VIEW` | `STATISTIC_RANGE_INVALID`, `AUDIT_LOG_RANGE_TOO_LARGE` |
 | GET | `/api/admin/ai/price-deviations` | `Pageable` | `PageResponse<AiPriceDeviationResponse>` | JWT | `AI_LOG_VIEW` | — |
-| POST | `/api/admin/ai/sentiment/reanalyze` | `ReanalyzeSentimentRequest{commentId}` | `SentimentResponse` | JWT | `AI_LOG_VIEW` hoặc `COMMENT_MODERATE` | `SENTIMENT_COMMENT_NOT_FOUND` |
 
 ### 8. Dependency
 

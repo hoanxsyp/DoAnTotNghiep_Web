@@ -68,7 +68,7 @@
 | Train intent classifier (PhoBERT, **6 nhãn**) | `ml/train_intent.py` → `ml/out-intent/` | §11 bước 2.1 |
 | Train NER (BIO, nhãn theo từ VnCoreNLP) | `ml/train_ner.py` → `ml/out-ner/` | §11 bước 2.2 |
 | Word-segment VnCoreNLP kèm offset ký tự, encode dùng chung train + service | `ml/phobert_encoding.py`, `ml/vncorenlp_util.py` | §11 lưu ý |
-| Bọc FastAPI service `/nlu` + `/embed` + `/health` (JRE trong Docker, warm-up lúc startup) | `nlu-service/app.py`, `nlu-service/Dockerfile` | §11 bước 2.3 |
+| Bọc FastAPI service `/nlu` + `/embed`; `/live` cho liveness, `/health` cho chẩn đoán, `/ready` cho readiness model (JRE trong Docker, warm-up lúc startup) | `nlu-service/app.py`, `nlu-service/Dockerfile` | §11 bước 2.3 |
 | Nối Spring qua `LocalNluServiceImpl` (@Primary, timeout 300ms, fallback LLM→rule) | `service/LocalNluServiceImpl` | §11 bước 2.4 |
 | Fast-path bật + ghi `path` vào `chat_log` | `ChatOrchestrator` | §6.3 |
 | **So sánh 3 phương án NLU (A/B/C)** | `ml/eval_nlu_compare.py`, `ml/eval-results/REPORT.md` | §14.4 |
