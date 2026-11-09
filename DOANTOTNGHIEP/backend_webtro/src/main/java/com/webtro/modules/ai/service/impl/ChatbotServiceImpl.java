@@ -61,7 +61,7 @@ import java.util.UUID;
  * khai, không bịa thông tin, luôn kèm disclaimer khi trả tin, hỏi lại tối đa
  * {@code ai.chatbot.max_clarify_turns}.
  *
- * <p>Câu hỏi tìm phòng do module AI chatbot trả lời ({@link AiChatbotClient}: ViSoBERT + tin thật
+ * <p>Câu hỏi tìm phòng do module AI chatbot trả lời ({@link AiChatbotClient}: PhoBERT + tin thật
  * qua {@code /api/search/listings} → vẫn đúng {@code publicStatuses()}, + Gemini có guardrail).
  * Chatbot theo luật ({@link ChatbotEngine}) chỉ còn lo nhạy cảm, thuật ngữ, câu mẫu chào hỏi /
  * đăng tin / FAQ, và toàn bộ hội thoại khi tắt {@code app.ai.chatbot-api.enabled}. AI sập →
