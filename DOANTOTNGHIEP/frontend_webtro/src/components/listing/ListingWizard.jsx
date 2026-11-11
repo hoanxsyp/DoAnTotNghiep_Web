@@ -25,6 +25,13 @@ const STEPS = ['Phòng & địa chỉ', 'Loại tin', 'Thông tin cơ bản', 'G
 const CURFEW = { FREE: 'Giờ giấc tự do', CURFEW: 'Có giờ giới nghiêm', UNKNOWN: 'Không rõ' };
 const TOILET_TYPE = { PRIVATE: 'Vệ sinh riêng', SHARED: 'Vệ sinh chung' };
 const ROOM_REQUIRED = ['WHOLE_HOUSE', 'APARTMENT', 'MINI_APARTMENT'];
+const AI_MIN_AREA = 8;
+const AI_MAX_AREA = 80;
+const AI_AREA_UNSUPPORTED_MESSAGE = 'AI chỉ hỗ trợ diện tích 8–80 m². Bạn vẫn có thể tiếp tục đăng tin với diện tích đã nhập.';
+const isAiPredictionAreaSupported = (area) => {
+  const value = Number(area);
+  return Number.isFinite(value) && value >= AI_MIN_AREA && value <= AI_MAX_AREA;
+};
 
 const DEFAULTS = {
   categoryId: '', title: '', description: '', price: '', area: '', depositAmount: '',
@@ -65,6 +72,10 @@ export default function ListingWizard({ mode = 'create', listingId, initialData,
   } = useForm({ defaultValues: { ...DEFAULTS, ...(initialData?.values || {}) }, mode: 'onTouched' });
 
   const categoryId = watch('categoryId');
+  const areaValue = watch('area');
+  const aiAreaOutsideRange = areaValue !== '' && areaValue != null
+    && Number.isFinite(Number(areaValue)) && !isAiPredictionAreaSupported(areaValue);
+  const visiblePrice = price?.inputArea === Number(areaValue) ? price : null;
   const visibleCategories = useMemo(
     () => (role === ROLES.TENANT ? categories.filter((c) => c.code === 'ROOMMATE') : categories),
     [categories, role],
@@ -207,12 +218,17 @@ export default function ListingWizard({ mode = 'create', listingId, initialData,
   const runPrediction = async () => {
     const v = getValues();
     if (!v.categoryId || !v.wardId || !v.area) return;
+    const inputArea = Number(v.area);
+    if (!isAiPredictionAreaSupported(inputArea)) {
+      setPriceState({ available: false, message: AI_AREA_UNSUPPORTED_MESSAGE, inputArea });
+      return;
+    }
     setPredicting(true);
     try {
       const res = await aiApi.predictPrice(buildPredictionPayload(mode === 'edit' ? listingId : undefined));
-      setPriceState(res);
+      setPriceState({ ...res, inputArea });
     } catch (e) {
-      setPriceState({ available: false, message: e?.message });
+      setPriceState({ available: false, message: e?.message, inputArea });
     } finally {
       setPredicting(false);
     }
@@ -343,10 +359,12 @@ export default function ListingWizard({ mode = 'create', listingId, initialData,
         await syncImages(id);
         // Gắn một dự đoán vào tin vừa tạo để lịch sử và cờ lệch giá không bị thất lạc.
         // AI là tính năng hỗ trợ: lỗi/tắt/timeout tuyệt đối không được làm hỏng luồng lưu tin.
-        try {
-          await aiApi.predictPrice(buildPredictionPayload(id));
-        } catch {
-          // Kết quả gọi trước khi tạo tin vẫn được hiển thị; việc lưu tin tiếp tục bình thường.
+        if (isAiPredictionAreaSupported(getValues('area'))) {
+          try {
+            await aiApi.predictPrice(buildPredictionPayload(id));
+          } catch {
+            // Kết quả gọi trước khi tạo tin vẫn được hiển thị; việc lưu tin tiếp tục bình thường.
+          }
         }
         if (submitImmediately) await listingApi.submit(id);
         notify.success(submitImmediately ? 'Đã gửi tin chờ duyệt' : 'Đã lưu tin nháp');
@@ -548,30 +566,32 @@ export default function ListingWizard({ mode = 'create', listingId, initialData,
                         <AutoAwesomeIcon color="primary" fontSize="small" />
                         <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Giá AI đề xuất</Typography>
                       </Stack>
-                      <Button size="small" onClick={runPrediction} disabled={predicting}>
+                      <Button size="small" onClick={runPrediction} disabled={predicting || aiAreaOutsideRange}>
                         {predicting ? <CircularProgress size={18} /> : 'Tính lại'}
                       </Button>
                     </Stack>
-                    {predicting ? (
+                    {aiAreaOutsideRange ? (
+                      <Alert severity="info">{AI_AREA_UNSUPPORTED_MESSAGE}</Alert>
+                    ) : predicting ? (
                       <Typography variant="body2" color="text.secondary">Đang phân tích thị trường…</Typography>
-                    ) : !price ? (
+                    ) : !visiblePrice ? (
                       <Typography variant="body2" color="text.secondary">Nhập giá & diện tích rồi bấm &quot;Tính lại&quot; để xem gợi ý.</Typography>
-                    ) : !price.available ? (
-                      <Alert severity="info">{price.message || 'Chưa đủ dữ liệu thị trường để dự đoán giá cho khu vực này.'}</Alert>
+                    ) : !visiblePrice.available ? (
+                      <Alert severity="info">{visiblePrice.message || 'Chưa đủ dữ liệu thị trường để dự đoán giá cho khu vực này.'}</Alert>
                     ) : (
                       <Stack spacing={1}>
                         <Typography variant="h6" color="primary" sx={{ fontWeight: 700 }}>
-                          {formatPrice(price.suggestedPrice)}/tháng
+                          {formatPrice(visiblePrice.suggestedPrice)}/tháng
                           <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 1 }}>
-                            (khoảng {formatPrice(price.priceRange?.low)} – {formatPrice(price.priceRange?.high)})
+                            (khoảng {formatPrice(visiblePrice.priceRange?.low)} – {formatPrice(visiblePrice.priceRange?.high)})
                           </Typography>
                         </Typography>
-                        {price.comparison?.deviationFlagged && (
+                        {visiblePrice.comparison?.deviationFlagged && (
                           <Alert severity="warning">
-                            {price.comparison?.verdictMessage || 'Giá bạn nhập lệch khá lớn so với mặt bằng khu vực. Bạn vẫn có thể đăng, nhưng tin có thể ít người liên hệ hơn.'}
+                            {visiblePrice.comparison?.verdictMessage || 'Giá bạn nhập lệch khá lớn so với mặt bằng khu vực. Bạn vẫn có thể đăng, nhưng tin có thể ít người liên hệ hơn.'}
                           </Alert>
                         )}
-                        {price.disclaimer && <Typography variant="caption" color="text.disabled">{price.disclaimer}</Typography>}
+                        {visiblePrice.disclaimer && <Typography variant="caption" color="text.disabled">{visiblePrice.disclaimer}</Typography>}
                       </Stack>
                     )}
                   </CardContent>
