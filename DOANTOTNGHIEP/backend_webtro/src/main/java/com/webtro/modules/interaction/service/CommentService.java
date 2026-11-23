@@ -44,6 +44,8 @@ public interface CommentService {
     PageResponse<AdminCommentResponse> adminListComments(CommentStatus status, Boolean isSpam,
                                                          String keyword, Long listingId, Pageable pageable);
 
+    AdminCommentResponse adminGetComment(Long commentId);
+
     /**
      * Ẩn bình luận vi phạm (dùng cho endpoint admin): đặt {@code HIDDEN}, ghi lý do/người/thời điểm,
      * đồng bộ số đếm và ghi AuditLog {@code COMMENT_HIDE}. Trả bản ghi sau khi ẩn.

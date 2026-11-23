@@ -347,6 +347,12 @@ public class ReviewServiceImpl implements ReviewService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public AdminReviewResponse adminGetReview(Long reviewId) {
+        return buildAdmin(aliveById(reviewId));
+    }
+
+    @Override
     @Transactional
     public AdminReviewResponse adminHideReview(Long reviewId, Long moderatorId, String reason) {
         Review r = aliveById(reviewId);
@@ -388,8 +394,8 @@ public class ReviewServiceImpl implements ReviewService {
 
     private AdminReviewResponse buildAdmin(Review r) {
         AuthorResponse author = reviewMapper.toAuthor(userGateway.findBrief(r.getUserId()).orElse(null));
-        ListingGateway.ListingBrief listing = listingGateway.getBrief(r.getListingId());
-        return reviewMapper.toAdminResponse(r, author, listing.ownerId());
+        Long ownerId = listingGateway.findBrief(r.getListingId()).map(ListingGateway.ListingBrief::ownerId).orElse(null);
+        return reviewMapper.toAdminResponse(r, author, ownerId);
     }
 
     private Review aliveById(Long reviewId) {

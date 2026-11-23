@@ -269,6 +269,14 @@ public class CommentServiceImpl implements CommentService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public AdminCommentResponse adminGetComment(Long commentId) {
+        Comment comment = commentRepository.findByIdAndDeletedAtIsNull(commentId)
+                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.COMMENT_NOT_FOUND));
+        return buildAdmin(comment);
+    }
+
+    @Override
     @Transactional
     public AdminCommentResponse adminHideComment(Long commentId, Long moderatorId, String reason) {
         Comment c = commentRepository.findByIdAndDeletedAtIsNull(commentId)
