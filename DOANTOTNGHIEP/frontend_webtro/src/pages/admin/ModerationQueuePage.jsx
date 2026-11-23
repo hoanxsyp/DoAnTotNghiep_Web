@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 import {
   Box, Tabs, Tab, Stack, Button, Typography, Link, Chip,
 } from '@mui/material';
@@ -64,7 +65,7 @@ const ModerationQueuePage = () => {
     {
       key: 'title', label: 'Tin đăng', render: (r) => (
         <Box sx={{ minWidth: 0, maxWidth: 340 }}>
-          <Link href={`/admin/tin-dang/${r.id}`} underline="hover" color="inherit">
+          <Link component={RouterLink} to={`/admin/tin-dang/${r.id}`} underline="hover" color="inherit">
             <Typography variant="body2" fontWeight={600} noWrap>{r.title}</Typography>
           </Link>
           <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>

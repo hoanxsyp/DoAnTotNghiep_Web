@@ -121,6 +121,7 @@ const DashboardPage = () => import('@/pages/admin/DashboardPage');
 const UsersPage = () => import('@/pages/admin/UsersPage');
 const LandlordsPage = () => import('@/pages/admin/LandlordsPage');
 const AdminListingsPage = () => import('@/pages/admin/ListingsPage');
+const AdminListingDetailPage = () => import('@/pages/admin/ListingDetailPage');
 const ModerationQueuePage = () => import('@/pages/admin/ModerationQueuePage');
 const ReportsPage = () => import('@/pages/admin/ReportsPage');
 const CommentsPage = () => import('@/pages/admin/CommentsPage');
@@ -240,6 +241,7 @@ const router = createBrowserRouter([
       { path: '/admin/nguoi-dung', element: loadForRoles([ROLES.ADMIN], UsersPage) },
       { path: '/admin/chu-tro', element: loadForRoles([ROLES.ADMIN, ROLES.MODERATOR], LandlordsPage) },
       { path: '/admin/tin-dang', element: loadForRoles([ROLES.ADMIN, ROLES.MODERATOR], AdminListingsPage) },
+      { path: '/admin/tin-dang/:id', element: loadForRoles([ROLES.ADMIN, ROLES.MODERATOR], AdminListingDetailPage) },
       { path: '/admin/kiem-duyet', element: loadForRoles([ROLES.ADMIN, ROLES.MODERATOR], ModerationQueuePage) },
       { path: '/admin/bao-cao', element: loadForRoles([ROLES.ADMIN, ROLES.MODERATOR], ReportsPage) },
       { path: '/admin/binh-luan', element: loadForRoles([ROLES.ADMIN, ROLES.MODERATOR], CommentsPage) },

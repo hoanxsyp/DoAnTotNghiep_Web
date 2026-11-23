@@ -7,7 +7,7 @@ import { unwrap } from './apiHelper';
 const listingApi = {
   // ----- Công khai -----
   search: (params) => unwrap(axiosClient.get('/search/listings', { params })),
-  getDetail: (id) => unwrap(axiosClient.get(`/listings/${id}`)),
+  getDetail: (id, params) => unwrap(axiosClient.get(`/listings/${id}`, { params })),
   getRelated: (id) => unwrap(axiosClient.get(`/listings/${id}/related`)),
   getSuggested: (params) => unwrap(axiosClient.get('/listings/suggested', { params })),
 
