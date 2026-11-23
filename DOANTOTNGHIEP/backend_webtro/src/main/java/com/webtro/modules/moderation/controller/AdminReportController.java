@@ -89,19 +89,18 @@ public class AdminReportController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
             @PageableDefault(size = 20, sort = "createdAt") Pageable pageable) {
 
-        Instant effectiveFrom = from != null ? from : Instant.now().minus(Duration.ofDays(30));
         Instant effectiveTo = to != null ? to : Instant.now();
-        if (Duration.between(effectiveFrom, effectiveTo).toDays() > MAX_RANGE_DAYS) {
+        if (from != null && Duration.between(from, effectiveTo).toDays() > MAX_RANGE_DAYS) {
             throw new BusinessException(ErrorCode.AUDIT_LOG_RANGE_TOO_LARGE);
         }
 
         if (groupBy == ReportGroupBy.TARGET) {
             PageResponse<AdminReportGroupResponse> data = moderationService.adminListReportGroups(
-                    status, targetType, severity, effectiveFrom, effectiveTo, pageable);
+                    status, targetType, severity, from, effectiveTo, pageable);
             return ResponseEntity.ok(ApiResponse.<Object>success(data, "Lấy danh sách báo cáo theo nhóm thành công"));
         }
         AdminReportListResponse data = moderationService.adminListReports(
-                status, targetType, targetId, severity, reporterId, effectiveFrom, effectiveTo, pageable);
+                status, targetType, targetId, severity, reporterId, from, effectiveTo, pageable);
         return ResponseEntity.ok(ApiResponse.<Object>success(data, "Lấy danh sách báo cáo thành công"));
     }
 

@@ -286,8 +286,7 @@ public class ModerationServiceImpl implements ModerationService {
     public AdminReportListResponse adminListReports(List<ReportStatus> statuses, List<ReportTargetType> targetTypes,
                                                     Long targetId, List<ReportSeverity> severities, Long reporterId,
                                                     Instant from, Instant to, Pageable pageable) {
-        List<ReportStatus> effectiveStatuses = (statuses == null || statuses.isEmpty())
-                ? List.of(ReportStatus.PENDING, ReportStatus.REVIEWING) : statuses;
+        List<ReportStatus> effectiveStatuses = reportListStatuses(statuses);
 
         Specification<Report> commonNoStatus = base();
         if (targetTypes != null && !targetTypes.isEmpty()) {
@@ -355,10 +354,7 @@ public class ModerationServiceImpl implements ModerationService {
                                                                         List<ReportTargetType> targetTypes,
                                                                         List<ReportSeverity> severities,
                                                                         Instant from, Instant to, Pageable pageable) {
-        Specification<Report> spec = base();
-        if (statuses != null && !statuses.isEmpty()) {
-            spec = spec.and(ReportSpecifications.statusesIn(statuses));
-        }
+        Specification<Report> spec = base().and(ReportSpecifications.statusesIn(reportListStatuses(statuses)));
         if (targetTypes != null && !targetTypes.isEmpty()) {
             spec = spec.and(ReportSpecifications.targetTypesIn(targetTypes));
         }
@@ -400,6 +396,11 @@ public class ModerationServiceImpl implements ModerationService {
                 .first(pageable.getPageNumber() == 0)
                 .last(toIdx >= total)
                 .build();
+    }
+
+    private List<ReportStatus> reportListStatuses(List<ReportStatus> statuses) {
+        return statuses == null || statuses.isEmpty()
+                ? List.of(ReportStatus.PENDING, ReportStatus.REVIEWING) : statuses;
     }
 
     private AdminReportGroupResponse toGroupRow(List<Report> group) {

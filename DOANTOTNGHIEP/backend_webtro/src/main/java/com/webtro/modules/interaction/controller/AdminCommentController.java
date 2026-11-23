@@ -57,6 +57,14 @@ public class AdminCommentController {
         return ResponseEntity.ok(ApiResponse.success(data, "Lấy danh sách bình luận thành công"));
     }
 
+    @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
+    @Operation(summary = "Chi tiết bình luận cho kiểm duyệt")
+    public ResponseEntity<ApiResponse<AdminCommentResponse>> detail(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.success(
+                commentService.adminGetComment(id), "Lấy chi tiết bình luận thành công"));
+    }
+
     /** Ẩn bình luận vi phạm (kèm lý do bắt buộc). */
     @PutMapping("/{id}/hide")
     @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")

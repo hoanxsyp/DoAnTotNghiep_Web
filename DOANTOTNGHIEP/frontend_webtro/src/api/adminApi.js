@@ -38,17 +38,22 @@ const adminApi = {
   getModerationQueue: (params) => unwrap(axiosClient.get('/admin/moderation-queue', { params })),
 
   // ----- Báo cáo (REPORT_RESOLVE) -----
-  getReports: (params) => unwrap(axiosClient.get('/admin/reports', { params })),
+  getReports: async (params) => {
+    const data = await unwrap(axiosClient.get('/admin/reports', { params }));
+    return params?.groupBy === 'TARGET' ? data : data?.page;
+  },
   resolveReport: (id, payload) => unwrap(axiosClient.put(`/admin/reports/${id}/resolve`, payload)),
   resolveReportGroup: (payload) => unwrap(axiosClient.put('/admin/reports/resolve-group', payload)),
 
   // ----- Cảnh báo vi phạm (WARNING_SEND) -----
 
   // ----- Bình luận & đánh giá (COMMENT_MODERATE / REVIEW_MODERATE) -----
+  getComment: (id) => unwrap(axiosClient.get(`/admin/comments/${id}`)),
   getComments: (params) => unwrap(axiosClient.get('/admin/comments', { params })),
   hideComment: (id, payload) => unwrap(axiosClient.put(`/admin/comments/${id}/hide`, payload)),
   unhideComment: (id) => unwrap(axiosClient.put(`/admin/comments/${id}/unhide`)),
   markCommentSpam: (id, payload) => unwrap(axiosClient.put(`/admin/comments/${id}/spam`, payload)),
+  getReview: (id) => unwrap(axiosClient.get(`/admin/reviews/${id}`)),
   getReviews: (params) => unwrap(axiosClient.get('/admin/reviews', { params })),
   hideReview: (id, payload) => unwrap(axiosClient.put(`/admin/reviews/${id}/hide`, payload)),
   unhideReview: (id) => unwrap(axiosClient.put(`/admin/reviews/${id}/unhide`)),

@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 import {
-  Box, Stack, TextField, MenuItem, Chip, Typography, IconButton, Rating,
+  Box, Link, Stack, TextField, MenuItem, Chip, Typography, IconButton, Rating,
   InputAdornment, Menu, ListItemIcon, ListItemText, Button,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
@@ -70,12 +71,18 @@ const ReviewsPage = () => {
         <Box sx={{ minWidth: 0, maxWidth: 400 }}>
           <Rating value={Number(r.rating) || 0} precision={0.5} size="small" readOnly />
           <Typography variant="body2" sx={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-            {r.content}
+            {r.listingId ? (
+              <Link component={RouterLink} to={`/admin/tin-dang/${r.listingId}?reviewId=${r.id}`} underline="hover">
+                {r.content || 'Xem đánh giá'}
+              </Link>
+            ) : (r.content || 'Không có nội dung văn bản.')}
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            {r.authorName || r.author?.fullName}
+            {r.authorName || r.author?.fullName || '—'}
             {' · '}
-            {r.rentalUnitName ? `phòng "${r.rentalUnitName}"` : (r.landlordName ? `chủ trọ ${r.landlordName}` : `tin #${r.listingId}`)}
+            {r.rentalUnitName
+              ? `phòng "${r.rentalUnitName}"`
+              : (r.landlordName ? `chủ trọ ${r.landlordName}` : (r.listingId ? `tin #${r.listingId}` : '—'))}
           </Typography>
         </Box>
       ),

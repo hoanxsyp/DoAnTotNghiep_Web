@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 import {
-  Box, Stack, TextField, MenuItem, Chip, Typography, Button,
+  Box, Stack, TextField, MenuItem, Chip, Link, Typography, Button,
   ToggleButtonGroup, ToggleButton,
 } from '@mui/material';
 import GavelIcon from '@mui/icons-material/Gavel';
@@ -78,7 +79,13 @@ const ReportsPage = () => {
     {
       key: 'target', label: 'Đối tượng', render: (r) => (
         <Box sx={{ minWidth: 0, maxWidth: 300 }}>
-          <Typography variant="body2" fontWeight={600} noWrap>{r.targetTitle || `${REPORT_TARGET_META[r.targetType]} #${r.targetId}`}</Typography>
+          <Typography variant="body2" fontWeight={600} noWrap>
+            {r.targetType === 'LISTING' ? (
+              <Link component={RouterLink} to={`/admin/tin-dang/${r.targetId}`} underline="hover">
+                {r.targetTitle || `Tin đăng #${r.targetId}`}
+              </Link>
+            ) : (r.targetTitle || `${REPORT_TARGET_META[r.targetType]} #${r.targetId}`)}
+          </Typography>
           <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
             {REPORT_TARGET_META[r.targetType]} · {r.targetOwnerName || ''}
           </Typography>
@@ -113,7 +120,13 @@ const ReportsPage = () => {
     {
       key: 'target', label: 'Đối tượng', render: (r) => (
         <Box sx={{ minWidth: 0, maxWidth: 300 }}>
-          <Typography variant="body2" fontWeight={600} noWrap>{r.targetTitle || `${REPORT_TARGET_META[r.targetType]} #${r.targetId}`}</Typography>
+          <Typography variant="body2" fontWeight={600} noWrap>
+            {r.targetType === 'LISTING' ? (
+              <Link component={RouterLink} to={`/admin/tin-dang/${r.targetId}`} underline="hover">
+                {r.targetTitle || `Tin đăng #${r.targetId}`}
+              </Link>
+            ) : (r.targetTitle || `${REPORT_TARGET_META[r.targetType]} #${r.targetId}`)}
+          </Typography>
           <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>{r.targetOwnerName || ''}</Typography>
         </Box>
       ),
@@ -138,7 +151,7 @@ const ReportsPage = () => {
     { key: 'last', label: 'Gần nhất', render: (r) => fromNow(r.lastReportedAt) },
     {
       key: 'actions', label: '', align: 'right', render: (r) => (
-        <Button size="small" variant="contained" startIcon={<GavelIcon />} onClick={() => { setActive(r); setDialog(true); }}>Xử lý nhóm</Button>
+        (r.pendingCount > 0) && <Button size="small" variant="contained" startIcon={<GavelIcon />} onClick={() => { setActive(r); setDialog(true); }}>Xử lý nhóm</Button>
       ),
     },
   ];
@@ -158,7 +171,7 @@ const ReportsPage = () => {
 
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} sx={{ mb: 2 }}>
         <TextField select size="small" label="Trạng thái" value={status} onChange={(e) => { setStatus(e.target.value); applyFilters({ status: e.target.value || undefined }); }} sx={{ minWidth: 180 }}>
-          <MenuItem value="">Tất cả</MenuItem>
+          <MenuItem value="">Đang mở</MenuItem>
           {STATUS_OPTIONS.map((s) => <MenuItem key={s} value={s}>{REPORT_STATUS_META[s].label}</MenuItem>)}
         </TextField>
         <TextField select size="small" label="Mức độ" value={severity} onChange={(e) => { setSeverity(e.target.value); applyFilters({ severity: e.target.value || undefined }); }} sx={{ minWidth: 180 }}>

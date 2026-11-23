@@ -354,6 +354,12 @@ public class ReviewServiceImpl implements ReviewService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public AdminReviewResponse adminGetReview(Long reviewId) {
+        return buildAdmin(aliveById(reviewId));
+    }
+
+    @Override
     @Transactional
     public AdminReviewResponse adminHideReview(Long reviewId, Long moderatorId, String reason) {
         Review r = aliveById(reviewId);

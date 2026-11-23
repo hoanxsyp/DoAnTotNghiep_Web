@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 import {
   Box, Stack, TextField, MenuItem, Typography, IconButton, InputAdornment,
   Menu, ListItemIcon, ListItemText, Button, Link, Chip,
@@ -21,7 +22,7 @@ import AdminPageHeader from '@/components/admin/AdminPageHeader';
 import AdminDataTable from '@/components/admin/AdminDataTable';
 import ConfirmDialog from '@/components/admin/ConfirmDialog';
 import StatusChip from '@/components/common/StatusChip';
-import { buildAdminListingFilters, listingDetailPath } from '@/utils/adminContracts';
+import { buildAdminListingFilters } from '@/utils/adminContracts';
 
 const STATUS_LIST = Object.values(LISTING_STATUS);
 
@@ -77,7 +78,7 @@ const ListingsPage = () => {
     {
       key: 'title', label: 'Tin đăng', render: (r) => (
         <Box sx={{ minWidth: 0, maxWidth: 320 }}>
-          <Link href={listingDetailPath(r)} underline="hover" color="inherit">
+          <Link component={RouterLink} to={`/admin/tin-dang/${r.id}`} underline="hover" color="inherit">
             <Typography variant="body2" fontWeight={600} noWrap>{r.title}</Typography>
           </Link>
           <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>

@@ -52,6 +52,8 @@ public interface ReviewService {
                                                        Long rentalUnitId,
                                                        Long landlordId, String keyword, Pageable pageable);
 
+    AdminReviewResponse adminGetReview(Long reviewId);
+
     /**
      * Ẩn đánh giá vi phạm (dùng cho endpoint admin): đặt {@code HIDDEN}, ghi lý do/người/thời điểm,
      * tính lại trung bình sao và ghi AuditLog {@code REVIEW_HIDE}. Trả bản ghi sau khi ẩn.

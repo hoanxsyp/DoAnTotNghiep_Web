@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 import {
-  Box, Stack, TextField, MenuItem, Chip, Typography, IconButton,
+  Box, Link, Stack, TextField, MenuItem, Chip, Typography, IconButton,
   InputAdornment, Menu, ListItemIcon, ListItemText, Button,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
@@ -75,10 +76,12 @@ const CommentsPage = () => {
       key: 'content', label: 'Bình luận', render: (r) => (
         <Box sx={{ minWidth: 0, maxWidth: 400 }}>
           <Typography variant="body2" sx={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-            {r.content}
+            <Link component={RouterLink} to={`/admin/tin-dang/${r.listingId}?commentId=${r.id}`} underline="hover">
+              {r.content || 'Xem bình luận'}
+            </Link>
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            {r.authorName} · trên tin {r.listingTitle ? `"${r.listingTitle}"` : `#${r.listingId}`}
+            {r.author?.fullName || '—'} · trên tin {r.listingTitle ? `"${r.listingTitle}"` : `#${r.listingId}`}
           </Typography>
         </Box>
       ),

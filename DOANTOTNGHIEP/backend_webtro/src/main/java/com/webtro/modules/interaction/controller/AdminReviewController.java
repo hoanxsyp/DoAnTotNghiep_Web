@@ -55,6 +55,14 @@ public class AdminReviewController {
         return ResponseEntity.ok(ApiResponse.success(data, "Lấy danh sách đánh giá thành công"));
     }
 
+    @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
+    @Operation(summary = "Chi tiết đánh giá cho kiểm duyệt")
+    public ResponseEntity<ApiResponse<AdminReviewResponse>> detail(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.success(
+                reviewService.adminGetReview(id), "Lấy chi tiết đánh giá thành công"));
+    }
+
     /** Ẩn đánh giá vi phạm (kèm lý do bắt buộc). */
     @PutMapping("/{id}/hide")
     @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
