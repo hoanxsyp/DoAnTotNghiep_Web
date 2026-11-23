@@ -24,6 +24,7 @@ const mapToInitialData = (d) => ({
     districtId: d.districtId ?? d.district?.id ?? null,
     wardId: d.wardId ?? d.ward?.id ?? null,
     addressDetail: d.addressDetail ?? '',
+    unitLabel: d.rentalUnit?.unitLabel ?? '',
     roomCount: d.roomCount ?? '',
     toiletCount: d.toiletCount ?? 1,
     maxOccupants: d.maxOccupants ?? 1,
@@ -39,8 +40,14 @@ const mapToInitialData = (d) => ({
     contactName: d.contactName ?? '',
     contactPhone: d.contactPhone ?? '',
   },
-  images: (d.images || []).map((img) => ({ id: img.id, url: img.mediumUrl || img.url || img.originalUrl, name: img.id, isPrimary: img.isPrimary })),
-  primaryImageId: (d.images || []).find((img) => img.isPrimary)?.id ?? null,
+  images: (d.images || []).map((img) => ({
+    id: img.id,
+    url: img.mediumUrl || img.url || img.originalUrl,
+    name: img.id,
+    isPrimary: img.primary ?? img.isPrimary ?? false,
+  })),
+  primaryImageId: (d.images || []).find((img) => (img.primary ?? img.isPrimary))?.id ?? null,
+  rentalUnit: d.rentalUnit || null,
 });
 
 const EditListingPage = () => {

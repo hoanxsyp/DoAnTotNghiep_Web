@@ -13,7 +13,7 @@ import notify from '@/utils/toast';
 import { formatCurrency, formatDateTime } from '@/utils/format';
 import { PAYMENT_STATUS_META } from '@/constants';
 
-const ContactsCell = ({ p }) => (
+const PackageCell = ({ p }) => (
   <Box>
     <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>{p.packageName}</Typography>
     <Typography variant="caption" color="text.secondary" noWrap sx={{ maxWidth: 220, display: 'block' }}>{p.listingTitle}</Typography>
@@ -107,7 +107,7 @@ const PaymentsPage = () => {
                 return (
                   <TableRow key={p.id} hover>
                     <TableCell><Typography variant="caption" sx={{ fontFamily: 'monospace' }}>{p.transactionCode}</Typography></TableCell>
-                    <TableCell><ContactsCell p={p} /></TableCell>
+                    <TableCell><PackageCell p={p} /></TableCell>
                     <TableCell align="right"><Typography variant="body2" sx={{ fontWeight: 600 }}>{formatCurrency(p.amount)}</Typography></TableCell>
                     <TableCell><Typography variant="body2">{p.paymentMethod}</Typography></TableCell>
                     <TableCell><Chip size="small" color={st.color} label={p.statusLabel || st.label} /></TableCell>

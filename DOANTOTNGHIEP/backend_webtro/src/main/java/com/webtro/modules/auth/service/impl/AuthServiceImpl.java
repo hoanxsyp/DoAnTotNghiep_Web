@@ -501,8 +501,10 @@ public class AuthServiceImpl implements AuthService {
     //  AUTH-06 — Xác thực email / gửi lại
     // ==================================================================
 
+    // noRollbackFor: lỗi OTP (sai/hết hạn) vẫn phải lưu attemptCount/EXPIRED, nếu rollback thì giới
+    // hạn 5 lần nhập sai không có tác dụng. Trước mỗi lần ném lỗi không có thay đổi nào khác.
     @Override
-    @Transactional
+    @Transactional(noRollbackFor = BusinessException.class)
     public VerifyEmailResponse verifyEmail(VerifyEmailRequest request, String ipAddress) {
         rateLimitService.checkLimit("verify-email", safeId(ipAddress), VERIFY_EMAIL_MAX, VERIFY_EMAIL_WINDOW);
 
@@ -627,8 +629,9 @@ public class AuthServiceImpl implements AuthService {
                 .build();
     }
 
+    // noRollbackFor: như verifyEmail — giữ lại attemptCount/EXPIRED khi nhập sai hoặc OTP hết hạn.
     @Override
-    @Transactional
+    @Transactional(noRollbackFor = BusinessException.class)
     public VerifyPhoneResponse verifyPhone(Long userId, VerifyPhoneRequest request) {
         rateLimitService.checkLimit("verify-phone", String.valueOf(userId), VERIFY_PHONE_MAX, VERIFY_PHONE_WINDOW);
 

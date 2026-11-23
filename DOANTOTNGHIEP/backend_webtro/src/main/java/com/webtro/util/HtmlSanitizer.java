@@ -46,6 +46,42 @@ public final class HtmlSanitizer {
     }
 
     /**
+     * Giống {@link #stripAllHtml} nhưng GIỮ xuống dòng — dùng cho văn bản nhiều đoạn như mô tả tin
+     * (frontend tách đoạn theo dấu xuống dòng). Trong mỗi dòng vẫn gộp khoảng trắng thừa; nhiều
+     * dòng trống liền nhau gộp thành một; bỏ dòng trống ở đầu và cuối.
+     */
+    public static String stripAllHtmlKeepLines(String input) {
+        if (input == null || input.isBlank()) {
+            return "";
+        }
+        String cleaned = SCRIPT_BLOCK.matcher(input).replaceAll("");
+        cleaned = TAG.matcher(cleaned).replaceAll("");
+        cleaned = EVENT_ATTR.matcher(cleaned).replaceAll("");
+        cleaned = JS_URI.matcher(cleaned).replaceAll("");
+        cleaned = HtmlUtils.htmlUnescape(cleaned);
+        cleaned = TAG.matcher(cleaned).replaceAll("");
+        StringBuilder out = new StringBuilder();
+        boolean previousBlank = true;
+        for (String line : cleaned.split("\r?\n", -1)) {
+            String normalized = TextNormalizer.collapseWhitespace(line);
+            if (normalized.isEmpty()) {
+                // Dòng trống đầu tiên sau một đoạn: giữ lại đúng một dòng trống ngăn đoạn.
+                if (!previousBlank) {
+                    out.append('\n');
+                }
+                previousBlank = true;
+            } else {
+                if (out.length() > 0) {
+                    out.append('\n');
+                }
+                out.append(normalized);
+                previousBlank = false;
+            }
+        }
+        return out.toString().strip();
+    }
+
+    /**
      * Kiểm tra chuỗi có chứa dấu hiệu HTML/script không (dùng cho validator từ chối sớm).
      */
     public static boolean containsHtml(String input) {

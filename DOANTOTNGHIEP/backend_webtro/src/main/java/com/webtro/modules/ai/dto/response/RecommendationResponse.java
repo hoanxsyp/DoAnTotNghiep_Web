@@ -102,6 +102,5 @@ public class RecommendationResponse {
         private Integer views;
         private Integer searches;
         private Integer favorites;
-        private Integer contacts;
     }
 }

@@ -2,6 +2,8 @@ package com.webtro.modules.ai.repository;
 
 import com.webtro.modules.ai.entity.RecommendationLog;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
@@ -21,4 +23,6 @@ public interface RecommendationLogRepository extends JpaRepository<Recommendatio
 
     /** Các id tin đã gợi ý cho user gần đây (dựng danh sách loại trừ khi gợi ý lô mới). */
     List<RecommendationLog> findByUserIdAndCreatedAtAfter(Long userId, Instant since);
+
+    Page<RecommendationLog> findByCreatedAtBetween(Instant from, Instant to, Pageable pageable);
 }

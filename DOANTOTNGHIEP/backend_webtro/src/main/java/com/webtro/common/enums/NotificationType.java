@@ -28,9 +28,6 @@ public enum NotificationType {
     /** Tin bị ẩn */
     LISTING_HIDDEN("Tin bị ẩn"),
 
-    /** Có người liên hệ */
-    NEW_CONTACT("Có người liên hệ"),
-
     /** Có bình luận mới */
     NEW_COMMENT("Có bình luận mới"),
 

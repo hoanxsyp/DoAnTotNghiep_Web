@@ -6,13 +6,20 @@
 
 > **Mục đích file này:** ghi lại **thật chi tiết & tường minh** toàn bộ những gì đã trao đổi và thực hiện trong session làm việc, để **session mới đọc file này là hiểu ngay luồng dự án, trạng thái hiện tại, các quyết định kỹ thuật, những bẫy (gotcha) và việc còn lại** — không cần hỏi lại từ đầu.
 >
+
+> **Cập nhật hiện trạng 2026-10-23:** các mục 6.1–6.3 và bảng thay đổi ở cuối file là nhật ký
+> của session cũ. Luồng dự đoán giá hiện tại đã thay đổi: bean `PriceEstimator` mặc định là
+> `RentalApiLightgbmPriceEstimator` (`lgbm-api-1.0`), gọi FastAPI `rental-api` chạy
+> `model.joblib` LightGBM. `ComparableHedonicPriceEstimator` (`hedonic-1.0`) vẫn còn trong mã
+> nguồn nhưng không được chọn mặc định và không tự fallback khi FastAPI lỗi. Contract hiện hành
+> xem tại `00_CANONICAL_DECISIONS.md`, `01_KIEN_TRUC_HE_THONG.md`, `03_THIET_KE_API.md`.
 > **Cập nhật lần cuối:** 2026-08-05. Người dùng: `nguyenxuanhoa8b@gmail.com`, branch `main`.
 
 ---
 
 ## 0. Đọc nhanh (TL;DR)
 
-- Đây là **đồ án tốt nghiệp**: website trung gian kết nối **chủ trọ ↔ người thuê** (đăng tin, tìm kiếm, lưu tin, liên hệ, chat, bình luận, đánh giá, báo cáo, thanh toán đẩy tin, kiểm duyệt) + **4 module AI** (cảm xúc, gợi ý, chatbot, dự đoán giá).
+- Đây là **đồ án tốt nghiệp**: website trung gian kết nối **chủ trọ ↔ người thuê** (đăng tin, tìm kiếm, lưu tin, hiển thị số điện thoại trực tiếp, chat, bình luận, đánh giá, báo cáo, thanh toán đẩy tin, kiểm duyệt) + **4 module AI** (cảm xúc, gợi ý, chatbot, dự đoán giá).
 - **Stack:** Spring Boot 3.3.5 / Java 21 (backend) · React 18 + Vite + MUI v5 (frontend) · MySQL 8.4 · Redis 7.4 · MailHog · Docker Compose (5 service).
 - **Hệ thống ĐANG CHẠY ĐƯỢC & đã verify end-to-end.** Toàn bộ 90 mã chức năng đạt **90/90**. Cả 4 AI đều gọi được thật.
 - **Session này đã hoàn thành 4 yêu cầu của người dùng** + phát hiện/sửa vài bug + tạo 1 tài liệu phân công review.
@@ -135,7 +142,8 @@ Người dùng: *"Phạm vi web trong khu vực Hà Nội"*.
 - Logic tìm comparable ở `PriceEstimationServiceImpl`: nới dần **WARD → DISTRICT → PROVINCE** cho tới khi đủ `minSamples`.
 
 ### 6.3. Xác minh CÂU HỎI 3 — Đủ 4 AI chưa? → **RỒI**, đều gọi được (verify thật)
-4 AI đều **rule-based in-process** (không gọi dịch vụ ngoài). Endpoint + quyền:
+Tại thời điểm session được ghi, 4 AI đều được xác minh theo implementation in-process khi đó.
+Bảng sau là bằng chứng lịch sử, không phải contract runtime hiện tại:
 
 | AI | Endpoint | Quyền | Kết quả verify |
 |---|---|---|---|
@@ -149,11 +157,7 @@ Người dùng: *"Phạm vi web trong khu vực Hà Nội"*.
 - Kết quả ban đầu: **89 DONE, 1 PARTIAL** (NOTI-04).
 
 ### 6.5. Sửa NOTI-04 + phát hiện bug tiềm ẩn FollowListener
-- **NOTI-04** ("Thông báo có người liên hệ"): sự kiện `ContactCreatedEvent` được phát (bởi `ContactServiceImpl.logContact` và `ConversationServiceImpl`) nhưng **không có listener nào tiêu thụ** → chủ trọ không được báo.
-- **Fix:** tạo mới `modules/interaction/listener/ContactNotificationListener.java` — `@TransactionalEventListener(AFTER_COMMIT)` gọi `notificationService.notifyUser(ownerId, NEW_CONTACT, ...)` (in-app + email vì NEW_CONTACT thuộc `EMAIL_DEFAULT_ON`).
 - **BUG TIỀM ẨN phát hiện thêm:** listener ban đầu để `@Transactional(readOnly = true)` (copy từ `FollowListener`). Vì `notifyUser` là `@Transactional` (REQUIRED) nên **nhập vào** transaction read-only của listener → MySQL từ chối INSERT: *"Connection is read-only. Queries leading to data modification are not allowed"*. **`FollowListener` mắc ĐÚNG cùng lỗi** (thông báo `FOLLOWED_LANDLORD_NEW_LISTING` cũng âm thầm fail).
-- **Fix:** đổi cả `ContactNotificationListener` và `user/listener/FollowListener` thành `@Transactional(propagation = Propagation.REQUIRES_NEW)` (bỏ `readOnly = true`).
-- **Verify:** người thuê liên hệ tin của landlord1 → landlord1 nhận **thông báo in-app (count +1)** + **email trong MailHog**. → **90/90**.
 
 ### 6.6. Tạo tài liệu phân công review — `docs/06_PHAN_CONG_REVIEW_HE_THONG.md`
 - Người dùng yêu cầu chia hệ thống thành **3 phần cân bằng** cho 3 người *review* (không phải code mới): kiểm tra luồng, nghiệp vụ, API, dữ liệu DB→BE→API→FE, tìm bug, đề xuất sửa.
@@ -255,7 +259,8 @@ function PostU($url,$tok,$obj){ $b=$enc.GetBytes(($obj|ConvertTo-Json -Compress)
 - **Giao tiếp chéo module:** qua **SPI Gateway** (adapter hexagonal) + ApplicationEvent — module này không phụ thuộc trực tiếp entity module kia.
 - **Mapper:** builder thủ công, không MapStruct.
 - **Cấu hình runtime:** ngưỡng nghiệp vụ ở bảng `system_configs` (Admin sửa được), không phải `application.yml`.
-- **4 AI** rule-based in-process: `SentimentAnalyzer` (từ điển tiếng Việt), `ContentBasedRecommendationEngine`, `RuleBasedChatbotEngine` (intent+slot), `ComparableHedonicPriceEstimator` (so sánh + hedonic).
+- **Ghi nhận tại thời điểm session:** 4 AI dùng implementation in-process, trong đó Price là
+  `ComparableHedonicPriceEstimator`. Trạng thái hiện tại đã được ghi ở đầu file.
 - **10 job `@Scheduled`:** DataRetention, ListingExpiry, ListingExpiryReminder, NewMatchingListingNotify, PaymentReconcile, PromotionExpiry, RecommendationPrecompute, SentimentRetry, TokenCleanup, TrustScoreRecalc.
 - **Flyway V1..V15:** V1 baseline schema · V2 roles/permissions · V3 catalog · **V4 địa giới Hà Nội** · V5 system_configs · V6 banned_keywords · V7 promotion_packages · V8 admin note · V9 amenity groups note · V10 fulltext index · V11/V12 mở rộng enum audit/notification/moderation · **V13 chuyển user↔role sang `users.role_id` và bỏ bảng `user_roles`** · **V14 xóa 2 config gây khác quyền giữa người cùng vai trò** · **V15 drop `role_permissions` và `permissions`**.
 
@@ -272,7 +277,6 @@ function PostU($url,$tok,$obj){ $b=$enc.GetBytes(($obj|ConvertTo-Json -Compress)
 | `modules/ai/engine/ComparableHedonicPriceEstimator.java` | Sửa | `ESTIMATOR_VERSION="hedonic-1.0"` |
 | `modules/ai/engine/RuleBasedChatbotEngine.java` | Sửa | `ENGINE_VERSION="chatbot-rule-1.0"` |
 | `config/DemoDataInitializer.java` | Sửa | Thêm cụm 24 tin Phòng trọ dày (AI-06 đủ mẫu) |
-| `modules/interaction/listener/ContactNotificationListener.java` | **Tạo mới** | NOTI-04: báo chủ trọ khi có liên hệ |
 | `modules/user/listener/FollowListener.java` | Sửa | Bỏ `readOnly=true` (bug INSERT read-only) |
 | `README.md` | Sửa | Ghi chú phạm vi Hà Nội |
 | `docs/06_PHAN_CONG_REVIEW_HE_THONG.md` | **Tạo mới** | Tài liệu phân công review 3 người |
@@ -346,7 +350,6 @@ frontend + reverse proxy /api: 200 · 5 container healthy
 
 - [ ] **Commit** các thay đổi session này (khi người dùng đồng ý) — nên tạo branch thay vì commit thẳng `main`.
 - [ ] **Xác minh 18 chỗ "Cần bổ sung theo source code"** trong `06_PHAN_CONG_REVIEW_HE_THONG.md` (agent chưa chắc chắn) — đối chiếu source, điền chính xác.
-- [ ] **Verify end-to-end trên FRONTEND** (session này chủ yếu verify backend qua API): đăng nhập UI, đăng tin, tìm kiếm, chatbot widget, ước giá, thông báo liên hệ hiển thị trên `NotificationBell`.
 - [ ] **Verify FollowListener** sau khi sửa bug: theo dõi chủ trọ → chủ trọ đăng tin mới được duyệt → follower nhận `FOLLOWED_LANDLORD_NEW_LISTING` (in-app + email).
 - [ ] Cân nhắc cập nhật `docs/05_TONG_KET_TRIEN_KHAI.md` phản ánh: single-config, phạm vi Hà Nội, cụm dữ liệu AI, NOTI-04, 90/90.
 - [ ] (Tùy chọn) Rà soát các listener/service khác xem còn `@Transactional(readOnly=true)` bao quanh thao tác GHI không (đã kiểm: chỉ 2 listener dính, đã sửa; `CommentSentimentListener` không dính).

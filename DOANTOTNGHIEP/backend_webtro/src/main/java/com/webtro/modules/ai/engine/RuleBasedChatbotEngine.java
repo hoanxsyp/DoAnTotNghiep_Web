@@ -29,9 +29,16 @@ public class RuleBasedChatbotEngine implements ChatbotEngine {
 
     /** Từ điển thuật ngữ (không dấu → định nghĩa) phục vụ intent GLOSSARY §3.15. */
     private static final Map<String, String[]> GLOSSARY = new LinkedHashMap<>();
+    /**
+     * Từ nhạy cảm KHÔNG DẤU — chỉ những từ không thể trùng với câu bình thường khi bỏ dấu.
+     * "súng"/"cá độ"/"lô đề" bỏ dấu thành "sung"/"ca do"/"lo de", trùng "bổ sung", "có cả đồ",
+     * "lo để xe" → câu tìm phòng bị từ chối như nội dung nhạy cảm; nên chúng chỉ khớp CÓ DẤU.
+     */
     private static final List<String> SENSITIVE_TERMS = List.of(
-            "sex", "khieu dam", "ma tuy", "cave", "mai dam", "vu khi", "sung", "danh nhau",
-            "chinh tri", "phan dong", "lo de", "ca do", "hack");
+            "sex", "khieu dam", "ma tuy", "cave", "mai dam", "vu khi", "danh nhau",
+            "chinh tri", "phan dong", "hack");
+    private static final List<String> SENSITIVE_TERMS_ACCENTED = List.of(
+            "súng", "cá độ", "lô đề", "ma túy", "ma tuý");
 
     static {
         GLOSSARY.put("chung cu mini", new String[]{"chung cư mini",
@@ -60,7 +67,8 @@ public class RuleBasedChatbotEngine implements ChatbotEngine {
     private static final Pattern AREA_UNDER = Pattern.compile("(?:duoi|<=?|nho hon)\\s*(\\d+(?:[.,]\\d+)?)\\s*(?:m2|met|met vuong)");
     private static final Pattern AREA_PLAIN = Pattern.compile("(\\d+(?:[.,]\\d+)?)\\s*(?:m2|met vuong)");
     private static final Pattern OCCUPANTS = Pattern.compile("(?:o|ở|cho)\\s*(\\d+)\\s*nguoi");
-    private static final Pattern LOCATION = Pattern.compile("(?:quan|quận|huyen|huyện|phuong|phường|tp|thanh pho|o|ở|gan|gần|tai|tại)\\s+([\\p{L}\\d]+(?:\\s+[\\p{L}\\d]+)?)");
+    // Giới từ phải đứng riêng một từ (không khớp chữ "o" cuối của "tro"); group(1) là tên khu vực.
+    private static final Pattern LOCATION = Pattern.compile("(?<![\\p{L}\\d])(?:quan|quận|huyen|huyện|phuong|phường|tp|thanh pho|o|ở|gan|gần|tai|tại)\\s+([\\p{L}\\d]+(?:\\s+[\\p{L}\\d]+)?)");
 
     @Override
     public String version() {
@@ -75,7 +83,8 @@ public class RuleBasedChatbotEngine implements ChatbotEngine {
         ChatSlots base = (resetContext || prior == null) ? ChatSlots.empty() : prior;
 
         // 1) Nhạy cảm — ưu tiên tuyệt đối (§9.3).
-        if (containsAny(noAccent, SENSITIVE_TERMS)) {
+        String accented = java.text.Normalizer.normalize(raw.toLowerCase(), java.text.Normalizer.Form.NFC);
+        if (containsAnyWord(noAccent, SENSITIVE_TERMS) || containsAnyWord(accented, SENSITIVE_TERMS_ACCENTED)) {
             return new ChatbotResult(ChatbotIntent.SENSITIVE, bd("0.93"), base, List.of(),
                     "Xin lỗi, mình không thể hỗ trợ nội dung này. Mình là trợ lý tìm phòng trọ — "
                             + "bạn cần tìm phòng ở khu vực nào ạ?", null, true);
@@ -176,16 +185,16 @@ public class RuleBasedChatbotEngine implements ChatbotEngine {
             case GREETING -> "Chào bạn! Mình là trợ lý tìm phòng trọ. Bạn muốn tìm phòng ở khu vực nào, "
                     + "khoảng giá bao nhiêu ạ?";
             case HOW_TO_POST -> "Để đăng tin cho thuê: đăng nhập bằng tài khoản chủ trọ, vào mục "
-                    + "\"Quản lý → Tin đăng → Tạo tin\", điền thông tin phòng, tải tối thiểu 1 ảnh rồi bấm "
-                    + "\"Gửi duyệt\". Tin sẽ hiển thị sau khi được kiểm duyệt. Mình chỉ hướng dẫn, không "
-                    + "đăng tin thay bạn nhé.";
+                    + "\"Quản lý → Tin đăng → Tạo tin\", chọn phòng có sẵn hoặc tạo phòng mới, điền thông "
+                    + "tin phòng, tải tối thiểu 1 ảnh rồi bấm \"Gửi duyệt\". Tin sẽ hiển thị sau khi được "
+                    + "kiểm duyệt. Phòng đã từng đăng thì vào \"Phòng của tôi\" và bấm \"Đăng lại\" để giữ "
+                    + "các đánh giá cũ. Mình chỉ hướng dẫn, không đăng tin thay bạn nhé.";
             case FAQ -> "Mình có thể giúp giải thích cách dùng website: tìm phòng, lưu tin, liên hệ chủ "
                     + "trọ, báo cáo tin sai. Bạn muốn hỏi về việc gì ạ?";
             case OUT_OF_SCOPE -> "Mình chỉ hỗ trợ tìm phòng trọ, giải thích thuật ngữ và hướng dẫn sử "
-                    + "dụng website thôi ạ. Về các vấn đề pháp lý hợp đồng thuê nhà, bạn nên tham khảo ý "
-                    + "kiến luật sư hoặc cơ quan có thẩm quyền. Mình có thể giúp bạn tìm phòng không?";
+                    + "dụng website thôi ạ. Mình có thể giúp bạn tìm phòng không?";
             case UNKNOWN -> "Xin lỗi, mình chưa hiểu ý bạn. Bạn thử nói rõ khu vực và khoảng giá muốn "
-                    + "tìm, ví dụ \"tìm phòng trọ Quận 1 dưới 4 triệu\" nhé.";
+                    + "tìm, ví dụ \"tìm phòng trọ Cầu Giấy dưới 4 triệu\" nhé.";
             default -> null; // FIND_ROOM / GLOSSARY / SENSITIVE xử lý riêng
         };
     }
@@ -312,7 +321,7 @@ public class RuleBasedChatbotEngine implements ChatbotEngine {
         // Khu vực (keyword).
         Matcher ml = LOCATION.matcher(t);
         if (ml.find()) {
-            String loc = ml.group(0).trim();
+            String loc = ml.group(1).trim();
             if (loc.length() >= 3) {
                 location = loc;
             }
@@ -376,9 +385,14 @@ public class RuleBasedChatbotEngine implements ChatbotEngine {
         return n.multiply(new BigDecimal("1000000")).setScale(0, java.math.RoundingMode.HALF_UP);
     }
 
-    private boolean containsAny(String text, List<String> keys) {
+    /**
+     * Khớp theo RANH GIỚI TỪ — dùng cho từ nhạy cảm: so chuỗi con thì "sung" (súng) khớp "bổ sung",
+     * "lo de" khớp "lo dem"… và câu tìm phòng bình thường bị từ chối như nội dung nhạy cảm.
+     */
+    private boolean containsAnyWord(String text, List<String> keys) {
         for (String k : keys) {
-            if (text.contains(k)) {
+            if (java.util.regex.Pattern.compile("(?<![\\p{L}\\p{N}])" + java.util.regex.Pattern.quote(k) + "(?![\\p{L}\\p{N}])")
+                    .matcher(text).find()) {
                 return true;
             }
         }

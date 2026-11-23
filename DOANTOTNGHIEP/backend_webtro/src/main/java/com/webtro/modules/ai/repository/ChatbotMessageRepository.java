@@ -32,4 +32,6 @@ public interface ChatbotMessageRepository extends JpaRepository<ChatbotMessage, 
     /** Id các tin nhắn chatbot cũ hơn {@code threshold} — {@code DataRetentionJob} xóa theo lô. */
     @Query("SELECT m.id FROM ChatbotMessage m WHERE m.createdAt < :threshold ORDER BY m.id ASC")
     List<Long> findIdsCreatedBefore(@Param("threshold") Instant threshold, Pageable pageable);
+
+    Page<ChatbotMessage> findByCreatedAtBetween(Instant from, Instant to, Pageable pageable);
 }

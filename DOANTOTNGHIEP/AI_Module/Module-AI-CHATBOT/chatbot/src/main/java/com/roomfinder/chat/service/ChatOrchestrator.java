@@ -18,8 +18,10 @@ import com.roomfinder.chat.model.NlgOutcome;
 import com.roomfinder.chat.model.NluResult;
 import com.roomfinder.chat.model.RetrievalResult;
 import com.roomfinder.chat.normalizer.EntityNormalizer;
+import com.roomfinder.chat.normalizer.LocationNormalizer;
+import com.roomfinder.chat.normalizer.UtilityNormalizer;
 import com.roomfinder.chat.repository.ChatLogRepository;
-import com.roomfinder.chat.repository.RoomRepository;
+import com.roomfinder.chat.listing.RoomSource;
 import com.roomfinder.chat.repository.RoomViewRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,6 +30,7 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 /**
  * Bộ điều phối luồng chat — hiện thực sơ đồ §2.1:
@@ -42,6 +45,7 @@ public class ChatOrchestrator {
     private static final List<String> ADVISORY_CUES = List.of(
             "nên", "tư vấn", "so sánh", "vì sao", "tại sao", "cái nào tốt hơn", "tốt hơn", "gợi ý", "khuyên");
     private static final List<String> CHEAPER_CUES = List.of("rẻ hơn", "giảm giá", "hạ giá", "rẻ nữa");
+    private static final List<String> COMPARE_CUES = List.of("so sánh", "so sanh", "khác nhau", "hơn phòng", "hay phòng");
     // NLU chỉ còn 6 intent: hỏi chi phí / quy định trả về room_detail (xem Intent).
     // Tách lại ở đây để giữ handler riêng cho 2 loại câu hỏi này.
     private static final List<String> COST_CUES = List.of(
@@ -66,7 +70,7 @@ public class ChatOrchestrator {
     private final ContextService contextService;
     private final RetrievalService retrievalService;
     private final NlgService nlgService;
-    private final RoomRepository roomRepo;
+    private final RoomSource roomSource;
     private final RoomViewRepository roomViewRepo;
     private final RecommendationService recommendationService;
     private final SemanticRerankService semanticRerankService;
@@ -78,7 +82,7 @@ public class ChatOrchestrator {
 
     public ChatOrchestrator(NluService nluService, EntityNormalizer normalizer,
                             ContextService contextService, RetrievalService retrievalService,
-                            NlgService nlgService, RoomRepository roomRepo,
+                            NlgService nlgService, RoomSource roomSource,
                             RoomViewRepository roomViewRepo, RecommendationService recommendationService,
                             SemanticRerankService semanticRerankService,
                             ChatLogRepository chatLogRepo, ObjectMapper mapper, ChatProperties props,
@@ -89,7 +93,7 @@ public class ChatOrchestrator {
         this.contextService = contextService;
         this.retrievalService = retrievalService;
         this.nlgService = nlgService;
-        this.roomRepo = roomRepo;
+        this.roomSource = roomSource;
         this.roomViewRepo = roomViewRepo;
         this.recommendationService = recommendationService;
         this.semanticRerankService = semanticRerankService;
@@ -113,6 +117,47 @@ public class ChatOrchestrator {
         NluResult nlu = nluService.parse(message);
         if (nlu.getEntities() == null) nlu.setEntities(new Filters());
         normalizer.normalize(nlu.getEntities());
+        Filters ent = nlu.getEntities();
+
+        // Điểm mốc bị NER gán nhầm là KHU VỰC ("tìm phòng gần Bách Khoa" → LOCATION "Bách Khoa"):
+        // không phải quận mà khớp bảng poi → tìm theo bán kính, không tìm theo từ khóa.
+        if (ent.getPoi() == null && ent.getLocation() != null
+                && !LocationNormalizer.isDistrict(ent.getLocation())
+                && retrievalService.isKnownPoi(ent.getLocation())) {
+            ent.setPoi(ent.getLocation());
+            ent.setLocation(null);
+        }
+
+        // Hỏi chi tiết mà KHÔNG chỉ phòng nào nhưng CÓ khu vực/giá/điểm mốc → thực chất là tìm phòng.
+        // PhoBERT xếp nhầm "phòng ở Cầu Giấy có máy giặt", câu không dấu… vào room_detail → bot hỏi
+        // lại "phòng nào?". Câu chi tiết thật luôn gắn với 1 phòng ("phòng 2", "phòng này").
+        if (nlu.getIntent() == Intent.ROOM_DETAIL
+                && (ent.getRoomRefs() == null || ent.getRoomRefs().isEmpty())
+                && ent.hasAnyLocatorSlot() && !mentionsCurrentRoom(message)) {
+            log.debug("room_detail không có phòng nhưng có tiêu chí tìm → search_room");
+            nlu.setIntent(Intent.SEARCH_ROOM);
+        }
+
+        // "có vskk k" khi CHƯA có phòng nào được gợi ý → không có gì để hỏi chi tiết, thực chất là
+        // muốn tìm phòng có vskk (bot sẽ hỏi thêm khu vực/giá nếu thiếu).
+        if (nlu.getIntent() == Intent.ROOM_DETAIL
+                && (ent.getRoomRefs() == null || ent.getRoomRefs().isEmpty())
+                && ent.getUtilities() != null && !ent.getUtilities().isEmpty()
+                && (ctx.getLastResultIds() == null || ctx.getLastResultIds().isEmpty())) {
+            log.debug("room_detail hỏi tiện ích nhưng chưa có kết quả nào → search_room");
+            nlu.setIntent(Intent.SEARCH_ROOM);
+        }
+
+        // "có phòng nào rẻ hơn 3 củ nữa k": chữ "rẻ hơn" khiến PhoBERT xếp vào compare_rooms, nhưng
+        // không chỉ phòng nào + có tiêu chí giá/khu vực (hoặc "rẻ hơn") → thực chất là lọc tiếp kết quả.
+        // So sánh thật luôn nói "so sánh" hoặc chỉ ≥ 2 phòng ("phòng 1 với phòng 2").
+        if (nlu.getIntent() == Intent.COMPARE_ROOMS
+                && (ent.getRoomRefs() == null || ent.getRoomRefs().isEmpty())
+                && (ent.hasAnyLocatorSlot() || containsAny(message, CHEAPER_CUES))
+                && !containsAny(message, COMPARE_CUES)) {
+            log.debug("compare_rooms không có phòng nhưng có tiêu chí lọc → refine_search");
+            nlu.setIntent(Intent.REFINE_SEARCH);
+        }
 
         // Slot đang chờ (§4.3): coi câu trả lời là tiếp nối tìm kiếm
         if (ctx.getPendingSlot() != null && nlu.getEntities().hasAnyLocatorSlot()) {
@@ -131,6 +176,20 @@ public class ChatOrchestrator {
             long reduced = Math.round(af.getPriceMax() * (100.0 - props.getCheaperStepPercent()) / 100.0);
             af.setPriceMax(reduced);
             log.debug("Rule rẻ hơn: price_max → {}", reduced);
+        } else if (nlu.getIntent() == Intent.REFINE_SEARCH
+                && nlu.getEntities().getPriceMax() == null && nlu.getEntities().getPriceMin() == null
+                && af.getPriceMax() == null && containsAny(message, CHEAPER_CUES)) {
+            // Chưa có giá trần (vd đang "từ 3 triệu"): "rẻ hơn" = rẻ hơn phòng rẻ nhất vừa gợi ý.
+            // Giữ price_min sẽ không bao giờ ra phòng rẻ hơn → bỏ.
+            Long cheapest = topN(ctx, ctx.getLastResultIds() == null ? 0 : ctx.getLastResultIds().size())
+                    .stream().map(Room::getPrice).filter(java.util.Objects::nonNull).min(Long::compare).orElse(null);
+            // Làm tròn xuống 100k để hiển thị gọn ("dưới 3 triệu", không phải "dưới 3.099.999đ").
+            Long cap = cheapest != null ? (cheapest - 1) / 100_000 * 100_000 : af.getPriceMin();
+            if (cap != null) {
+                af.setPriceMin(null);
+                af.setPriceMax(cap);
+                log.debug("Rule rẻ hơn (chưa có giá trần): price_max → {}", cap);
+            }
         }
 
         if (nlu.getIntent() == Intent.ROOM_DETAIL) {
@@ -140,7 +199,7 @@ public class ChatOrchestrator {
 
         ChatResponse resp = switch (nlu.getIntent()) {
             case SEARCH_ROOM, REFINE_SEARCH -> handleSearch(ctx, nlu, message, sessionId, t0);
-            case ROOM_DETAIL   -> handleRoomDetail(ctx, nlu, sessionId, t0);
+            case ROOM_DETAIL   -> handleRoomDetail(ctx, nlu, message, sessionId, t0);
             case COMPARE_ROOMS -> handleCompare(ctx, nlu, sessionId, t0);
             case CALCULATE_COST -> handleCalculateCost(ctx, nlu, sessionId, t0);
             case BOOK_APPOINTMENT -> handleBooking(ctx, nlu, sessionId, t0);
@@ -244,24 +303,99 @@ public class ChatOrchestrator {
 
     // --- ROOM_DETAIL -----------------------------------------------------
 
-    private ChatResponse handleRoomDetail(ChatContext ctx, NluResult nlu, String sessionId, long t0) {
+    private ChatResponse handleRoomDetail(ChatContext ctx, NluResult nlu, String message, String sessionId,
+                                          long t0) {
         List<Room> refs = resolveRefs(ctx, nlu);
         if (refs.isEmpty() && namedARoom(nlu)) {
             return simpleReply(ctx, nlu, sessionId, t0, unresolvedRefReply(ctx));
+        }
+        List<String> asked = askedUtilities(nlu, message);
+        // "có vskk k" ngay sau khi bot liệt kê phòng: hỏi về CÁC PHÒNG VỪA GỢI Ý, không phải xin xem
+        // chi tiết 1 phòng → trả lời tiện ích đó cho từng phòng thay vì hỏi lại "phòng nào?".
+        if (refs.isEmpty() && !asked.isEmpty()) {
+            List<Room> shown = topN(ctx, ctx.getLastResultIds() == null ? 0 : ctx.getLastResultIds().size());
+            if (!shown.isEmpty()) return answerUtilities(ctx, nlu, sessionId, t0, shown, asked, true);
         }
         if (refs.isEmpty()) {
             return simpleReply(ctx, nlu, sessionId, t0,
                     "Bạn muốn xem chi tiết phòng nào? Hãy nói \"phòng số 1\", \"phòng số 2\"... nhé.");
         }
+        // "phòng 1 có vskk không" → trả lời đúng câu hỏi (có/không), không liệt kê cả tin.
+        if (!asked.isEmpty()) return answerUtilities(ctx, nlu, sessionId, t0, refs, asked, false);
         Room r = refs.get(0);
-        String reply = String.format(
-                "Phòng [#%d] — %s. Giá %,dđ/tháng, diện tích %sm², tại %s. Điều hòa: %s, chỗ để xe: %s.",
-                r.getId(), r.getTitle(), r.getPrice(), r.getArea(),
-                r.getAddressText(), yn(r.getHasAirConditioner()), yn(r.getHasParking()));
+        String base = String.format("Phòng [#%d] — %s. Giá %,dđ/tháng, diện tích %sm², tại %s.",
+                r.getId(), r.getTitle(), r.getPrice(), r.getArea(), r.getAddressText());
+        String reply = r.getAmenityNames() == null
+                ? base + String.format(" Điều hòa: %s, chỗ để xe: %s.", yn(r.getHasAirConditioner()), yn(r.getHasParking()))
+                : base + (r.getAmenityNames().isEmpty() ? " Tin đăng chưa ghi tiện ích."
+                        : " Tiện ích: " + String.join(", ", r.getAmenityNames()) + ".")
+                        + " Chỗ để xe: " + yn(r.getHasParking()) + "."
+                        + " Bạn liên hệ chủ trọ để xác nhận phòng còn trống nhé.";
         logRoomViews(ctx, refs);
         contextService.save(ctx);
         logTurn(sessionId, nlu != null ? nlu.getIntent().getCode() : "", nlu, refs, "FAST", false, t0);
         return build(sessionId, reply, nlu.getIntent(), cards(refs), ctx.getActiveFilters(),
+                "FAST", false, nlu.getConfidence(), false, t0);
+    }
+
+    /** Tiện ích người dùng hỏi trong câu này (NER, thiếu thì dò bằng từ điển), bỏ cái bị phủ định. */
+    private List<String> askedUtilities(NluResult nlu, String message) {
+        List<String> asked = new ArrayList<>(nlu.getEntities().getUtilities() == null
+                ? List.of() : nlu.getEntities().getUtilities());
+        if (asked.isEmpty()) asked.addAll(UtilityNormalizer.detectAll(message));
+        asked.removeAll(UtilityNormalizer.detectNegated(message));
+        return asked.stream().distinct().toList();
+    }
+
+    /** Phòng có tiện ích {@code key} không; {@code null} = tin không đủ dữ liệu để biết. */
+    private static Boolean roomHas(Room r, String key) {
+        if (r.getUtilityKeys() != null) return r.getUtilityKeys().contains(key);
+        return switch (key) {
+            case "air_conditioner" -> r.getHasAirConditioner();
+            case "parking" -> r.getHasParking();
+            case "wifi" -> r.getHasWifi();
+            case "washing_machine" -> r.getHasWashingMachine();
+            case "private_bathroom" -> r.getIsPrivateBathroom();
+            default -> null;
+        };
+    }
+
+    /**
+     * Trả lời "có X không" cho từng phòng, đánh số THEO DANH SÁCH VỪA GỢI Ý (để "phòng 2" ở lượt sau
+     * vẫn đúng phòng). Hỏi chung các phòng ({@code allShown}): thẻ phòng chỉ hiện các phòng CÓ X;
+     * không phòng nào có thì gợi ý tìm lại. Không đổi bộ lọc đang lưu và danh sách kết quả cũ.
+     */
+    private ChatResponse answerUtilities(ChatContext ctx, NluResult nlu, String sessionId, long t0,
+                                         List<Room> rooms, List<String> asked, boolean allShown) {
+        List<Long> last = ctx.getLastResultIds();
+        String what = asked.stream().map(UtilityNormalizer::label).collect(java.util.stream.Collectors.joining(", "));
+        StringBuilder sb = new StringBuilder(allShown ? "Về " + what + " của các phòng mình vừa gợi ý:\n" : "");
+        List<Room> matched = new ArrayList<>();
+        for (Room r : rooms) {
+            int ord = last == null ? 0 : last.indexOf(r.getId()) + 1;
+            List<String> parts = new ArrayList<>();
+            boolean hasAll = true;
+            for (String key : asked) {
+                Boolean has = roomHas(r, key);
+                if (!Boolean.TRUE.equals(has)) hasAll = false;
+                String ans = has == null ? "tin chưa ghi" : (has ? "có" : "không");
+                parts.add(asked.size() > 1 || !allShown ? UtilityNormalizer.label(key) + ": " + ans : ans);
+            }
+            if (hasAll) matched.add(r);
+            sb.append(String.format("• %s[#%d] %,dđ — %s%n",
+                    ord > 0 ? "Phòng " + ord + " " : "Phòng ", r.getId(), r.getPrice(), String.join(", ", parts)));
+        }
+        if (allShown && matched.isEmpty()) {
+            sb.append("Chưa phòng nào trong số này có ").append(what)
+                    .append(". Bạn muốn mình tìm phòng có ").append(what).append(" không?\n");
+        } else if (allShown && matched.size() < rooms.size()) {
+            sb.append("Mình để lại bên dưới các phòng có ").append(what).append(".\n");
+        }
+        sb.append("Thông tin theo tin đăng — bạn nên hỏi lại chủ trọ khi đi xem phòng nhé.");
+        List<Room> shownCards = matched.isEmpty() ? rooms : matched;
+        contextService.save(ctx);
+        logTurn(sessionId, nlu.getIntent().getCode(), nlu, shownCards, "FAST", false, t0);
+        return build(sessionId, sb.toString().trim(), nlu.getIntent(), cards(shownCards), ctx.getActiveFilters(),
                 "FAST", false, nlu.getConfidence(), false, t0);
     }
 
@@ -402,14 +536,14 @@ public class ChatOrchestrator {
             if (ord >= 1 && ord <= last.size()) ids.add(last.get(ord - 1));
             else if (last.contains((long) ord)) ids.add((long) ord);   // ref là id thật
         }
-        return orderByIds(roomRepo.findAllById(ids), ids);
+        return orderByIds(roomSource.findByIds(ids), ids);
     }
 
     private List<Room> topN(ChatContext ctx, int n) {
         List<Long> last = ctx.getLastResultIds();
         if (last == null || last.isEmpty()) return List.of();
         List<Long> ids = last.stream().limit(n).toList();
-        return orderByIds(roomRepo.findAllById(ids), ids);
+        return orderByIds(roomSource.findByIds(ids), ids);
     }
 
     private List<Room> orderByIds(List<Room> rooms, List<Long> ids) {
@@ -420,6 +554,17 @@ public class ChatOrchestrator {
 
     private List<RoomCardDto> cards(List<Room> rooms) {
         return rooms.stream().map(RoomCardDto::from).toList();
+    }
+
+    /** "phòng này", "căn đó"… — đang hỏi về phòng vừa nói tới, không phải tìm mới. */
+    private static final Pattern CURRENT_ROOM = Pattern.compile(
+            "\\b(?:phong|can|nha|cai)\\s+(?:nay|do|kia|vua roi|tren)\\b");
+
+    private boolean mentionsCurrentRoom(String message) {
+        if (message == null) return false;
+        String s = java.text.Normalizer.normalize(message.toLowerCase(), java.text.Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "").replace("đ", "d");
+        return CURRENT_ROOM.matcher(s).find();
     }
 
     private boolean containsAny(String message, List<String> cues) {

@@ -137,6 +137,8 @@ public class UserServiceImpl implements UserService {
                 }
             });
             user.setPhone(normalizedPhone);
+            // Số mới chưa được xác thực → phải nhập OTP lại (docs/03 §4.2.3).
+            user.setPhoneVerifiedAt(null);
             userRepository.save(user);
         }
 
@@ -243,6 +245,13 @@ public class UserServiceImpl implements UserService {
 
         if (lp.getVerificationStatus() == VerificationStatus.VERIFIED) {
             throw new ConflictException(ErrorCode.LANDLORD_ALREADY_VERIFIED);
+        }
+        if (lp.getVerificationStatus() == VerificationStatus.PENDING
+                && !verificationRepository
+                .findByUser_IdAndTypeAndStatusAndDeletedAtIsNull(
+                        userId, VerificationType.LANDLORD, VerificationStatus.PENDING)
+                .isEmpty()) {
+            throw new ConflictException(ErrorCode.LANDLORD_VERIFICATION_PENDING);
         }
 
         // Đặt hồ sơ về trạng thái chờ duyệt + lưu ghi chú gửi Admin.

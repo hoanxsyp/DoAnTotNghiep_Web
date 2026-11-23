@@ -3,12 +3,13 @@ package com.roomfinder.chat.service;
 import com.roomfinder.chat.config.RecommendationProperties;
 import com.roomfinder.chat.domain.Room;
 import com.roomfinder.chat.domain.RoomView;
-import com.roomfinder.chat.repository.RoomRepository;
+import com.roomfinder.chat.listing.RoomSource;
 import com.roomfinder.chat.repository.RoomViewRepository;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -20,8 +21,9 @@ import java.util.stream.Collectors;
  *
  * Vector đặc trưng mỗi phòng: [price_norm, area_norm, lat_norm, lng_norm,
  * has_ac, has_parking, has_wifi, has_washing_machine, is_private_bathroom]
- * (chuẩn hóa min-max theo TOÀN CATALOG, không phải riêng candidate pool —
- * để hồ sơ người dùng và candidate luôn cùng 1 thang đo).
+ * (chuẩn hóa min-max trên CANDIDATE + CÁC PHÒNG ĐÃ XEM — chung 1 thang đo cho
+ * hồ sơ người dùng và candidate. Không quét toàn catalog: với nguồn tin đăng của
+ * web, mỗi phòng là 1 lần gọi API).
  *
  * Hồ sơ người dùng = trung bình có trọng số (giảm dần theo thời gian, half-life
  * cấu hình được) các phòng trong lịch sử xem (`room_view`). Gợi ý = sắp xếp
@@ -30,13 +32,13 @@ import java.util.stream.Collectors;
 @Service
 public class RecommendationService {
 
-    private final RoomRepository roomRepo;
+    private final RoomSource roomSource;
     private final RoomViewRepository roomViewRepo;
     private final RecommendationProperties props;
 
-    public RecommendationService(RoomRepository roomRepo, RoomViewRepository roomViewRepo,
+    public RecommendationService(RoomSource roomSource, RoomViewRepository roomViewRepo,
                                   RecommendationProperties props) {
-        this.roomRepo = roomRepo;
+        this.roomSource = roomSource;
         this.roomViewRepo = roomViewRepo;
         this.props = props;
     }
@@ -55,9 +57,11 @@ public class RecommendationService {
             return null;
         }
 
-        List<Room> allRooms = roomRepo.findAll();
-        FeatureStats stats = FeatureStats.compute(allRooms);
-        Map<Long, Room> byId = allRooms.stream().collect(Collectors.toMap(Room::getId, Function.identity(), (a, b) -> a));
+        List<Long> viewedIds = views.stream().map(RoomView::getRoomId).distinct().toList();
+        List<Room> scale = new ArrayList<>(candidates);
+        scale.addAll(roomSource.findByIds(viewedIds));
+        FeatureStats stats = FeatureStats.compute(scale);
+        Map<Long, Room> byId = scale.stream().collect(Collectors.toMap(Room::getId, Function.identity(), (a, b) -> a));
 
         double[] profile = buildProfile(views, byId, stats);
         if (profile == null) {

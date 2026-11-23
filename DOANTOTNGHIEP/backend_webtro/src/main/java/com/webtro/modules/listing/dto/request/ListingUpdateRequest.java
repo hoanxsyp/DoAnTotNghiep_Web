@@ -40,6 +40,13 @@ public class ListingUpdateRequest {
     @NotNull(message = "Vui lòng chọn loại tin")
     private Long categoryId;
 
+    /**
+     * Số/mã phòng mới. {@code null} = giữ nguyên, chuỗi rỗng = bỏ số phòng. Phòng đã có đánh giá
+     * thì không đổi được (RU-4).
+     */
+    @Size(max = 50, message = "Số phòng tối đa 50 ký tự")
+    private String unitLabel;
+
     @NotBlank(message = "Vui lòng nhập tiêu đề")
     @Size(max = 150, message = "Tiêu đề tối đa 150 ký tự")
     private String title;
@@ -72,16 +79,12 @@ public class ListingUpdateRequest {
     @Digits(integer = 15, fraction = 2, message = "Giá nước không hợp lệ")
     private BigDecimal waterPrice;
 
-    @NotNull(message = "Vui lòng chọn tỉnh/thành phố")
     private Long provinceId;
 
-    @NotNull(message = "Vui lòng chọn quận/huyện")
     private Long districtId;
 
-    @NotNull(message = "Vui lòng chọn phường/xã")
     private Long wardId;
 
-    @NotBlank(message = "Vui lòng nhập địa chỉ chi tiết")
     @Size(min = 5, max = 255, message = "Địa chỉ chi tiết phải từ 5 đến 255 ký tự")
     private String addressDetail;
 

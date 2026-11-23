@@ -69,7 +69,6 @@ const StatisticsPage = () => {
     { label: 'Tỷ lệ duyệt', value: `${rates.approvalRatePercent ?? 0}%`, color: 'success' },
     { label: 'Tỷ lệ thuê thành công', value: `${rates.successfulRentalRatePercent ?? 0}%`, color: 'warning' },
     { label: 'Doanh thu', value: formatCurrency(totals.revenue), color: 'primary' },
-    { label: 'Lượt liên hệ', value: compactNumber(totals.contacts), color: 'info' },
   ];
 
   return (

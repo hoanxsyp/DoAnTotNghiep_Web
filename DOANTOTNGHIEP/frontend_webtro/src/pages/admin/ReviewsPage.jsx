@@ -71,12 +71,18 @@ const ReviewsPage = () => {
         <Box sx={{ minWidth: 0, maxWidth: 400 }}>
           <Rating value={Number(r.rating) || 0} precision={0.5} size="small" readOnly />
           <Typography variant="body2" sx={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-            <Link component={RouterLink} to={`/admin/tin-dang/${r.listingId}?reviewId=${r.id}`} underline="hover">
-              {r.content || 'Xem đánh giá'}
-            </Link>
+            {r.listingId ? (
+              <Link component={RouterLink} to={`/admin/tin-dang/${r.listingId}?reviewId=${r.id}`} underline="hover">
+                {r.content || 'Xem đánh giá'}
+              </Link>
+            ) : (r.content || 'Không có nội dung văn bản.')}
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            {r.author?.fullName || '—'} · {r.landlordName ? `chủ trọ ${r.landlordName}` : `tin #${r.listingId}`}
+            {r.authorName || r.author?.fullName || '—'}
+            {' · '}
+            {r.rentalUnitName
+              ? `phòng "${r.rentalUnitName}"`
+              : (r.landlordName ? `chủ trọ ${r.landlordName}` : (r.listingId ? `tin #${r.listingId}` : '—'))}
           </Typography>
         </Box>
       ),

@@ -7,6 +7,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.math.BigDecimal;
+
 /**
  * DTO trả về cho một phường/xã ({@code wards}) — mục 4.3.4 của {@code docs/03}.
  */
@@ -38,6 +40,12 @@ public class WardResponse {
 
     @Schema(description = "Khu vực có hỗ trợ đăng tin không", example = "true")
     private Boolean supported;
+
+    @Schema(description = "Vĩ độ tâm phường (dữ liệu địa lý công khai)", example = "21.0430000")
+    private BigDecimal latitude;
+
+    @Schema(description = "Kinh độ tâm phường (dữ liệu địa lý công khai)", example = "105.8220000")
+    private BigDecimal longitude;
 
     @Schema(description = "Số tin đăng trong phường/xã", example = "74")
     private Integer listingCount;

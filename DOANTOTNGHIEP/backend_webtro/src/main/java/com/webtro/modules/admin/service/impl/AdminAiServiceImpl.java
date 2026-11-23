@@ -29,13 +29,16 @@ import com.webtro.modules.listing.repository.ListingRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -163,17 +166,26 @@ public class AdminAiServiceImpl implements AdminAiService {
                     "Khoảng thời gian tra cứu tối đa 90 ngày");
         }
 
+        if (module == null) {
+            return AiLogResponse.builder().module("ALL")
+                    .results(getAllLogs(effectiveFrom, effectiveTo, pageable))
+                    .build();
+        }
+
         PageResponse<AiLogItemResponse> results = switch (module) {
             case RECOMMENDATION -> {
-                Page<RecommendationLog> p = recommendationLogRepository.findAll(pageable);
+                Page<RecommendationLog> p = recommendationLogRepository
+                        .findByCreatedAtBetween(effectiveFrom, effectiveTo, pageable);
                 yield PageResponse.from(p, this::mapRecommendation);
             }
             case PRICE -> {
-                Page<PredictionHistory> p = predictionHistoryRepository.findAll(pageable);
+                Page<PredictionHistory> p = predictionHistoryRepository
+                        .findByCreatedAtBetween(effectiveFrom, effectiveTo, pageable);
                 yield PageResponse.from(p, this::mapPrice);
             }
             case CHATBOT -> {
-                Page<ChatbotMessage> p = chatbotMessageRepository.findAll(pageable);
+                Page<ChatbotMessage> p = chatbotMessageRepository
+                        .findByCreatedAtBetween(effectiveFrom, effectiveTo, pageable);
                 yield PageResponse.from(p, this::mapChatbot);
             }
         };
@@ -181,8 +193,55 @@ public class AdminAiServiceImpl implements AdminAiService {
         return AiLogResponse.builder().module(module.name()).results(results).build();
     }
 
+    private PageResponse<AiLogItemResponse> getAllLogs(Instant from, Instant to, Pageable pageable) {
+        Sort.Order createdAtOrder = pageable.getSort().getOrderFor("createdAt");
+        Sort.Direction direction = createdAtOrder == null ? Sort.Direction.DESC : createdAtOrder.getDirection();
+        long required = pageable.getOffset() + pageable.getPageSize();
+        int fetchSize = Math.toIntExact(Math.min(required, Integer.MAX_VALUE));
+        Pageable sourcePageable = PageRequest.of(0, fetchSize,
+                Sort.by(direction, "createdAt").and(Sort.by(direction, "id")));
+
+        Page<RecommendationLog> recommendationPage = recommendationLogRepository
+                .findByCreatedAtBetween(from, to, sourcePageable);
+        Page<PredictionHistory> pricePage = predictionHistoryRepository
+                .findByCreatedAtBetween(from, to, sourcePageable);
+        Page<ChatbotMessage> chatbotPage = chatbotMessageRepository
+                .findByCreatedAtBetween(from, to, sourcePageable);
+
+        List<AiLogItemResponse> merged = new ArrayList<>();
+        recommendationPage.getContent().stream().map(this::mapRecommendation).forEach(merged::add);
+        pricePage.getContent().stream().map(this::mapPrice).forEach(merged::add);
+        chatbotPage.getContent().stream().map(this::mapChatbot).forEach(merged::add);
+
+        Comparator<AiLogItemResponse> comparator = Comparator
+                .comparing(AiLogItemResponse::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(AiLogItemResponse::getModule)
+                .thenComparing(AiLogItemResponse::getId, Comparator.nullsLast(Comparator.naturalOrder()));
+        if (direction.isDescending()) {
+            comparator = comparator.reversed();
+        }
+        merged.sort(comparator);
+
+        long total = recommendationPage.getTotalElements()
+                + pricePage.getTotalElements()
+                + chatbotPage.getTotalElements();
+        int start = Math.toIntExact(Math.min(pageable.getOffset(), merged.size()));
+        int end = Math.min(start + pageable.getPageSize(), merged.size());
+        int totalPages = (int) Math.ceil((double) total / pageable.getPageSize());
+        return PageResponse.<AiLogItemResponse>builder()
+                .items(List.copyOf(merged.subList(start, end)))
+                .page(pageable.getPageNumber())
+                .size(pageable.getPageSize())
+                .totalElements(total)
+                .totalPages(totalPages)
+                .first(pageable.getPageNumber() == 0)
+                .last(end >= total)
+                .build();
+    }
+
     private AiLogItemResponse mapRecommendation(RecommendationLog e) {
         return AiLogItemResponse.builder()
+                .module(AiModule.RECOMMENDATION.name())
                 .id(e.getId())
                 .createdAt(e.getCreatedAt())
                 .userId(e.getUserId())
@@ -196,6 +255,7 @@ public class AdminAiServiceImpl implements AdminAiService {
 
     private AiLogItemResponse mapPrice(PredictionHistory e) {
         return AiLogItemResponse.builder()
+                .module(AiModule.PRICE.name())
                 .id(e.getId())
                 .createdAt(e.getCreatedAt())
                 .userId(e.getUserId())
@@ -210,6 +270,7 @@ public class AdminAiServiceImpl implements AdminAiService {
 
     private AiLogItemResponse mapChatbot(ChatbotMessage e) {
         return AiLogItemResponse.builder()
+                .module(AiModule.CHATBOT.name())
                 .id(e.getId())
                 .createdAt(e.getCreatedAt())
                 .conversationId(e.getConversation() != null ? e.getConversation().getId() : null)

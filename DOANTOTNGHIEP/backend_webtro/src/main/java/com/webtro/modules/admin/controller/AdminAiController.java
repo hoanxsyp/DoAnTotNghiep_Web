@@ -65,7 +65,7 @@ public class AdminAiController {
     @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Xem log AI", description = "Lịch sử recommendation/price/chatbot theo module.")
     public ResponseEntity<ApiResponse<AiLogResponse>> getLogs(
-            @RequestParam AiModule module,
+            @RequestParam(required = false) AiModule module,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {

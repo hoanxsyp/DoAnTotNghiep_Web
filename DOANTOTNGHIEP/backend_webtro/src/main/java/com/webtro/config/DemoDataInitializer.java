@@ -7,6 +7,7 @@ import com.webtro.common.enums.FurnitureStatus;
 import com.webtro.common.enums.Gender;
 import com.webtro.common.enums.GenderRequirement;
 import com.webtro.common.enums.ListingStatus;
+import com.webtro.common.enums.LocationSource;
 import com.webtro.common.enums.NotificationChannel;
 import com.webtro.common.enums.NotificationType;
 import com.webtro.common.enums.PaymentMethod;
@@ -44,9 +45,17 @@ import com.webtro.modules.interaction.repository.ViewHistoryRepository;
 import com.webtro.modules.listing.entity.Listing;
 import com.webtro.modules.listing.entity.ListingAmenity;
 import com.webtro.modules.listing.entity.ListingImage;
+import com.webtro.modules.listing.entity.RentalUnit;
+import com.webtro.modules.listing.repository.RentalUnitRepository;
+import com.webtro.modules.interaction.service.ReviewRatingRecalculator;
+import com.webtro.modules.rental.entity.RentalRequest;
+import com.webtro.modules.rental.repository.RentalRequestRepository;
+import com.webtro.common.enums.RentalRequestStatus;
 import com.webtro.modules.listing.repository.ListingAmenityRepository;
 import com.webtro.modules.listing.repository.ListingImageRepository;
 import com.webtro.modules.listing.repository.ListingRepository;
+import com.webtro.modules.listing.service.ListingCategoryCountPublisher;
+import com.webtro.modules.listing.service.ListingOwnerStatsPublisher;
 import com.webtro.modules.moderation.entity.Report;
 import com.webtro.modules.moderation.repository.ReportRepository;
 import com.webtro.modules.notification.entity.Notification;
@@ -94,6 +103,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -101,8 +111,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Gieo DỮ LIỆU MẪU THẬT vào cơ sở dữ liệu lúc ứng dụng khởi động — người dùng, tin đăng (kèm ảnh
@@ -155,7 +167,12 @@ public class DemoDataInitializer implements ApplicationRunner {
     // listing module
     private final ListingRepository listingRepository;
     private final ListingImageRepository listingImageRepository;
+    private final RentalUnitRepository rentalUnitRepository;
+    private final RentalRequestRepository rentalRequestRepository;
+    private final ReviewRatingRecalculator ratingRecalculator;
     private final ListingAmenityRepository listingAmenityRepository;
+    private final ListingCategoryCountPublisher categoryCountPublisher;
+    private final ListingOwnerStatsPublisher ownerStatsPublisher;
 
     // interaction module
     private final FavoriteRepository favoriteRepository;
@@ -178,14 +195,20 @@ public class DemoDataInitializer implements ApplicationRunner {
         }
         if (listingRepository.count() > 0) {
             log.info("Đã có dữ liệu mẫu (listings.count > 0), bỏ qua gieo dữ liệu demo");
-            return;
+        } else {
+            try {
+                // Gọi qua proxy để @Transactional có hiệu lực (tránh self-invocation).
+                self.getObject().seed();
+            } catch (Exception ex) {
+                log.error("Gieo dữ liệu mẫu THẤT BẠI (đã rollback, không làm sập ứng dụng): {}",
+                        ex.getMessage(), ex);
+            }
         }
+        // Bổ sung tin cho phường còn thưa — chạy cả trên DB đã có dữ liệu (idempotent theo số tin/phường).
         try {
-            // Gọi qua proxy để @Transactional có hiệu lực (tránh self-invocation).
-            self.getObject().seed();
+            self.getObject().topUpAreas();
         } catch (Exception ex) {
-            log.error("Gieo dữ liệu mẫu THẤT BẠI (đã rollback, không làm sập ứng dụng): {}",
-                    ex.getMessage(), ex);
+            log.error("Bổ sung tin mẫu theo khu vực THẤT BẠI (đã rollback): {}", ex.getMessage(), ex);
         }
     }
 
@@ -203,7 +226,7 @@ public class DemoDataInitializer implements ApplicationRunner {
         Role tenantRole = requireRole(RoleCode.TENANT);
 
         // ---- Catalog thật (đọc id thật, không đoán) ----
-        List<LocationRef> locations = loadLocations();
+        List<LocationRef> locations = loadLocations(2);
         if (locations.isEmpty()) {
             throw new IllegalStateException("Chưa seed đơn vị hành chính (provinces/districts/wards) — không thể gieo tin");
         }
@@ -373,7 +396,10 @@ public class DemoDataInitializer implements ApplicationRunner {
                     .electricityPrice(new BigDecimal("3500"))
                     .waterPrice(new BigDecimal("100000"))
                     .wardId(loc.wardId())
-                    .addressDetail("Số " + (12 + i) + ", ngõ " + (3 + i % 20) + " đường Nguyễn Văn Cừ, " + loc.label())
+                    .latitude(loc.latitude())
+                    .longitude(loc.longitude())
+                    .locationSource(loc.locationSource())
+                    .addressDetail("Số " + (12 + i) + ", ngõ " + (3 + i % 20) + " " + onStreet(loc.streets().get(0)))
                     .roomCount(1)
                     .toiletCount(1)
                     .toiletType((i % 3 == 0) ? ToiletType.SHARED : ToiletType.PRIVATE)
@@ -397,6 +423,7 @@ public class DemoDataInitializer implements ApplicationRunner {
                     .publishedAt(publishedAt)
                     .expiredAt(expiredAt)
                     .build();
+            attachDemoUnit(listing);
             listing = listingRepository.save(listing);
             listings.add(listing);
 
@@ -458,7 +485,11 @@ public class DemoDataInitializer implements ApplicationRunner {
                         .electricityPrice(new BigDecimal("3500"))
                         .waterPrice(new BigDecimal("100000"))
                         .wardId(loc.wardId())
-                        .addressDetail("Số " + (2 + c) + ", ngõ " + (10 + c % 30) + " " + district)
+                        .latitude(loc.latitude())
+                        .longitude(loc.longitude())
+                        .locationSource(loc.locationSource())
+                        .addressDetail("Số " + (2 + c) + ", ngõ " + (10 + c % 30) + " "
+                                + onStreet(loc.streets().get(c % loc.streets().size())))
                         .roomCount(1)
                         .toiletCount(1)
                         .toiletType((c % 4 == 0) ? ToiletType.SHARED : ToiletType.PRIVATE)
@@ -478,6 +509,7 @@ public class DemoDataInitializer implements ApplicationRunner {
                         .publishedAt(now.minus(Duration.ofDays(1L + c)))
                         .expiredAt(now.plus(Duration.ofDays(30)))
                         .build();
+                attachDemoUnit(listing);
                 listing = listingRepository.save(listing);
                 listings.add(listing);
 
@@ -612,13 +644,26 @@ public class DemoDataInitializer implements ApplicationRunner {
             }
             int rating = ratingCycle[k % ratingCycle.length];
             String content = rating >= 4 ? reviewTexts[k % 2] : reviewTexts[2 + (k % 3)];
+            // Chỉ người từng thuê mới được đánh giá (RE-1): gieo kèm một lần thuê đã trả phòng.
+            Instant rentedAt = now.minus(Duration.ofDays(120L + k * 5L));
+            rentalRequestRepository.save(RentalRequest.builder()
+                    .listingId(listing.getId())
+                    .rentalUnitId(listing.getRentalUnitId())
+                    .tenantId(tenant.getId())
+                    .desiredViewingDate(LocalDate.ofInstant(rentedAt.minus(Duration.ofDays(3)), java.time.ZoneOffset.UTC))
+                    .status(RentalRequestStatus.CHECKED_OUT)
+                    .approvedAt(rentedAt.minus(Duration.ofDays(2)))
+                    .rentedAt(rentedAt)
+                    .checkedOutAt(rentedAt.plus(Duration.ofDays(90)))
+                    .build());
             reviewRepository.save(Review.builder()
                     .listingId(listing.getId())
+                    .rentalUnitId(listing.getRentalUnitId())
                     .userId(tenant.getId())
                     .rating(rating)
                     .content(content)
                     .status(ReviewStatus.VISIBLE)
-                    .isVerifiedContact(k % 2 == 0)
+                    .isVerifiedContact(true)
                     .build());
             int[] c = counters.get(listing.getId());
             c[5]++;
@@ -636,13 +681,12 @@ public class DemoDataInitializer implements ApplicationRunner {
             l.setViewCount(c[0] + 5 + (idx % 9) * 7);        // thêm nền nhẹ theo index
             l.setFavoriteCount(c[1]);
             l.setCommentCount(c[2]);
-            l.setReviewCount(c[5]);
-            if (c[5] > 0) {
-                l.setAverageRating(BigDecimal.valueOf(c[6])
-                        .divide(BigDecimal.valueOf(c[5]), 2, RoundingMode.HALF_UP));
-            }
             listingRepository.save(l);
         }
+        // Điểm phòng / tin / chủ trọ tính bằng đúng đường ghi của hệ thống (mục 10), không tự cộng.
+        listings.stream().filter(l -> counters.get(l.getId())[5] > 0)
+                .map(Listing::getRentalUnitId).distinct()
+                .forEach(ratingRecalculator::lockAndRecalc);
 
         // ---- Cập nhật hồ sơ chủ trọ: tổng tin + đánh giá trung bình ----
         updateLandlordAggregates(landlords, listings, landlordRating);
@@ -678,6 +722,7 @@ public class DemoDataInitializer implements ApplicationRunner {
         int paymentCreated = createPaymentsAndPromotions(landlords, listings, now);
 
         updateCategoryListingCounts(listings);
+        backdateDemoListings(now);
 
         // ============================ TỔNG KẾT ============================
         log.info("Gieo dữ liệu mẫu HOÀN TẤT: {} người dùng (1 moderator + {} chủ trọ + {} người thuê), "
@@ -686,6 +731,377 @@ public class DemoDataInitializer implements ApplicationRunner {
                 1 + landlords.size() + tenants.size(), landlords.size(), tenants.size(),
                 listings.size(), favCreated, viewCreated, commentCreated, reviewCreated,
                 followCreated, reportCreated, notiCreated, paymentCreated);
+    }
+
+    // =====================================================================================
+    //  Bổ sung tin theo khu vực
+    // =====================================================================================
+
+    /** Số tin ACTIVE tối thiểu mỗi phường — lọc theo phường/quận (web lẫn chatbot) luôn có kết quả. */
+    private static final int MIN_ACTIVE_PER_WARD = 5;
+    /** Số tin ACTIVE tối thiểu trên mỗi đường/phố tiêu biểu của phường ({@link DemoAreaCatalog#STREETS}). */
+    private static final int MIN_ACTIVE_PER_STREET = 2;
+
+    /** Vòng loại hình cho các tin bổ sung — nghiêng về phòng trọ/CCMN như thị trường thật. */
+    private static final CategoryCode[] AREA_CATEGORY_CYCLE = {
+            CategoryCode.BOARDING_HOUSE, CategoryCode.MINI_APARTMENT, CategoryCode.BOARDING_HOUSE,
+            CategoryCode.ROOMMATE, CategoryCode.MINI_APARTMENT, CategoryCode.APARTMENT,
+            CategoryCode.BOARDING_HOUSE, CategoryCode.WHOLE_HOUSE, CategoryCode.MINI_APARTMENT,
+            CategoryCode.HOMESTAY
+    };
+
+    private record Odds(String code, double p) {
+    }
+
+    /**
+     * Thông số theo loại hình: diện tích, hệ số giá so với phòng trọ 20m2 cùng quận, xác suất từng
+     * tiện ích — để tiện ích/nội thất của tin bổ sung KHỚP loại hình (căn hộ có thang máy, trọ thì ít).
+     */
+    private record AreaProfile(int minArea, int maxArea, int refArea, double priceFactor,
+                               int rooms, int toilets, int maxOccupants, double sharedToilet,
+                               double petAllowed, List<Odds> amenities) {
+    }
+
+    private static final List<Odds> COMMON_ODDS = List.of(
+            new Odds("WIFI", 0.9), new Odds("WINDOW", 0.7), new Odds("MOTORBIKE_PARKING", 0.85),
+            new Odds("NEAR_MARKET", 0.4), new Odds("NEAR_BUS_STOP", 0.4), new Odds("ELECTRIC_METER", 0.3),
+            new Odds("FIRE_ALARM", 0.4));
+
+    private static final Map<CategoryCode, AreaProfile> AREA_PROFILES = Map.of(
+            CategoryCode.BOARDING_HOUSE, new AreaProfile(14, 26, 20, 1.0, 1, 1, 3, 0.25, 0.2, List.of(
+                    new Odds("AIR_CONDITIONER", 0.7), new Odds("WATER_HEATER", 0.9), new Odds("BED", 0.6),
+                    new Odds("WARDROBE", 0.5), new Odds("MEZZANINE", 0.35), new Odds("WASHING_MACHINE", 0.3),
+                    new Odds("FRIDGE", 0.3), new Odds("LAUNDRY_AREA", 0.5), new Odds("CCTV", 0.5),
+                    new Odds("FINGERPRINT_LOCK", 0.3), new Odds("BALCONY", 0.2), new Odds("KITCHEN_CABINET", 0.5))),
+            CategoryCode.MINI_APARTMENT, new AreaProfile(22, 38, 28, 1.4, 1, 1, 3, 0.0, 0.2, List.of(
+                    new Odds("AIR_CONDITIONER", 0.95), new Odds("WATER_HEATER", 0.95), new Odds("BED", 0.8),
+                    new Odds("WARDROBE", 0.8), new Odds("FRIDGE", 0.6), new Odds("WASHING_MACHINE", 0.6),
+                    new Odds("ELEVATOR", 0.75), new Odds("CCTV", 0.8), new Odds("FINGERPRINT_LOCK", 0.6),
+                    new Odds("BALCONY", 0.45), new Odds("KITCHEN_CABINET", 0.8), new Odds("PRIVATE_KITCHEN", 0.5),
+                    new Odds("DESK", 0.4), new Odds("TV", 0.3), new Odds("SECURITY_GUARD", 0.2))),
+            CategoryCode.APARTMENT, new AreaProfile(45, 75, 55, 2.5, 2, 2, 4, 0.0, 0.3, List.of(
+                    new Odds("AIR_CONDITIONER", 1.0), new Odds("WATER_HEATER", 1.0), new Odds("BED", 0.9),
+                    new Odds("WARDROBE", 0.9), new Odds("FRIDGE", 0.9), new Odds("WASHING_MACHINE", 0.9),
+                    new Odds("TV", 0.6), new Odds("ELEVATOR", 1.0), new Odds("SECURITY_GUARD", 0.9),
+                    new Odds("CCTV", 0.9), new Odds("BALCONY", 0.7), new Odds("PRIVATE_KITCHEN", 1.0),
+                    new Odds("CAR_PARKING", 0.6))),
+            CategoryCode.WHOLE_HOUSE, new AreaProfile(40, 90, 60, 3.2, 3, 2, 6, 0.0, 0.5, List.of(
+                    new Odds("PRIVATE_ENTRANCE", 1.0), new Odds("PRIVATE_KITCHEN", 1.0),
+                    new Odds("WATER_HEATER", 0.9), new Odds("AIR_CONDITIONER", 0.6), new Odds("LAUNDRY_AREA", 0.7),
+                    new Odds("BALCONY", 0.5), new Odds("STREET_FRONT", 0.3), new Odds("CAR_PARKING", 0.3),
+                    new Odds("WARDROBE", 0.4), new Odds("BED", 0.4))),
+            CategoryCode.ROOMMATE, new AreaProfile(20, 32, 25, 0.55, 1, 1, 4, 0.5, 0.1, List.of(
+                    new Odds("AIR_CONDITIONER", 0.7), new Odds("WATER_HEATER", 0.9), new Odds("BED", 0.7),
+                    new Odds("WARDROBE", 0.6), new Odds("WASHING_MACHINE", 0.5), new Odds("FRIDGE", 0.4),
+                    new Odds("DESK", 0.4), new Odds("KITCHEN_CABINET", 0.4))),
+            CategoryCode.HOMESTAY, new AreaProfile(18, 30, 22, 1.3, 1, 1, 2, 0.0, 0.3, List.of(
+                    new Odds("AIR_CONDITIONER", 1.0), new Odds("WATER_HEATER", 1.0), new Odds("BED", 1.0),
+                    new Odds("WARDROBE", 0.9), new Odds("FRIDGE", 0.6), new Odds("WASHING_MACHINE", 0.7),
+                    new Odds("TV", 0.5), new Odds("BALCONY", 0.5), new Odds("KITCHEN_CABINET", 0.7),
+                    new Odds("FINGERPRINT_LOCK", 0.6))));
+
+    /**
+     * Bổ sung tin ACTIVE cho mọi phường còn dưới {@link #MIN_ACTIVE_PER_WARD} tin: địa chỉ trên đường
+     * thật của phường, giá theo mặt bằng quận và loại hình, tiện ích hợp loại hình, mô tả nêu đường
+     * + địa điểm lân cận (để tìm theo từ khóa/chatbot khớp). Chủ tin là các chủ trọ demo.
+     *
+     * <p><b>Idempotent</b>: phường đủ tin thì bỏ qua, nên chạy lại mỗi lần khởi động không sinh trùng.
+     * Bộ đếm theo loại hình/chủ trọ cập nhật qua publisher như lúc đăng tin thật.
+     */
+    @Transactional
+    public void topUpAreas() {
+        List<User> landlords = landlordProfileRepository.findAll().stream()
+                .map(LandlordProfile::getUser)
+                .filter(u -> u.getEmail() != null && u.getEmail().endsWith(DOMAIN))
+                .sorted(Comparator.comparing(User::getId))
+                .toList();
+        if (landlords.isEmpty()) {
+            log.info("Không có chủ trọ demo — bỏ qua bổ sung tin theo khu vực");
+            return;
+        }
+        Map<CategoryCode, Long> categoryIds = loadCategoryIds();
+        Map<String, Amenity> amenitiesByCode = new HashMap<>();
+        for (Amenity a : amenityRepository.findByIsActiveTrueOrderByDisplayOrderAsc()) {
+            amenitiesByCode.put(a.getCode(), a);
+        }
+        List<LocationRef> locations = loadLocations(Integer.MAX_VALUE);
+        Map<Long, LocationRef> locationByWard = new HashMap<>();
+        locations.forEach(l -> locationByWard.put(l.wardId(), l));
+
+        List<Listing> existing = listingRepository.findAll();
+        int fixedAddresses = fixLegacyAddresses(existing, locationByWard);
+        Map<Long, Long> activeByWard = existing.stream()
+                .filter(l -> l.getDeletedAt() == null && l.getStatus() == ListingStatus.ACTIVE)
+                .collect(Collectors.groupingBy(Listing::getWardId, Collectors.counting()));
+
+        Instant now = Instant.now();
+        int created = 0;
+        int wards = 0;
+        for (LocationRef loc : locations) {
+            int have = activeByWard.getOrDefault(loc.wardId(), 0L).intValue();
+            if (have >= MIN_ACTIVE_PER_WARD) {
+                continue;
+            }
+            wards++;
+            for (int slot = have; slot < MIN_ACTIVE_PER_WARD; slot++) {
+                if (createAreaListing(loc, slot, null, landlords, categoryIds, amenitiesByCode, now)) {
+                    created++;
+                }
+            }
+        }
+
+        // Mỗi đường/phố tiêu biểu của phường có tối thiểu MIN_ACTIVE_PER_STREET tin — tìm theo tên đường
+        // ("phòng ở Hoàng Quốc Việt") cũng ra kết quả, không chỉ tìm theo phường/quận.
+        List<Listing> active = listingRepository.findAll().stream()
+                .filter(l -> l.getDeletedAt() == null && l.getStatus() == ListingStatus.ACTIVE
+                        && l.getAddressDetail() != null)
+                .toList();
+        int streetCreated = 0;
+        for (LocationRef loc : locations) {
+            List<String> streets = loc.streets();
+            for (int si = 0; si < streets.size(); si++) {
+                String marker = " " + onStreet(streets.get(si));
+                long have = active.stream()
+                        .filter(l -> l.getWardId().equals(loc.wardId()) && l.getAddressDetail().endsWith(marker))
+                        .count();
+                for (long n = have; n < MIN_ACTIVE_PER_STREET; n++) {
+                    int slot = 100 + si * 10 + (int) n;   // hạt giống khác vòng theo phường
+                    if (createAreaListing(loc, slot, streets.get(si), landlords, categoryIds, amenitiesByCode, now)) {
+                        streetCreated++;
+                    }
+                }
+            }
+        }
+        if (created > 0 || streetCreated > 0) {
+            backdateDemoListings(now);
+        }
+        if (created > 0 || streetCreated > 0 || fixedAddresses > 0) {
+            log.info("Bổ sung tin mẫu theo khu vực: +{} tin cho {} phường (tối thiểu {} tin ACTIVE/phường), "
+                            + "+{} tin theo đường/phố (tối thiểu {} tin/đường), sửa {} địa chỉ cũ",
+                    created, wards, MIN_ACTIVE_PER_WARD, streetCreated, MIN_ACTIVE_PER_STREET, fixedAddresses);
+        }
+    }
+
+    /**
+     * Chuẩn hóa địa chỉ tin demo cũ về đúng quy ước {@code addressDetail} = CHỈ số nhà/ngõ/đường
+     * (backend tự nối phường, quận, tỉnh khi hiển thị — xem {@code ListingMapper.fullAddress}):
+     * <ul>
+     *   <li>"… đường Nguyễn Văn Cừ, Phường …" — đường ở Long Biên ghi cho mọi phường → đường thật của phường;</li>
+     *   <li>"…, Phường X, Quận Y, Hà Nội" — nhãn hành chính bị ghi kèm → hiển thị lặp 2 lần → bỏ;</li>
+     *   <li>"Số 5, ngõ 13 Quận Cầu Giấy" — không có tên đường → thêm đường thật của phường.</li>
+     * </ul>
+     */
+    private int fixLegacyAddresses(List<Listing> listings, Map<Long, LocationRef> locationByWard) {
+        int fixed = 0;
+        for (Listing l : listings) {
+            String address = l.getAddressDetail();
+            LocationRef loc = locationByWard.get(l.getWardId());
+            if (address == null || loc == null) {
+                continue;
+            }
+            List<String> streets = loc.streets();
+            String street = onStreet(streets.get((int) (l.getId() % streets.size())));
+            String fixedAddress = address.replace(" đường Nguyễn Văn Cừ, ", " " + onStreet(streets.get(0)) + ", ");
+            if (fixedAddress.endsWith(", " + loc.label())) {
+                fixedAddress = fixedAddress.substring(0, fixedAddress.length() - loc.label().length() - 2);
+            }
+            if (fixedAddress.endsWith(" " + loc.districtName())) {
+                fixedAddress = fixedAddress.substring(0, fixedAddress.length() - loc.districtName().length()) + street;
+            }
+            if (!fixedAddress.equals(address)) {
+                l.setAddressDetail(fixedAddress);
+                listingRepository.save(l);
+                fixed++;
+            }
+        }
+        return fixed;
+    }
+
+    /** @param forcedStreet đường bắt buộc (bù tin theo đường); {@code null} → chọn ngẫu nhiên trong phường */
+    private boolean createAreaListing(LocationRef loc, int slot, String forcedStreet, List<User> landlords,
+                                      Map<CategoryCode, Long> categoryIds,
+                                      Map<String, Amenity> amenitiesByCode, Instant now) {
+        // Ngẫu nhiên CÓ HẠT GIỐNG theo (phường, vị trí) — dữ liệu giống nhau giữa các lần cài mới.
+        Random rnd = new Random(loc.wardId() * 1_000L + slot);
+        CategoryCode code = AREA_CATEGORY_CYCLE[(int) ((loc.wardId() + slot) % AREA_CATEGORY_CYCLE.length)];
+        Long categoryId = categoryIds.get(code);
+        AreaProfile p = AREA_PROFILES.get(code);
+        if (categoryId == null || p == null) {
+            return false;
+        }
+        String district = DemoAreaCatalog.shortName(loc.districtName());
+        String ward = DemoAreaCatalog.shortName(loc.wardName());
+        List<String> streets = loc.streets();
+        String randomStreet = streets.get(rnd.nextInt(streets.size()));
+        String street = forcedStreet != null ? forcedStreet : randomStreet;
+        List<String> landmarks = DemoAreaCatalog.landmarks(loc.districtName());
+        String landmark = landmarks.isEmpty() ? null : landmarks.get(rnd.nextInt(landmarks.size()));
+
+        int areaM2 = p.minArea() + rnd.nextInt(p.maxArea() - p.minArea() + 1);
+        double raw = DemoAreaCatalog.basePrice(loc.districtName()) * p.priceFactor()
+                * Math.sqrt(areaM2 / (double) p.refArea()) * (0.9 + rnd.nextDouble() * 0.25);
+        BigDecimal price = BigDecimal.valueOf(Math.max(1_000_000L, Math.round(raw / 100_000d) * 100_000L));
+
+        // ---- Tiện ích + các cột suy ra từ tiện ích (để bộ lọc web/chatbot nhất quán) ----
+        Set<String> codes = new java.util.LinkedHashSet<>();
+        for (Odds o : COMMON_ODDS) {
+            if (rnd.nextDouble() < o.p()) {
+                codes.add(o.code());
+            }
+        }
+        for (Odds o : p.amenities()) {
+            if (rnd.nextDouble() < o.p()) {
+                codes.add(o.code());
+            }
+        }
+        if (DemoAreaCatalog.UNIVERSITY_DISTRICTS.contains(district) && rnd.nextDouble() < 0.5) {
+            codes.add("NEAR_UNIVERSITY");
+        }
+        boolean pet = rnd.nextDouble() < p.petAllowed();
+        if (pet && rnd.nextBoolean()) {
+            codes.add("PET_FRIENDLY_AREA");
+        }
+        codes.retainAll(amenitiesByCode.keySet());
+        boolean parking = codes.contains("MOTORBIKE_PARKING") || codes.contains("CAR_PARKING");
+        FurnitureStatus furniture = codes.contains("BED") && codes.contains("WARDROBE")
+                && (codes.contains("AIR_CONDITIONER") || codes.contains("FRIDGE")) ? FurnitureStatus.FULL
+                : (codes.contains("BED") || codes.contains("WARDROBE") ? FurnitureStatus.BASIC : FurnitureStatus.NONE);
+        ToiletType toilet = rnd.nextDouble() < p.sharedToilet() ? ToiletType.SHARED : ToiletType.PRIVATE;
+        double cr = rnd.nextDouble();
+        CurfewType curfew = cr < 0.55 ? CurfewType.FREE : (cr < 0.85 ? CurfewType.CURFEW : CurfewType.UNKNOWN);
+        GenderRequirement gender = code == CategoryCode.ROOMMATE
+                ? (rnd.nextBoolean() ? GenderRequirement.FEMALE_ONLY : GenderRequirement.MALE_ONLY)
+                : (rnd.nextDouble() < 0.85 ? GenderRequirement.ANY : GenderRequirement.FEMALE_ONLY);
+        int current = code == CategoryCode.ROOMMATE ? 1 + rnd.nextInt(p.maxOccupants() - 1) : 0;
+
+        String title = areaTitle(code, rnd, areaM2, street, ward, district, landmark, codes, furniture, toilet,
+                curfew, pet, gender);
+        int house = 2 + rnd.nextInt(120);
+        String address = (codes.contains("STREET_FRONT") ? "Số " + house + " " + onStreet(street)
+                : "Số " + house + ", ngõ " + (3 + rnd.nextInt(180)) + " " + onStreet(street));
+        BigDecimal electricity = BigDecimal.valueOf(new long[]{3500, 3800, 4000}[rnd.nextInt(3)]);
+        BigDecimal water = BigDecimal.valueOf(80_000L + rnd.nextInt(5) * 10_000L);
+        int depositMonths = (code == CategoryCode.APARTMENT || code == CategoryCode.WHOLE_HOUSE) ? 2 : 1;
+        LocalDate availableFrom = LocalDate.now().plusDays(rnd.nextInt(15));
+        List<String> amenityNames = codes.stream().map(c -> amenitiesByCode.get(c).getName()).toList();
+
+        Listing listing = Listing.builder()
+                .ownerId(landlords.get(rnd.nextInt(landlords.size())).getId())
+                .categoryId(categoryId)
+                .title(title)
+                .slug(slugify(title) + "-" + UUID.randomUUID().toString().substring(0, 6))
+                .description(areaDescription(title, address + ", " + loc.label(), landmark, district, areaM2, price, depositMonths,
+                        electricity, water, toilet, furniture, curfew, pet, gender, amenityNames, availableFrom))
+                .price(price)
+                .area(BigDecimal.valueOf(areaM2))
+                .depositAmount(price.multiply(BigDecimal.valueOf(depositMonths)))
+                .electricityPrice(electricity)
+                .waterPrice(water)
+                .wardId(loc.wardId())
+                .latitude(loc.latitude())
+                .longitude(loc.longitude())
+                .locationSource(loc.locationSource())
+                .addressDetail(address)
+                .roomCount(p.rooms())
+                .toiletCount(p.toilets())
+                .toiletType(toilet)
+                .maxOccupants(p.maxOccupants())
+                .currentOccupants(current)
+                .genderRequirement(gender)
+                .petAllowed(pet)
+                .parkingAvailable(parking)
+                .curfewType(curfew)
+                .furnitureStatus(furniture)
+                .availableFrom(availableFrom)
+                .status(ListingStatus.ACTIVE)
+                .publishedAt(now.minus(Duration.ofDays(1L + rnd.nextInt(45))))
+                .expiredAt(now.plus(Duration.ofDays(15L + rnd.nextInt(45))))
+                .viewCount(5 + rnd.nextInt(250))
+                .build();
+        ListingCategoryCountPublisher.Snapshot catBefore = categoryCountPublisher.snapshot(null);
+        ListingOwnerStatsPublisher.Snapshot ownerBefore = ownerStatsPublisher.snapshot(null);
+        attachDemoUnit(listing);
+        listing = listingRepository.save(listing);
+        categoryCountPublisher.publishIfChanged(catBefore, listing);
+        ownerStatsPublisher.publishIfChanged(ownerBefore, listing);
+
+        createImages(listing, 1 + rnd.nextInt(2), (int) (loc.wardId() + slot));
+        for (String c : codes) {
+            listingAmenityRepository.save(ListingAmenity.builder()
+                    .listing(listing)
+                    .amenityId(amenitiesByCode.get(c).getId())
+                    .build());
+        }
+        return true;
+    }
+
+    /** Tiêu đề theo loại hình, nêu 1-2 điểm nổi bật CÓ THẬT trong tin (lấy từ tiện ích/cột đã gán). */
+    private String areaTitle(CategoryCode code, Random rnd, int areaM2, String street, String ward,
+                             String district, String landmark, Set<String> codes, FurnitureStatus furniture,
+                             ToiletType toilet, CurfewType curfew, boolean pet, GenderRequirement gender) {
+        List<String> highlights = new ArrayList<>();
+        if (furniture == FurnitureStatus.FULL) highlights.add("full nội thất");
+        if (toilet == ToiletType.PRIVATE && code == CategoryCode.BOARDING_HOUSE) highlights.add("khép kín");
+        if (codes.contains("BALCONY")) highlights.add("có ban công");
+        if (codes.contains("MEZZANINE")) highlights.add("có gác lửng");
+        if (codes.contains("ELEVATOR") && code != CategoryCode.APARTMENT) highlights.add("có thang máy");
+        if (codes.contains("WASHING_MACHINE")) highlights.add("có máy giặt");
+        if (codes.contains("AIR_CONDITIONER") && code == CategoryCode.BOARDING_HOUSE) highlights.add("có điều hòa");
+        if (curfew == CurfewType.FREE) highlights.add("giờ giấc tự do");
+        if (pet) highlights.add("cho nuôi thú cưng");
+        java.util.Collections.shuffle(highlights, rnd);
+        String h1 = highlights.isEmpty() ? "giá tốt" : highlights.get(0);
+        String h2 = highlights.size() > 1 ? highlights.get(1) : "an ninh tốt";
+        String near = landmark != null && rnd.nextBoolean() ? "gần " + landmark : onStreet(street);
+        return switch (code) {
+            case MINI_APARTMENT -> "Chung cư mini " + areaM2 + "m2 " + h1 + ", " + h2 + " - " + onStreet(street)
+                    + ", " + district;
+            case APARTMENT -> "Căn hộ 2 phòng ngủ " + areaM2 + "m2 " + h1 + ", " + near + ", " + district;
+            case WHOLE_HOUSE -> "Nhà nguyên căn " + (2 + rnd.nextInt(3)) + " tầng " + areaM2 + "m2 "
+                    + onStreet(street) + ", " + ward + ", " + district;
+            case ROOMMATE -> "Tìm bạn " + (gender == GenderRequirement.FEMALE_ONLY ? "nữ" : "nam")
+                    + " ở ghép phòng " + areaM2 + "m2 " + h1 + ", " + near + ", " + district;
+            case HOMESTAY -> "Homestay thuê tháng " + h1 + " " + areaM2 + "m2, " + near + ", " + district;
+            default -> "Phòng trọ " + h1 + " " + areaM2 + "m2 " + onStreet(street) + ", " + ward + ", " + district;
+        };
+    }
+
+    private String areaDescription(String title, String address, String landmark, String district, int areaM2,
+                                   BigDecimal price, int depositMonths, BigDecimal electricity,
+                                   BigDecimal water, ToiletType toilet, FurnitureStatus furniture,
+                                   CurfewType curfew, boolean pet, GenderRequirement gender,
+                                   List<String> amenityNames, LocalDate availableFrom) {
+        StringBuilder sb = new StringBuilder(title).append(".\n\n");
+        sb.append("Địa chỉ: ").append(address).append(".");
+        if (landmark != null) {
+            sb.append(" Khu vực thuận tiện, đi ").append(landmark).append(" chỉ vài phút");
+        }
+        sb.append(".\n\n");
+        sb.append("- Diện tích ").append(areaM2).append("m2, giá thuê ").append(formatVnd(price))
+                .append("/tháng, cọc ").append(depositMonths).append(" tháng.\n");
+        sb.append("- Điện ").append(formatVnd(electricity)).append("/số, nước ").append(formatVnd(water))
+                .append("/người/tháng.\n");
+        sb.append("- Vệ sinh ").append(toilet == ToiletType.PRIVATE ? "khép kín riêng" : "dùng chung")
+                .append(", nội thất ").append(switch (furniture) {
+                    case FULL -> "đầy đủ, chỉ việc xách vali vào ở";
+                    case BASIC -> "cơ bản";
+                    default -> "để trống, tự trang bị";
+                }).append(".\n");
+        if (!amenityNames.isEmpty()) {
+            sb.append("- Tiện ích: ").append(String.join(", ", amenityNames).toLowerCase(Locale.ROOT)).append(".\n");
+        }
+        sb.append("- ").append(switch (curfew) {
+            case FREE -> "Giờ giấc tự do, có khóa riêng";
+            case CURFEW -> "Đóng cửa lúc 23h, an ninh yên tĩnh";
+            default -> "Giờ giấc thỏa thuận với chủ nhà";
+        }).append(pet ? "; cho nuôi thú cưng nhỏ" : "; không nuôi thú cưng").append(".\n");
+        if (gender != GenderRequirement.ANY) {
+            sb.append("- Ưu tiên ").append(gender == GenderRequirement.FEMALE_ONLY ? "nữ" : "nam").append(".\n");
+        }
+        sb.append("- Phòng trống từ ").append(availableFrom).append(".\n\n");
+        sb.append("Khu dân cư ").append(district).append(" văn minh, gần chợ, siêu thị và bến xe buýt. ")
+                .append("Liên hệ chủ nhà để xem phòng trực tiếp.");
+        return sb.toString();
     }
 
     // =====================================================================================
@@ -728,6 +1144,31 @@ public class DemoDataInitializer implements ApplicationRunner {
         }
     }
 
+    /**
+     * Tin demo vừa gieo mang ngày tạo = lúc khởi động, nên chiếm hết hạn mức "tối đa N tin/ngày" của
+     * các chủ trọ demo. Lùi ngày tạo về ngày đăng giả lập (tin chưa đăng thì lùi 1 ngày) để chủ trọ
+     * demo vẫn đăng tin thử được ngay trong ngày.
+     */
+    private void backdateDemoListings(Instant since) {
+        int n = listingRepository.backdateDemoListingsCreatedSince(since.minus(Duration.ofMinutes(1)));
+        log.info("Lùi ngày tạo của {} tin demo về ngày đăng giả lập (không chiếm hạn mức đăng tin trong ngày)", n);
+    }
+
+    /** Mỗi tin demo một phòng riêng (giống backfill V29: 1 tin = 1 phòng). */
+    private void attachDemoUnit(Listing listing) {
+        String name = listing.getTitle().length() <= 150 ? listing.getTitle() : listing.getTitle().substring(0, 150);
+        RentalUnit unit = rentalUnitRepository.save(RentalUnit.builder()
+                .ownerId(listing.getOwnerId())
+                .name(name)
+                .wardId(listing.getWardId())
+                .addressDetail(listing.getAddressDetail())
+                .latitude(listing.getLatitude())
+                .longitude(listing.getLongitude())
+                .locationSource(listing.getLocationSource())
+                .build());
+        listing.setRentalUnitId(unit.getId());
+    }
+
     private void updateLandlordAggregates(List<User> landlords, List<Listing> listings,
                                           Map<Long, int[]> landlordRating) {
         for (User landlord : landlords) {
@@ -745,12 +1186,7 @@ public class DemoDataInitializer implements ApplicationRunner {
             LandlordProfile profile = opt.get();
             profile.setTotalListings((int) total);
             profile.setTotalActiveListings((int) active);
-            int[] r = landlordRating.get(landlord.getId());
-            if (r != null && r[0] > 0) {
-                profile.setReviewCount(r[0]);
-                profile.setAverageRating(BigDecimal.valueOf(r[1])
-                        .divide(BigDecimal.valueOf(r[0]), 2, RoundingMode.HALF_UP));
-            }
+            // Điểm chủ trọ do ReviewRatingRecalculator ghi (landlordRating chỉ còn để đếm log).
             landlordProfileRepository.save(profile);
         }
     }
@@ -1023,8 +1459,12 @@ public class DemoDataInitializer implements ApplicationRunner {
     //  Catalog helpers
     // =====================================================================================
 
-    /** Tổ hợp (tỉnh, quận, phường) THẬT từ catalog để gán địa chỉ FK hợp lệ cho tin/hồ sơ. */
-    private List<LocationRef> loadLocations() {
+    /**
+     * Tổ hợp (tỉnh, quận, phường) THẬT từ catalog để gán địa chỉ FK hợp lệ cho tin/hồ sơ.
+     *
+     * @param maxWardsPerDistrict số phường tối đa lấy mỗi quận
+     */
+    private List<LocationRef> loadLocations(int maxWardsPerDistrict) {
         List<LocationRef> result = new ArrayList<>();
         List<Province> provinces = provinceRepository.findByIsActiveTrueOrderByDisplayOrderAsc();
         for (Province province : provinces) {
@@ -1036,12 +1476,12 @@ public class DemoDataInitializer implements ApplicationRunner {
                 if (wards.isEmpty()) {
                     continue;
                 }
-                // Lấy tối đa 2 phường mỗi quận để có đủ tổ hợp mà không quá tải.
-                int take = Math.min(2, wards.size());
+                int take = Math.min(maxWardsPerDistrict, wards.size());
                 for (int i = 0; i < take; i++) {
                     Ward ward = wards.get(i);
                     result.add(new LocationRef(province.getId(), district.getId(), ward.getId(),
-                            ward.getName() + ", " + district.getName() + ", " + province.getShortName()));
+                            ward.getName() + ", " + district.getName() + ", " + province.getShortName(),
+                            ward.getLatitude(), ward.getLongitude(), ward.getName(), district.getName()));
                 }
             }
         }
@@ -1102,6 +1542,24 @@ public class DemoDataInitializer implements ApplicationRunner {
     }
 
     /** Tổ hợp địa chỉ hành chính thật (id + nhãn hiển thị). */
-    private record LocationRef(Long provinceId, Long districtId, Long wardId, String label) {
+    /** Tọa độ = tâm phường (tin demo không có vị trí thật), đánh dấu {@code LocationSource.WARD}. */
+    private record LocationRef(Long provinceId, Long districtId, Long wardId, String label,
+                               BigDecimal latitude, BigDecimal longitude,
+                               String wardName, String districtName) {
+
+        LocationSource locationSource() {
+            return latitude != null && longitude != null ? LocationSource.WARD : null;
+        }
+
+        /** Đường/phố thật của phường ({@link DemoAreaCatalog}). */
+        List<String> streets() {
+            return DemoAreaCatalog.streets(districtName, wardName);
+        }
+
+    }
+
+    /** "Xuân Thủy" → "phố Xuân Thủy"; tên đã có tiền tố ("Phố Huế", "Đường Thành") giữ nguyên. */
+    private static String onStreet(String street) {
+        return street.matches("^(Phố|Đường|Ngõ|Làng)\\s.*") ? street : "phố " + street;
     }
 }

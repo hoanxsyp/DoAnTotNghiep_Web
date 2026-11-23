@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import dayjs from 'dayjs';
 import { useParams, useNavigate, useLocation, Link as RouterLink } from 'react-router-dom';
 import {
   Container, Grid, Box, Typography, Stack, Chip, Button, Paper, Divider, Avatar, Breadcrumbs,
   Link, IconButton, Alert, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
   Menu, MenuItem, ListItemIcon, Rating, LinearProgress, Tooltip,
 } from '@mui/material';
-import PhoneIcon from '@mui/icons-material/Phone';
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
@@ -21,7 +21,7 @@ import listingApi from '@/api/listingApi';
 import commentApi from '@/api/commentApi';
 import reviewApi from '@/api/reviewApi';
 import favoriteApi from '@/api/favoriteApi';
-import contactApi from '@/api/contactApi';
+import conversationApi from '@/api/conversationApi';
 import reportApi from '@/api/reportApi';
 import CommentThread from '@/components/interaction/CommentThread';
 import RatingStars from '@/components/interaction/RatingStars';
@@ -97,7 +97,6 @@ const ListingDetailPage = () => {
 
   const [galleryIndex, setGalleryIndex] = useState(0);
   const [favorited, setFavorited] = useState(false);
-  const [revealedPhone, setRevealedPhone] = useState(null);
 
   const [comments, setComments] = useState([]);
   const [commentsLoading, setCommentsLoading] = useState(true);
@@ -222,19 +221,6 @@ const ListingDetailPage = () => {
     }
   };
 
-  const handleRevealPhone = async () => {
-    if (!isAuthenticated) {
-      requireLogin('Đăng nhập để xem số điện thoại của chủ trọ.');
-      return;
-    }
-    try {
-      const data = await contactApi.contactListing(id, { type: 'VIEW_PHONE' });
-      setRevealedPhone(data?.phone || data?.contactPhone || null);
-    } catch (err) {
-      notify.apiError(err);
-    }
-  };
-
   const handleMessage = () => {
     if (!isAuthenticated) {
       requireLogin('Đăng nhập để nhắn tin cho chủ trọ.');
@@ -249,7 +235,7 @@ const ListingDetailPage = () => {
   const submitFirstMessage = async () => {
     setChatSubmitting(true);
     try {
-      const data = await contactApi.createConversation({
+      const data = await conversationApi.createConversation({
         listingId: Number(id),
         initialMessage: chatMessage.trim(),
       });
@@ -459,7 +445,7 @@ const ListingDetailPage = () => {
     title, price, depositAmount, area, description, fullAddress, shortAddress,
     provinceName, districtName, wardName, addressDetail, images = [], amenities = [],
     landlord, contactName, contactPhone,
-    viewCount, favoriteCount, commentCount, latitude, longitude, electricityPrice, waterPrice,
+    viewCount, favoriteCount, commentCount, latitude, longitude, locationSource, electricityPrice, waterPrice,
     roomCount, toiletCount, currentOccupants, maxOccupants, availableFrom, furnitureStatus,
     curfewType, toiletType, petAllowed, parkingAvailable, genderRequirement, categoryCode,
     canReview, reviewedByMe, publishedAt, status,
@@ -472,6 +458,9 @@ const ListingDetailPage = () => {
   const currentImage = gallery[galleryIndex];
   const displayAddress = fullAddress || [addressDetail, wardName, districtName, provinceName].filter(Boolean).join(', ') || shortAddress;
   const landlordId = landlord?.id;
+  // Tin ở ghép do tenant đăng không nhận yêu cầu thuê, chỉ liên hệ qua chat/SĐT (BUG-10).
+  const rentalRequestEnabled = landlord?.rentalRequestEnabled !== false;
+  const messageLabel = rentalRequestEnabled ? 'Nhắn tin cho chủ trọ' : 'Nhắn tin cho người đăng';
 
   const amenityGroups = amenities.reduce((acc, a) => {
     const g = a.group || 'UTILITY';
@@ -482,8 +471,6 @@ const ListingDetailPage = () => {
   const dist = reviews.summary?.distribution || {};
   const totalReviews = reviews.summary?.totalReviews ?? reviews.items.length;
   const avgRating = reviews.summary?.averageRating ?? 0;
-
-  const phoneToShow = revealedPhone || contactPhone;
 
   return (
     <Container maxWidth="lg" sx={{ py: { xs: 2, md: 3 } }}>
@@ -628,10 +615,18 @@ const ListingDetailPage = () => {
               <Typography variant="h6" component="h2" sx={{ fontWeight: 700, mt: 3, mb: 1 }}>
                 Vị trí
               </Typography>
+              {/* WARD = tọa độ tâm phường: chỉ hiện khu vực, không cắm ghim như vị trí thật */}
+              {locationSource === 'WARD' && (
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                  Vị trí gần đúng theo khu vực {wardName ? `phường ${wardName}` : 'phường'} — liên hệ chủ trọ để biết địa chỉ chính xác.
+                </Typography>
+              )}
               <Box
                 component="iframe"
                 title="Bản đồ vị trí"
-                src={`https://www.openstreetmap.org/export/embed.html?bbox=${longitude - 0.008}%2C${latitude - 0.006}%2C${longitude + 0.008}%2C${latitude + 0.006}&layer=mapnik&marker=${latitude}%2C${longitude}`}
+                src={locationSource === 'WARD'
+                  ? `https://www.openstreetmap.org/export/embed.html?bbox=${longitude - 0.016}%2C${latitude - 0.012}%2C${longitude + 0.016}%2C${latitude + 0.012}&layer=mapnik`
+                  : `https://www.openstreetmap.org/export/embed.html?bbox=${longitude - 0.008}%2C${latitude - 0.006}%2C${longitude + 0.008}%2C${latitude + 0.006}&layer=mapnik&marker=${latitude}%2C${longitude}`}
                 sx={{ width: '100%', height: 300, border: 0, borderRadius: 2 }}
                 loading="lazy"
               />
@@ -639,13 +634,19 @@ const ListingDetailPage = () => {
           )}
 
           {/* Đánh giá */}
-          <Typography variant="h6" component="h2" sx={{ fontWeight: 700, mt: 3, mb: 1 }}>
+          <Typography variant="h6" component="h2" sx={{ fontWeight: 700, mt: 3, mb: 0.5 }}>
             Đánh giá {totalReviews > 0 ? `(${totalReviews})` : ''}
           </Typography>
+          {/* Đánh giá thuộc về phòng: gồm cả đánh giá từ các lần đăng tin trước của cùng phòng (RE-2). */}
+          {(reviews.summary?.rentalUnitName || listing?.rentalUnit?.name) && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+              Đánh giá của phòng &quot;{reviews.summary?.rentalUnitName || listing?.rentalUnit?.name}&quot; qua mọi lần đăng tin
+            </Typography>
+          )}
           {reviewsLoading ? (
             <LoadingSkeleton variant="comment" count={2} />
           ) : totalReviews === 0 ? (
-            <EmptyState size="sm" title="Chưa có đánh giá nào cho tin này" />
+            <EmptyState size="sm" title="Chưa có đánh giá nào cho phòng này" />
           ) : (
             <Box>
               <Stack direction="row" spacing={2} alignItems="center">
@@ -693,6 +694,11 @@ const ListingDetailPage = () => {
                             {fromNow(r.createdAt)}
                           </Typography>
                         </Stack>
+                        {r.rentedViaListingCreatedAt && String(r.listingId) !== String(listing?.id) && (
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                            Thuê qua tin đăng tháng {dayjs(r.rentedViaListingCreatedAt).format('MM/YYYY')}
+                          </Typography>
+                        )}
                         {r.content && <RichTextViewer content={r.content} variant="body2" />}
                       </Box>
                       {isAuthenticated && String(r.author?.id) === String(user?.id) && (
@@ -824,7 +830,7 @@ const ListingDetailPage = () => {
 
               {/* Hành động */}
               <Stack spacing={1}>
-                {(role === ROLES.TENANT || !isAuthenticated) && status === 'ACTIVE' && (
+                {(role === ROLES.TENANT || !isAuthenticated) && status === 'ACTIVE' && rentalRequestEnabled && (
                   <Button
                     variant="contained"
                     color="success"
@@ -841,21 +847,13 @@ const ListingDetailPage = () => {
                     Thuê phòng
                   </Button>
                 )}
-                {phoneToShow && (
-                  <Button
-                    variant="contained"
-                    color={revealedPhone ? 'success' : 'primary'}
-                    startIcon={<PhoneIcon />}
-                    fullWidth
-                    component={revealedPhone ? 'a' : 'button'}
-                    href={revealedPhone ? `tel:${revealedPhone}` : undefined}
-                    onClick={revealedPhone ? undefined : handleRevealPhone}
-                  >
-                    {revealedPhone ? phoneToShow : `${phoneToShow}  ·  Hiện số`}
-                  </Button>
+                {contactPhone && (
+                  <Typography variant="body1" align="center" sx={{ py: 1, fontWeight: 700 }}>
+                    {contactPhone}
+                  </Typography>
                 )}
                 <Button variant="outlined" startIcon={<ChatBubbleOutlineIcon />} fullWidth onClick={handleMessage}>
-                  Nhắn tin cho chủ trọ
+                  {messageLabel}
                 </Button>
                 <Stack direction="row" spacing={1}>
                   <Button
@@ -1018,7 +1016,7 @@ const ListingDetailPage = () => {
 
       {/* Dialog tin nhắn đầu tiên gửi chủ trọ */}
       <Dialog open={chatOpen} onClose={() => !chatSubmitting && setChatOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Nhắn tin cho chủ trọ</DialogTitle>
+        <DialogTitle>{messageLabel}</DialogTitle>
         <DialogContent>
           <TextField
             label="Tin nhắn"

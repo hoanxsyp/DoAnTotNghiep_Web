@@ -49,7 +49,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * </pre>
  * Báo cáo ghi ra {@code ml/eval-results/retrieval_recall.md}.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
+// Bộ vàng gán trên 59 phòng seed của data.sql -> luôn nạp seed, bất kể SQL_INIT_MODE.
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE,
+        properties = "spring.sql.init.mode=always")
 @EnabledIfEnvironmentVariable(named = "RETRIEVAL_EVAL", matches = "true")
 class RetrievalRecallEvalTest {
 

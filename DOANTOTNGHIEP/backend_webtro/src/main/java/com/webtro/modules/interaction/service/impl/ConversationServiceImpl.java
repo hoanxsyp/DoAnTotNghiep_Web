@@ -2,8 +2,6 @@ package com.webtro.modules.interaction.service.impl;
 
 import com.webtro.common.PageResponse;
 import com.webtro.common.enums.BannedKeywordScope;
-import com.webtro.common.enums.ContactType;
-import com.webtro.common.event.ContactCreatedEvent;
 import com.webtro.constant.ConfigKey;
 import com.webtro.constant.ErrorCode;
 import com.webtro.exception.BusinessException;
@@ -17,11 +15,9 @@ import com.webtro.modules.interaction.dto.response.ConversationCreatedResponse;
 import com.webtro.modules.interaction.dto.response.ConversationPageResponse;
 import com.webtro.modules.interaction.dto.response.ConversationResponse;
 import com.webtro.modules.interaction.dto.response.MessageResponse;
-import com.webtro.modules.interaction.entity.ContactLog;
 import com.webtro.modules.interaction.entity.Conversation;
 import com.webtro.modules.interaction.entity.Message;
 import com.webtro.modules.interaction.mapper.ConversationMapper;
-import com.webtro.modules.interaction.repository.ContactLogRepository;
 import com.webtro.modules.interaction.repository.ConversationRepository;
 import com.webtro.modules.interaction.repository.MessageRepository;
 import com.webtro.modules.interaction.service.ConversationService;
@@ -33,7 +29,6 @@ import com.webtro.security.RateLimitService;
 import com.webtro.util.HtmlSanitizer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -67,7 +62,6 @@ public class ConversationServiceImpl implements ConversationService {
 
     private final ConversationRepository conversationRepository;
     private final MessageRepository messageRepository;
-    private final ContactLogRepository contactLogRepository;
     private final ListingGateway listingGateway;
     private final UserGateway userGateway;
     private final BannedKeywordGateway bannedKeywordGateway;
@@ -75,7 +69,6 @@ public class ConversationServiceImpl implements ConversationService {
     private final ChatRealtimePublisher chatRealtimePublisher;
     private final RateLimitService rateLimitService;
     private final SystemConfigService systemConfig;
-    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     @Transactional(readOnly = true)
@@ -133,34 +126,12 @@ public class ConversationServiceImpl implements ConversationService {
         Persisted persisted = persistConversationMessage(
                 request.getListingId(), userId, listing.ownerId(), message);
 
-        // CONT-05: mỗi lần mở chat cũng là một lượt liên hệ.
-        writeChatContactLog(listing, userId);
-
         return ConversationCreatedResponse.builder()
                 .id(persisted.conversation().getId())
                 .listingId(listing.id())
                 .listingTitle(listing.title())
                 .tenantId(userId)
                 .landlordId(listing.ownerId())
-                .myRole("TENANT")
-                .alreadyExisted(persisted.alreadyExisted())
-                .firstMessageId(persisted.message().getId())
-                .createdAt(persisted.conversation().getCreatedAt())
-                .build();
-    }
-
-    @Override
-    @Transactional
-    public ConversationCreatedResponse startChatFromContact(Long listingId, Long tenantId, Long landlordId,
-                                                            String initialMessage) {
-        // Người gọi (ContactService) đã kiểm tra public/self/restricted/chat-enabled + quét từ cấm.
-        String message = HtmlSanitizer.stripAllHtml(initialMessage);
-        Persisted persisted = persistConversationMessage(listingId, tenantId, landlordId, message);
-        return ConversationCreatedResponse.builder()
-                .id(persisted.conversation().getId())
-                .listingId(listingId)
-                .tenantId(tenantId)
-                .landlordId(landlordId)
                 .myRole("TENANT")
                 .alreadyExisted(persisted.alreadyExisted())
                 .firstMessageId(persisted.message().getId())
@@ -340,25 +311,6 @@ public class ConversationServiceImpl implements ConversationService {
                 action.run();
             }
         });
-    }
-
-    /** Ghi ContactLog CHAT (dedup theo contact.dedup_minutes) + báo chủ trọ khi được tính. */
-    private void writeChatContactLog(ListingGateway.ListingBrief listing, Long tenantId) {
-        int dedupMinutes = systemConfig.getInt(ConfigKey.CONTACT_DEDUP_MINUTES);
-        Instant since = Instant.now().minus(Duration.ofMinutes(dedupMinutes));
-        boolean counted = !contactLogRepository
-                .existsByListingIdAndUserIdAndCreatedAtAfterAndDeletedAtIsNull(listing.id(), tenantId, since);
-        contactLogRepository.save(ContactLog.builder()
-                .listingId(listing.id())
-                .userId(tenantId)
-                .contactType(ContactType.CHAT)
-                .isCounted(counted)
-                .isReadByOwner(false)
-                .build());
-        if (counted) {
-            listingGateway.incrementContactCount(listing.id());
-            eventPublisher.publishEvent(new ContactCreatedEvent(listing.id(), listing.ownerId(), tenantId));
-        }
     }
 
     private String scanAndSanitize(String text) {

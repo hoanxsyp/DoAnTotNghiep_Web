@@ -18,7 +18,7 @@ import java.util.Map;
  */
 public interface RecommendationEngine {
 
-    /** Một tin trong lịch sử hành vi kèm trọng số nguồn (xem=1, tìm=2, lưu=3, liên hệ=5). */
+    /** Một tin trong lịch sử hành vi kèm trọng số nguồn (xem=1, tìm=2, lưu=3). */
     record WeightedListing(ListingAttr attr, int weight) {
     }
 
@@ -53,7 +53,7 @@ public interface RecommendationEngine {
             boolean empty) {
     }
 
-    record BehaviorCounts(int views, int searches, int favorites, int contacts) {
+    record BehaviorCounts(int views, int searches, int favorites) {
     }
 
     /**

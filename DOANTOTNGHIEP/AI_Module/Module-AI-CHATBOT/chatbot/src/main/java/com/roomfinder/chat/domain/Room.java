@@ -5,10 +5,13 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 /**
- * Ánh xạ bảng `room` (đã bổ sung cột theo §8).
- * distance_m KHÔNG lưu trong DB — tính runtime khi tìm theo POI.
+ * Phòng mà chatbot làm việc. Nguồn {@code db}: ánh xạ bảng `room` (đã bổ sung cột theo §8).
+ * Nguồn {@code backend}: dựng từ API tin đăng của web, KHÔNG bao giờ lưu xuống DB.
+ * distance_m KHÔNG lưu trong DB — tính runtime khi tìm theo POI. Vector mô tả cho semantic
+ * rerank cache ở bảng riêng {@code listing_embedding} (xem {@link ListingEmbedding}).
  */
 @Entity
 @Table(name = "room")
@@ -41,15 +44,28 @@ public class Room {
     private String description;
     private String thumbnail;
 
-    /**
-     * Embedding của {@code description} — GĐ3 semantic rerank (SPEC §12.1).
-     * Lưu JSON thô (mảng float, tính bằng {@code EmbeddingClient}), tính lười
-     * (lazy) khi cần rerank lần đầu rồi cache lại — KHÔNG tính lại mỗi request.
-     */
-    @Column(columnDefinition = "JSON")
-    private String descriptionVector;
-
     /** Khoảng cách (m) tới POI — chỉ set khi tìm theo "gần X". Không map cột. */
     @Transient
     private Double distanceM;
+
+    // --- Chỉ có khi nguồn là tin đăng của web (BackendRoomSource), không map cột ---
+
+    /** Slug tin đăng — link {@code /tin/{slug}-{id}} trên web. */
+    @Transient
+    private String slug;
+
+    /** Phường của tin (wards.id phía web). */
+    @Transient
+    private Long wardId;
+
+    /** Tên các tiện ích của tin (vd "Máy lạnh", "Thang máy") — để NLG mô tả đúng. */
+    @Transient
+    private List<String> amenityNames;
+
+    /**
+     * Key tiện ích (theo {@code UtilityNormalizer}, vd "private_bathroom", "balcony") mà tin này CÓ —
+     * để trả lời "các phòng đó có vskk không" cho mọi tiện ích. {@code null} = nguồn không đủ dữ liệu.
+     */
+    @Transient
+    private java.util.Set<String> utilityKeys;
 }

@@ -2,6 +2,7 @@ package com.webtro.modules.admin.service.impl;
 
 import com.webtro.common.PageResponse;
 import com.webtro.common.enums.AuditAction;
+import com.webtro.common.event.UserSessionsRevokedEvent;
 import com.webtro.common.enums.ListingStatus;
 import com.webtro.common.enums.NotificationType;
 import com.webtro.common.enums.UserStatus;
@@ -53,6 +54,7 @@ import com.webtro.modules.user.repository.VerificationRepository;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -108,6 +110,7 @@ public class AdminUserServiceImpl implements AdminUserService {
     private final AdminUserMapper adminUserMapper;
     private final AuditLogService auditLogService;
     private final NotificationService notificationService;
+    private final ApplicationEventPublisher eventPublisher;
 
     // ============================ Tìm/lọc ============================
 
@@ -716,6 +719,8 @@ public class AdminUserServiceImpl implements AdminUserService {
                 count++;
             }
         }
+        // Đóng cả kết nối WebSocket chat đang mở (BUG-13), chạy sau khi transaction commit.
+        eventPublisher.publishEvent(new UserSessionsRevokedEvent(userId, reason));
         return count;
     }
 

@@ -33,7 +33,6 @@ public class LandlordDashboardResponse {
     private long activeCount;
     private long pendingCount;
     private long viewCount30d;
-    private long contactCount30d;
     private Deltas deltas;
     private List<ChartPoint> chart;
     private List<ListingSummaryResponse> topListings;
@@ -45,7 +44,6 @@ public class LandlordDashboardResponse {
     private Map<String, Long> listingsByStatus;
     private long totalViews;
     private long totalFavorites;
-    private long totalContacts;
     private Integer responseRatePercent;
     private BigDecimal averageRating;
     private Integer reviewCount;
@@ -61,7 +59,6 @@ public class LandlordDashboardResponse {
         private Integer activeCount;
         private Integer pendingCount;
         private BigDecimal viewCountPercent;
-        private BigDecimal contactCountPercent;
     }
 
     @Getter
@@ -72,7 +69,6 @@ public class LandlordDashboardResponse {
     public static class ChartPoint {
         private LocalDate date;
         private long views;
-        private long contacts;
     }
 
     @Getter

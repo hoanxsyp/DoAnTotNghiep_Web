@@ -9,7 +9,9 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Bộ nạp có cache cho danh sách từ khóa cấm đang bật ({@code [§11.11]}).
@@ -51,7 +53,8 @@ public class BannedKeywordCache {
                         k.getSeverity(),
                         k.getAppliesTo(),
                         Boolean.TRUE.equals(k.getIsRegex())))
-                .toList();
+                // ArrayList (không final) để Redis serializer ghi type-id; Stream.toList() làm cache đọc lỗi.
+                .collect(Collectors.toCollection(ArrayList::new));
     }
 
     /** Xóa cache khi Admin thêm/sửa/xóa/bật-tắt từ khóa. */

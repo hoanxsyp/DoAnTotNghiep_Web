@@ -77,9 +77,12 @@ public final class ListingSpecifications {
             return null;
         }
         String pattern = "%" + keyword.trim().toLowerCase() + "%";
+        // Gồm cả địa chỉ (công khai trên trang chi tiết): người thuê hay tìm theo tên đường/khu
+        // ("Xuân Thủy", "Linh Đàm") — không có trong danh mục phường/quận.
         return (root, query, cb) -> cb.or(
                 cb.like(cb.lower(root.get("title")), pattern),
-                cb.like(cb.lower(root.get("description")), pattern));
+                cb.like(cb.lower(root.get("description")), pattern),
+                cb.like(cb.lower(root.get("addressDetail")), pattern));
     }
 
     public static Specification<Listing> provinceId(Long provinceId) {

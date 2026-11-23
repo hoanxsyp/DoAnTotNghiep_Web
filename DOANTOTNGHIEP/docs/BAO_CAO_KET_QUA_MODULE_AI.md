@@ -127,7 +127,12 @@ Sau cập nhật, website trong `backend_webtro` / `frontend_webtro` dùng modul
    - `amenityIds`, `furnitureStatus`, `toiletType` → danh sách tiện ích model Python.
 3. `backend_webtro` gọi FastAPI `rental-api` tại `POST /predict`.
 4. `rental-api` dùng `LightGBM` tốt nhất (`model.joblib`) vì `RENTAL_BACKEND=sklearn`; nếu phường của website chưa có trong tập train thì fallback về `unknown` để model vẫn dự đoán theo cấp quận.
-5. Backend vẫn lưu `prediction_histories`, tính cảnh báo lệch giá và trả response cũ cho frontend.
+5. Backend lưu `prediction_histories`, tính cảnh báo lệch giá và trả `PricePredictionResponse`.
+6. Nếu request có `listingId`, backend kiểm tra tin thuộc người gọi trước khi dự đoán rồi cập nhật
+   `listings.price_prediction_id` và `listings.price_deviation_flag`.
+7. `POST /api/listings` không gọi AI và `ListingCreateResponse` không có `pricePrediction`.
+   `ListingWizard` gọi endpoint AI riêng; sau khi tạo tin thì gọi lại với id mới. Lỗi/tắt/timeout
+   AI bị bắt riêng và không làm thất bại luồng lưu/gửi tin.
 
 Cấu hình liên quan:
 
@@ -145,7 +150,7 @@ $env:RENTAL_API_BASE_URL="http://localhost:8000"
 ## Kiểm thử nhanh qua Python
 
 ```powershell
-cd "C:\Users\nguye\OneDrive\Máy tính\DoAnTotNghiep_Web\DOANTOTNGHIEP\AI_Module\AI_Rental_Price_Predictor\ai_rental"
+cd AI_Module/AI_Rental_Price_Predictor/ai_rental
 
 python -c "import sys; sys.path.insert(0, 'serving'); import predict_core as c; print(c.predict('Cầu Giấy', 'Dịch Vọng', 28, 'can_ho_mini', ['dieu_hoa','khep_kin','thang_may','wifi'], 3))"
 ```

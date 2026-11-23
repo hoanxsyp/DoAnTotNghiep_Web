@@ -128,12 +128,10 @@ public class ContentBasedRecommendationEngine implements RecommendationEngine {
 
         int views = 0;
         int favorites = 0;
-        int contacts = 0;
         for (WeightedListing wl : behavior) {
             switch (wl.weight()) {
                 case 1 -> views++;
                 case 3 -> favorites++;
-                case 5 -> contacts++;
                 default -> { /* nguồn khác */ }
             }
         }
@@ -144,7 +142,7 @@ public class ContentBasedRecommendationEngine implements RecommendationEngine {
                 percentile(prices, 10), percentile(prices, 90),
                 percentile(areas, 10), percentile(areas, 90),
                 preferredOccupants, preferredGender,
-                new BehaviorCounts(views, searches.size(), favorites, contacts), empty);
+                new BehaviorCounts(views, searches.size(), favorites), empty);
     }
 
     @Override

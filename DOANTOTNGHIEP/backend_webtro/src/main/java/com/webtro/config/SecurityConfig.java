@@ -53,8 +53,9 @@ public class SecurityConfig {
             "/api/wards/**",
             "/api/amenities/**",
             "/api/promotion-packages/**",
-            "/api/users/*/public",
+            "/api/users/{id:\\d+}",   // hồ sơ công khai (GET /api/users/{id}); regex để không mở /me
             "/api/users/*/listings",
+            "/api/users/*/reviews",
             "/api/files/**",
             "/api/content/**",
     };

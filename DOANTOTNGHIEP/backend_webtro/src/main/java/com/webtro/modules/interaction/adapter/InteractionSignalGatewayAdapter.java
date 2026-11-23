@@ -3,11 +3,9 @@ package com.webtro.modules.interaction.adapter;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.webtro.modules.ai.spi.InteractionSignalGateway;
-import com.webtro.modules.interaction.entity.ContactLog;
 import com.webtro.modules.interaction.entity.Favorite;
 import com.webtro.modules.interaction.entity.SearchHistory;
 import com.webtro.modules.interaction.entity.ViewHistory;
-import com.webtro.modules.interaction.repository.ContactLogRepository;
 import com.webtro.modules.interaction.repository.FavoriteRepository;
 import com.webtro.modules.interaction.repository.SearchHistoryRepository;
 import com.webtro.modules.interaction.repository.ViewHistoryRepository;
@@ -28,13 +26,12 @@ import java.util.Set;
 /**
  * Adapter (canonical luật 4/7, mục 10.2 §9.2) — hiện thực SPI {@link InteractionSignalGateway} của
  * module {@code ai} bằng bốn repository hành vi của module {@code interaction}
- * ({@link ViewHistoryRepository}, {@link SearchHistoryRepository}, {@link FavoriteRepository},
- * {@link ContactLogRepository}).
+ * ({@link ViewHistoryRepository}, {@link SearchHistoryRepository}, {@link FavoriteRepository}).
  *
  * <p>Chỉ trả tín hiệu hành vi thô (id tin + trọng số nguồn + tiêu chí tìm kiếm); toàn bộ logic dựng
  * {@code UserPreferenceProfile} nằm ở module {@code ai}.
  *
- * <p><b>Trọng số nguồn</b> theo Javadoc SPI: xem = 1, lưu = 3, liên hệ = 5. Tín hiệu tìm kiếm
+ * <p><b>Trọng số nguồn</b> theo Javadoc SPI: xem = 1, lưu = 3. Tín hiệu tìm kiếm
  * (trọng số 2) KHÔNG gộp vào {@link #recentBehaviorRefs} vì {@code SearchHistory} không gắn với một
  * tin cụ thể (không có {@code listingId}); nó được trả riêng qua {@link #recentSearchSignals}.
  */
@@ -45,16 +42,14 @@ public class InteractionSignalGatewayAdapter implements InteractionSignalGateway
 
     private static final int WEIGHT_VIEW = 1;
     private static final int WEIGHT_FAVORITE = 3;
-    private static final int WEIGHT_CONTACT = 5;
 
     private final ViewHistoryRepository viewHistoryRepository;
     private final SearchHistoryRepository searchHistoryRepository;
     private final FavoriteRepository favoriteRepository;
-    private final ContactLogRepository contactLogRepository;
     private final ObjectMapper objectMapper;
 
     /**
-     * Gộp các tham chiếu hành vi gần đây từ ViewHistory (w=1), Favorite (w=3), ContactLog (w=5); mỗi
+     * Gộp các tham chiếu hành vi gần đây từ ViewHistory (w=1), Favorite (w=3); mỗi
      * nguồn tối đa {@code maxPerSource} bản ghi mới nhất kể từ {@code since}.
      */
     @Override
@@ -73,10 +68,6 @@ public class InteractionSignalGatewayAdapter implements InteractionSignalGateway
         for (Favorite f : favoriteRepository
                 .findByUserIdAndCreatedAtAfterAndDeletedAtIsNullOrderByCreatedAtDesc(userId, since, cap)) {
             refs.add(new BehaviorRef(f.getListingId(), WEIGHT_FAVORITE, f.getCreatedAt()));
-        }
-        for (ContactLog c : contactLogRepository
-                .findByUserIdAndCreatedAtAfterAndDeletedAtIsNullOrderByCreatedAtDesc(userId, since, cap)) {
-            refs.add(new BehaviorRef(c.getListingId(), WEIGHT_CONTACT, c.getCreatedAt()));
         }
         return refs;
     }
@@ -114,7 +105,7 @@ public class InteractionSignalGatewayAdapter implements InteractionSignalGateway
         return new HashSet<>(favoriteRepository.findFavoritedListingIds(userId, listingIds));
     }
 
-    /** Có bất kỳ tín hiệu hành vi nào không (xem/lưu/liên hệ/tìm kiếm) — quyết định cold-start. */
+    /** Có bất kỳ tín hiệu hành vi nào không (xem/lưu/tìm kiếm) — quyết định cold-start. */
     @Override
     @Transactional(readOnly = true)
     public boolean hasBehaviorData(Long userId) {
@@ -123,7 +114,6 @@ public class InteractionSignalGatewayAdapter implements InteractionSignalGateway
         }
         return viewHistoryRepository.existsByUserId(userId)
                 || favoriteRepository.existsByUserIdAndDeletedAtIsNull(userId)
-                || contactLogRepository.existsByUserIdAndDeletedAtIsNull(userId)
                 || searchHistoryRepository.existsByUserId(userId);
     }
 

@@ -33,6 +33,12 @@ public interface ListingService {
 
     ListingCreateResponse create(ListingCreateRequest request);
 
+    /**
+     * Đăng lại phòng: tạo tin nháp mới cho phòng từ tin gần nhất (nội dung, tiện ích, ảnh).
+     * Phòng phải thuộc người gọi, còn dùng và không có tin sống (RU-2).
+     */
+    ListingCreateResponse relist(Long rentalUnitId);
+
     ListingDetailResponse update(Long id, ListingUpdateRequest request);
 
     void delete(Long id);
@@ -75,7 +81,7 @@ public interface ListingService {
 
     /**
      * Lấy tin đang hiển thị công khai theo id (dùng để module khác xác thực mục tiêu thao tác:
-     * bình luận, đánh giá, liên hệ). Ném {@code LISTING_NOT_FOUND} nếu không tồn tại,
+     * bình luận, đánh giá, trò chuyện). Ném {@code LISTING_NOT_FOUND} nếu không tồn tại,
      * {@code LISTING_NOT_ACTIVE} nếu tin không public.
      */
     Listing getActiveById(Long id);
@@ -88,9 +94,6 @@ public interface ListingService {
 
     /** Tăng/giảm bộ đếm lượt lưu (favorite). {@code delta} có thể âm khi bỏ lưu. */
     void incrementFavoriteCount(Long listingId, int delta);
-
-    /** Tăng bộ đếm lượt liên hệ. */
-    void incrementContactCount(Long listingId);
 
     /**
      * Kết quả sắp xếp ảnh trả về cho client (id + thứ tự + cờ ảnh chính).

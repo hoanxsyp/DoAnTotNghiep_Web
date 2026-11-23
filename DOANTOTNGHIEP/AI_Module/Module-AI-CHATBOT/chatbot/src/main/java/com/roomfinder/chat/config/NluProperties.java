@@ -5,7 +5,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 /**
  * Cấu hình NLU service self-host (GĐ2, §11 bước 2.4) — khối `roomfinder.nlu`.
  * Base model hiện tại: PhoBERT (xem ml/README.md); cấu hình không phụ thuộc model.
- * Timeout mặc định 300ms theo SPEC: NLU cục bộ phải nhanh, chậm hơn thì
+ * Timeout mặc định 800ms (SPEC gợi ý 300ms, quá sát thực tế — xem application.yml): NLU cục bộ phải nhanh, chậm hơn thì
  * fallback LLM còn rẻ hơn là bắt người dùng đợi.
  */
 @ConfigurationProperties(prefix = "roomfinder.nlu")
@@ -13,7 +13,7 @@ public class NluProperties {
 
     private boolean enabled = true;
     private String url = "http://localhost:8000";
-    private int timeoutMs = 300;
+    private int timeoutMs = 800;
 
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean v) { this.enabled = v; }

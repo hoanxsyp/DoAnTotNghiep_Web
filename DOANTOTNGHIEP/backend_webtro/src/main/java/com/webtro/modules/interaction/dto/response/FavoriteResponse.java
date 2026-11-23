@@ -45,4 +45,7 @@ public class FavoriteResponse {
 
     @Schema(description = "Nhãn tiếng Việt giải thích tin không còn hiển thị", example = "Tin đã hết hạn hiển thị")
     private String notAvailableLabel;
+
+    @Schema(description = "Người đăng có nhận yêu cầu thuê không (false khi tenant đăng tin ở ghép)")
+    private Boolean rentalRequestEnabled;
 }

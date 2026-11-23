@@ -13,6 +13,11 @@ import com.webtro.modules.catalog.repository.CategoryRepository;
 import com.webtro.modules.catalog.repository.WardRepository;
 import com.webtro.modules.listing.entity.Listing;
 import com.webtro.modules.listing.entity.ListingImage;
+import com.webtro.modules.listing.entity.RentalUnit;
+import com.webtro.modules.listing.dto.response.RentalUnitSummaryResponse;
+import com.webtro.modules.listing.repository.ListingRepository;
+import com.webtro.modules.listing.repository.RentalUnitRepository;
+import com.webtro.modules.listing.service.RentalUnitSupport;
 import com.webtro.modules.listing.dto.response.LandlordSummaryResponse;
 import com.webtro.modules.listing.dto.response.ListingAmenityResponse;
 import com.webtro.modules.listing.dto.response.ListingDetailResponse;
@@ -26,7 +31,6 @@ import com.webtro.modules.user.entity.LandlordProfile;
 import com.webtro.modules.user.entity.User;
 import com.webtro.modules.user.repository.LandlordProfileRepository;
 import com.webtro.modules.user.repository.UserRepository;
-import com.webtro.util.MaskUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -58,6 +62,8 @@ public class ListingMapper {
     private final UserRepository userRepository;
     private final LandlordProfileRepository landlordProfileRepository;
     private final ListingStateMachine stateMachine;
+    private final RentalUnitRepository rentalUnitRepository;
+    private final ListingRepository listingRepository;
     private final SystemConfigService config;
 
     // ==================================================================
@@ -85,17 +91,19 @@ public class ListingMapper {
 
         if (ownerView) {
             Long daysRemaining = daysRemaining(l.getExpiredAt());
+            RentalUnit unit = rentalUnitRepository.findAliveById(l.getRentalUnitId()).orElse(null);
+            b.rentalUnitId(l.getRentalUnitId())
+                    .rentalUnitName(unit == null ? null : unit.getName());
             b.status(l.getStatus().name())
                     .statusLabel(l.getStatus().getLabel())
                     .rejectReason(l.getRejectReason())
                     .viewCount(l.getViewCount())
                     .favoriteCount(l.getFavoriteCount())
-                    .contactCount(l.getContactCount())
                     .publishedAt(l.getPublishedAt())
                     .expiredAt(l.getExpiredAt())
                     .daysRemaining(daysRemaining)
                     .expiringSoon(isExpiringSoon(daysRemaining))
-                    .availableActions(availableActions(l));
+                    .availableActions(availableActions(l, unit));
         }
         return b.build();
     }
@@ -107,7 +115,7 @@ public class ListingMapper {
     /**
      * Ánh xạ tin sang chi tiết đầy đủ.
      *
-     * @param viewerAuthenticated người xem đã đăng nhập chưa (quyết định che SĐT + tọa độ)
+     * @param viewerAuthenticated người xem đã đăng nhập chưa (quyết định hiển thị tọa độ)
      * @param privileged          người xem là chủ tin hoặc admin (được xem cả thông tin nhạy cảm)
      */
     public ListingDetailResponse toDetail(Listing l, boolean viewerAuthenticated, boolean privileged) {
@@ -118,6 +126,7 @@ public class ListingMapper {
 
         return ListingDetailResponse.builder()
                 .id(l.getId())
+                .rentalUnit(rentalUnitOf(l.getRentalUnitId()))
                 .slug(l.getSlug())
                 .title(l.getTitle())
                 .description(l.getDescription())
@@ -140,6 +149,8 @@ public class ListingMapper {
                 .fullAddress(fullAddress(l, location.province(), location.district(), location.ward()))
                 .latitude(revealSensitive ? l.getLatitude() : null)
                 .longitude(revealSensitive ? l.getLongitude() : null)
+                .locationSource(revealSensitive && l.getLocationSource() != null
+                        ? l.getLocationSource().name() : null)
                 .roomCount(l.getRoomCount())
                 .toiletCount(l.getToiletCount())
                 .floorCount(l.getFloorCount())
@@ -156,8 +167,7 @@ public class ListingMapper {
                 .amenities(amenitiesOf(l.getId()))
                 .landlord(landlordOf(l.getOwnerId()))
                 .contactName(contactName(l))
-                .contactPhone(revealSensitive ? contactPhone(l) : MaskUtil.maskPhone(contactPhone(l)))
-                .phoneMasked(!revealSensitive)
+                .contactPhone(contactPhone(l))
                 .status(l.getStatus().name())
                 .statusLabel(l.getStatus().getLabel())
                 .averageRating(l.getAverageRating())
@@ -165,7 +175,6 @@ public class ListingMapper {
                 .commentCount(l.getCommentCount())
                 .viewCount(l.getViewCount())
                 .favoriteCount(l.getFavoriteCount())
-                .contactCount(l.getContactCount())
                 .favoritedByMe(false)
                 .reviewedByMe(false)
                 .canReview(false)
@@ -222,6 +231,26 @@ public class ListingMapper {
     }
 
     // ==================================================================
+    //  Phòng
+    // ==================================================================
+
+    public RentalUnitSummaryResponse rentalUnitOf(Long rentalUnitId) {
+        if (rentalUnitId == null) {
+            return null;
+        }
+        return rentalUnitRepository.findAliveById(rentalUnitId)
+                .map(u -> RentalUnitSummaryResponse.builder()
+                        .id(u.getId())
+                        .name(u.getName())
+                        .unitLabel(u.getUnitLabel())
+                        .averageRating(u.getAverageRating())
+                        .reviewCount(u.getReviewCount())
+                        .addressLocked(u.isAddressLocked())
+                        .build())
+                .orElse(null);
+    }
+
+    // ==================================================================
     //  Chủ trọ
     // ==================================================================
 
@@ -239,6 +268,7 @@ public class ListingMapper {
                 .averageRating(profile == null ? BigDecimal.ZERO : profile.getAverageRating())
                 .totalActiveListings(profile == null ? 0 : profile.getTotalActiveListings())
                 .chatEnabled(profile == null || Boolean.TRUE.equals(profile.getAllowChat()))
+                .rentalRequestEnabled(profile != null)
                 .memberSince(user == null ? null : user.getCreatedAt())
                 .followedByMe(false)
                 .build();
@@ -248,17 +278,27 @@ public class ListingMapper {
     //  Helper
     // ==================================================================
 
-    /** Tên liên hệ ưu tiên hồ sơ chủ trọ (tin đăng không lưu contactName riêng). */
+    /**
+     * Tên liên hệ ưu tiên hồ sơ chủ trọ (tin đăng không lưu contactName riêng); người đăng không có
+     * hồ sơ chủ trọ (tenant đăng tin ở ghép) hoặc hồ sơ để trống thì lấy họ tên tài khoản.
+     */
     private String contactName(Listing l) {
         return landlordProfileRepository.findByUser_IdAndDeletedAtIsNull(l.getOwnerId())
                 .map(LandlordProfile::getContactName)
-                .orElse(null);
+                .filter(s -> !s.isBlank())
+                .orElseGet(() -> userRepository.findByIdAndDeletedAtIsNull(l.getOwnerId())
+                        .map(User::getFullName)
+                        .orElse(null));
     }
 
+    /** SĐT liên hệ: hồ sơ chủ trọ trước, không có thì SĐT tài khoản (bắt buộc khi đăng ký). */
     private String contactPhone(Listing l) {
         return landlordProfileRepository.findByUser_IdAndDeletedAtIsNull(l.getOwnerId())
                 .map(LandlordProfile::getContactPhone)
-                .orElse(null);
+                .filter(s -> !s.isBlank())
+                .orElseGet(() -> userRepository.findByIdAndDeletedAtIsNull(l.getOwnerId())
+                        .map(User::getPhone)
+                        .orElse(null));
     }
 
     private String primaryThumbnail(Long listingId) {
@@ -321,7 +361,7 @@ public class ListingMapper {
     }
 
     /** Danh sách hành động khả dụng, suy ra từ state machine để FE chỉ việc render. */
-    private List<String> availableActions(Listing l) {
+    private List<String> availableActions(Listing l, RentalUnit unit) {
         ListingStatus s = l.getStatus();
         List<String> actions = new ArrayList<>();
         if (s != ListingStatus.LOCKED && s != ListingStatus.RENTED && s != ListingStatus.DELETED) {
@@ -346,6 +386,11 @@ public class ListingMapper {
             actions.add("PROMOTE");
         }
         actions.add("VIEW_STATS");
+        // "Đăng lại phòng này": tin đã đóng, phòng còn dùng và chưa có tin sống khác (RU-2).
+        if (s == ListingStatus.CLOSED && unit != null && !unit.isArchived()
+                && listingRepository.findByRentalUnitAndStatuses(unit.getId(), RentalUnitSupport.LIVE_STATUSES).isEmpty()) {
+            actions.add("RELIST");
+        }
         if (stateMachine.canTransition(s, ListingEvent.SOFT_DELETE)) {
             actions.add("DELETE");
         }

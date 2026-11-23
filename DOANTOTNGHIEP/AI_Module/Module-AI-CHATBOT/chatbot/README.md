@@ -103,10 +103,36 @@ và `chatbot-nlu` (ViSoBERT — chỉ phục vụ được nếu đã train mode
 chưa train thì `/health` trả `degraded` và request trả 503, xem `nlu-service/README.md`).
 `chatbot-api` map ra http://localhost:8081, `chatbot-nlu` ra http://localhost:8003.
 
+### Nguồn dữ liệu phòng (`LISTING_SOURCE`)
+
+| Giá trị | Phòng lấy từ đâu | Dùng khi |
+|---|---|---|
+| `backend` (mặc định trong compose) | **Tin đăng thật của web** qua API công khai của `backend_webtro`: `/api/search/listings` (lọc) + `/api/listings/{id}?countView=false` (mô tả, tiện ích — **không cộng lượt xem**). Chatbot KHÔNG đọc DB của web; quy tắc tin công khai (`publicStatuses()`, canonical §5.2) do backend áp | Chạy cùng web |
+| `db` (mặc định khi chạy riêng) | 59 phòng demo trong `chatbot-mysql` (`data.sql`, cần `SQL_INIT_MODE=always`) | Frontend demo riêng của module, bộ đo Recall@5 |
+
+Biến kèm theo: `BACKEND_URL` (compose: `http://backend:8080`). Với nguồn `backend`:
+- Tên quận/phường được dịch sang `provinceId/districtId/wardId` theo danh mục của web (nạp lười
+  ở lượt chat đầu, cache 60 phút); không khớp → tìm theo `keyword`.
+- Không nói rõ loại hình → chỉ tìm các loại để Ở (bỏ `SMALL_PREMISES` — mặt bằng).
+- Backend luôn xếp tin đẩy lên đầu và chưa sắp được theo khoảng cách → chatbot lấy tối đa
+  100 tin rồi tự sắp theo giá / khoảng cách (Haversine, tọa độ tâm phường vì API ẩn tọa độ tin).
+- Tiện ích: 28 key của `UtilityNormalizer` → `amenityIds` (tin phải có ĐỦ) hoặc cột riêng
+  (`parkingAvailable`, `petAllowed`, `toiletType`, `curfewType`, `furnitureStatus`). Nguồn `db`
+  chỉ lọc được 4 cột của bảng demo. Câu phủ định ("không cần thang máy", "có ban công thì tốt,
+  không có cũng được") gỡ tiện ích khỏi bộ lọc.
+- NLG: Gemini được thấy danh sách tiện ích THẬT + 200 ký tự đầu của mô tả; prompt cấm khẳng
+  định tiện ích không có trong danh sách.
+- Backend sập/timeout → `chatbot-api` trả **503** (không trả "không có phòng").
+- Vector mô tả cho semantic rerank cache ở bảng `listing_embedding` (khóa `backend:<id>`,
+  tự tính lại khi chủ trọ sửa mô tả).
+
 ## 4. Chạy cục bộ (không Docker)
 
 1. Bật MySQL (tạo DB `roomfinder`) và Redis.
 2. Cấu hình qua biến môi trường (mặc định: `localhost`, user `root`/`root`).
+   Lần đầu với DB riêng `roomfinder`, đặt `SQL_INIT_MODE=always` để tạo bảng + seed
+   59 phòng demo (`schema.sql`, `data.sql`). Mặc định là `never` để không bao giờ
+   ghi bảng/phòng giả vào DB của web chính.
 3. Build & run (ở thư mục gốc repo — nơi có `pom.xml`):
 
 ```bash

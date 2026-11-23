@@ -1,16 +1,24 @@
 package com.roomfinder.chat.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.roomfinder.chat.config.ListingSourceProperties;
 import com.roomfinder.chat.config.SemanticProperties;
+import com.roomfinder.chat.domain.ListingEmbedding;
 import com.roomfinder.chat.domain.Room;
 import com.roomfinder.chat.embedding.EmbeddingClient;
-import com.roomfinder.chat.repository.RoomRepository;
+import com.roomfinder.chat.repository.ListingEmbeddingRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.time.Instant;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Semantic rerank — SPEC §12.1 (GĐ3). KHÔNG dùng Elasticsearch (xem README §8):
@@ -26,16 +34,20 @@ public class SemanticRerankService {
     private static final Logger log = LoggerFactory.getLogger(SemanticRerankService.class);
 
     private final EmbeddingClient embeddingClient;
-    private final RoomRepository roomRepo;
+    private final ListingEmbeddingRepository embeddingRepo;
     private final SemanticProperties props;
     private final ObjectMapper mapper;
+    /** Tiền tố khóa cache theo nguồn phòng — id phòng demo và id tin của web không đè nhau. */
+    private final String keyPrefix;
 
-    public SemanticRerankService(EmbeddingClient embeddingClient, RoomRepository roomRepo,
-                                  SemanticProperties props, ObjectMapper mapper) {
+    public SemanticRerankService(EmbeddingClient embeddingClient, ListingEmbeddingRepository embeddingRepo,
+                                  SemanticProperties props, ObjectMapper mapper,
+                                  ListingSourceProperties listingProps) {
         this.embeddingClient = embeddingClient;
-        this.roomRepo = roomRepo;
+        this.embeddingRepo = embeddingRepo;
         this.props = props;
         this.mapper = mapper;
+        this.keyPrefix = listingProps.getSource() + ":";
     }
 
     /**
@@ -48,28 +60,55 @@ public class SemanticRerankService {
         float[] queryVec = embeddingClient.embed(message);
         if (queryVec == null) return null;
 
-        candidates.forEach(this::ensureVector);
+        Map<Long, float[]> vectors = new HashMap<>();
+        for (Room r : candidates) {
+            float[] v = vectorOf(r);
+            if (v != null) vectors.put(r.getId(), v);
+        }
         return candidates.stream()
-                .sorted(Comparator.comparingDouble((Room r) -> -scoreOf(r, queryVec)))
+                .sorted(Comparator.comparingDouble((Room r) -> -scoreOf(vectors.get(r.getId()), queryVec)))
                 .toList();
     }
 
-    /** Tính + cache description_vector nếu chưa có (lazy, chỉ 1 lần/phòng). */
-    private void ensureVector(Room r) {
-        if (r.getDescriptionVector() != null) return;
-        float[] v = embeddingClient.embed(r.getDescription());
-        if (v == null) return;
-        try {
-            r.setDescriptionVector(mapper.writeValueAsString(v));
-            roomRepo.save(r);
-        } catch (Exception e) {
-            log.warn("Lưu description_vector lỗi cho room {}: {}", r.getId(), e.getMessage());
+    /**
+     * Vector mô tả từ cache {@code listing_embedding}; chưa có hoặc mô tả đã đổi (hash khác) thì
+     * embed lại rồi lưu — mỗi phòng chỉ tính 1 lần cho tới khi chủ trọ sửa mô tả.
+     */
+    private float[] vectorOf(Room r) {
+        if (r.getDescription() == null || r.getDescription().isBlank()) return null;
+        String key = keyPrefix + r.getId();
+        String hash = sha256(r.getDescription());
+        ListingEmbedding cached = embeddingRepo.findById(key).orElse(null);
+        if (cached != null && hash.equals(cached.getDescriptionHash())) {
+            float[] v = parse(cached.getVector());
+            if (v != null) return v;
         }
+        float[] v = embeddingClient.embed(r.getDescription());
+        if (v == null) return null;
+        try {
+            ListingEmbedding e = cached != null ? cached : new ListingEmbedding();
+            e.setListingKey(key);
+            e.setDescriptionHash(hash);
+            e.setVector(mapper.writeValueAsString(v));
+            e.setUpdatedAt(Instant.now());
+            embeddingRepo.save(e);
+        } catch (Exception ex) {
+            log.warn("Lưu vector mô tả lỗi cho {}: {}", key, ex.getMessage());
+        }
+        return v;
     }
 
-    private double scoreOf(Room r, float[] queryVec) {
-        float[] v = parse(r.getDescriptionVector());
+    private static double scoreOf(float[] v, float[] queryVec) {
         return v == null ? -1.0 : cosine(queryVec, v);
+    }
+
+    private static String sha256(String s) {
+        try {
+            byte[] d = MessageDigest.getInstance("SHA-256").digest(s.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(d);
+        } catch (Exception e) {
+            return Integer.toHexString(s.hashCode());
+        }
     }
 
     private float[] parse(String json) {

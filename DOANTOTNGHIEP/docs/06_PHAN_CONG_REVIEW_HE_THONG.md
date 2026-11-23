@@ -32,7 +32,8 @@
 - **Phân trang:** `PageResponse { items, page, size, totalElements, totalPages, first, last }` — lưu ý danh sách nằm ở **`items`** (không phải `content`).
 - **Đăng nhập:** body dùng field **`emailOrPhone`** (không phải `email`).
 - **Phân quyền:** Phân quyền role-only — **4 vai trò**, kiểm soát bằng `@PreAuthorize("hasRole/hasAnyRole")`.
-- **AI:** cả 4 module là **rule-based in-process** (không gọi dịch vụ ngoài).
+- **AI:** sentiment/recommendation/chatbot chạy trong Spring Boot; dự đoán giá gọi FastAPI
+  `rental-api` và model LightGBM qua `RentalApiLightgbmPriceEstimator`.
 - **Tài khoản demo:** admin `admin@webtro.local` dùng `ADMIN_PASSWORD` trong `.env` (hiện tại `Admin@12345`); `moderator@webtro.local`, `landlordN@webtro.local` và `tenantN@webtro.local` dùng mật khẩu chung `Test@1234`.
 
 ---
@@ -50,7 +51,7 @@
 |---|---|---|---|---|
 | **A** | **Người 1** | Danh tính, Tài khoản người dùng, Thông báo, Kiểm duyệt/Quản trị người dùng | AUTH·USER·NOTI · ADM-01/02/03/10/13 · RPT-03/04/05/06 | **29** |
 | **B** | **Người 2** | Tin đăng (vòng đời), Tìm kiếm/Lọc, Danh mục địa giới, AI gợi ý/định giá | LIST·SRCH · ADM-04/05/06/07 · AI-04/06 · RPT-01 | **30** |
-| **C** | **Người 3** | Tương tác (lưu/liên hệ/chat/bình luận/đánh giá), Thanh toán & Đẩy tin, AI cảm xúc/chatbot, Cấu hình hệ thống | FAV·CONT·CMT·REV · PAY · AI-01/05/07/08 · ADM-08/09/11/12/14 · RPT-02 | **31** |
+| **C** | **Người 3** | Tương tác (lưu/chat/bình luận/đánh giá), Thanh toán & Đẩy tin, AI cảm xúc/chatbot, Cấu hình hệ thống | FAV·CMT·REV · PAY · AI-01/05/07/08 · ADM-08/09/11/12/14 · RPT-02 | **31** |
 
 ---
 
@@ -95,7 +96,6 @@ Các trang nằm dưới `frontend_webtro/src/pages/auth/*`, dùng chung layout 
 
 | File | Màn hình | Thành phần chính |
 |---|---|---|
-| `pages/auth/LoginPage.jsx` | Đăng nhập | Form 2 field (`emailOrPhone`, `password`), toggle hiện/ẩn mật khẩu, checkbox "Ghi nhớ", link "Quên mật khẩu?", `Alert` báo lỗi riêng cho từng mã lỗi (`ACCOUNT_NOT_VERIFIED` → hiện nút "Gửi lại email" gọi `resendVerification`; `ACCOUNT_LOCKED`/403; `429` rate-limit hiện số phút chờ; `INVALID_CREDENTIALS`). Sau đăng nhập, điều hướng theo vai trò: Admin → `/admin/dashboard`; Moderator → `/admin/kiem-duyet`, Landlord → `/quan-ly/tong-quan`, còn lại → `/`. |
 | `pages/auth/RegisterPage.jsx` | Đăng ký | Chọn vai trò (`ToggleButtonGroup` Tenant/Landlord), họ tên, email, SĐT (regex số VN `VN_PHONE`), mật khẩu + checklist độ mạnh trực quan (`ChecklistRow`), xác nhận mật khẩu, checkbox đồng ý điều khoản. Sau khi đăng ký thành công hiện màn "kiểm tra email" (mask email) + đếm ngược cooldown gửi lại. |
 | `pages/auth/ForgotPasswordPage.jsx` | Quên mật khẩu | Form 1 field email; luôn hiện thông báo thành công (khớp hành vi BE luôn trả 200 để chống dò tài khoản); có cooldown đếm ngược. |
 | `pages/auth/ResetPasswordPage.jsx` | Đặt lại mật khẩu | Đọc `token` từ query string, form mật khẩu mới + xác nhận. |
@@ -434,7 +434,6 @@ flowchart TD
 
 Là **kênh giao tiếp bất đồng bộ** giữa hệ thống và người dùng: thông báo trong ứng dụng (in-app, chuông thông báo) + email (qua MailHog ở dev). Module này KHÔNG tự sinh sự kiện — nó là **SPI dùng chung** (`NotificationService`) để các module khác (auth, admin, moderation, user/follow, listing, payment...) gọi vào khi có sự kiện cần báo cho người dùng, tuân thủ nguyên tắc kiến trúc hexagonal "giao tiếp chéo module qua SPI gateway, không đụng trực tiếp repository của module khác".
 
-**Vì sao cần:** Người dùng cần biết ngay khi: tài khoản bị khóa, tin đăng bị duyệt/từ chối/khóa, có liên hệ mới, nhận cảnh báo vi phạm, thanh toán thành công/thất bại, chủ trọ họ theo dõi có tin mới... Nếu không có kênh thông báo tập trung, mỗi module phải tự làm UI riêng → không nhất quán.
 
 **Hỏng thì ảnh hưởng gì:**
 - Không nhận được thông báo bảo mật quan trọng (khóa tài khoản, cảnh báo vi phạm) → người dùng bị động, không biết lý do bị hạn chế.
@@ -541,7 +540,6 @@ Phía đọc: FE gọi `GET /notifications?type=...&unreadOnly=...&page=&size=` 
 - Module 2 (User/Follow) qua `FollowListener`: `FOLLOWED_LANDLORD_NEW_LISTING`.
 - Module 5 (Admin): `ACCOUNT_LOCKED`, `ACCOUNT_VERIFICATION` (verify/unverify/reject landlord).
 - Module 4 (Moderation): `VIOLATION_WARNING`, `LISTING_LOCKED`, `LISTING_HIDDEN`, `REPORT_THRESHOLD` (qua `notifyModerators`).
-- Module listing/payment (ngoài phạm vi Người 1): `LISTING_APPROVED/REJECTED/EXPIRING/EXPIRED`, `PAYMENT_SUCCESS/FAILED`, `NEW_CONTACT`, `NEW_COMMENT`, `NEW_REVIEW`, `AI_NEGATIVE_ALERT`.
 - `scheduler/NewMatchingListingNotifyJob` — nguồn phát sinh DUY NHẤT của `NEW_MATCHING_LISTING`.
 
 ### 9. Các trường hợp cần kiểm tra
@@ -987,7 +985,7 @@ flowchart TD
 - **Module 5 — Admin Listing & Moderation Queue**: quản lý tin đăng phía Admin, hàng đợi kiểm duyệt, duyệt/từ chối/ẩn/khóa/gắn cờ/yêu cầu sửa/kiểm duyệt hàng loạt. Mã chức năng: ADM-04 (+ nhánh RPT-01 khi `targetType = LISTING`, xem ghi chú ranh giới ở Module 5 mục 1 và mục 8).
 - **Module 6 — Landlord Dashboard/Overview**: trang tổng quan hiệu quả tin đăng của chủ trọ.
 
-> **Ghi chú chia sẻ**: `ListingDetailPage.jsx` (frontend_webtro/src/pages/public/ListingDetailPage.jsx) do Người 2 sở hữu phần **hiển thị thông tin tin đăng** (ảnh, đặc điểm, giá, địa chỉ, chủ trọ, trạng thái, tin liên quan, gợi ý). Phần **bình luận** (`commentApi`, `CommentThread`), **đánh giá** (`reviewApi`, `RatingStars`), **liên hệ/report** (`contactApi`, `reportApi`) trong CÙNG trang này do **Người 3** phụ trách (module Interaction/Moderation). Khi review file này, chỉ chấm phần UI đọc `listing.*` (title, price, area, images, amenities, landlord, related) — bỏ qua khối comment/review/contact/report.
+> **Ghi chú chia sẻ**: `ListingDetailPage.jsx` (frontend_webtro/src/pages/public/ListingDetailPage.jsx) do Người 2 sở hữu phần **hiển thị thông tin tin đăng** (ảnh, đặc điểm, giá, địa chỉ, chủ trọ, trạng thái, tin liên quan, gợi ý). Phần **bình luận** (`commentApi`, `CommentThread`), **đánh giá** (`reviewApi`, `RatingStars`), **chat/report** (`conversationApi`, `reportApi`) trong CÙNG trang này do **Người 3** phụ trách (module Interaction/Moderation). Khi review file này, chỉ chấm phần UI đọc `listing.*` (title, price, area, images, amenities, landlord, related) — bỏ qua khối comment/review/contact/report.
 
 ---
 
@@ -1126,7 +1124,6 @@ Ví dụ luồng **tạo tin** (Input → FE → API → BE validate → busines
 
 | Bảng | Vai trò | Quan hệ | Field quan trọng |
 |---|---|---|---|
-| `listings` | Bảng nghiệp vụ chính (audit + soft-delete) | N-1 tới `users` (owner_id), `categories`, `provinces`, `districts`, `wards`; 1-N tới `listing_images`, `listing_amenities` | `status` (10 giá trị, CHECK constraint), `slug` (UNIQUE), `price_deviation_flag`, `price_prediction_id` (FK mềm sang `prediction_histories`, chỉ giữ Long), `view_count/favorite_count/contact_count/comment_count/positive_comment_count/negative_comment_count/need_review_count` (bộ đếm denormalized), `published_at/expired_at/expiry_reminder_sent_at`, `renew_count`, `is_promoted/promoted_until/promotion_priority`, `auto_hidden_at/auto_hide_reason`, `lock_reason/lock_severity` |
 | `listing_images` | 1-N với `listings` (CASCADE khi xóa listing) | `listing_id` FK | `is_primary`, `display_order`, `file_size` (CHECK 0 < size ≤ 5MB), `content_type` (CHECK IN jpeg/png/webp) |
 | `listing_amenities` | Bảng nối N-N `listings` ↔ `amenities` | UNIQUE (`listing_id`, `amenity_id`) | `amenity_id` chỉ giữ Long (không FK object) theo luật "canonical 8" — tránh phụ thuộc ngược sang module catalog |
 
@@ -1571,12 +1568,12 @@ flowchart TD
 
 ### 1. Module này dùng để làm gì?
 
-Đây là cụm 4 tính năng "AI" phục vụ khám phá tin — nhưng cần hiểu đúng bản chất: **cả 4 đều là thuật toán rule-based/thống kê chạy in-process trong JVM**, KHÔNG gọi model học máy hay service ngoài (không OpenAI/không Python service). Cụ thể:
+Phần này mô tả Recommendation và Price Estimation. Hai luồng có cách triển khai khác nhau:
 
-- **AI-04 Gợi ý cá nhân hóa (Recommendation)**: `ContentBasedRecommendationEngine` — tính điểm khớp giữa hồ sơ hành vi người dùng (xem/tìm/lưu/liên hệ) và từng tin ứng viên bằng công thức cộng có trọng số 9 số hạng.
-- **AI-06 Dự đoán giá (Price Estimation)**: `ComparableHedonicPriceEstimator` — lấy giá trung vị/m² của các tin tương đương (so sánh) trong cùng khu vực + điều chỉnh phần trăm theo tiện nghi (hedonic pricing).
+- **AI-04 Gợi ý cá nhân hóa (Recommendation)**: `ContentBasedRecommendationEngine` — tính điểm khớp giữa hồ sơ hành vi người dùng (xem/tìm/lưu) và từng tin ứng viên bằng công thức cộng có trọng số 9 số hạng.
+- **AI-06 Dự đoán giá (Price Estimation)**: `RentalApiLightgbmPriceEstimator` là bean `@Primary`; backend gọi FastAPI `rental-api` để chạy model LightGBM. `ComparableHedonicPriceEstimator` vẫn có trong mã nguồn nhưng không được chọn mặc định và không phải fallback tự động.
 
-Vai trò trong hệ thống: tăng tỷ lệ tìm được phòng phù hợp (Recommendation), và giúp chủ trọ định giá hợp lý tránh đăng giá quá lệch thị trường (Price) — **tất cả đều KHÔNG chặn hành động của người dùng** (đăng tin, liên hệ...), chỉ hiển thị cảnh báo/gợi ý.
+Vai trò trong hệ thống: tăng tỷ lệ tìm được phòng phù hợp (Recommendation), và giúp chủ trọ định giá hợp lý tránh đăng giá quá lệch thị trường (Price) — **tất cả đều KHÔNG chặn hành động của người dùng** (đăng tin, nhắn tin...), chỉ hiển thị cảnh báo/gợi ý.
 
 **Nếu module này hỏng thì ảnh hưởng gì?** Recommendation lỗi → trang chủ/trang tìm kiếm rỗng kết quả 0 vẫn hoạt động bình thường vì có "cold start" dự phòng (tin mới + phổ biến), nhưng mất tính cá nhân hóa; Price lỗi → chủ trọ mất công cụ tham khảo giá khi đăng tin (không chặn đăng tin, vẫn đăng được).
 
@@ -1584,7 +1581,7 @@ Vai trò trong hệ thống: tăng tỷ lệ tìm được phòng phù hợp (Re
 
 | Nơi xuất hiện | File | Chức năng |
 |---|---|---|
-| Khối "Giá AI đề xuất" trong form đăng tin | `frontend_webtro/src/components/listing/ListingWizard.jsx` (dòng ~382–419) | Card hiển thị giá đề xuất + khoảng (`priceRange.low–high`), nút "Tính lại" (`runPrediction`), cảnh báo mềm (`Alert severity="warning"`) khi `comparison.deviationFlagged=true`, luôn hiện `disclaimer` cuối card. |
+| Khối "Giá AI đề xuất" trong form đăng tin | `frontend_webtro/src/components/listing/ListingWizard.jsx` | Card hiển thị giá đề xuất + khoảng (`priceRange.low–high`), nút "Tính lại" (`runPrediction`), cảnh báo mềm khi `comparison.deviationFlagged=true`, và `disclaimer` khi response có giá trị này. |
 | Khối "Có thể bạn quan tâm" khi tìm kiếm 0 kết quả | `SearchPage.jsx` | Gọi `listingApi.getSuggested({ source: 'LOW_RESULT_SEARCH', size: 6 })`. |
 | Section gợi ý ở trang chủ | `HomePage.jsx` | > Cần bổ sung theo source code (đã xác nhận `HomePage.jsx` import `listingApi`/`searchApi`/`catalogApi`, cần đọc thêm phần thân file sau dòng 90 để xác nhận có gọi `getSuggested`/AI recommendation cho section riêng hay không). |
 
@@ -1602,15 +1599,18 @@ Vai trò trong hệ thống: tăng tỷ lệ tìm được phòng phù hợp (Re
 |---|---|---|
 | `RecommendationEngine` | `ContentBasedRecommendationEngine` | Thuần thuật toán tính điểm — không đụng DB/HTTP |
 | `RecommendationService` | `RecommendationServiceImpl` | Điều phối: đọc tín hiệu hành vi qua gateway, gọi engine, ghi log, trả response |
-| `PriceEstimator` | `ComparableHedonicPriceEstimator` | Thuần thuật toán so sánh + hedonic |
-| `PriceEstimationService` | `PriceEstimationServiceImpl` | Điều phối: validate tham chiếu, mở rộng phạm vi WARD→DISTRICT→PROVINCE, gọi estimator, lưu lịch sử |
+| `PriceEstimator` | `RentalApiLightgbmPriceEstimator` (`@Primary`) | Map catalog → payload FastAPI, gọi `/predict`, đổi đơn vị và map kết quả |
+| `PriceEstimator` | `ComparableHedonicPriceEstimator` (không mặc định) | Thuật toán so sánh + hedonic còn được giữ trong mã nguồn |
+| `PriceEstimationService` | `PriceEstimationServiceImpl` | Kiểm bật/tắt, ownership, tham chiếu; gọi estimator; lưu lịch sử và cập nhật cờ tin khi có `listingId` |
 
 **SPI Gateway** (module `ai` KHÔNG đụng trực tiếp entity của module khác — nguyên tắc kiến trúc hexagonal):
 - `ListingDataGateway` — đọc thuộc tính tin (`ListingAttr`), tìm ứng viên gợi ý (`findCandidates`), tìm tin so sánh giá (`findComparables`), ghi cờ lệch giá ngược lại (`markPriceDeviation`).
 - `InteractionSignalGateway` — đọc hành vi (`recentBehaviorRefs`: view/favorite/contact có trọng số), tín hiệu tìm kiếm (`recentSearchSignals`), tin đã xem gần đây (`recentlyViewedListingIds` — để chống gợi ý lặp).
 - `UserDataGateway` — đọc sở thích khai báo tường minh (`UserPreference`: số người ở mong muốn, giới tính ưu tiên).
 
-**`AiModuleSupport`** — tiện ích dùng chung cho cả Recommendation lẫn Price: `ensureEnabled(configKey)` (kiểm cấu hình bật/tắt tính năng, nếu tắt → chặn sớm) và `runWithTimeout(name, timeoutConfigKey, supplier)` (chạy phần tính điểm CPU thuần có giới hạn thời gian — tránh 1 request AI làm treo thread pool).
+**`AiModuleSupport`** — tiện ích dùng chung cho cả Recommendation lẫn Price: `ensureEnabled(configKey)`
+(tắt → `503 AI_MODULE_DISABLED`) và `runWithTimeout(name, timeoutConfigKey, supplier)` để giới
+hạn thời gian chạy estimator. Với Price mặc định, supplier này bao gồm lời gọi HTTP tới FastAPI.
 
 **Repository/Entity riêng của module `ai`**: `RecommendationLog`/`RecommendationLogRepository` (ghi mọi lần gợi ý), `PredictionHistory`/`PredictionHistoryRepository` (ghi mọi lần dự đoán giá, kể cả khi thiếu dữ liệu).
 
@@ -1660,18 +1660,25 @@ flowchart TD
 
 **Luồng Price Estimation (`POST /api/ai/price-prediction`)**:
 
-1. Kiểm `ai.price.enabled`; validate category/tỉnh/huyện/xã tồn tại + khu vực có hỗ trợ đăng tin (`isAreaSupported`).
-2. Tính dải diện tích so sánh: `area ± area_tolerance%` (config), cửa sổ thời gian `ai.price.comparable_days`.
-3. **Mở rộng phạm vi dần dần**: thử tìm tin so sánh ở cấp `WARD` trước; nếu số mẫu < `ai.price.min_samples` → thử `DISTRICT`; vẫn thiếu → thử `PROVINCE`. Chỉ chuyển cấp rộng hơn nếu số mẫu ở cấp đó **không ít hơn** cấp trước (tránh mở rộng vô ích).
-4. `estimator.estimate(...)` — chạy có timeout: nếu mẫu < ngưỡng tối thiểu → trả `available=false, confidence=INSUFFICIENT_DATA` (KHÔNG ước tính).
-5. Nếu đủ mẫu: giá cơ sở = **trung vị (median) giá/m²** của các tin so sánh × diện tích; cộng dồn % điều chỉnh hedonic cho 6 yếu tố (nội thất đầy đủ, toilet riêng, thang máy, chỗ để xe, giờ tự do, mặt tiền) — mỗi yếu tố có trọng số cấu hình riêng; khoảng giá = percentile 25/50/75 của **tổng giá** các tin so sánh, co giãn theo cùng hệ số hedonic; độ tin cậy (`HIGH/MEDIUM/LOW`) suy từ số mẫu + độ phân tán IQR/median.
-6. **Lưu `PredictionHistory` ở MỌI trường hợp** (kể cả thiếu dữ liệu) — quyết định này nằm TRƯỚC khi ném lỗi `AI_INSUFFICIENT_DATA`, nên dù trả 422 vẫn có bản ghi lịch sử phục vụ báo cáo chất lượng AI.
-7. Nếu có `inputPrice` (giá chủ trọ định nhập) → tính `deviationRatio = (inputPrice - suggested)/suggested`; lệch quá `ai.price.deviation_flag_ratio` → `deviationFlagged=true` — **chỉ để cảnh báo mềm, `blocksPosting` LUÔN `false`**.
-8. Nếu có `listingId` (đang sửa tin) → ghi ngược cờ `price_deviation_flag` vào bảng `listings` qua `ListingDataGateway.markPriceDeviation`.
+1. Kiểm `ai.price.enabled`. Nếu request có `listingId`, đọc owner và trả `LISTING_NOT_FOUND` hoặc `LISTING_FORBIDDEN` trước khi gọi model.
+2. Validate category/tỉnh/huyện/xã tồn tại, category active, quan hệ tỉnh–huyện–xã và khu vực được hỗ trợ; validate các amenity id khi danh sách không rỗng.
+3. Dựng `PriceInput`. Vì bean mặc định trả `usesComparables() = false`, service không gọi `findComparables`; nó chạy estimator với danh sách rỗng trong `AiModuleSupport.runWithTimeout`.
+4. `RentalApiLightgbmPriceEstimator` đọc tên quận/phường/category/amenity từ DB, map sang `district`, `ward`, `room_type`, `amenities`, `area_m2`, `floor`, `latitude`, `longitude`, rồi gọi FastAPI `POST /predict` bằng HTTP/1.1.
+5. FastAPI chạy model `model.joblib` khi Docker dùng `RENTAL_BACKEND=sklearn` và trả giá theo đơn vị triệu đồng cùng `market_*`, `model_type`, `mape_pct`.
+6. Backend đổi giá sang đồng, tính confidence, `deviationRatio` và `deviationFlagged`. FastAPI 4xx được map thành `400 AI_PRICE_INPUT_INVALID`; lỗi kết nối/5xx/timeout thành `503 AI_SERVICE_UNAVAILABLE`.
+7. Kết quả thành công được lưu thành một dòng `PredictionHistory`. Nếu có `listingId`, service cập nhật `price_deviation_flag` và `price_prediction_id`; `blocksPosting` luôn `false`.
+
+Nhánh WARD→DISTRICT→PROVINCE và `AI_INSUFFICIENT_DATA` chỉ chạy khi bean `PriceEstimator`
+được chọn trả `usesComparables() = true`; bean `@Primary` hiện tại không đi qua nhánh này.
 
 ### 5. Dữ liệu chạy như thế nào
 
-**Price**: Input (form đăng tin bước "Giá & tiện ích") → FE build object gửi `POST /api/ai/price-prediction` với `categoryId/provinceId/districtId/wardId/area/roomCount/toiletCount/furnitureStatus/toiletType/amenityIds/inputPrice` → BE validate tham chiếu → tìm comparables → `PriceEstimator` tính (thuần Java, không network ngoài) → lưu `PredictionHistory` → map `PriceEstimate` (record nội bộ) sang `PricePredictionResponse` (DTO public, có `disclaimer` bắt buộc luôn xuất hiện) → FE lưu vào state `price`, hiển thị card, và **giá trị này KHÔNG tự động điền vào field `price`** — chỉ hiển thị tham khảo, người dùng tự quyết định nhập giá.
+**Price**: Form bước "Giá & tiện ích" gửi `POST /api/ai/price-prediction` với
+`categoryId/provinceId/districtId/wardId/area/roomCount/toiletCount/furnitureStatus/toiletType/amenityIds/inputPrice`
+và `listingId` khi có → backend validate → gọi FastAPI/LightGBM → lưu `PredictionHistory` → map
+sang `PricePredictionResponse` → frontend hiển thị card. Giá đề xuất không tự ghi đè field `price`.
+Sau khi tạo tin, frontend gọi lại với id mới để liên kết lịch sử/cờ lệch giá; lỗi ở lần gọi này bị
+bắt riêng và không làm thất bại thao tác lưu/gửi tin.
 
 **Recommendation**: Input là ngữ cảnh (`source`, có thể kèm `listingId`) chứ không phải form nhập liệu → FE gọi khi mount trang hoặc khi 0 kết quả tìm kiếm → BE tổng hợp hành vi (đọc, không ghi gì vào Listing/User) → chỉ ghi mới vào `recommendation_logs` → trả danh sách `RecommendationItem` (đã map sẵn từ `Listing` sang dạng rút gọn tương tự `ListingSummaryResponse` nhưng có thêm `scoreBreakdown`/`matchReasons`) → FE render `ListingGrid`.
 
@@ -1681,7 +1688,7 @@ flowchart TD
 | Bảng | Vai trò | Quan hệ | Field quan trọng |
 |---|---|---|---|
 | `recommendation_logs` | Append-only, ghi mọi lần gợi ý (kể cả cold start) | N-1 `users` (nullable — khách vãng lai), N-1 `listings` | `session_id`, `source` (enum), `batch_id` (nhóm 1 lần gọi), `score` (DECIMAL 6,4), `rank_position`, các cột điểm thành phần (`location_score, area_size_score, price_score, category_score, amenity_score, occupant_score, gender_score, freshness_score`), `promoted_boost` (CHECK 1.000–1.150), `is_cold_start`, `context` (JSON), `clicked_at` (NULL cho tới khi người dùng click — cần xác nhận có API nào set field này không, xem mục 11) |
-| `prediction_histories` | Append-only, ghi mọi lần dự đoán giá | N-1 `users`, N-1 `listings` (nullable — có thể dự đoán trước khi tạo tin), + tham chiếu `category_id/province_id/district_id/ward_id` | `suggested_price/price_low/price_median/price_high/price_per_sqm`, `sample_size`, `scope_used` (`WARD/DISTRICT/PROVINCE`), `confidence` (`HIGH/MEDIUM/LOW/INSUFFICIENT_DATA`), `dispersion_ratio` (IQR/median), `adjustment_detail` (JSON — 6 yếu tố hedonic), `input_price/deviation_ratio/is_flagged`, `is_applied` (cần xác nhận cờ này được set khi nào — có thể đánh dấu "chủ trọ đã dùng giá gợi ý", xem mục 11), `estimator_version` (VARCHAR 20, hiện `"hedonic-1.0"`) |
+| `prediction_histories` | Append-only, ghi dự đoán thành công; nhánh estimator comparable còn có thể ghi cả kết quả thiếu dữ liệu trước khi ném lỗi | N-1 `users`, N-1 `listings` (nullable), N-1 `categories`, N-1 `wards`; không còn `province_id`/`district_id` sau V20 | `suggested_price/price_low/price_median/price_high/price_per_sqm`, `sample_size`, `scope_used`, `confidence`, `dispersion_ratio`, `adjustment_detail`, `input_price/deviation_ratio/is_flagged`, `is_applied` (hiện không có code đặt `TRUE`), `estimator_version` (`lgbm-api-1.0` mặc định; `hedonic-1.0` nếu chọn estimator còn lại) |
 | `view_histories`, `search_histories` | Nguồn tín hiệu hành vi cho Recommendation (đọc qua `InteractionSignalGatewayAdapter`, KHÔNG thuộc module `ai`) | — | Xem chi tiết ở Module 2 mục 6 — **`search_histories` hiện luôn rỗng do bug đã nêu**, ảnh hưởng trực tiếp tới chất lượng gợi ý ở đây |
 | `listings.price_prediction_id` | FK mềm (chỉ giữ Long) trỏ về `prediction_histories.id` gần nhất | — | Ghi khi `markPriceDeviation` được gọi |
 | `listings.price_deviation_flag` | Cờ lệch giá (Boolean) | — | Đọc bởi `canAutoApprove` (Module 1) và bởi màn quản trị AI (`AdminAiController`, thuộc Người 1 phụ trách theo phân công, không mô tả sâu ở đây) |
@@ -1692,12 +1699,12 @@ flowchart TD
 |---|---|---|---|---|---|---|---|
 | POST | `/api/ai/recommendations` | `RecommendationRequest{source, listingId?, size?, provinceId?, districtId?, excludeListingIds?}` + header `X-Session-Id?` | `ApiResponse<RecommendationResponse>` | Tùy chọn (khách được cold start, đăng nhập được cá nhân hóa) | — | `size` 1–24, `excludeListingIds` ≤50 phần tử, `listingId` bắt buộc khi `source∈{SIMILAR_LISTING,AFTER_FAVORITE}` | `MISSING_PARAMETER` |
 | GET | `/api/listings/suggested` | query `source?(default HOMEPAGE), size?, listingId?, provinceId?, districtId?, excludeListingIds?` + header `X-Session-Id?` | `ApiResponse<RecommendationResponse>` | Tùy chọn | — | như trên (dựng lại `RecommendationRequest` từ query rồi gọi cùng service) | như trên |
-| POST | `/api/ai/price-prediction` | `PricePredictionRequest{categoryId, provinceId, districtId, wardId, area, roomCount?, toiletCount?, furnitureStatus?, toiletType?, curfewType?, amenityIds?, isStreetFront?, latitude?, longitude?, listingId?, inputPrice?}` | `ApiResponse<PricePredictionResponse>` | Bắt buộc | `LISTING_CREATE` | tham chiếu tồn tại + khu vực hỗ trợ đăng tin; `area` 0.01–1000 | `CATEGORY_NOT_FOUND`, `PROVINCE/DISTRICT/WARD_NOT_FOUND`, `ADDRESS_HIERARCHY_MISMATCH`, `AI_INSUFFICIENT_DATA` (422) |
-| GET | `/api/ai/price-prediction/histories` | query `listingId` + `Pageable` | `ApiResponse<PageResponse<PricePredictionHistoryResponse>>` | Bắt buộc | `LISTING_UPDATE_OWN` (chủ tin) hoặc `AI_LOG_VIEW` | chủ tin đúng người xem, hoặc có quyền log | `LISTING_NOT_FOUND`, `LISTING_FORBIDDEN` |
+| POST | `/api/ai/price-prediction` | `PricePredictionRequest{categoryId, provinceId, districtId, wardId, area, roomCount?, toiletCount?, furnitureStatus?, toiletType?, curfewType?, amenityIds?, isStreetFront?, latitude?, longitude?, listingId?, inputPrice?}` | `ApiResponse<PricePredictionResponse>` | Bắt buộc | role `TENANT`, `LANDLORD` hoặc `ADMIN` | DTO: area 0.01–1000; FastAPI hiện tại: area 8–80; nếu có `listingId` phải là chủ tin | `AI_PRICE_INPUT_INVALID` (400), `LISTING_NOT_FOUND`, `LISTING_FORBIDDEN`, `AI_MODULE_DISABLED`, `AI_SERVICE_UNAVAILABLE` |
+| GET | `/api/ai/price-prediction/histories` | query `listingId` + `Pageable` | `ApiResponse<PageResponse<PricePredictionHistoryResponse>>` | Bắt buộc | role `TENANT`, `LANDLORD`, `MODERATOR` hoặc `ADMIN` | chủ tin; Moderator/Admin được xem qua `hasLogView` | `LISTING_NOT_FOUND`, `LISTING_FORBIDDEN` |
 
 `PricePredictionResponse` gồm: `available, predictionHistoryId, suggestedPrice, priceRange{low,medium,high}, confidence, confidenceScore, confidenceLabel, explanation{summary,basePrice,adjustments[],totalAdjustmentPercent,factorsInVietnamese}, comparable{sampleSize,scope,scopeLabel,scopeExpanded,periodDays,medianPricePerSqm,iqrRatio}, comparison{inputPrice,suggestedPrice,difference,deviationRatio,deviationPercent,deviationFlagged,thresholdRatio,verdict,verdictMessage,blocksPosting(luôn false)}, disclaimer, predictedAt`.
 
-`RecommendationResponse` gồm: `source, personalized, coldStart, coldStartStrategy[], coldStartNote, recommendationLogId, batchId, profileSummary{preferredPriceLow/High, preferredAreaLow/High, preferredOccupants, behaviorCounts{views,searches,favorites,contacts}, note}, items[]{id,slug,title,categoryCode,categoryName,price,area,shortAddress,thumbnailUrl,averageRating,promoted,matchScore,scoreBreakdown{8 field},matchReasons[]}, generatedAt, cacheHit(luôn false — xem mục 10)`.
+`RecommendationResponse` gồm: `source, personalized, coldStart, coldStartStrategy[], coldStartNote, recommendationLogId, batchId, profileSummary{preferredPriceLow/High, preferredAreaLow/High, preferredOccupants, behaviorCounts{views,searches,favorites}, note}, items[]{id,slug,title,categoryCode,categoryName,price,area,shortAddress,thumbnailUrl,averageRating,promoted,matchScore,scoreBreakdown{8 field},matchReasons[]}, generatedAt, cacheHit(luôn false — xem mục 10)`.
 
 ### 8. Dependency
 
@@ -1716,11 +1723,14 @@ flowchart TD
 - □ Gợi ý loại trừ đúng tin của chính người dùng đang đăng nhập (`userId.equals(c.ownerId())`).
 - □ Tin `ROOMMATE` có tính điểm `genderMatch`; tin loại khác thì `scoreBreakdown.genderMatch = null` và tổng trọng số áp dụng còn 0.94.
 - □ Tắt `ai.recommendation.enabled` → toàn bộ endpoint gợi ý phải báo đúng trạng thái tắt tính năng (xác nhận hành vi của `ensureEnabled` — ném lỗi hay trả rỗng?).
-- □ Dự đoán giá khi khu vực chưa đủ mẫu ở cả 3 cấp (WARD/DISTRICT/PROVINCE) → `AI_INSUFFICIENT_DATA` (422) NHƯNG vẫn có 1 dòng mới trong `prediction_histories` với `confidence=INSUFFICIENT_DATA`.
+- □ Dự đoán giá với diện tích trong khoảng FastAPI `8..80` và địa giới/category hợp lệ → trả giá theo đồng, lưu `estimator_version=lgbm-api-1.0`.
+- □ Diện tích ngoài `8..80` nhưng vẫn qua DTO backend (ví dụ `5`) → FastAPI 4xx được map thành `400 AI_PRICE_INPUT_INVALID`.
+- □ Tắt `ai.price.enabled` → `503 AI_MODULE_DISABLED`; dừng `rental-api`/gây timeout → `503 AI_SERVICE_UNAVAILABLE`.
 - □ Dự đoán giá với `inputPrice` lệch rất xa (ví dụ gấp 5 lần giá trung vị khu vực) → `deviationFlagged=true`, `blocksPosting=false` — vẫn cho phép tiếp tục đăng tin bình thường.
 - □ Dự đoán giá không truyền `inputPrice` → `comparison` phải là `null` hoặc rỗng hợp lý (không lỗi vì thiếu field so sánh).
 - □ Dự đoán giá 2 lần liên tiếp cho cùng 1 `listingId` với `inputPrice` khác nhau → cả 2 lần đều lưu `PredictionHistory` riêng biệt (không ghi đè), và `listings.price_prediction_id`/`price_deviation_flag` phản ánh **lần gần nhất**.
-- □ Xem lịch sử dự đoán giá (`GET .../histories`) bằng tài khoản không phải chủ tin và không có `AI_LOG_VIEW` → `LISTING_FORBIDDEN`.
+- □ Gửi `listingId` không thuộc người gọi ngay trong POST dự đoán → `LISTING_FORBIDDEN`; id không tồn tại → `LISTING_NOT_FOUND`.
+- □ Xem lịch sử dự đoán giá bằng tài khoản không phải chủ tin và không phải Moderator/Admin → `LISTING_FORBIDDEN`.
 
 ### 10. Các lỗi dễ gặp
 
@@ -1731,12 +1741,12 @@ flowchart TD
 
 ### 11. Các điểm cần review
 
-- **Business**: công thức Recommendation cộng điểm tuyến tính 9 số hạng là hợp lý cho rule-based, nhưng trọng số (`0.22/0.12/0.20/...`) đang hardcode ở tầng `ContentBasedRecommendationEngine` (hằng số Java `static final BigDecimal`) thay vì đọc từ `SystemConfigService` như hầu hết ngưỡng khác trong hệ thống — nghĩa là muốn tinh chỉnh trọng số phải deploy lại, không tự chỉnh qua Admin UI được (khác với Price — trọng số hedonic (`ai.price.hedonic.*`) ĐÃ đọc từ config, có sự bất nhất giữa 2 module con trong cùng cụm AI).
+- **Business**: trọng số Recommendation (`0.22/0.12/0.20/...`) đang là hằng số Java trong `ContentBasedRecommendationEngine`.
 - **Response/API naming**: nên bỏ field `cacheHit` khỏi `RecommendationResponse` hoặc thực sự cài cache (theo đúng ý đồ `AI_RECOMMENDATION_CACHE_TTL_MINUTES`), tránh field "ma" gây hiểu lầm khi tích hợp FE/đối tác thứ 3 sau này.
 - **DB**: cột `recommendation_logs.clicked_at` và `prediction_histories.is_applied` hiện chết — cần quyết định: (a) bổ sung API để ghi nhận, hoặc (b) xóa khỏi schema nếu không dùng, tránh gây hiểu lầm khi đọc DB trong tương lai.
 - **Validation**: `PricePredictionRequest` không có ràng buộc buộc `amenityIds` phải thuộc active list ngay ở Bean Validation — việc validate `amenityIds` diễn ra gián tiếp qua `amenityService.validateAndGet` (đúng, nhưng chỉ khi `amenityIds` không rỗng) — chấp nhận được, chỉ cần lưu ý khi review test case.
-- **Security**: `POST /api/ai/price-prediction` yêu cầu quyền `LISTING_CREATE` — hợp lý (chỉ chủ trọ/admin mới cần định giá tham khảo trước khi đăng), nhưng cũng đồng nghĩa người thuê **không dùng được công cụ tham khảo giá thị trường** khi xem tin — nên xác nhận đây có đúng chủ đích sản phẩm hay là hạn chế cần mở rộng sau này.
-- **Performance**: mở rộng phạm vi so sánh giá dần WARD→DISTRICT→PROVINCE nghĩa là trường hợp xấu nhất chạy tới **3 query** `findComparables` liên tiếp (mỗi query có `COMPARABLE_FETCH_LIMIT=300` dòng) trước khi ước tính — nên đo thời gian phản hồi thực tế ở khu vực thưa dữ liệu (phường mới, ít tin).
+- **Security**: POST dự đoán cho phép `TENANT`, `LANDLORD`, `ADMIN`; khi truyền `listingId`, service bắt buộc ownership kể cả với `ADMIN`. GET histories cho phép chủ tin hoặc `MODERATOR`/`ADMIN`.
+- **Tích hợp ngoài tiến trình**: backend dùng connect timeout `PT2S`, request timeout HTTP `PT3S`; lời gọi estimator còn được bọc bởi `AI_PRICE_TIMEOUT_MS`.
 
 ### 12. Kết quả mong đợi
 
@@ -1842,8 +1852,8 @@ flowchart TD
 
 | Method | URL | Request | Response | Auth | Permission | Validation | Error tiêu biểu |
 |---|---|---|---|---|---|---|---|
-| GET | `/api/admin/listings` | query `status[], keyword, ownerId, categoryId, provinceId, districtId, wardId, priceDeviationFlagged, from, to` + `Pageable` | `ApiResponse<PageResponse<AdminListingResponse>>` | Bắt buộc | `LISTING_VIEW_ANY` | — | — |
-| GET | `/api/admin/moderation-queue` | `Pageable` (mặc định sort `createdAt ASC`) | `ApiResponse<PageResponse<AdminListingResponse>>` | Bắt buộc | `LISTING_VIEW_ANY` | luôn lọc cứng `status IN (PENDING, NEED_REVIEW)` | — |
+| GET | `/api/admin/listings` | query `status[], keyword, ownerId, categoryId, categoryCode, provinceId, districtId, wardId, priceDeviationFlagged, from, to` + `Pageable` | `ApiResponse<PageResponse<AdminListingResponse>>` | Bắt buộc | `LISTING_VIEW_ANY` | `categoryCode` nhận mã danh mục chuẩn | — |
+| GET | `/api/admin/moderation-queue` | query `status` (mặc định `PENDING`) + `Pageable` (mặc định sort `createdAt ASC`) | `ApiResponse<PageResponse<AdminListingResponse>>` | Bắt buộc | `LISTING_VIEW_ANY` | `status` chỉ nhận `PENDING` hoặc `NEED_REVIEW`; mỗi request trả riêng một hàng đợi | `VALIDATION_FAILED` nếu trạng thái khác |
 | GET | `/api/admin/moderation-actions` | query `targetType?, listingId?` + `Pageable` (mặc định `createdAt DESC`) | `ApiResponse<PageResponse<AdminModerationActionResponse>>` | Bắt buộc | `LISTING_VIEW_ANY` | — | — |
 | GET | `/api/admin/listings/{id}` | — | `ApiResponse<AdminListingResponse>` | Bắt buộc | `LISTING_VIEW_ANY` | — | `LISTING_NOT_FOUND` |
 | PUT | `/api/admin/listings/{id}/approve` | `ApproveListingRequest{displayDays?, note?}?` | `ApiResponse<AdminListingActionResponse>` | Bắt buộc | `LISTING_MODERATE` | trạng thái nguồn = `PENDING` | `LISTING_ALREADY_APPROVED`, `LISTING_INVALID_TRANSITION` |
@@ -1886,14 +1896,21 @@ flowchart TD
 
 ### 10. Các lỗi dễ gặp
 
-- **[Nghi vấn] Response quản trị thiếu field mà FE đang kỳ vọng** — `ModerationQueuePage.jsx` render `r.categoryName`, `r.ownerName`, `r.submittedAt`, `r.needReviewReason`/`r.autoHideReason`, nhưng `AdminListingResponse` (DTO thật, đã đọc trực tiếp) chỉ có `id, title, slug, categoryId, price, area, ownerId, status, statusLabel, reportCount, priceDeviationFlagged, provinceId, districtId, wardId, publishedAt, expiredAt, createdAt, updatedAt` — **không có `categoryName/ownerName/submittedAt/needReviewReason/autoHideReason`**. Hệ quả: cột "Tin đăng" trong hàng đợi kiểm duyệt sẽ hiển thị tên danh mục/chủ trọ **rỗng** (fallback `''`), cột "Chờ từ" âm thầm dùng `createdAt` thay vì thời điểm submit thật (không lỗi nhưng sai ý nghĩa hiển thị nếu tin có nhiều lần sửa/gửi lại), và cột "Lý do cần kiểm tra" ở tab NEED_REVIEW **luôn hiện text mặc định "Cần kiểm tra"** thay vì lý do cụ thể vì `needReviewReason`/`autoHideReason` luôn `undefined`. Đây là điểm cần verify UI thật đầu tiên khi review Module 5.
+- **Response quản trị đã có metadata hiển thị cơ bản** — `AdminListingResponse` hiện trả
+  `categoryCode`, `categoryName`, `ownerName`, `provinceName` bên cạnh các ID, nên danh sách và
+  hàng đợi không còn rỗng tên loại tin/chủ trọ/khu vực. DTO vẫn chưa có `submittedAt`,
+  `needReviewReason`/`autoHideReason`; UI tiếp tục dùng `createdAt` cho “Chờ từ” và text mặc định
+  cho lý do cần kiểm tra. Đây là phạm vi còn lại cần xác nhận nếu nghiệp vụ yêu cầu thời điểm gửi
+  duyệt/lý do cụ thể.
 - **`reason` là `VARCHAR(500) NOT NULL` ở DB nhưng không phải lúc nào tầng service cũng nhận `reason` bắt buộc từ request** (vd `hide`/`unhide`/`flag-need-review`/`clear-need-review` cho phép `reason` optional) — code xử lý đúng bằng hàm `sanitize(reason, defaultText)` để không bao giờ gửi NULL xuống DB, nhưng đây là điểm dễ quên khi thêm hành động mới trong tương lai (phải luôn nhớ `sanitize`, nếu quên sẽ vỡ ràng buộc NOT NULL ở DB ngay khi test).
 - **Nhầm giữa quyền `LISTING_MODERATE` và `LISTING_LOCK`**: dev mới dễ gán nhầm cả 2 quyền cho cùng 1 role Moderator, phá vỡ chủ đích thiết kế "chỉ Admin mới khóa được tin" (Moderator chỉ duyệt/từ chối/ẩn/gắn cờ).
 - **Self-invocation transaction**: nếu sau này có refactor gọi trực tiếp `this.approve(...)` thay vì qua `self.approve(...)` bên trong `bulkModerate`, transaction riêng theo từng tin sẽ **mất hiệu lực âm thầm** (không lỗi biên dịch, không lỗi runtime rõ ràng — chỉ phát hiện khi test 1 tin lỗi giữa lô và thấy toàn bộ lô bị rollback theo).
 
 ### 11. Các điểm cần review
 
-- **Ưu tiên xác minh mismatch field ở mục 10** — bổ sung `categoryName/ownerName/submittedAt/needReviewReason/autoHideReason` vào `AdminListingResponse`/`AdminListingMapper` (hoặc sửa FE bỏ kỳ vọng các field này) để hàng đợi kiểm duyệt hiển thị đủ thông tin cho Moderator ra quyết định nhanh — thiếu tên chủ trọ/danh mục ngay trong bảng buộc Moderator phải bấm vào từng tin mới biết, làm chậm tốc độ xử lý hàng đợi.
+- **Phần metadata còn lại ở mục 10** — chỉ bổ sung `submittedAt`, `needReviewReason`/
+  `autoHideReason` khi nghiệp vụ chốt cần phân biệt lần gửi duyệt gần nhất và hiển thị lý do cụ thể;
+  `categoryName`/`ownerName` đã được cung cấp, không còn là finding mở.
 - **Business**: cân nhắc thêm cột `submitted_at` riêng trên `listings` (khác `created_at`) nếu muốn "Chờ từ" phản ánh đúng lần submit gần nhất (tin có thể tạo từ lâu, sửa nhiều lần, mỗi lần gửi lại nên tính lại thời gian chờ).
 - **API naming**: `reasonCode` (trong `RejectListingRequest`) là optional và không thấy dùng để rẽ nhánh logic nghiệp vụ nào trong `AdminListingServiceImpl.reject()` (chỉ được gán thẳng vào response) — nên xác nhận `reasonCode` có ý nghĩa thống kê (nhóm lý do từ chối phổ biến) hay là field dư thừa.
 - **DB**: `moderation_actions.reason NOT NULL` — nên cân nhắc đổi thành nullable ở DB để khớp đúng ngữ nghĩa "một số hành động không bắt buộc lý do", thay vì luôn phải có `sanitize()` với text mặc định ở tầng code (giảm rủi ro quên sanitize khi thêm hành động mới).
@@ -1911,8 +1928,6 @@ flowchart TD
 
 > **Cập nhật 2026-08-11:** lỗi mismatch được mô tả trong mục này đã được xử lý theo hướng (a): backend `GET /api/landlord/dashboard`
 > nhận `days=7|30|90` và trả các field frontend đang dùng (`activeCount`, `pendingCount`, `viewCount30d`,
-> `contactCount30d`, `chart`, `topListings`, `actionItems`, `landlordVerificationStatus`), đồng thời vẫn giữ các field
-> cũ (`totalListings`, `listingsByStatus`, `totalViews`, `totalFavorites`, `totalContacts`) để không phá client cũ.
 > Kiểm chứng local: DB `landlord1@webtro.local` có `PENDING=1`, API trả `pendingCount=1`.
 
 ### 1. Module này dùng để làm gì?
@@ -1927,7 +1942,6 @@ Vai trò: giúp chủ trọ đánh giá nhanh hiệu quả kênh đăng tin củ
 
 | Màn hình | File | Chức năng |
 |---|---|---|
-| Tổng quan chủ trọ | `frontend_webtro/src/pages/landlord/OverviewPage.jsx` (185 dòng) | Dropdown chọn khoảng thời gian (7/30/90 ngày), `Alert` nhắc xác thực chủ trọ nếu chưa `VERIFIED`, 4 `StatCard` (tin đang hiển thị/chờ duyệt/lượt xem/lượt liên hệ — có `delta` so kỳ trước), `ChartCard` line-chart xu hướng xem/liên hệ, khối "Việc cần xử lý" (`actionItems`, `Alert` theo `severity`), khối "Tin đăng nổi bật" (`topListings`, danh sách link sang trang thống kê từng tin). |
 | Sửa hồ sơ chủ trọ | `frontend_webtro/src/pages/landlord/LandlordProfileEditPage.jsx` (208 dòng) | > Cần bổ sung theo source code (đã xác nhận file tồn tại, chưa đọc chi tiết nội dung — đây là màn hồ sơ chủ trọ, chỉ liên quan gián tiếp tới Module 6 qua `landlordVerificationStatus` hiển thị trên `OverviewPage`, KHÔNG thuộc trọng tâm 4 module còn lại nên không mô tả sâu ở đây; cần đọc thêm nếu review cần chi tiết màn này). |
 
 ### 3. Chức năng Backend
@@ -1936,7 +1950,6 @@ Vai trò: giúp chủ trọ đánh giá nhanh hiệu quả kênh đăng tin củ
 
 **Service**: `LandlordDashboardServiceImpl` (`.../user/service/impl/LandlordDashboardServiceImpl.java`, 75 dòng — rất mỏng) — toàn bộ logic:
 1. `listingRepository.countByStatusForOwner(userId)` → map thành `Map<String,Long> listingsByStatus`.
-2. `listingRepository.countByOwner/sumViewCountForOwner/sumFavoriteCountForOwner/sumContactCountForOwner(userId)` → 4 số tổng **toàn thời gian** (không theo khoảng ngày).
 3. Đọc `LandlordProfile` (nếu có) → `responseRatePercent`, `averageRating`, `reviewCount`, `validReportCount`, `warningCount`.
 
 **Repository**: dùng lại `ListingRepository` (Module 1) + `LandlordProfileRepository` (module `user`) — không có repository riêng cho module này.
@@ -1950,7 +1963,6 @@ Vai trò: giúp chủ trọ đánh giá nhanh hiệu quả kênh đăng tin củ
 3. BE **hoàn toàn bỏ qua tham số `days`** (controller không khai báo `@RequestParam` nào) — tính tổng toàn thời gian.
 4. Service query 5 lượt vào `listings` (1 group-by trạng thái + 3 SUM + 1 COUNT) và 1 lượt vào `landlord_profiles`.
 5. Trả `LandlordDashboardResponse` phẳng (không có chart/trend/topListings/actionItems).
-6. FE nhận response, cố gắng đọc các field mà thực tế response không có (`activeCount, pendingCount, viewCount30d, contactCount30d, deltas, chart, actionItems, topListings, landlordVerificationStatus`) → toàn bộ ra `undefined`.
 
 ```mermaid
 flowchart TD
@@ -1984,14 +1996,12 @@ Module này không sở hữu bảng riêng — chỉ đọc:
 
 | Bảng | Field đọc | Mục đích |
 |---|---|---|
-| `listings` | `status` (group by), `view_count`, `favorite_count`, `contact_count`, `owner_id`, `deleted_at` (loại tin đã xóa mềm khỏi mọi phép đếm/tổng) | Tổng hợp số liệu chủ trọ |
 | `landlord_profiles` | `response_rate_percent`, `average_rating`, `review_count`, `valid_report_count`, `warning_count`, `deleted_at` | Khối đánh giá/vi phạm |
 
 ### 7. API liên quan
 
 | Method | URL | Request | Response (field THẬT) | Auth | Permission | Validation | Error |
 |---|---|---|---|---|---|---|---|
-| GET | `/api/landlord/dashboard` | Không tham số nào được BE dùng (FE gửi `days` nhưng bị bỏ qua) | `ApiResponse<LandlordDashboardResponse>` = `{ totalListings, listingsByStatus: Map<String,Long>, totalViews, totalFavorites, totalContacts, responseRatePercent?, averageRating?, reviewCount?, validReportCount?, warningCount? }` | Bắt buộc | `LISTING_CREATE` | — | — |
 
 ### 8. Dependency
 
@@ -2002,7 +2012,6 @@ Module này không sở hữu bảng riêng — chỉ đọc:
 ### 9. Các trường hợp cần kiểm tra
 
 - □ Chủ trọ chưa có `LandlordProfile` (tài khoản mới, chưa từng tạo hồ sơ) → response vẫn trả 200, cụm field đánh giá/vi phạm bị loại khỏi JSON (do `@JsonInclude(NON_NULL)`) — FE phải xử lý được trường hợp thiếu field, không crash.
-- □ Chủ trọ có 0 tin đăng → `totalListings=0`, `listingsByStatus={}` (map rỗng), `totalViews/totalFavorites/totalContacts=0` — không lỗi 500.
 - □ So sánh số liệu `listingsByStatus` trả về với số đếm thực tế trên `MyListingsPage` (lọc theo từng status) — phải khớp nhau (cùng nguồn `listings`, khác cách tổng hợp).
 - □ Đổi dropdown "7/30/90 ngày" trên UI → xác nhận số liệu hiển thị **có thực sự đổi hay không** (dự đoán: KHÔNG đổi, vì BE bỏ qua `days` — đây là test case then chốt để xác nhận bug ở mục 10).
 - □ Gọi trực tiếp API bằng Postman với các giá trị `days` khác nhau → xác nhận response giống hệt nhau bất kể `days`.
@@ -2012,11 +2021,7 @@ Module này không sở hữu bảng riêng — chỉ đọc:
 
 - **[NGHIÊM TRỌNG — mismatch hợp đồng dữ liệu rất lớn] FE kỳ vọng một API "dashboard đầy đủ", BE chỉ có API "tổng hợp phẳng"**: đối chiếu trực tiếp `OverviewPage.jsx` với `LandlordDashboardResponse`/`LandlordDashboardController` (cả 2 đã đọc source thật), phát hiện HÀNG LOẠT field FE dùng nhưng BE không trả:
   - `data.activeCount`, `data.pendingCount` — BE chỉ có `listingsByStatus` (map, cần tự lấy `listingsByStatus['ACTIVE']`/`['PENDING']` ở FE, KHÔNG có field phẳng tương ứng).
-  - `data.viewCount30d`, `data.contactCount30d` — BE chỉ có `totalViews`/`totalContacts` **toàn thời gian**, không có bản theo cửa sổ ngày.
-  - `data.deltas.activeCount`, `data.deltas.pendingCount`, `data.deltas.viewCountPercent`, `data.deltas.contactCountPercent` — BE **hoàn toàn không có khái niệm "so với kỳ trước"** (không lưu snapshot lịch sử để so sánh).
-  - `data.chart` (mảng `{date, views, contacts}` cho line-chart) — BE không trả time-series nào cả.
   - `data.actionItems` (mảng việc cần xử lý kèm `severity/message/actionUrl`) — không tồn tại ở BE.
-  - `data.topListings` (mảng tin nổi bật kèm `viewCount/contactCount`) — không tồn tại ở BE.
   - `data.landlordVerificationStatus` — không tồn tại ở BE.
   
   **Hệ quả thực tế**: hầu hết `OverviewPage` sẽ hiển thị **toàn số 0 và rỗng** — 4 `StatCard` chính đều `?? 0`, biểu đồ xu hướng luôn rỗng (`chartData` = `null` vì `data?.chart` luôn `undefined`), khối "Việc cần xử lý" luôn hiện "Không có việc gì cần xử lý" (vì `actionItems` luôn `[]` do `data?.actionItems || []`), khối "Tin đăng nổi bật" luôn hiện "Chưa có dữ liệu", và Alert nhắc xác thực chủ trọ **không bao giờ hiện** (vì `data.landlordVerificationStatus` luôn `undefined`, điều kiện `data?.landlordVerificationStatus && ... !== 'VERIFIED'` luôn `false`). Đây gần như chắc chắn là trang có giao diện đẹp nhưng **không hiển thị đúng bất kỳ số liệu thật nào ngoài việc không crash** (nhờ toàn bộ FE dùng `?.`/`??` fallback an toàn).
@@ -2024,7 +2029,6 @@ Module này không sở hữu bảng riêng — chỉ đọc:
 
 ### 11. Các điểm cần review
 
-- **Đây là ưu tiên sửa cao nhất trong toàn bộ Module 6** — 2 hướng khắc phục khả thi: (a) mở rộng `LandlordDashboardResponse`/`LandlordDashboardServiceImpl` để BE thực sự trả `activeCount/pendingCount/viewCount{days}d/contactCount{days}d/deltas/chart/actionItems/topListings/landlordVerificationStatus` như FE kỳ vọng (cần thêm truy vấn theo cửa sổ ngày trên `view_histories`/`contact_logs`/so sánh kỳ trước, và nguồn `topListings` cần sort theo view/contact — hiện chưa có query nào phục vụ việc này trong `LandlordRepository`); hoặc (b) viết lại `OverviewPage.jsx` để khớp đúng field phẳng hiện có của BE (đơn giản hơn nhưng mất tính năng biểu đồ/xu hướng/gợi ý việc cần làm — giảm giá trị sản phẩm so với thiết kế UI).
 - **Business**: quyết định rõ "tổng lượt xem/liên hệ" nên là toàn thời gian (đang đúng ở BE) hay theo cửa sổ ngày (đang đúng ở FE) — đây là quyết định sản phẩm, không chỉ là bug kỹ thuật, cần thống nhất trước khi sửa code.
 - **API naming/thiết kế**: nếu giữ hướng (a), nên đặt tên field rõ ràng có hậu tố khoảng thời gian (vd `viewCountInWindow` thay vì `viewCount30d` cứng số ngày trong tên field, vì `days` là tham số động 7/30/90).
 - **Performance**: nếu bổ sung `chart` (time-series theo ngày) và `topListings` (sort theo view/contact), cần index phù hợp trên `view_histories`(`listing_id`, `viewed_at`) — đã có sẵn `idx_view_histories_listing_id_viewed_at` (xem Module 2 mục 6) nên khả thi về mặt hạ tầng, chỉ thiếu code truy vấn.
@@ -2048,7 +2052,7 @@ Module này không sở hữu bảng riêng — chỉ đọc:
 - □ Test UI — thao tác trực tiếp trên FE (không chỉ đọc code) cho: `ListingWizard` (đủ 6 bước, cả nhánh lỗi validate từng bước), `SearchPage` (đủ tổ hợp filter + sort), `ModerationQueuePage` (2 tab, duyệt/từ chối/ẩn/gỡ cờ), `AreasPage`/`CategoriesPage`/`AmenitiesPage` (toggle + import), `OverviewPage` (đổi khoảng ngày).
 - □ Kiểm tra DB — sau mỗi hành động UI, đối chiếu trực tiếp bảng `listings`, `moderation_actions`, `audit_logs`, `recommendation_logs`, `prediction_histories`, `search_histories` để chắc chắn dữ liệu ghi đúng, đủ.
 - □ So sánh Business — đối chiếu hành vi thực tế với các quy tắc đã tài liệu hóa ở mục 4/5 mỗi module (đặc biệt bảng luật `ListingStateMachine`, công thức Recommendation, mở rộng phạm vi Price WARD→DISTRICT→PROVINCE).
-- □ Ghi Bug — các lỗi dashboard, sort Search, toggle/import Catalog và listener lịch sử tìm kiếm trong bản review ban đầu đã được xử lý; tiếp tục kiểm tra mismatch `AdminListingResponse` ở hàng đợi kiểm duyệt.
+- □ Ghi Bug — các lỗi dashboard, sort Search, toggle/import Catalog, listener lịch sử tìm kiếm và metadata cơ bản của `AdminListingResponse` đã được xử lý; tiếp tục kiểm tra riêng `submittedAt`/lý do kiểm duyệt nếu nghiệp vụ chốt cần hiển thị các field này.
 - □ Ghi Improvement — các điểm ở mục 11 mỗi module không phải bug chặn nhưng đáng cải thiện (đồng bộ ngưỡng validate FE/BE, đưa trọng số Recommendation vào SystemConfig, bổ sung field còn thiếu, dọn cột DB chết `clicked_at`/`is_applied`...).
 - □ Tổng hợp báo cáo — gộp toàn bộ finding theo mẫu chung của nhóm, kèm mức độ ưu tiên và module ảnh hưởng, gửi lại cho Technical Lead trước khi merge.
 
@@ -2068,7 +2072,7 @@ Module này không sở hữu bảng riêng — chỉ đọc:
 
 # Người 3 — Tương tác, Thanh toán, AI Cảm xúc/Chatbot & Cấu hình hệ thống
 
-> Tài liệu này dùng để onboarding lập trình viên mới nhận review cụm chức năng: **Tương tác người dùng** (lưu tin/lịch sử, liên hệ/chat nội bộ, bình luận/đánh giá), **Thanh toán & Đẩy tin** (gói dịch vụ, giao dịch, callback, coupon), **AI Cảm xúc + Chatbot + AI Log/Config**, và **Cấu hình hệ thống**. Toàn bộ nội dung được trích xuất từ source code thật (method/path API, entity/field, luồng service) tại thời điểm viết tài liệu — không suy đoán. Những chỗ không xác định chắc chắn được đánh dấu rõ.
+> Tài liệu này dùng để onboarding lập trình viên mới nhận review cụm chức năng: **Tương tác người dùng** (lưu tin/lịch sử, chat nội bộ, bình luận/đánh giá), **Thanh toán & Đẩy tin** (gói dịch vụ, giao dịch, callback, coupon), **AI Cảm xúc + Chatbot + AI Log/Config**, và **Cấu hình hệ thống**. Toàn bộ nội dung được trích xuất từ source code thật (method/path API, entity/field, luồng service) tại thời điểm viết tài liệu — không suy đoán. Những chỗ không xác định chắc chắn được đánh dấu rõ.
 
 > **Quy ước đọc code dùng chung toàn hệ thống** (nhắc lại để đối chiếu khi review):
 > - Backend: Spring Boot 3.3.5 / Java 21, kiến trúc hexagonal `com.webtro.modules.*`, giao tiếp chéo module qua **SPI Gateway** (interface trong `modules/<module>/spi/*`, có adapter hiện thực ở module sở hữu dữ liệu) và **ApplicationEvent** phát sau commit (`TransactionPhase.AFTER_COMMIT`) cho luồng một chiều (vd. bình luận → AI phân tích cảm xúc).
@@ -2082,15 +2086,12 @@ Module này không sở hữu bảng riêng — chỉ đọc:
 ## Các module phụ trách
 
 - **Module 1: Favorite & View History** (lưu tin, lịch sử xem/tìm kiếm) — mã FAV-01..03
-- **Module 2: Contact & Chat nội bộ (Conversation)** — mã CONT-01..05
 - **Module 3: Comment & Review (+ kiểm duyệt admin)** — mã CMT-01..04, REV-01..03, RPT-02, ADM-11
 - **Module 4: Payment & Promotion** (gói dịch vụ / mua đẩy tin / giao dịch / callback / coupon) — mã PAY-01..06, ADM-08, ADM-09
 - **Module 5: AI Cảm xúc + Chatbot + AI Log/Config** — mã AI-01, AI-05, AI-07, AI-08, ADM-12
 - **Module 6: System Config** — mã ADM-14
 
 > **Ghi chú chia sẻ quan trọng:**
-> - Bảng `system_configs` do Người 3 sở hữu (Module 6) nhưng **mọi module khác đọc ngưỡng từ đây** qua `SystemConfigService` (vd. `contact.dedup_minutes`, `comment.edit_window_minutes`, `review.edit_window_hours`, `payment.order_expiry_minutes`, `ai.sentiment.*`...) — đổi sai một khóa có thể ảnh hưởng dây chuyền nhiều cụm khác.
-> - `notifyUser`/`notifyModerators` (module `notification`, thuộc Người 1) được Module 1–5 của Người 3 **kích hoạt** khi có liên hệ mới, bình luận mới, đánh giá mới, thanh toán thành công/thất bại, cảnh báo AI — chỉ cần hiểu API `NotificationService.notifyUser(...)`, KHÔNG sửa module notification.
 > - `moderation/controller/ReportController.java` (nhánh `target = COMMENT`) chia sẻ với Người 1 (LISTING/USER) — Người 3 chỉ quan tâm luồng báo cáo bình luận (RPT-02), không review `AdminReportController`/`AdminWarningController`/`AdminBannedKeywordController`.
 
 ---
@@ -2104,7 +2105,6 @@ Module quản lý hai nhóm dữ liệu hành vi cá nhân của người dùng:
 - **Favorite (tin đã lưu — FAV-01/02/03)**: cho phép người thuê "thả tim" một tin đăng để xem lại sau, có thể ghi chú riêng (`note`). Dữ liệu này nuôi tính năng gợi ý AI (Recommendation — content-based, dùng làm tín hiệu sở thích) và số liệu `favorite_count` hiển thị trên tin.
 - **View/Search History (lịch sử xem & tìm kiếm — FAV liên quan)**: ghi log mỗi lượt xem chi tiết tin và mỗi lượt tìm kiếm (kèm bộ lọc dạng JSON) để (a) người dùng xem lại, (b) chống đếm view/contact trùng lặp trong một cửa sổ thời gian, (c) là nguồn dữ liệu cho AI Recommendation/Chatbot phân tích hành vi.
 
-**Vai trò trong hệ thống**: đây là "trí nhớ" của người dùng trên nền tảng — nếu hỏng, người thuê mất khả năng quay lại tin đã quan tâm, hệ thống mất tín hiệu hành vi phục vụ AI gợi ý, và cơ chế khử trùng lặp view/contact (chống spam đếm số liệu) sẽ sai lệch làm méo thống kê `view_count`/`contact_count` của tin đăng.
 
 **Nếu hỏng**: người dùng không lưu được tin (mất trải nghiệm cốt lõi cho thuê trọ), `listings.favorite_count` không đồng bộ (được `FavoriteServiceImpl.syncFavoriteCount` tính lại chính xác mỗi lần thêm/xóa nên rủi ro sai số thấp), lịch sử xem/tìm kiếm sai làm chatbot/recommendation gợi ý kém chính xác.
 
@@ -2269,167 +2269,33 @@ flowchart TD
 
 ---
 
-## Module: Contact & Chat nội bộ (Conversation)
+## Module: Chat nội bộ (Conversation)
 
-### 1. Module này dùng để làm gì?
+### 1. Mục đích
 
-Cho phép người thuê liên hệ chủ trọ theo 3 kênh: **xem số điện thoại** (`VIEW_PHONE`), **gửi form liên hệ** (`FORM`, có nội dung + SĐT callback), và **bắt đầu chat nội bộ** (`START_CHAT` → tạo `Conversation` + tin nhắn đầu tiên). Đây là module cầu nối giữa nhu cầu thuê trọ thực tế và chủ nhà, đồng thời ghi `contact_logs` để tính `listings.contact_count`, phục vụ thống kê và chống spam liên hệ. Từ V23, module này không quyết định quyền đánh giá.
+Cho phép người thuê và chủ trọ trao đổi trong hội thoại gắn với một tin đăng. Số điện thoại chủ trọ được `ListingDetailResponse` trả đầy đủ và hiển thị trực tiếp dạng text; thao tác xem số không tạo log, không tăng bộ đếm và không gửi thông báo.
 
-**Nếu hỏng**: người thuê không thể liên hệ chủ trọ, chủ trọ không biết ai quan tâm tin của mình và tính năng chat nội bộ (thay thế Zalo/gọi điện) mất tác dụng. Quyền đánh giá không phụ thuộc module này.
+### 2. Thành phần
 
-### 2. Chức năng Frontend
+- Frontend: `ListingDetailPage.jsx`, `MessagesPage.jsx`, `conversationApi.js`.
+- Backend: `ConversationController`, `ConversationService`, `ConversationServiceImpl`, `ConversationRepository`, `MessageRepository`.
+- API: `/api/conversations/**`.
+- Dữ liệu: `conversations`, `messages`.
 
-| Màn hình / Component | File | Mô tả |
-|---|---|---|
-| Chat nội bộ (người thuê) | `frontend_webtro/src/pages/tenant/MessagesPage.jsx` | Layout 2 cột: danh sách hội thoại (trái, `List/ListItemButton`, `Badge` số chưa đọc) + khung chat (phải, `TextField` nhập + `IconButton Send`). Responsive: mobile ẩn danh sách khi đang xem 1 hội thoại (`useMediaQuery`). Đồng bộ `conversationId` lên query string bằng `useSearchParams`. |
-| Người liên hệ tin (chủ trọ) | `frontend_webtro/src/pages/landlord/ContactsPage.jsx` | Bảng MUI `Table` liệt kê người đã liên hệ (tên, tin, kênh, thời gian), `Chip` tổng hợp số liệu theo kênh (Tổng/Xem SĐT/Gửi form/Nhắn tin), filter theo tin/kênh/ngày, `TablePagination`, nút mở hội thoại tương ứng (điều hướng sang `/quan-ly/tin-nhan?conversationId=...`). |
-| Nút liên hệ + hiển thị SĐT trên trang chi tiết tin | `frontend_webtro/src/pages/public/ListingDetailPage.jsx` (khối liên hệ — **chia sẻ với Người 2**, Người 3 chỉ phụ trách phần tương tác/nút liên hệ, không phải nội dung mô tả tin) | Gọi `contactApi.getContactInfo`/`contactApi.contactListing` khi bấm "Xem số điện thoại"/"Gửi liên hệ"/"Nhắn tin". |
-| Widget chatbot (không thuộc Conversation nhưng dùng chung UI pattern chat) | `frontend_webtro/src/components/chatbot/ChatbotWidget.jsx` | Xem chi tiết ở Module AI. |
+### 3. Luồng chính
 
-**API client FE**: `frontend_webtro/src/api/contactApi.js` — bao gồm cả `contactListing`, `getLandlordContacts`, `getConversations`, `createConversation`, `getMessages`, `sendMessage`, `getConversation`, `markRead`, `getContactInfo`.
+1. Người thuê bấm "Nhắn tin cho chủ trọ" và nhập tin nhắn đầu tiên.
+2. `POST /api/conversations` tạo hoặc lấy lại hội thoại theo `(listingId, tenantId, landlordId)`.
+3. Tin nhắn được lưu, cập nhật preview, thời gian gần nhất và số chưa đọc.
+4. Hai bên xem/gửi tin và đánh dấu đã đọc qua các API hội thoại.
 
-### 3. Chức năng Backend
+### 4. Điểm cần kiểm tra
 
-- **Controller**: `ContactController` (`/api/listings/{id}/contact-info`, `/api/listings/{id}/contact`, `/api/landlord/contacts`), `ConversationController` (`/api/conversations/**`).
-- **Service**: `ContactService`/`ContactServiceImpl`, `ConversationService`/`ConversationServiceImpl`.
-- **Repository**: `ContactLogRepository`, `ConversationRepository`, `MessageRepository`.
-- **Listener**: `ContactNotificationListener` — lắng nghe `ContactCreatedEvent` (`AFTER_COMMIT`, `Propagation.REQUIRES_NEW`) để báo chủ trọ qua `NotificationService.notifyUser(..., NEW_CONTACT, ...)`.
-- **SPI Gateway**: `ListingGateway` (brief tin, tăng `contact_count`), `UserGateway` (thông tin liên hệ chủ trọ, kiểm tra `isContactRestricted`, `isLandlordChatEnabled`), `BannedKeywordGateway` (quét từ cấm trong nội dung form/tin nhắn).
-- **Validation**: `CreateContactRequest` (`type` bắt buộc có message khi `FORM`/`START_CHAT`), `CreateConversationRequest`, `SendMessageRequest`.
-- **Business logic đáng chú ý**: khử trùng lặp liên hệ theo `contact.dedup_minutes`; chặn tự liên hệ chính mình (`CONTACT_FORBIDDEN_SELF`); chặn user bị `contact_restricted` (do spam report); chặn nếu chủ trọ tắt chat (`isLandlordChatEnabled=false` → `CHAT_DISABLED_BY_LANDLORD`); quét từ cấm (`BannedKeywordGateway.scan(..., BOTH)`) trước khi lưu nội dung.
-- **Rate limit**: `contact-info` 60/giờ, `contact` (tạo liên hệ) 20/giờ, `conversation` (tạo hội thoại) 20/giờ, `message` (gửi tin nhắn) theo `ConfigKey.SPAM_MESSAGE_PER_MINUTE` — tất cả qua `RateLimitService` (Redis).
-- **Event**: `ContactCreatedEvent(listingId, ownerId, contacterId)` phát từ cả `ContactServiceImpl` (VIEW_PHONE/FORM/START_CHAT) lẫn `ConversationServiceImpl.writeChatContactLog` (chat trực tiếp không qua contact form) — gộp lại 1 listener để tránh trùng logic.
-
-### 4. Luồng hoạt động
-
-**Luồng gửi liên hệ (CONT-01/02)**:
-
-```mermaid
-flowchart TD
-    A[FE: bấm Xem SĐT / Gửi form / Nhắn tin] --> B[POST /api/listings/id/contact]
-    B --> C{Có nội dung bắt buộc?}
-    C -- Thiếu --> C1[400 VALIDATION_FAILED]
-    C -- Đủ --> D[guardContactable: tin public? không phải chính mình? user không bị hạn chế?]
-    D -- Vi phạm --> D1[403/409 tương ứng]
-    D -- OK --> E{Nội dung có từ cấm?}
-    E -- Có --> E1[422 BANNED_KEYWORD_DETECTED]
-    E -- Không --> F{type = START_CHAT?}
-    F -- Có --> G[Tạo/lấy lại Conversation + tin nhắn đầu]
-    F -- Không --> H[Ghi ContactLog]
-    G --> H
-    H --> I{Trong cửa sổ dedup?}
-    I -- Có --> I1[isCounted=false, không tăng contact_count]
-    I -- Không --> J[Tăng listings.contact_count]
-    J --> K[Publish ContactCreatedEvent AFTER_COMMIT]
-    K --> L[ContactNotificationListener -> notifyUser NEW_CONTACT]
-    I1 --> M[201 Created + ContactResultResponse]
-    J --> M
-```
-
-**Luồng chat (CONT-03/04)**: `POST /api/conversations` tạo/lấy lại hội thoại theo bộ ba `(listingId, tenantId, landlordId)` (idempotent — nếu đã tồn tại trả `200 OK` với `alreadyExisted=true` thay vì `201`); mỗi tin nhắn gửi qua `POST /api/conversations/{id}/messages` cập nhật `lastMessageAt`, `lastMessagePreview`, bộ đếm chưa đọc (`tenantUnreadCount`/`landlordUnreadCount`), và ghi mốc `firstResponseAt` (idempotent — chỉ set lần đầu chủ trọ trả lời) phục vụ tính SLA phản hồi chủ trọ.
-
-### 5. Dữ liệu chạy như thế nào
-
-- **Input**: `CreateContactRequest{type, message?, callbackPhone?}` hoặc `SendMessageRequest{content}` → **FE**: `contactApi.js` chỉ forward HTTP → **BE validate**: Bean Validation + `guardContactable` (nghiệp vụ) → **Business logic**: quét từ cấm → sanitize HTML → ghi `ContactLog`/`Message` → cập nhật đếm trên `Conversation`/`Listing` (cross-module qua gateway) → **DB**: `INSERT contact_logs`, `INSERT/UPDATE conversations`, `INSERT messages` → **Response**: `ContactResultResponse`/`ConversationCreatedResponse`/`MessageResponse` (DTO ghép thêm dữ liệu từ `ListingGateway`/`UserGateway`, không lưu trùng lặp trong bảng `contact_logs`/`messages`) → **FE update**: cập nhật khung chat / bảng người liên hệ realtime (polling thủ công, không có WebSocket — xem mục 11).
-- **DTO trung gian đáng chú ý**: `ContactInfoResponse` gộp dữ liệu từ `UserGateway.LandlordContactInfo` (SĐT, Zalo, `chatEnabled`, `verified`) + trạng thái `conversationId` nếu đã từng chat — một response tổng hợp 2 module.
-
-### 6. Database liên quan
-
-**Bảng `contact_logs`**
-
-| Field | Ý nghĩa |
-|---|---|
-| `listing_id`, `user_id`, `owner_id` | 3 khóa ngoại chéo module (Long) |
-| `contact_type` | `VIEW_PHONE` / `FORM` / `CHAT` |
-| `message`, `contact_name`, `contact_phone` | Nội dung form (nullable) |
-| `is_counted` | Có tính vào `contact_count` không (khử trùng lặp theo `contact.dedup_minutes`) |
-| `is_read_by_owner` | Chủ trọ đã đọc chưa |
-
-- Check DB: `ck_contact_logs_not_self (user_id <> owner_id)` — ràng buộc ở cả tầng DB lẫn service (`guardContactable`), 2 lớp bảo vệ.
-- Index dedup: `idx_contact_logs_dedup (listing_id, user_id, created_at)`.
-
-**Bảng `conversations`**
-
-| Field | Ý nghĩa |
-|---|---|
-| `listing_id`, `tenant_id`, `landlord_id` | Bộ ba xác định hội thoại duy nhất |
-| `status` | `ACTIVE`/`ARCHIVED`/`BLOCKED` |
-| `first_response_at` | Mốc chủ trọ phản hồi lần đầu — dùng tính SLA |
-| `last_message_at`, `last_message_preview` | Hiển thị nhanh danh sách hội thoại |
-| `tenant_unread_count`, `landlord_unread_count`, `message_count` | Bộ đếm denormalized |
-
-- Unique: `uk_conversations_listing_tenant_landlord (listing_id, tenant_id, landlord_id)` — 1-N tới `messages`.
-- Check: `ck_conversations_not_self (tenant_id <> landlord_id)`.
-
-**Bảng `messages`** (1 `conversation` — N `messages`, quan hệ `@ManyToOne(LAZY)` **trong cùng module** nên map object thật, khác với các FK chéo module chỉ giữ `Long`)
-
-| Field | Ý nghĩa |
-|---|---|
-| `conversation_id` | FK→conversations |
-| `sender_id` | FK→users (chéo module, Long) |
-| `content` | Tối đa 2000 ký tự |
-| `is_read`, `read_at` | Check `ck_messages_read`: `is_read=false OR read_at IS NOT NULL` |
-
-### 7. API liên quan
-
-| Method | URL | Request | Response | Auth | Permission | Error chính |
-|---|---|---|---|---|---|---|
-| GET | `/api/listings/{id}/contact-info` | — | `ContactInfoResponse` | JWT | `CONTACT_CREATE` | `LISTING_NOT_ACTIVE`, `CONTACT_FORBIDDEN_SELF`, `CONTACT_RESTRICTED_SPAM` |
-| POST | `/api/listings/{id}/contact` | `CreateContactRequest{type, message?, callbackPhone?}` | `ContactResultResponse` | JWT | `CONTACT_CREATE` | như trên + `BANNED_KEYWORD_DETECTED`, `CHAT_DISABLED_BY_LANDLORD` |
-| GET | `/api/landlord/contacts` | Query `listingId?, type?, from?, to?, Pageable` | `LandlordContactPageResponse` | JWT | `LISTING_CREATE` | `LISTING_FORBIDDEN` (nếu `listingId` không thuộc mình) |
-| GET | `/api/conversations` | Query `role?(ALL/AS_TENANT/AS_LANDLORD), unreadOnly?, listingId?, Pageable` | `ConversationPageResponse` | JWT | `CONTACT_CREATE` | — |
-| POST | `/api/conversations` | `CreateConversationRequest{listingId, initialMessage}` | `ConversationCreatedResponse` (200 nếu đã tồn tại, 201 nếu mới) | JWT | `CONTACT_CREATE` | `LISTING_NOT_ACTIVE`, `CONTACT_FORBIDDEN_SELF`, `CHAT_DISABLED_BY_LANDLORD` |
-| GET | `/api/conversations/{id}` | — | `ConversationResponse` | JWT | `CONTACT_CREATE` | `CONVERSATION_NOT_FOUND`, `CONVERSATION_FORBIDDEN` |
-| GET | `/api/conversations/{id}/messages` | `Pageable` (default size 30, sort `createdAt,asc`) | `PageResponse<MessageResponse>` | JWT | `CONTACT_CREATE` | như trên |
-| POST | `/api/conversations/{id}/messages` | `SendMessageRequest{content}` | `MessageResponse` (201) | JWT | `CONTACT_CREATE` | `CONTACT_RESTRICTED_SPAM`, `BANNED_KEYWORD_DETECTED`, rate limit |
-| POST | `/api/conversations/{id}/read` | — | `204` | JWT | `CONTACT_CREATE` | — |
-
-### 8. Dependency
-
-- **Phụ thuộc**: `ListingGateway`, `UserGateway`, `BannedKeywordGateway` (module moderation), `SystemConfigService` (`contact.dedup_minutes`, `spam.message_per_minute`), `NotificationService` (module notification, chỉ gọi không sửa), Redis (`RateLimitService`).
-- **Được phụ thuộc bởi**: FE `ListingDetailPage` dùng API liên hệ. `ReviewServiceImpl` không còn phụ thuộc `ContactLogRepository`; quyền đánh giá do `RentalEligibilityGateway` xác định.
-
-### 9. Các trường hợp cần kiểm tra
-
-- [ ] Xem SĐT lần đầu → ghi log, tăng `contact_count`; xem lại trong cửa sổ dedup → không tăng.
-- [ ] Gửi form thiếu nội dung khi `type` yêu cầu message → 400.
-- [ ] Gửi form/chat chứa từ cấm mức SEVERE (BOTH scope) → 422, không lưu.
-- [ ] Liên hệ tin của chính mình → 409/403 `CONTACT_FORBIDDEN_SELF`.
-- [ ] Liên hệ khi tài khoản bị `contact_restricted` (do report nhiều) → 403.
-- [ ] Bắt đầu chat khi chủ trọ tắt `chatEnabled` → 409/422 `CHAT_DISABLED_BY_LANDLORD`.
-- [ ] Tạo hội thoại lần 2 cho cùng bộ ba (listing, tenant, landlord) → trả về hội thoại cũ (200, `alreadyExisted=true`), không tạo bản ghi mới (kiểm tra unique constraint không bị vi phạm).
-- [ ] Gửi tin nhắn khi không phải thành viên hội thoại → 403 `CONVERSATION_FORBIDDEN`.
-- [ ] Gửi tin nhắn vượt rate limit/phút → 429.
-- [ ] Đánh dấu đã đọc → `unreadCount` về 0, các `Message.isRead=true/readAt` được set đúng (giới hạn quét `READ_SCAN_CAP=500` — hội thoại > 500 tin chưa đọc sẽ không đánh dấu hết, xem mục 10).
-- [ ] `firstResponseAt` chỉ được set 1 lần khi chủ trọ trả lời lần đầu (test gửi nhiều tin từ chủ trọ, mốc không đổi sau lần đầu).
-- [ ] Danh sách hội thoại role=ALL khi user có > 200 hội thoại ở vai trò tenant hoặc landlord → kiểm tra có bị cắt dữ liệu (giới hạn `MERGE_CAP=200`, xem mục 10).
-- [ ] Filter `listingId`/`type`/`from`/`to` ở `GET /api/landlord/contacts` — **kiểm tra kỹ, có dấu hiệu không lọc thật ở DB** (xem mục 10/11).
-- [ ] Phân trang tin nhắn: trang đầu vs trang sau, thứ tự tăng dần theo `createdAt`.
-- [ ] Concurrent: 2 tin nhắn gửi đồng thời trong cùng hội thoại → không mất tin, `messageCount` cộng đúng (transaction từng request, `Conversation` không có optimistic lock — rủi ro lost update khi tải cao, xem mục 11).
-
-### 10. Các lỗi dễ gặp
-
-- **Đã xử lý:** `GET /api/landlord/contacts` truyền `listingId`, `type`, `from`, `to` vào truy vấn DB; phân trang, `totalElements` và summary dùng cùng điều kiện lọc.
-- Danh sách hội thoại role=`ALL` gộp tối đa 200 hội thoại mỗi vai trò rồi phân trang thủ công trong bộ nhớ (`MERGE_CAP=200`) — tài khoản có nhiều hội thoại hơn sẽ bị cắt bớt kết quả một cách âm thầm (không lỗi, chỉ thiếu dữ liệu).
-- `markRead` chỉ quét tối đa 500 tin gần nhất (`READ_SCAN_CAP`) — hội thoại rất dài với > 500 tin chưa đọc sẽ còn sót tin chưa được đánh dấu đọc.
-- Không có WebSocket/SSE — `MessagesPage.jsx` không tự động nhận tin mới real-time, phải tự tải lại (kiểm tra UX có polling hay yêu cầu người dùng bấm làm mới).
-- Nhầm giữa `ContactLog.contactType=CHAT` (được ghi mỗi lần **mở** chat mới trong cửa sổ dedup) và số tin nhắn thực tế — `contact_count` KHÔNG bằng số tin nhắn.
-
-### 11. Các điểm cần review
-
-- **Đã xử lý:** `listingId/type/from/to` của `GET /api/landlord/contacts` được áp tại DB; tổng trang và summary không còn đếm theo riêng trang hiện tại.
-- **Concurrency**: `Conversation` không có `@Version` (optimistic locking) — 2 tin nhắn gửi đồng thời có thể ghi đè bộ đếm `messageCount`/`unreadCount` (lost update kinh điển: đọc → cộng → ghi không atomic). Nên cân nhắc `UPDATE ... SET count = count + 1` ở tầng SQL hoặc thêm `@Version`.
-- **Performance**: `listConversations(role=ALL)` tải tối đa 400 bản ghi vào bộ nhớ mỗi request rồi sort/paginate thủ công — không mở rộng tốt cho landlord có hàng nghìn hội thoại; nên có finder DB gộp hoặc UNION query.
-- **API response**: `POST /api/conversations` trả `200` hay `201` tùy `alreadyExisted` — kiểm tra FE có xử lý đúng cả 2 status code (nhiều client chỉ check `res.ok`, không phân biệt).
-- **Security**: nội dung tin nhắn/form đã qua `HtmlSanitizer.stripAllHtml` + quét từ cấm — xác nhận không có đường vòng (vd. Unicode homoglyph, zero-width) qua được bộ lọc từ cấm.
-- **UX**: không có cơ chế "đang nhập..." hay đọc realtime — nếu roadmap cần, đây là điểm để đề xuất cải tiến (không phải bug).
-
-### 12. Kết quả mong đợi
-
-- 3 kênh liên hệ hoạt động đúng, chống trùng lặp, chống spam theo rate limit.
-- Chat nội bộ tạo/khôi phục đúng hội thoại theo bộ ba, tin nhắn gửi/nhận/đánh dấu đọc chính xác.
-- Chủ trọ nhận thông báo kịp thời khi có người liên hệ (qua `notifyUser`).
-- Bảng "Người liên hệ" của chủ trọ lọc đúng theo tin/kênh/ngày (sau khi fix lỗi mục 10).
+- Không cho chủ tin tự tạo hội thoại với chính mình.
+- Tôn trọng cờ bật/tắt chat của chủ trọ và hạn chế spam tin nhắn.
+- Nội dung được sanitize và quét từ cấm.
+- Hội thoại cũ được tái sử dụng, không tạo trùng.
+- Số chưa đọc và `firstResponseAt` được cập nhật đúng.
 
 ---
 
@@ -2631,7 +2497,7 @@ Xử lý toàn bộ vòng đời **mua gói đẩy tin**: xem danh sách gói (`
 | Lịch sử thanh toán | `frontend_webtro/src/pages/landlord/PaymentsPage.jsx` | > Cần bổ sung theo source code (chưa đọc chi tiết) — dựa theo API `GET /payments/my` có filter status/listingId/from/to, khả năng cao dùng bảng + `TablePagination` giống `ContactsPage`. |
 | Kết quả thanh toán (sau redirect từ cổng) | `frontend_webtro/src/pages/landlord/PaymentResultPage.jsx` | `Card` trung tâm hiển thị thành công/thất bại, nút "Xem lịch sử thanh toán" và nút điều hướng tiếp theo (tới quản lý tin nếu thành công, quay lại gói dịch vụ nếu thất bại). |
 | Quản trị gói dịch vụ | `frontend_webtro/src/pages/admin/PackagesPage.jsx` | > Cần bổ sung theo source code — CRUD gói (code bất biến khi sửa), bật/tắt bán. |
-| Quản trị giao dịch | `frontend_webtro/src/pages/admin/PaymentsPage.jsx` | `AdminDataTable` + filter (status/method/user/listing/package/transactionCode/amount/date), menu hành động **"Hoàn tiền"** mở `ConfirmDialog` (`refundDialog`), `Chip` trạng thái theo `PAYMENT_METHOD_META`/`PAYMENT_STATUS_META`. |
+| Quản trị giao dịch | `frontend_webtro/src/pages/admin/PaymentsPage.jsx` | `AdminDataTable` + ô tìm mã giao dịch/tên/email người mua, filter trạng thái/phương thức; menu **"Hoàn tiền"** cho `SUCCESS` và **"Đối soát"** cho `PENDING`; hiển thị tên/email người mua và `paymentMethod` từ response quản trị. |
 
 **API client FE**: `frontend_webtro/src/api/paymentApi.js` (bao gồm `getPackages`, `createPayment`, `promote`, `getMyPayments`, `getPayment`, `cancelPayment`, `getMySubscriptions`, `validateCoupon`) — có ghi chú rõ `POST /payments` và `POST /listings/{id}/promote` **bắt buộc truyền header `Idempotency-Key`** (UUID) qua `config` thứ hai của hàm.
 
@@ -2744,7 +2610,7 @@ flowchart TD
 | POST | `/api/admin/promotion-packages` | `PackageRequest` | `PromotionPackageResponse` (201) | JWT | `PACKAGE_MANAGE` | `PACKAGE_CODE_DUPLICATE`, `PACKAGE_PRIORITY_EXCEEDED` |
 | PUT | `/api/admin/promotion-packages/{id}` | `PackageRequest` (code bất biến, bị bỏ qua) | `PromotionPackageResponse` | JWT | `PACKAGE_MANAGE` | `PACKAGE_NOT_FOUND` |
 | PUT | `/api/admin/promotion-packages/{id}/toggle` | `TogglePackageRequest{active, reason}` | `PromotionPackageResponse` | JWT | `PACKAGE_MANAGE` | — |
-| GET | `/api/admin/payments` | Nhiều filter (status/method/user/listing/package/txnCode/amount/date) + `Pageable` | `PaymentHistoryResponse` | JWT | `PAYMENT_MANAGE` (chỉ Admin) | `INVALID_SORT_FIELD` nếu sort khác `createdAt/paidAt/amount/finalAmount` |
+| GET | `/api/admin/payments` | Query `keyword?` (mã giao dịch hoặc tên/email người mua), `status[]?`, `paymentMethod[]?`, `userId?`, `listingId?`, `packageId?`, `transactionCode?`, `amountFrom?`, `amountTo?`, `from?`, `to?` + `Pageable` | `PaymentHistoryResponse{page, summary}`; item có `buyerName`, `buyerEmail`, `paymentMethod` | JWT | `PAYMENT_MANAGE` (chỉ Admin) | `INVALID_SORT_FIELD` nếu sort khác `createdAt/paidAt/amount/finalAmount` |
 | GET | `/api/admin/payments/{id}` | — | `PaymentResponse` (kèm `gatewayTxnRef`) | JWT | `PAYMENT_MANAGE` | — |
 | PUT | `/api/admin/payments/{id}/refund` | `RefundPaymentRequest{refundAmount?, reason, cancelSubscription?}` | `PaymentResponse` | JWT | `PAYMENT_MANAGE` | `PAYMENT_REFUND_NOT_ALLOWED`, `PAYMENT_ALREADY_REFUNDED` |
 | POST | `/api/admin/payments/{id}/reconcile` | — | `PaymentCallbackResponse` | JWT | `PAYMENT_MANAGE` | — |
@@ -2809,14 +2675,24 @@ flowchart TD
 
 ## Module: AI Cảm xúc + Chatbot + AI Log/Config
 
+> **Cập nhật hiện hành:** module cảm xúc đã bị xóa bởi `V21__drop_sentiment_module.sql`.
+> Các mô tả `sentiment_results`, endpoint sentiment và job sentiment ở phần lịch sử bên dưới chỉ
+> dùng để đối chiếu trước migration, không phải chức năng đang chạy. Contract quản trị hiện hành
+> chỉ gồm Recommendation, Price và Chatbot; xem `docs/TEMP_XOA_MODULE_CAM_XUC.md`.
+
 ### 1. Module này dùng để làm gì?
 
-Đây là 1 trong 4 tính năng AI rule-based **chạy in-process** (không gọi service ngoài, không cần GPU/API key) trong phạm vi Người 3:
+Phạm vi Người 3 gồm các tính năng AI chạy trong hệ thống và phần quản trị log/cấu hình:
 
-- **AI-01 Sentiment (cảm xúc)**: phân tích cảm xúc bình luận bằng từ điển tiếng Việt có trọng số (`VietnameseLexiconSentimentAnalyzer`) — tự động chạy sau mỗi bình luận mới/sửa, gắn nhãn `POSITIVE/NEUTRAL/NEGATIVE/MIXED`, phát hiện rủi ro (lừa đảo, đòi cọc...), và đề xuất hành động (`NONE/WATCH/NEED_REVIEW`).
+- **AI-01 Sentiment (lịch sử, đã xóa)**: nội dung liên quan chỉ còn để đối chiếu migration V21;
+  endpoint và bảng sentiment không còn trong hệ thống hiện hành.
 - **AI-05 Chatbot**: trợ lý hội thoại tìm phòng theo luật (`RuleBasedChatbotEngine`) — nhận diện 8 intent (FIND_ROOM, HOW_TO_POST, GLOSSARY, FAQ, GREETING, OUT_OF_SCOPE, SENSITIVE, UNKNOWN), trích xuất 11 loại slot (giá, diện tích, số người ở, khu vực...) qua regex, hỏi lại tối đa 3 lượt khi thiếu thông tin quan trọng, chỉ trả **tin công khai thật** (qua `ListingSearchService`, không bịa dữ liệu), kèm disclaimer bắt buộc.
-- **AI-07 Log AI**: lưu vết mọi lần chạy AI (bảng `sentiment_results` append-only có versioning `is_latest`, `chatbot_messages`) phục vụ audit/debug/thống kê — Admin xem qua `GET /api/admin/ai/logs`.
-- **AI-08 Cấu hình ngưỡng AI**: các tham số điều khiển hành vi AI (ngưỡng độ dài tối thiểu, ngưỡng tin cậy thấp, trọng số tài khoản mới, ngưỡng tỷ lệ tiêu cực L1/L2...) lưu ở bảng `ai_configs` (không lẫn với `system_configs`), quản lý qua `AdminAiController`.
+- **AI-07 Log AI**: endpoint quản trị hiện hợp nhất ba nguồn `recommendation_logs`,
+  `prediction_histories`, `chatbot_messages`; bỏ trống `module` để xem tất cả hoặc chọn
+  `RECOMMENDATION`/`PRICE`/`CHATBOT`.
+- **AI-08 Cấu hình ngưỡng AI**: `AdminAiController` đọc/ghi các khóa `ai.*` trong
+  `system_configs` và trả bốn nhóm `modules`, `recommendation`, `price`, `chatbot`; không còn nhóm
+  sentiment.
 
 **Vai trò trong hệ thống**: AI là lớp "giám sát tự động" giúp phát hiện sớm tin có vấn đề (nhiều bình luận tiêu cực) và hỗ trợ người dùng tìm phòng nhanh hơn qua hội thoại tự nhiên, **KHÔNG thay thế quyết định của con người** — nguyên tắc cứng: AI chỉ đề xuất/gắn cờ, không tự khóa tài khoản hay tự ẩn tin.
 
@@ -2827,8 +2703,8 @@ flowchart TD
 | Màn hình / Component | File | Mô tả |
 |---|---|---|
 | Widget chatbot nổi | `frontend_webtro/src/components/chatbot/ChatbotWidget.jsx` | `Fab` góc phải màn hình mở/đóng khung chat (`Paper` 380×520px), giữ `conversationId` trong state để duy trì ngữ cảnh qua nhiều lượt, render danh sách tin nhắn (`Card`/`CardActionArea` cho từng tin gợi ý kèm ảnh/giá), `TextField` + `IconButton Send`. |
-| Cấu hình AI (admin) | `frontend_webtro/src/pages/admin/AiConfigPage.jsx` | Trang xem/sửa ngưỡng 4 module AI (form theo nhóm), có `Alert` báo lỗi kèm nút "Thử lại". |
-| Log AI (admin) | `frontend_webtro/src/pages/admin/AiLogsPage.jsx` | Xem log theo module AI (`sentiment/recommendation/chatbot/price`), lọc theo khoảng ngày, phân trang — dùng chung pattern `AdminDataTable`. |
+| Cấu hình AI (admin) | `frontend_webtro/src/pages/admin/AiConfigPage.jsx` | Trang xem/sửa cấu hình Recommendation, Price, Chatbot và công tắc module; có `Alert` báo lỗi kèm nút "Thử lại". |
+| Log AI (admin) | `frontend_webtro/src/pages/admin/AiLogsPage.jsx` | Hai tab “Log gọi AI” và “Tin lệch giá”; tab log chọn `RECOMMENDATION`/`CHATBOT`/`PRICE` hoặc “Tất cả module”, phân trang bằng `AdminDataTable`. |
 
 **API client FE**: `frontend_webtro/src/api/aiApi.js` (`analyzeSentiment` — công cụ chẩn đoán cho admin/mod, không phải luồng người dùng thường), `frontend_webtro/src/api/chatbotApi.js` (`sendMessage`). Trang admin dùng `adminApi.js` cho cấu hình/log (endpoint `/api/admin/ai/*`).
 
@@ -2950,16 +2826,13 @@ flowchart TD
 
 | Method | URL | Request | Response | Auth | Permission | Error chính |
 |---|---|---|---|---|---|---|
-| POST | `/api/ai/sentiment/analyze` | `SentimentAnalyzeRequest{commentId? \| text?, persist?}` (đúng 1 trong 2) | `SentimentResponse` | JWT | `AI_LOG_VIEW` | `VALIDATION_FAILED`, `SENTIMENT_COMMENT_NOT_FOUND` |
 | POST | `/api/ai/chatbot/message` | `ChatbotMessageRequest{message, sessionId?, conversationId?, resetContext?}` | `ChatbotMessageResponse` | Public (JWT optional) | — | `CHATBOT_MESSAGE_EMPTY`, `CHATBOT_MESSAGE_TOO_LONG`, `CHATBOT_RATE_LIMIT` |
 | GET | `/api/ai/chatbot/conversations` | `Pageable` | `PageResponse<ChatbotConversationResponse>` | JWT | `isAuthenticated()` | — |
 | GET | `/api/ai/chatbot/conversations/{id}/messages` | `Pageable` | `PageResponse<ChatbotMessageHistoryResponse>` | JWT | `isAuthenticated()` + chủ phiên | `CHATBOT_CONVERSATION_NOT_FOUND`, `FORBIDDEN` |
 | GET | `/api/admin/ai/config` | — | `AiConfigResponse` | JWT | `AI_CONFIG_MANAGE` | — |
 | PUT | `/api/admin/ai/config` | `UpdateConfigRequest{configs[], reason}` | `UpdateConfigResponse` | JWT | `AI_CONFIG_MANAGE` | `CONFIG_KEY_UNKNOWN`, `CONFIG_VALUE_INVALID` |
-| GET | `/api/admin/ai/logs` | Query `module` (bắt buộc), `from?, to?, Pageable` | `AiLogResponse` | JWT | `AI_LOG_VIEW` | — |
-| GET | `/api/admin/ai/alerts` | `Pageable` | `PageResponse<AiAlertResponse>` | JWT | `AI_LOG_VIEW` | — |
+| GET | `/api/admin/ai/logs` | Query `module?` (`RECOMMENDATION`/`CHATBOT`/`PRICE`; bỏ trống = `ALL`), `from?, to?, Pageable` | `AiLogResponse{module, results: PageResponse<AiLogItemResponse>}`; khi `ALL` sort/phân trang sau khi hợp nhất 3 nguồn | JWT | `AI_LOG_VIEW` | `STATISTIC_RANGE_INVALID`, `AUDIT_LOG_RANGE_TOO_LARGE` |
 | GET | `/api/admin/ai/price-deviations` | `Pageable` | `PageResponse<AiPriceDeviationResponse>` | JWT | `AI_LOG_VIEW` | — |
-| POST | `/api/admin/ai/sentiment/reanalyze` | `ReanalyzeSentimentRequest{commentId}` | `SentimentResponse` | JWT | `AI_LOG_VIEW` hoặc `COMMENT_MODERATE` | `SENTIMENT_COMMENT_NOT_FOUND` |
 
 ### 8. Dependency
 
@@ -3098,7 +2971,6 @@ flowchart TD
 ### 8. Dependency
 
 - **Phụ thuộc**: `SystemConfigRepository`, Redis (cache), `AuditLogService`.
-- **Được phụ thuộc bởi TẤT CẢ module khác trong phạm vi Người 3** (và nhiều module ngoài phạm vi): Favorite/History (`view.dedup_minutes`), Contact (`contact.dedup_minutes`), Comment (`comment.edit_window_minutes`, `spam.comment_per_minute`), Review (`review.edit_window_hours`), Conversation (`spam.message_per_minute`), Payment (`payment.order_expiry_minutes`, `payment.callback_max_skew_seconds`, `promotion.max_priority`), AI (toàn bộ `ai.*` — nhưng quản trị qua `AdminAiController` riêng, không qua controller này). Quyền review dựa trên `rental_requests`; key `review.require_contact` đã được V24 xóa.
 
 ### 9. Các trường hợp cần kiểm tra
 
@@ -3145,9 +3017,7 @@ flowchart TD
 - [ ] Chạy thử toàn bộ luồng end-to-end trên môi trường dev (MailHog cho email, Redis cho cache/rate-limit, MySQL cho DB) trước khi review sâu từng API.
 - [ ] Test API bằng Postman/Swagger cho từng endpoint trong 6 module, đặc biệt các luồng có nhiều bước (thanh toán, chat, kiểm duyệt).
 - [ ] Test UI cho từng trang FE liệt kê ở mục 2 của mỗi module, cả trạng thái loading/empty/error.
-- [ ] Kiểm tra DB: chạy query trực tiếp đối chiếu số liệu denormalized (`favorite_count`, `comment_count`, `average_rating`, `contact_count`) với số đếm thật (`COUNT(*)`).
 - [ ] So sánh Business: đối chiếu hành vi thật với mô tả canonical/tài liệu nghiệp vụ (nếu có), đặc biệt các ngoại lệ (§9.1 AI, §3.14 Payment).
-- [ ] Ghi Bug: ưu tiên xác nhận lại 4 lỗi thật đã phát hiện trong quá trình đọc code — (1) `GET /api/reviews/my` luôn trả rỗng, (2) filter `listingId/type/from/to` ở `GET /api/landlord/contacts` không có tác dụng, (3) filter `rating` ở danh sách review tin không lọc DB, (4) rủi ro race condition khi áp coupon giới hạn lượt dùng thấp.
 - [ ] Ghi Improvement: performance (`findAll().stream()` trong PromotionServiceImpl, N+1 ở CommentServiceImpl/HistoryServiceImpl), UX (thông báo hoàn tiền dùng sai loại notification, chatbot không polling realtime cho MessagesPage).
 - [ ] Tổng hợp báo cáo theo 6 module, kèm mức độ ưu tiên (nghiêm trọng/trung bình/thấp) và đề xuất hướng sửa cho từng phát hiện.
 
@@ -3169,14 +3039,14 @@ flowchart TD
 | Module/Thành phần dùng chung | Chịu trách nhiệm chính | Người phối hợp (chỉ cần hiểu) | Lý do & ranh giới |
 |---|---|---|---|
 | **Bảo mật / JWT / RBAC filter** (auth) | **Người 1** | Người 2, Người 3 | Mọi endpoint đều qua filter JWT + `@PreAuthorize`. P2/P3 chỉ kiểm tra quyền trên endpoint của mình dùng đúng quyền đã khai báo. |
-| **Notification** (`notifyUser`) | **Người 1** | Người 2 (tin được duyệt/sắp hết hạn), Người 3 (thanh toán/liên hệ/bình luận) | P2/P3 **kích hoạt** thông báo qua API `NotificationService`, không sửa module. Kiểm tra: sự kiện của mình có sinh đúng thông báo (in-app + email) không. |
+| **Notification** (`notifyUser`) | **Người 1** | Người 2 (tin được duyệt/sắp hết hạn), Người 3 (thanh toán/bình luận) | P2/P3 **kích hoạt** thông báo qua API `NotificationService`, không sửa module. Kiểm tra: sự kiện của mình có sinh đúng thông báo (in-app + email) không. |
 | **Catalog / Địa giới** (provinces·districts·wards) | **Người 2** | Người 1 (địa chỉ hồ sơ người dùng/chủ trọ) | P1 chỉ **đọc** danh mục để chọn địa chỉ. Kiểm tra: phạm vi chỉ Hà Nội. |
 | **ReportController** (`POST /api/reports`) — 1 endpoint, 3 target | **Người 1** (xử lý báo cáo, target USER) | Người 2 (target LISTING · RPT-01), Người 3 (target COMMENT · RPT-02) | Cùng endpoint, khác `targetType`. P2/P3 kiểm tra nhánh target của mình; P1 kiểm tra luồng **xử lý** báo cáo (`AdminReportController`). |
 | **system_configs** (ngưỡng nghiệp vụ) | **Người 3** (ADM-14) | Người 1, Người 2 | Mọi module **đọc** ngưỡng (thời hạn tin, rate-limit, ngưỡng AI...). P3 đảm bảo CRUD config + cache invalidation đúng. |
 | **audit_logs** (`AdminAuditLogController`) | **Người 1** | Người 2 (duyệt/khóa tin), Người 3 (hoàn tiền/kiểm duyệt) | Mọi hành động admin ghi audit. P2/P3 kiểm tra hành động admin của mình **có ghi audit** đúng `old/new value` (JSON). |
 | **BannedKeyword** (lọc từ cấm) | **Người 1** (moderation) | Người 2 (tiêu đề/mô tả tin), Người 3 (bình luận/chat) | P1 quản danh sách; P2/P3 kiểm tra nội dung của mình bị chặn đúng khi chứa từ cấm. |
 | **Storage / FileController** (ảnh) | **Người 2** (ảnh tin) | Người 1 (avatar) | Ảnh lưu ngoài webroot, phục vụ qua `/api/files/**`. P1 kiểm tra upload avatar dùng cùng cơ chế. |
-| **FE `ListingDetailPage.jsx`** | **Người 2** (hiển thị tin + gợi ý + ước giá) | **Người 3** (khối bình luận/đánh giá/nút liên hệ/chatbot) | **Một trang, hai chủ.** P2 sở hữu khung hiển thị tin; P3 sở hữu các khối tương tác nhúng trong trang. Phải thống nhất props/loading state khi review. |
+| **FE `ListingDetailPage.jsx`** | **Người 2** (hiển thị tin, số điện thoại dạng text, gợi ý + ước giá) | **Người 3** (khối bình luận/đánh giá/chatbot) | **Một trang, hai chủ.** P2 sở hữu khung hiển thị tin; P3 sở hữu các khối tương tác nhúng trong trang. Phải thống nhất props/loading state khi review. |
 | **SPI Gateway** (`ListingGateway`, `UserGateway`...) | Chủ module nguồn | Module tiêu thụ | Hợp đồng chéo module. Khi đổi field phải kiểm tra cả hai phía. |
 
 ---
@@ -3277,7 +3147,6 @@ flowchart TD
 
 > - **Chạy sạch:** vì migration `V4` (địa giới Hà Nội) và seed dữ liệu mẫu đã thay đổi, khi cần dữ liệu chuẩn hãy `docker compose down -v && docker compose up --build` để Flyway seed lại từ đầu.
 > - **Swagger:** `http://localhost:8080/swagger-ui.html` (bật/tắt qua biến `SWAGGER_ENABLED`).
-> - **Mail dev:** `http://localhost:8025` (MailHog) để xác minh email xác thực / cảnh báo / thông báo liên hệ.
 > - **Mọi ngưỡng nghiệp vụ** (thời hạn tin, rate-limit, ngưỡng AI…) nằm ở bảng `system_configs` — sửa qua giao diện Admin (Người 3), **không** hardcode.
 
 *— Hết tài liệu phân công review —*

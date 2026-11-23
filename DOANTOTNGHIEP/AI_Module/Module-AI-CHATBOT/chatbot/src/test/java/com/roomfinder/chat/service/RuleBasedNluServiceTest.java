@@ -8,6 +8,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Kiểm thử NLU rule-based — nhánh dự phòng khi LLM lỗi/timeout. Vì nhánh này
@@ -98,5 +99,16 @@ class RuleBasedNluServiceTest {
         assertEquals(3_000_000L, f.getPriceMax());
         assertNull(f.getPriceMin());
         assertEquals(30.0, f.getAreaMin());
+    }
+
+    /**
+     * Câu thật người dùng gửi khi PhoBERT timeout (rơi xuống rule-based): "vskk" phải ra
+     * vệ sinh khép kín — trước đây bộ quét cả câu bỏ qua mọi từ viết tắt.
+     */
+    @Test
+    void fallbackUnderstandsVskkAbbreviation() {
+        Filters f = parse("t cần tìm phòng vskk tc < 3tr kv hà đông");
+        assertTrue(f.getUtilities().contains("private_bathroom"), f.getUtilities().toString());
+        assertEquals(3_000_000L, f.getPriceMax());
     }
 }

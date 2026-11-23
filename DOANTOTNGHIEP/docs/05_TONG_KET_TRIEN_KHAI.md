@@ -28,7 +28,8 @@ sản phẩm **thực tế đã chạy được**, không phải kế hoạch.
 **Backend** (`backend_webtro/`): ~590 file Java.
 - 45 entity + 45 repository, 43 controller, ~70 service (interface + impl), ~180 DTO, ~32 mapper thủ công.
 - 12 SPI adapter nối chéo module (mẫu hexagonal, giữ ranh giới module).
-- 10 scheduler job, 4 module AI rule-based (sentiment tiếng Việt, gợi ý 9 số hạng, chatbot, dự đoán giá).
+- Các engine sentiment, recommendation và chatbot chạy trong Spring Boot; dự đoán giá dùng
+  `RentalApiLightgbmPriceEstimator` gọi FastAPI `rental-api` phục vụ model LightGBM.
 - Security: JWT access + refresh token (rotation + reuse detection + blacklist Redis), phân quyền role-only
   (4 role, role-only), rate limit Redis. **Mỗi người dùng có đúng một vai trò**
   (`users.role_id`); quyền suy 100% từ vai trò nên hai người cùng vai trò có bộ chức năng y hệt nhau.
@@ -38,7 +39,8 @@ sản phẩm **thực tế đã chạy được**, không phải kế hoạch.
 - 51 trang (public/auth/tenant/landlord/admin), 34 component dùng lại, 18 API module, router lazy-load,
   3 guard (ProtectedRoute/RoleRoute), theme MUI sáng/tối, axios interceptor tự refresh.
 
-**Docs** (`docs/`): 8 tài liệu — canonical (00), kiến trúc (01), database (02), API (03), giao diện (04), tổng kết (05), phân công review (06), bàn giao session (07).
+**Docs** (`docs/`): hiện có 15 file Markdown (kết quả đếm trực tiếp trong thư mục), gồm bộ tài liệu
+đánh số 00–10 và các báo cáo/tài liệu nghiệp vụ bổ sung.
 
 ## 3. Cách chạy
 
@@ -55,6 +57,8 @@ Sau khi các container `healthy`:
 | Website | http://localhost |
 | API + Swagger | http://localhost:8080/swagger-ui.html |
 | Hộp thư test (MailHog) | http://localhost:8025 |
+| FastAPI dự đoán giá | http://localhost:8002 |
+| Giao diện độc lập của module dự đoán giá | http://localhost:8501 |
 
 Đăng nhập admin: `admin@webtro.local` + `ADMIN_PASSWORD` trong `.env`.
 

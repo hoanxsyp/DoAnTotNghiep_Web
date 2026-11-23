@@ -16,7 +16,7 @@ import java.util.Optional;
 public interface UserGateway {
 
     /**
-     * Thông tin công khai của một người dùng để hiển thị (tác giả bình luận/đánh giá, người liên hệ).
+     * Thông tin công khai của một người dùng để hiển thị (tác giả bình luận/đánh giá hoặc người tham gia hội thoại).
      *
      * @param memberSince thời điểm tạo tài khoản (users.created_at)
      */
@@ -27,32 +27,20 @@ public interface UserGateway {
     record LandlordAggregate(BigDecimal averageRating, int reviewCount) {
     }
 
-    /**
-     * Thông tin liên hệ công khai của chủ trọ (từ {@code landlord_profiles} + {@code users}) — dùng
-     * cho {@code GET /api/listings/{id}/contact-info}.
-     *
-     * @param contactZalo Zalo liên hệ; schema {@code landlord_profiles} chưa có cột riêng nên bên
-     *                    hiện thực có thể trả trùng {@code contactPhone} (đúng ví dụ canonical 4.6.1).
-     */
-    record LandlordContactInfo(Long landlordId, String landlordName, String contactName,
-                               String contactPhone, String contactZalo,
-                               boolean chatEnabled, boolean verified) {
-    }
-
-    /** Thông tin liên hệ của chủ trọ; ném {@code USER_NOT_FOUND} nếu không có hồ sơ. */
-    LandlordContactInfo getLandlordContactInfo(Long landlordId);
-
     /** Lấy thông tin người dùng; ném {@code ResourceNotFoundException(USER_NOT_FOUND)} nếu không có. */
     UserBrief getBrief(Long userId);
 
     /** Lấy thông tin người dùng nếu tồn tại. */
     Optional<UserBrief> findBrief(Long userId);
 
-    /** Nạp hàng loạt (tránh N+1 khi render danh sách bình luận/đánh giá/liên hệ). */
+    /** Nạp hàng loạt (tránh N+1 khi render danh sách bình luận/đánh giá). */
     Map<Long, UserBrief> getBriefs(Collection<Long> userIds);
 
     /** Chủ trọ có bật chat không ({@code landlord_profiles.allow_chat}); false nếu không có hồ sơ chủ trọ. */
     boolean isLandlordChatEnabled(Long landlordId);
+
+    /** Người dùng có hồ sơ chủ trọ không; tenant đăng tin ở ghép thì không có. */
+    boolean hasLandlordProfile(Long userId);
 
     /**
      * Người dùng có đang bị hạn chế liên hệ không ({@code users.contact_restricted_until} còn hiệu
@@ -66,6 +54,15 @@ public interface UserGateway {
     /** Đọc tổng hợp đánh giá hiện tại của chủ trọ (để tính lại trung bình khi thêm/sửa/xóa review). */
     LandlordAggregate getLandlordAggregate(Long landlordId);
 
-    /** Cập nhật {@code landlord_profiles.average_rating} + {@code review_count} (canonical 4.7.8 quy tắc 5). */
+    /**
+     * Cập nhật {@code landlord_profiles.average_rating} + {@code review_count}. Chủ phòng không có
+     * hồ sơ chủ trọ (ví dụ người thuê đăng tin ở ghép) thì bỏ qua.
+     */
     void updateLandlordReviewAggregate(Long landlordId, BigDecimal averageRating, int reviewCount);
+
+    /**
+     * Khoá dòng hồ sơ chủ trọ ({@code SELECT … FOR UPDATE}) trước khi tính lại điểm chủ trọ
+     * (mục 10.2 bước 1). Trả về {@code false} nếu người này không có hồ sơ chủ trọ.
+     */
+    boolean lockLandlordProfile(Long landlordId);
 }

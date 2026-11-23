@@ -67,7 +67,6 @@ public final class ConfigKey {
     public static final String AI_CHATBOT_TIMEOUT_MS = "ai.chatbot.timeout_ms";
 
     // ====================== Interaction misc ========================
-    public static final String CONTACT_DEDUP_MINUTES = "contact.dedup_minutes";
     public static final String VIEW_DEDUP_MINUTES = "view.dedup_minutes";
     public static final String COMMENT_EDIT_WINDOW_MINUTES = "comment.edit_window_minutes";
     public static final String REVIEW_EDIT_WINDOW_HOURS = "review.edit_window_hours";

@@ -88,4 +88,30 @@ public interface ViewHistoryRepository extends JpaRepository<ViewHistory, Long> 
     List<Object[]> countDailyViewsForOwnerBetween(@Param("ownerId") Long ownerId,
                                                   @Param("from") Instant from,
                                                   @Param("to") Instant to);
+
+    /** Lượt xem được tính theo ngày của một tin trong khoảng [from, to). */
+    @Query(value = """
+            SELECT DATE(v.viewed_at) AS day, COUNT(*) AS total
+            FROM view_histories v
+            WHERE v.listing_id = :listingId
+              AND v.is_counted = true
+              AND v.viewed_at >= :from
+              AND v.viewed_at < :to
+            GROUP BY DATE(v.viewed_at)
+            """, nativeQuery = true)
+    List<Object[]> countDailyViewsForListingBetween(@Param("listingId") Long listingId,
+                                                    @Param("from") Instant from,
+                                                    @Param("to") Instant to);
+
+    /** Số người/phiên/IP khác nhau đã tạo lượt xem được tính cho một tin. */
+    @Query(value = """
+            SELECT COUNT(DISTINCT COALESCE(
+                CONCAT('U:', v.user_id),
+                CONCAT('S:', v.session_id),
+                CONCAT('I:', v.ip_address)))
+            FROM view_histories v
+            WHERE v.listing_id = :listingId
+              AND v.is_counted = true
+            """, nativeQuery = true)
+    long countUniqueViewersByListingId(@Param("listingId") Long listingId);
 }

@@ -31,7 +31,11 @@ public class NlgService {
         2. TUYỆT ĐỐI không bịa giá, diện tích, địa chỉ hay mã phòng.
         3. Nếu danh sách rỗng, hãy nói không tìm thấy và gợi ý nới điều kiện.
         4. Luôn nhắc mã phòng theo định dạng [#id] khi đề cập một phòng.
-        5. Trả lời ngắn gọn, tối đa 4 câu, giọng thân thiện, xưng "mình".
+        5. Chỉ nói phòng CÓ tiện ích nào nếu tiện ích đó nằm trong dòng "Tiện ích" của phòng;
+           tiện ích không được liệt kê thì nói là tin đăng không ghi, KHÔNG khẳng định là có.
+        6. "Mô tả" là lời chủ trọ — chỉ dùng để tóm ý, không suy ra số liệu mới từ đó.
+        7. Không cam kết phòng còn trống; nhắc người dùng liên hệ chủ trọ để xác nhận.
+        8. Trả lời ngắn gọn, tối đa 4 câu, giọng thân thiện, xưng "mình".
         """;
 
     private static final String RETRY_WARNING = """
@@ -74,6 +78,9 @@ public class NlgService {
         }
     }
 
+    /** Mô tả gửi LLM tối đa ngần này ký tự — đủ ý chính, không đội token/độ trễ. */
+    private static final int DESCRIPTION_MAX_CHARS = 200;
+
     /** Serialize từ object phòng — §6.1 (KHÔNG nhét raw JSON). */
     private String buildUserContent(String userMessage, List<Room> rooms, Filters filters, String relaxationNote) {
         StringBuilder sb = new StringBuilder();
@@ -96,14 +103,34 @@ public class NlgService {
         b.append("[#").append(r.getId()).append("] ")
          .append("Giá ").append(String.format("%,d", r.getPrice())).append("đ")
          .append(" | ").append(r.getArea()).append("m²")
-         .append(" | ").append(r.getAddressText() == null ? r.getDistrict() : r.getAddressText())
-         .append(" | Điều hòa: ").append(bool(r.getHasAirConditioner()))
-         .append(" | Chỗ để xe: ").append(bool(r.getHasParking()))
-         .append(" | Wifi: ").append(bool(r.getHasWifi()));
+         .append(" | ").append(r.getAddressText() == null ? r.getDistrict() : r.getAddressText());
+        if (r.getAmenityNames() != null) {
+            // Tin đăng của web: danh sách tiện ích THẬT do chủ trọ chọn.
+            b.append(" | Tiện ích: ").append(r.getAmenityNames().isEmpty()
+                    ? "(tin đăng không ghi)" : String.join(", ", r.getAmenityNames()));
+            b.append(" | Chỗ để xe: ").append(bool(r.getHasParking()))
+             .append(" | Vệ sinh khép kín: ").append(bool(r.getIsPrivateBathroom()));
+        } else {
+            // Phòng demo (nguồn db): chỉ có 4 cột tiện ích.
+            b.append(" | Điều hòa: ").append(bool(r.getHasAirConditioner()))
+             .append(" | Chỗ để xe: ").append(bool(r.getHasParking()))
+             .append(" | Wifi: ").append(bool(r.getHasWifi()));
+        }
         if (r.getDistanceM() != null) {
             b.append(" | Cách điểm mốc ~").append(Math.round(r.getDistanceM())).append("m");
         }
+        String desc = shortDescription(r.getDescription());
+        if (desc != null) b.append("\n    Mô tả: ").append(desc);
         return b.toString();
+    }
+
+    /** Một dòng, tối đa DESCRIPTION_MAX_CHARS ký tự, cắt ở ranh giới từ. */
+    static String shortDescription(String description) {
+        if (description == null || description.isBlank()) return null;
+        String oneLine = description.replaceAll("\\s+", " ").trim();
+        if (oneLine.length() <= DESCRIPTION_MAX_CHARS) return oneLine;
+        int cut = oneLine.lastIndexOf(' ', DESCRIPTION_MAX_CHARS);
+        return oneLine.substring(0, cut > 0 ? cut : DESCRIPTION_MAX_CHARS) + "…";
     }
 
     private String bool(Boolean v) { return Boolean.TRUE.equals(v) ? "Có" : "Không"; }

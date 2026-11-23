@@ -160,7 +160,7 @@ const HomePage = () => {
             Tìm phòng trọ ưng ý, nhanh và an toàn
           </Typography>
           <Typography sx={{ mt: 1, opacity: 0.9 }}>
-            Hàng nghìn tin đăng đã kiểm duyệt trên toàn quốc
+            Hàng nghìn tin đăng đã kiểm duyệt tại Hà Nội
           </Typography>
 
           <Paper
@@ -191,11 +191,11 @@ const HomePage = () => {
                   select
                   fullWidth
                   size="small"
-                  label="Tỉnh/TP"
+                  label="Khu vực Hà Nội"
                   value={provinceId}
                   onChange={(e) => setProvinceId(e.target.value)}
                 >
-                  <MenuItem value="">Toàn quốc</MenuItem>
+                  <MenuItem value="">Toàn Hà Nội</MenuItem>
                   {provinces.map((p) => (
                     <MenuItem key={p.id} value={p.id}>
                       {p.name}

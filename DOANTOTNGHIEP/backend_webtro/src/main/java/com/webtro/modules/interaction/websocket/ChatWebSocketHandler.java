@@ -1,5 +1,6 @@
 package com.webtro.modules.interaction.websocket;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.webtro.modules.interaction.service.ConversationService;
@@ -45,7 +46,18 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
-        JsonNode root = objectMapper.readTree(message.getPayload());
+        JsonNode root;
+        try {
+            root = objectMapper.readTree(message.getPayload());
+        } catch (JsonProcessingException e) {
+            // Gói sai định dạng: báo lỗi, giữ kết nối (không để Spring đóng 1011).
+            sendError(session, "INVALID_JSON");
+            return;
+        }
+        if (root == null) {
+            sendError(session, "INVALID_JSON");
+            return;
+        }
         String type = root.path("type").asText("");
         if (!TYPE_SUBSCRIBE.equals(type) && !TYPE_UNSUBSCRIBE.equals(type)) {
             sendError(session, "UNSUPPORTED_TYPE");

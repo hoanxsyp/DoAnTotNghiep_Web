@@ -26,6 +26,9 @@ public class ListingDetailResponse {
 
     private Long id;
     private String slug;
+
+    /** Phòng của tin; đánh giá và điểm hiển thị thuộc về phòng (RE-2). */
+    private RentalUnitSummaryResponse rentalUnit;
     private String title;
     private String description;
 
@@ -50,6 +53,8 @@ public class ListingDetailResponse {
     private String fullAddress;
     private BigDecimal latitude;
     private BigDecimal longitude;
+    /** {@code OWNER} = vị trí chính xác; {@code WARD} = tâm phường (gần đúng). Che cùng tọa độ. */
+    private String locationSource;
 
     private Integer roomCount;
     private Integer toiletCount;
@@ -70,7 +75,6 @@ public class ListingDetailResponse {
 
     private String contactName;
     private String contactPhone;
-    private Boolean phoneMasked;
 
     private String status;
     private String statusLabel;
@@ -79,7 +83,6 @@ public class ListingDetailResponse {
     private Integer commentCount;
     private Integer viewCount;
     private Integer favoriteCount;
-    private Integer contactCount;
 
     private Boolean favoritedByMe;
     private Boolean reviewedByMe;

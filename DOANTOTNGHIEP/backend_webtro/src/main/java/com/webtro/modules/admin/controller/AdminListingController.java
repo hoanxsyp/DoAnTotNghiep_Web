@@ -4,6 +4,7 @@ import com.webtro.common.ApiResponse;
 import com.webtro.common.BulkActionResponse;
 import com.webtro.common.PageResponse;
 import com.webtro.common.enums.ListingStatus;
+import com.webtro.common.enums.CategoryCode;
 import com.webtro.common.enums.ReportTargetType;
 import com.webtro.modules.admin.dto.request.ApproveListingRequest;
 import com.webtro.modules.admin.dto.request.BulkListingActionRequest;
@@ -67,6 +68,7 @@ public class AdminListingController {
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Long ownerId,
             @RequestParam(required = false) Long categoryId,
+            @RequestParam(required = false) CategoryCode categoryCode,
             @RequestParam(required = false) Long provinceId,
             @RequestParam(required = false) Long districtId,
             @RequestParam(required = false) Long wardId,
@@ -79,7 +81,7 @@ public class AdminListingController {
         Instant toInstant = to != null ? to.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant() : null;
 
         PageResponse<AdminListingResponse> data = adminListingService.searchListings(
-                status, keyword, ownerId, categoryId, provinceId, districtId, wardId,
+                status, keyword, ownerId, categoryId, categoryCode, provinceId, districtId, wardId,
                 priceDeviationFlagged, fromInstant, toInstant, pageable);
         return ResponseEntity.ok(ApiResponse.success(data, "Lấy danh sách tin đăng thành công"));
     }
@@ -89,8 +91,9 @@ public class AdminListingController {
     @Operation(summary = "Hàng đợi kiểm duyệt",
             description = "Tin chờ xử lý (PENDING + NEED_REVIEW), phân trang, ưu tiên tin cũ trước.")
     public ResponseEntity<ApiResponse<PageResponse<AdminListingResponse>>> moderationQueue(
+            @RequestParam(defaultValue = "PENDING") ListingStatus status,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.ASC) Pageable pageable) {
-        PageResponse<AdminListingResponse> data = adminListingService.moderationQueue(pageable);
+        PageResponse<AdminListingResponse> data = adminListingService.moderationQueue(status, pageable);
         return ResponseEntity.ok(ApiResponse.success(data, "Lấy hàng đợi kiểm duyệt thành công"));
     }
 

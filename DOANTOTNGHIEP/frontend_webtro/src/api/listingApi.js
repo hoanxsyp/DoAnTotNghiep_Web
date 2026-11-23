@@ -24,10 +24,21 @@ const listingApi = {
   getStats: (id) => unwrap(axiosClient.get(`/listings/${id}/stats`)),
 
   // ----- Ảnh -----
-  uploadImages: (id, formData) =>
+  uploadImages: (id, formData, setPrimaryIndex) =>
     unwrap(axiosClient.post(`/listings/${id}/images`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      params: setPrimaryIndex == null ? undefined : { setPrimaryIndex },
     })),
+  deleteImage: (id, imageId, newPrimaryImageId) =>
+    unwrap(axiosClient.delete(`/listings/${id}/images/${imageId}`, {
+      params: newPrimaryImageId == null ? undefined : { newPrimaryImageId },
+    })),
+  setPrimaryImage: (id, imageId) =>
+    unwrap(axiosClient.put(`/listings/${id}/images/${imageId}/primary`)),
+  reorderImages: (id, imageIds) =>
+    unwrap(axiosClient.put(`/listings/${id}/images/order`, { imageIds })),
+  updateAmenities: (id, amenityIds) =>
+    unwrap(axiosClient.put(`/listings/${id}/amenities`, { amenityIds })),
 
   // ----- AI dự đoán giá -----
   predictPrice: (payload) => unwrap(axiosClient.post('/ai/price-prediction', payload)),

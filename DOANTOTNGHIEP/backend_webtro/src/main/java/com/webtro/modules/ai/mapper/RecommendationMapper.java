@@ -135,9 +135,8 @@ public class RecommendationMapper {
                         .views(p.counts().views())
                         .searches(p.counts().searches())
                         .favorites(p.counts().favorites())
-                        .contacts(p.counts().contacts())
                         .build())
-                .note("Hồ sơ dựng từ lịch sử xem (w=1), tìm kiếm (w=2), lưu tin (w=3), liên hệ (w=5)")
+                .note("Hồ sơ dựng từ lịch sử xem (w=1), tìm kiếm (w=2), lưu tin (w=3)")
                 .build();
     }
 

@@ -41,7 +41,7 @@ Bốn ràng buộc phạm vi gốc, được nâng thành **ràng buộc kiến 
 
 **CÓ (nằm trong hệ thống)** — theo `[§13.1]` + `[§14.1]` + `[§14.2]`:
 
-Đăng ký/đăng nhập/phân quyền; quản lý hồ sơ; đăng tin 7 loại `[§0.3]`; duyệt tin; tìm kiếm/lọc nâng cao; lưu tin; lịch sử xem/tìm kiếm; liên hệ chủ trọ; chat nội bộ (mức cơ bản `[§13.2]`); bình luận; đánh giá; báo cáo vi phạm; kiểm duyệt; thanh toán đẩy tin (sandbox); gói đẩy tin; notification (in-app + email); admin dashboard + thống kê; audit log; 4 module AI; upload ảnh; SEO cơ bản; theo dõi chủ trọ.
+Đăng ký/đăng nhập/phân quyền; quản lý hồ sơ; đăng tin 7 loại `[§0.3]`; duyệt tin; tìm kiếm/lọc nâng cao; lưu tin; lịch sử xem/tìm kiếm; hiển thị trực tiếp số điện thoại chủ trọ; chat nội bộ (mức cơ bản `[§13.2]`); bình luận; đánh giá; báo cáo vi phạm; kiểm duyệt; thanh toán đẩy tin (sandbox); gói đẩy tin; notification (in-app + email); admin dashboard + thống kê; audit log; 4 module AI; upload ảnh; SEO cơ bản; theo dõi chủ trọ.
 
 **CỐ TÌNH KHÔNG LÀM** — copy nguyên `[§13.3]`, mỗi dòng là một cam kết kiến trúc:
 
@@ -127,7 +127,7 @@ graph TB
     end
 
     GUEST -->|"HTTPS: xem, tìm kiếm, chatbot cơ bản, đăng ký"| SYS
-    TENANT -->|"HTTPS: lưu tin, liên hệ, bình luận, đánh giá, báo cáo"| SYS
+    TENANT -->|"HTTPS: lưu tin, nhắn tin, bình luận, đánh giá, báo cáo"| SYS
     LANDLORD -->|"HTTPS: đăng/sửa/gia hạn tin, mua gói, xem thống kê"| SYS
     MOD -->|"HTTPS: duyệt tin, xử lý report, kiểm duyệt bình luận"| SYS
     ADMIN -->|"HTTPS: quản trị user/tin/thanh toán/cấu hình/AI/thống kê"| SYS
@@ -354,10 +354,8 @@ sequenceDiagram
 | 3 | **catalog** | Dữ liệu tra cứu ít đổi, dùng chung: loại tin `[§0.3]`, cây hành chính tỉnh/huyện/xã, tiện ích theo nhóm. Là module bị phụ thuộc nhiều nhất, **không phụ thuộc ai**. | `categories`, `provinces`, `districts`, `wards`, `amenities` | `ADM-05` quản lý danh mục, `ADM-06` quản lý khu vực, `ADM-07` quản lý tiện ích `[§2.12]`; `[§10.5]` |
 | 4 | **listing** | Vòng đời tin đăng (state machine), CRUD tin, ảnh, tiện ích của tin, gia hạn, thống kê tin, quy tắc hiển thị công khai. **Chủ sở hữu `ListingStateMachine` và `ListingVisibilityService`.** | `listings`, `listing_images`, `listing_amenities` | `LIST-01` tạo nháp, `LIST-02` đăng tin, `LIST-03` sửa tin, `LIST-04` gửi duyệt, `LIST-05` duyệt/từ chối (thực thi state), `LIST-06` ẩn, `LIST-07` đóng, `LIST-08` xóa mềm, `LIST-09` gia hạn, `LIST-10` thống kê tin, `LIST-11` quản lý ảnh, `LIST-12` quản lý tiện ích `[§2.3]` |
 | 5 | **search** | Truy vấn tìm kiếm + lọc + sắp xếp + phân trang, tin liên quan, gợi ý mở rộng khi ít kết quả, ghi lịch sử tìm kiếm, xen tin được đẩy mà vẫn giữ tính liên quan `[§3.7]`. **Chỉ đọc**, không sở hữu entity nghiệp vụ. | *(không sở hữu entity riêng; đọc `listings` qua `ListingQueryService`; ghi `search_histories` qua module `interaction`)* | `SRCH-01` từ khóa, `SRCH-02` khu vực, `SRCH-03` giá, `SRCH-04` diện tích, `SRCH-05` loại tin, `SRCH-06` tiện ích, `SRCH-07` lọc ở ghép theo giới tính/số người, `SRCH-08` sắp xếp, `SRCH-09` tin liên quan `[§2.4]` |
-| 6 | **interaction** | Lưu tin, lịch sử xem, lịch sử tìm kiếm, ghi nhận liên hệ, chat nội bộ, bình luận, đánh giá. Quyền đánh giá đọc quan hệ thuê `RENTED`/`CHECKED_OUT` qua `RentalEligibilityGateway`, không dựa trên `ContactLog`. Là **nguồn dữ liệu hành vi** cho recommendation `[§9.2]`. | `favorites`, `view_histories`, `search_histories`, `contact_logs`, `conversations`, `messages`, `comments`, `reviews` | `FAV-01..03` `[§2.5]`; `HIST-01` ghi lịch sử xem, `HIST-02` xem lịch sử `[§2.5]`; `CONT-01..05` `[§2.6]`; `CMT-01..04`, `REV-01..03` `[§2.7]` |
 | 7 | **moderation** | Báo cáo vi phạm, xử lý report, hành động kiểm duyệt, cảnh báo vi phạm, từ khóa cấm, ngưỡng tự động ẩn `[§5.3]`, ngưỡng khóa `[§5.4]`. | `reports`, `moderation_actions`, `violation_warnings`, `banned_keywords` | `RPT-01` báo cáo tin, `RPT-02` báo cáo bình luận, `RPT-03` báo cáo người dùng, `RPT-04` xử lý báo cáo, `RPT-05` gửi cảnh báo vi phạm, `RPT-06` khóa tin/tài khoản `[§2.8]`; `CMT-04`, `REV-03` (quyết định kiểm duyệt) `[§2.7]` |
 | 8 | **payment** | Gói dịch vụ, tạo giao dịch, callback cổng thanh toán, kích hoạt gói, lịch sử thanh toán, đẩy tin, nhãn nổi bật, coupon. | `promotion_packages`, `payments`, `promotion_subscriptions`, `coupons` | `PAY-01` xem gói, `PAY-02` mua gói đẩy tin, `PAY-03` tạo giao dịch, `PAY-04` xác nhận thanh toán, `PAY-05` kích hoạt gói, `PAY-06` lịch sử thanh toán; `PROMO-01` đẩy tin lên đầu, `PROMO-02` gắn nhãn nổi bật `[§2.9]` |
-| 9 | **notification** | Thông báo in-app, gửi email qua template Thymeleaf, đánh dấu đã đọc, digest. Là module **hạ nguồn** — ai cũng gọi được, nó không gọi ngược lên. | `notifications` | `NOTI-01` thông báo trong hệ thống, `NOTI-02` email xác thực, `NOTI-03` email cảnh báo, `NOTI-04` có người liên hệ, `NOTI-05` tin sắp hết hạn, `NOTI-06` kết quả duyệt tin `[§2.10]` |
 | 10 | **ai** | 4 engine sau interface: sentiment, recommendation, chatbot, price. Log AI + cấu hình ngưỡng. **Chỉ đề xuất, không quyết định** `[§10.10]`. | `sentiment_results`, `recommendation_logs`, `prediction_histories`, `chatbot_conversations`, `chatbot_messages` | `AI-01` phân tích cảm xúc, `AI-04` gợi ý cá nhân hóa, `AI-05` chatbot, `AI-06` dự đoán giá, `AI-07` quản lý log AI, `AI-08` cấu hình ngưỡng AI `[§2.11]` |
 | 11 | **admin** | Dashboard, thống kê, cấu hình hệ thống, cấu hình AI, audit log. Là **mặt tiền quản trị**: điều phối các module khác, tự mình chứa rất ít nghiệp vụ. | `audit_logs`, `system_configs`, `ai_configs` | `ADM-01` dashboard, `ADM-02` quản lý người dùng, `ADM-03` quản lý chủ trọ, `ADM-04` quản lý tin đăng, `ADM-08` quản lý gói dịch vụ, `ADM-09` quản lý thanh toán, `ADM-10` quản lý báo cáo/khiếu nại, `ADM-11` quản lý bình luận/đánh giá, `ADM-12` quản lý AI, `ADM-13` thống kê và báo cáo, `ADM-14` quản lý cấu hình hệ thống `[§2.12]` |
 
@@ -518,7 +516,6 @@ backend_webtro/
     │   │   │       ├── ReviewCreatedEvent.java · ListingApprovedEvent.java
     │   │   │       ├── ListingStatusChangedEvent.java · ReportCreatedEvent.java
     │   │   │       ├── PaymentSucceededEvent.java · FavoriteCreatedEvent.java
-    │   │   │       └── ContactCreatedEvent.java
     │   │   │
     │   │   ├── config/
     │   │   │   ├── SecurityConfig.java               # SecurityFilterChain, csrf().disable() + lý do
@@ -672,21 +669,16 @@ backend_webtro/
     │   │       │   ├── controller/    FavoriteController · ViewHistoryController · ContactController
     │   │       │   │                  ConversationController · CommentController · ReviewController
     │   │       │   ├── service/       FavoriteService · ViewHistoryService · SearchHistoryService
-    │   │       │   │                  ContactService · ConversationService · MessageService
     │   │       │   │                  CommentService · ReviewService
     │   │       │   ├── service/impl/  (…Impl)
     │   │       │   ├── repository/    FavoriteRepository · ViewHistoryRepository · SearchHistoryRepository
-    │   │       │   │                  ContactLogRepository · ConversationRepository · MessageRepository
     │   │       │   │                  CommentRepository · ReviewRepository
-    │   │       │   ├── entity/        Favorite · ViewHistory · SearchHistory · ContactLog
     │   │       │   │                  Conversation · Message · Comment · Review
     │   │       │   ├── dto/request/   CreateFavoriteRequest · CreateContactRequest · SendMessageRequest
     │   │       │   │                  CreateCommentRequest · UpdateCommentRequest · ReplyCommentRequest
     │   │       │   │                  CreateReviewRequest · UpdateReviewRequest
-    │   │       │   ├── dto/response/  FavoriteResponse · ViewHistoryResponse · ContactLogResponse
     │   │       │   │                  ConversationResponse · MessageResponse
     │   │       │   │                  CommentResponse · ReviewResponse · RatingSummaryResponse
-    │   │       │   └── mapper/        FavoriteMapper · ViewHistoryMapper · ContactLogMapper
     │   │       │                      ConversationMapper · MessageMapper · CommentMapper · ReviewMapper
     │   │       │
     │   │       ├── moderation/
@@ -756,8 +748,8 @@ backend_webtro/
     │   │       │   │   │                   UserPreferenceProfileBuilder · ListingScorer · ColdStartStrategy
     │   │       │   │   ├── chatbot/        ChatbotEngine (interface) · RuleBasedChatbotEngine
     │   │       │   │   │                   IntentClassifier · SlotExtractor · ChatbotResponseBuilder · FaqKnowledgeBase
-    │   │       │   │   └── price/          PriceEstimator (interface) · ComparableHedonicPriceEstimator
-    │   │       │   │                       ComparableFinder · HedonicAdjuster · ConfidenceCalculator
+    │   │       │   │   └── price/          PriceEstimator (interface) · RentalApiLightgbmPriceEstimator (@Primary)
+    │   │       │   │                       ComparableHedonicPriceEstimator (không mặc định)
     │   │       │   ├── listener/      CommentSentimentListener
     │   │       │   ├── repository/    SentimentResultRepository · RecommendationLogRepository
     │   │       │   │                  PredictionHistoryRepository · ChatbotConversationRepository
@@ -886,7 +878,6 @@ frontend_webtro/
     │   ├── listingApi.js              # CRUD, submit, hide, close, renew, images, stats
     │   ├── searchApi.js               # searchListings, relatedListings, suggestions
     │   ├── favoriteApi.js · historyApi.js
-    │   ├── contactApi.js · conversationApi.js
     │   ├── commentApi.js · reviewApi.js
     │   ├── reportApi.js
     │   ├── paymentApi.js              # packages, createPayment, myPayments, promote
@@ -1299,43 +1290,11 @@ http.csrf(AbstractHttpConfigurer::disable);
 | `latitude/longitude` chính xác tuyệt đối của nhà riêng | Trả tọa độ **làm tròn 3 chữ số thập phân** (~110m) cho người chưa đăng nhập; đủ để hiển thị vị trí khu vực `[§13.2]` mà không chỉ đúng cửa nhà — **[BỔ SUNG NGOÀI CANONICAL]** |
 | Header lộ công nghệ | nginx `server_tokens off`, tắt `X-Powered-By` |
 
-### 5.4. Che số điện thoại với khách chưa đăng nhập `[§3.8]`
+### 5.4. Hiển thị số điện thoại trên chi tiết tin
 
-**Yêu cầu gốc:** `[§3.8]` *"Thông tin liên hệ có thể bị che một phần nếu người dùng chưa đăng nhập"*; `[§1.2]` *"Không được... xem đầy đủ thông tin liên hệ nếu hệ thống yêu cầu đăng nhập"*; `[§3.10]` *"Khách chưa đăng nhập được yêu cầu đăng nhập trước khi xem số đầy đủ"*.
-**Canonical §8 chốt:** khách chưa đăng nhập chỉ thấy `0901***456` (`MaskUtil`).
+`ListingDetailResponse.contactPhone` trả số điện thoại chủ trọ đầy đủ cho cả khách và người dùng đã đăng nhập. Frontend hiển thị số dưới dạng text, không có nút mở số và không phát sinh log/thống kê/thông báo khi người dùng xem số.
 
-| Đối tượng xem | Thấy gì | Cơ sở |
-|---|---|---|
-| Khách chưa đăng nhập | `0901***456` (che 3 số giữa) | canonical §8, `[§3.8]` |
-| Người dùng đã đăng nhập (`ACTIVE`) | Số đầy đủ + ghi `ContactLog` `[§3.10]` | `[§2.6]` CONT-01 |
-| Chủ sở hữu tin | Số đầy đủ | Của chính mình |
-| MODERATOR / ADMIN (`LISTING_VIEW_ANY`) | Số đầy đủ | Cần để kiểm duyệt `[§10.4]` |
-
-**Hiện thực — điểm mấu chốt: che ở BACKEND, không phải frontend.**
-
-```java
-// ListingMapper — luật 3: mapper là nơi DUY NHẤT quyết định field nào lộ ra
-public ListingDetailResponse toDetailResponse(Listing l, CurrentUser viewer) {
-    boolean canSeeFullPhone =
-            viewer != null && (
-                    viewer.getUserId().equals(l.getOwnerId())
-                 || SecurityUtils.hasAnyRole(RoleCode.MODERATOR, RoleCode.ADMIN)
-                 || viewer.getStatus() == UserStatus.ACTIVE
-            );
-    return ListingDetailResponse.builder()
-            .contactPhone(canSeeFullPhone
-                    ? l.getContactPhone()
-                    : MaskUtil.maskPhone(l.getContactPhone()))   // 0901234456 -> 0901***456
-            .phoneMasked(!canSeeFullPhone)                        // FE hiện nút "Đăng nhập để xem số"
-            .build();
-}
-```
-
-> **Vì sao che ở backend là bắt buộc:** nếu backend trả số đầy đủ rồi frontend mới che bằng CSS/JS, số **vẫn nằm trong response JSON** — mở DevTools tab Network là thấy. Đó không phải bảo mật, đó là trang trí. `[§11.2]` đã cảnh báo đúng nguyên tắc này: *"API cần kiểm tra quyền ở backend, không chỉ ẩn nút ở frontend"*.
->
-> Hệ quả bắt buộc: `ListingDetailResponse` **không được** cache chung cho mọi người xem (mục 8.4) — vì nội dung phụ thuộc người xem.
-
-**Ghi nhận lượt liên hệ** `[§3.10]`: khi người dùng đã đăng nhập bấm "Xem số điện thoại" → `POST /api/listings/{id}/contact` → ghi `ContactLog` (chống trùng trong `contact.dedup_minutes` = 60 `[§3.10]`) → tăng `listings.contact_count` → thông báo `NEW_CONTACT` cho chủ trọ `[§5.6]`.
+Hồ sơ công khai của chủ trọ vẫn áp dụng chính sách riêng về dữ liệu cá nhân; thay đổi này chỉ áp dụng cho số điện thoại đã được chủ trọ dùng để quảng cáo trên trang chi tiết tin.
 
 ### 5.5. Bảng tổng hợp rate limit `[§11.10]` (canonical §8)
 
@@ -1377,7 +1336,7 @@ graph TB
         SA["<b>SentimentAnalyzer</b><br/>→ VietnameseLexiconSentimentAnalyzer<br/>ASYNC"]
         RE["<b>RecommendationEngine</b><br/>→ ContentBasedRecommendationEngine<br/>SYNC + cache 15'"]
         CB["<b>ChatbotEngine</b><br/>→ RuleBasedChatbotEngine<br/>SYNC"]
-        PE["<b>PriceEstimator</b><br/>→ ComparableHedonicPriceEstimator<br/>SYNC"]
+        PE["<b>PriceEstimator</b><br/>→ RentalApiLightgbmPriceEstimator (@Primary)<br/>SYNC → FastAPI rental-api /predict"]
     end
 
     subgraph OUT["Hệ quả — CHỈ đề xuất, KHÔNG quyết định [§10.10]"]
@@ -1544,25 +1503,23 @@ Hàng đợi là **`LinkedBlockingQueue` bên trong `ThreadPoolTaskExecutor`** (
 | `ViewHistory` | **1** | `view_histories` |
 | `SearchHistory` | **2** | `search_histories` |
 | `Favorite` | **3** | `favorites` |
-| `ContactLog` | **5** | `contact_logs` |
 
 **7 chiều nhu cầu suy ra — phủ đúng danh sách "Dữ liệu đầu vào" `[§9.2]` (11 mục):**
 
 | # | Chiều `UserPreferenceProfile` | Kiểu | Cách suy ra từ hành vi có trọng số | Mục `[§9.2]` được phủ |
 |---|---|---|---|---|
-| 1 | `preferredWards` / `preferredDistricts` / `preferredProvince` | `Set<Long>` theo tần suất có trọng số | Gom `ward_id`/`district_id` của tin trong `view_histories`/`favorites`/`contact_logs` + tham số khu vực trong `search_histories`; giữ top‑N (`N = 5`) theo tổng trọng số | *"Khu vực thường xem"*, *"Lịch sử xem tin"*, *"Lịch sử tìm kiếm"*, *"Tin đã lưu"*, *"Tin đã liên hệ"* |
 | 2 | `preferredPriceRange` | `[minPrice, maxPrice]` | **Percentile 10–90** của `listings.price` trên tập hành vi có trọng số (mỗi bản ghi được nhân bản theo trọng số khi tính percentile) | *"Khoảng giá thường xem"* |
 | 3 | `preferredCategories` | `Set<CategoryCode>` | Tần suất có trọng số của `listings.category_id`; giữ top‑3 | *"Loại phòng thường xem"* |
 | 4 | `preferredAmenities` | `Set<Long>` | Tần suất có trọng số của `listing_amenities.amenity_id` + tiện ích được tick trong `search_histories` | *(chi tiết hóa `[§2.4]` SRCH‑06)* |
 | 5 | `preferredAreaRange` | `[minAreaM2, maxAreaM2]` | **Percentile 10–90** của `listings.area` trên **cùng** tập hành vi có trọng số như chiều giá; nếu `search_histories` có `areaFrom/areaTo` tường minh thì tham số tìm kiếm **ghi đè** (ý định khai báo mạnh hơn ý định suy diễn) | *"Diện tích quan tâm"* `[§2.4]` SRCH‑04 |
 | 6 | `preferredOccupants` (`maxOccupants`) | `Integer` | Lấy **mode** (giá trị xuất hiện nhiều nhất) của `listings.max_occupants` trên tập hành vi; nếu `search_histories` có tham số số người thì ưu tiên tham số đó; đọc từ `user_profiles.preferred_occupants` nếu người dùng đã khai trong hồ sơ | *"Số người ở"* `[§2.4]` SRCH‑07 |
-| 7 | `preferredGenderRequirement` | `GenderRequirement` | Ưu tiên 1: cột `user_profiles.preferred_gender_requirement` do người dùng khai `[§2.2]`. Ưu tiên 2: tham số giới tính trong `search_histories` gần nhất. Ưu tiên 3: suy từ `listings.gender_requirement` của các tin `ROOMMATE` đã lưu/liên hệ. Không đủ căn cứ → `ANY` | *"Giới tính nếu là ở ghép"* `[§2.4]` SRCH‑07 |
+| 7 | `preferredGenderRequirement` | `GenderRequirement` | Ưu tiên 1: cột `user_profiles.preferred_gender_requirement` do người dùng khai `[§2.2]`. Ưu tiên 2: tham số giới tính trong `search_histories` gần nhất. Ưu tiên 3: suy từ `listings.gender_requirement` của các tin `ROOMMATE` đã lưu. Không đủ căn cứ → `ANY` | *"Giới tính nếu là ở ghép"* `[§2.4]` SRCH‑07 |
 
 > **Ba mục còn lại của `[§9.2]` được phủ ở chỗ khác, không phải chiều hồ sơ:** *"Lịch sử xem tin"* / *"Lịch sử tìm kiếm"* là **nguồn** (bảng trọng số ở trên), không phải chiều; *"Tin đang Active trong hệ thống"* là **tập ứng viên** đầu vào của `ListingScorer`, lấy qua `ListingVisibilityService.publicStatuses()` (canonical §5.2) — xem "Bộ lọc bắt buộc" bên dưới.
 
 > **`preferredGenderRequirement` chỉ có nghĩa với tin `ROOMMATE`.** Cột `user_profiles.preferred_gender_requirement` `[§9.2]` được **tiêu thụ tại đây** (`UserPreferenceProfileBuilder` đọc, `ListingScorer` chấm `genderMatch`) — đây là module duy nhất dùng nó, ngoài `search` (SRCH‑07 lọc cứng theo tham số người dùng nhập tại thời điểm tìm). Khác biệt: `search` **lọc cứng**, recommendation **chấm điểm mềm**.
 
-> Thang trọng số 1/2/3/5 phản ánh **mức cam kết**: xem là tò mò, tìm kiếm là có chủ đích, lưu là quan tâm, **liên hệ là tín hiệu mạnh nhất** — người đó thật sự muốn thuê. Đây là hiện thực trực tiếp của `[§9.2]` *"Hệ thống thu thập hành vi hợp lệ"*.
+> Thang trọng số 1/2/3/5 phản ánh **mức cam kết**: xem là tò mò, tìm kiếm là có chủ đích, lưu là tín hiệu quan tâm mạnh. Đây là hiện thực trực tiếp của `[§9.2]` *"Hệ thống thu thập hành vi hợp lệ"*.
 
 **Công thức chấm điểm (canonical §10.2):**
 
@@ -1726,7 +1683,7 @@ Bảng `recommendation_logs` (02_THIET_KE_DATABASE.md) lưu **từng** điểm t
 |---|---|
 | **Chỉ trả tin public** | Gọi `ListingSearchService`, vốn dùng `ListingVisibilityService.publicStatuses()` (canonical §5.2). Chatbot **không** có đường truy cập DB riêng |
 | **Không bịa thông tin ngoài DB** | `ChatbotResponseBuilder` chỉ render từ `ListingSummaryResponse` trả về. Không có LLM sinh văn bản tự do → **về mặt kiến trúc, chatbot không thể bịa** |
-| Không cam kết còn phòng | `[§9.3]` *"Tự cam kết phòng còn trống"* bị cấm. Template luôn kèm "Vui lòng liên hệ chủ trọ để xác nhận" |
+| Không cam kết còn phòng | `[§9.3]` *"Tự cam kết phòng còn trống"* bị cấm. Template luôn kèm "Vui lòng gọi theo số điện thoại trên tin hoặc nhắn tin cho chủ trọ để xác nhận" |
 | Không tư vấn pháp lý | Intent `OUT_OF_SCOPE` → trả lời giới hạn hỗ trợ |
 | Không đặt cọc / thương lượng thay người dùng | Không có endpoint nào cho việc đó `[§13.3]` |
 | Không tạo tin thay chủ trọ | `[§9.3]` |
@@ -1750,50 +1707,43 @@ Bảng `recommendation_logs` (02_THIET_KE_DATABASE.md) lưu **từng** điểm t
 | Hạng mục | Nội dung |
 |---|---|
 | **Interface** | `PriceEstimator` — `PriceEstimate estimate(PriceEstimateInput input)` |
-| **Impl** | `ComparableHedonicPriceEstimator` (canonical §10.4) |
-| **Thành phần phụ** | `ComparableFinder`, `HedonicAdjuster`, `ConfidenceCalculator`, `StatisticsUtil` |
+| **Impl mặc định** | `RentalApiLightgbmPriceEstimator` — `@Primary`, version `lgbm-api-1.0`, gọi FastAPI `rental-api` |
+| **Impl còn trong mã nguồn** | `ComparableHedonicPriceEstimator` — version `hedonic-1.0`, không được chọn mặc định và không tự chạy khi FastAPI lỗi |
+| **Hạ tầng** | Docker Compose: `rental-api:8000`; backend ngoài Docker mặc định gọi `localhost:8002`; connect timeout `PT2S`, request timeout `PT3S` |
 
 **Input** `[§9.4]`: khu vực (`wardId`/`districtId`/`provinceId`), diện tích, loại nhà (`categoryId`), số phòng, số toilet, nội thất (`FurnitureStatus`), mặt tiền/hẻm, khoảng cách tới trung tâm (`GeoUtil`), tiện ích, tình trạng phòng.
+
+**Input** được backend map sang FastAPI: `districtId`/`wardId` → tên địa giới đã bỏ tiền tố;
+`categoryId` → `room_type`; `amenityIds`, `furnitureStatus`, `toiletType` → danh sách tiện ích;
+`area` → `area_m2`; tọa độ lấy từ request hoặc từ phường.
 
 **Output** `[§9.4]`:
 
 | Trường | Ghi chú |
 |---|---|
-| `suggestedPrice` | `BigDecimal` — giá đề xuất (median) |
-| `priceLow` / `priceMedium` / `priceHigh` | Percentile **25 / 50 / 75** (canonical §10.4) |
-| `confidence` | `PriceConfidence`: `HIGH`, `MEDIUM`, `LOW`, `INSUFFICIENT_DATA` (canonical §5) |
-| `sampleSize` | Số comparable dùng — minh bạch với chủ trọ |
-| `explanation` | `[§9.4]` *"Giá cao hơn do gần trung tâm và có nội thất"* — sinh từ hệ số hedonic đã áp dụng |
+| `suggestedPrice` | Giá `predicted_price_million` từ FastAPI, đổi từ triệu đồng sang đồng |
+| `priceLow` / `priceMedium` / `priceHigh` | `price_range[0]` / giá dự đoán / `price_range[1]`, đổi sang đồng |
+| `confidence` | `HIGH`/`MEDIUM`/`LOW`, tính từ `market_sample_count`, `mape_pct` và `ai.price.min_samples` |
+| `sampleSize` | `market_sample_count` do FastAPI trả về |
+| `explanation` | Chuỗi gồm loại model, giá dự đoán, phạm vi benchmark, số mẫu và độ mới nếu có |
 | `deviationRatio` | `|giá nhập − giá đề xuất| / giá đề xuất` |
 | `flagged` | `deviationRatio > ai.price.deviation_flag_ratio` (0.35) |
 
-**Thuật toán 6 bước (canonical §10.4):**
+**Luồng implementation đang hoạt động:**
 
 | Bước | Nội dung |
 |---|---|
-| 1 | Lấy **comparable**: cùng `ward` (nới dần `district` → `province` nếu thiếu mẫu), cùng `category`, diện tích **±30%**, tin `ACTIVE`/`CLOSED` trong **180 ngày** |
-| 2 | Nếu `n < ai.price.min_samples` (=8) → **`INSUFFICIENT_DATA`, KHÔNG dự đoán** `[§9.4]` |
-| 3 | Giá cơ sở = `median(price/m²) × diện tích` |
-| 4 | Điều chỉnh **hedonic** (hệ số cấu hình được): nội thất đầy đủ **+12%**, toilet riêng **+8%**, thang máy **+7%**, chỗ để xe **+5%**, giờ tự do **+3%**, mặt tiền **+15%**, khoảng cách trung tâm |
-| 5 | Khoảng = percentile **25 / 50 / 75**. Confidence theo `n` và độ phân tán (**IQR/median**) |
-| 6 | `deviationRatio > 0.35` → **ghi flag**, cảnh báo **mềm**, **TUYỆT ĐỐI KHÔNG CHẶN ĐĂNG TIN** `[§3.3]` `[§9.4]`. Lưu `PredictionHistory` **mọi lần** |
+| 1 | Kiểm `ai.price.enabled`; nếu có `listingId`, kiểm tra tin tồn tại và thuộc người gọi |
+| 2 | Kiểm tra category/province/district/ward tồn tại, đúng quan hệ cha-con và khu vực được hỗ trợ |
+| 3 | `RentalApiLightgbmPriceEstimator` map input và gọi `POST /predict` bằng HTTP/1.1 |
+| 4 | FastAPI validate input và chạy model từ `model.joblib` với `RENTAL_BACKEND=sklearn` |
+| 5 | Backend đổi đơn vị triệu đồng → đồng, tính confidence và độ lệch so với `inputPrice` |
+| 6 | Lưu `PredictionHistory`; nếu có `listingId`, cập nhật cờ lệch giá và prediction id gần nhất |
 
-> **Vì sao dùng median chứ không phải mean:** thị trường thuê trọ có outlier mạnh (một căn hộ cao cấp lẫn trong dãy trọ). Mean bị outlier kéo lệch; median không. Tương tự, dùng **IQR/median** đo phân tán thay vì độ lệch chuẩn. Đây là lý do `min_samples` = 8 là đủ — với thống kê thứ hạng, 8 mẫu cho median ổn định hơn nhiều so với mean.
->
-> **Vì sao `n < 8` thì KHÔNG dự đoán thay vì dự đoán kèm "độ tin cậy thấp":** `[§9.4]` *"Nếu dữ liệu đầu vào thiếu hoặc quá khác thường, hệ thống **không dự đoán** hoặc báo độ tin cậy thấp"*. Chọn "không dự đoán" vì một con số hiện lên màn hình sẽ được chủ trọ tin, bất kể nhãn cảnh báo bên cạnh. Thà không nói còn hơn nói sai — đúng `[§9.4]` *"Không hiển thị AI như nguồn đảm bảo chính xác tuyệt đối"*.
-
-**Điều kiện kích hoạt `[§5.5]` + `[§5.9]`:**
-
-| Sự kiện | Nguồn |
-|---|---|
-| Chủ trọ nhập đủ thông tin tin đăng | `[§5.5]`, `[§3.3]` bước 8 |
-| Sửa các trường ảnh hưởng giá | `[§5.5]` |
-| Đổi **khu vực** | `[§5.9]` |
-| Đổi **diện tích** | `[§5.9]` |
-| Đổi **loại nhà** | `[§5.9]` |
-| Đổi **số phòng / số toilet** | `[§5.9]` |
-| Đổi **nội thất hoặc tiện ích quan trọng** | `[§5.9]` |
-| Admin cập nhật mô hình / cấu hình vùng giá | `[§5.9]` — đổi `ai.price.*` |
+**Điểm gọi trong frontend hiện tại:** `ListingWizard` gọi khi người dùng bấm **Tính lại** hoặc
+**Tiếp tục** tại bước Giá & tiện ích. Chế độ sửa gửi `listingId`; chế độ tạo gọi một lần trước khi
+có id và gọi lại sau `POST /api/listings` với id vừa tạo. Không có cơ chế debounce/useEffect tự
+gọi lại theo từng thay đổi field.
 
 **Quy tắc bất khả xâm phạm** `[§3.16]` `[§9.4]`:
 
@@ -1802,15 +1752,15 @@ Bảng `recommendation_logs` (02_THIET_KE_DATABASE.md) lưu **từng** điểm t
 | Giá AI **chỉ là tham khảo**, không bắt buộc | `PricePredictionResponse` là dữ liệu hiển thị; `CreateListingRequest.price` **không** validate theo giá AI |
 | **Không chặn đăng tin** chỉ vì giá khác dự đoán | Không có `@AssertTrue` nào so `price` với `suggestedPrice`. `ListingServiceImpl` **không** gọi `PriceEstimator` trong đường ghi |
 | Giá lệch lớn → **đánh dấu cần kiểm duyệt** | Ghi `flagged` + `deviationRatio` → Admin lọc `[§9.4]` *"Admin có thể dùng danh sách tin lệch giá lớn để kiểm duyệt"* |
-| Lưu `PredictionHistory` mọi lần | `[§3.16]` *"Kết quả dự đoán cần lưu để phục vụ báo cáo và đánh giá chất lượng AI"* |
+| Lưu `PredictionHistory` | Lưu sau khi estimator trả về kết quả (kể cả kết quả `available=false` của implementation comparable); lỗi validation/kết nối/timeout xảy ra trước đó không tạo dòng lịch sử |
 
 **Timeout & lỗi:**
 
 | Tình huống | Xử lý |
 |---|---|
-| Không đủ mẫu | `INSUFFICIENT_DATA` → FE hiện "Chưa đủ dữ liệu khu vực này để đưa giá tham khảo" `[§3.16]` |
-| Engine lỗi / timeout `ai.price.timeout_ms` = 2000 — **[BỔ SUNG NGOÀI CANONICAL]** | `PricePredictionPanel` hiện trạng thái lỗi nhẹ. **Form đăng tin vẫn submit được** — đây là điểm bắt buộc |
-| `ai.price.enabled = false` `[§10.10]` | Panel ẩn; endpoint trả `503 AI_SERVICE_UNAVAILABLE` |
+| FastAPI trả lỗi 4xx | Backend trả `400 AI_PRICE_INPUT_INVALID` |
+| Không kết nối được, lỗi 5xx hoặc timeout | Backend trả `503 AI_SERVICE_UNAVAILABLE`; `ListingWizard` bắt lỗi và vẫn cho lưu/gửi tin |
+| `ai.price.enabled = false` `[§10.10]` | Endpoint trả `503 AI_MODULE_DISABLED`; `ListingWizard` vẫn cho lưu/gửi tin |
 
 ### 6.6. Nguyên tắc: AI hỗ trợ, KHÔNG thay thế kiểm duyệt con người `[§0.2]` `[§10.10]` `[§15]`
 
@@ -1848,44 +1798,21 @@ Canonical §10 chốt: *"AI **không bao giờ** tự khóa tài khoản; chỉ 
 
 > **Ghi chú về `listing.auto_approve.trusted_landlord`** (canonical §9, mặc định `false`): `[§3.3]` luồng phụ có nêu *"Nếu chủ trọ đã được xác thực, hệ thống có thể tự động duyệt tin ít rủi ro"*. Đây là **rule cấu hình do Admin bật**, dựa trên trạng thái xác thực thủ công + `trust_score` — **không** phải AI quyết định. Mặc định `false` đúng tinh thần `[§15]` trục 3. Khi bật, `ModerationAction` vẫn được ghi với actor `SYSTEM` để truy vết.
 
-### 6.7. Vì sao rule-based/thống kê trong Java thay vì service ML riêng
+### 6.7. Ranh giới triển khai AI hiện tại
 
-**Quyết định: cả 4 module AI hiện thực bằng rule-based/thống kê, viết bằng Java, chạy trong tiến trình Spring Boot.** Không có service Python/ML, không có model training pipeline, không có container thứ 6.
+Các engine vẫn nằm sau interface (`SentimentAnalyzer`, `RecommendationEngine`, `ChatbotEngine`,
+`PriceEstimator`), nhưng cách triển khai không còn đồng nhất hoàn toàn:
 
-**Căn cứ 1 — `[§13.2]` nói thẳng ra mức triển khai:**
+| Module | Implementation đang dùng | Tiến trình |
+|---|---|---|
+| Sentiment | `VietnameseLexiconSentimentAnalyzer` | Spring Boot |
+| Recommendation | `ContentBasedRecommendationEngine` | Spring Boot |
+| Chatbot | `RuleBasedChatbotEngine` | Spring Boot |
+| Price Prediction | `RentalApiLightgbmPriceEstimator` → FastAPI `/predict` → `model.joblib` LightGBM | Spring Boot + container `rental-api` |
 
-| Trích dẫn `[§13.2]` | Ý nghĩa |
-|---|---|
-| Recommendation: *"Dùng **rule-based kết hợp điểm hành vi**, không cần thuật toán phức tạp"* | Chốt luôn phương pháp |
-| Price Prediction: *"Hiển thị **khoảng giá tham khảo**, không cần giải thích **ML sâu**"* | Chốt luôn đầu ra |
-
-Đây không phải suy diễn — tài liệu nghiệp vụ đã chọn sẵn.
-
-**Căn cứ 2 — `[§0.2]` phạm vi:** *"AI ở mức hỗ trợ quyết định"*. Giá trị của đồ án nằm ở **nghiệp vụ AI được tích hợp đúng chỗ, đúng ngưỡng, có log, tắt được, không vượt quyền** — không nằm ở độ tinh vi của mô hình.
-
-**Căn cứ 3 — vấn đề dữ liệu lạnh (quyết định nhất):** ML giám sát cần **dữ liệu huấn luyện có nhãn**. Hệ thống mới triển khai có **0 bình luận đã gán nhãn cảm xúc**, **0 giao dịch thuê thành công**. Không có tập huấn luyện thì không có mô hình — bất kể chọn thuật toán gì. Rule-based/thống kê **chạy đúng từ ngày đầu tiên với 0 dữ liệu lịch sử**, và cải thiện dần khi dữ liệu tích lũy (`ComparableFinder` càng nhiều comparable càng chính xác). Đây là lập luận kỹ thuật, không phải lập luận "cho dễ".
-
-**Căn cứ 4 — ràng buộc "không bịa" là ràng buộc kiến trúc:** `[§3.15]` cấm chatbot tạo thông tin ngoài DB; `[§9.4]` cấm trình bày AI như nguồn chính xác tuyệt đối. Rule-based cho **đảm bảo cứng**; mô hình sinh chỉ cho **xác suất**. Với hệ thống mà người dùng ra quyết định thuê nhà, đảm bảo cứng thắng.
-
-**Căn cứ 5 — giải thích được `[§9.2]` `[§9.4]` `[§10.10]`:** yêu cầu gốc đòi *"RecommendationLog để **giải thích** và đánh giá hiệu quả"* và *"Gợi ý **giải thích đơn giản**: 'Giá cao hơn do gần trung tâm và có nội thất'"*. Với công thức có trọng số tường minh, `reason` sinh ra **trực tiếp từ các số hạng của công thức**. Với mạng nơ-ron, phải thêm cả LIME/SHAP — nhiều công sức hơn để đạt kết quả kém trực quan hơn.
-
-**Căn cứ 6 — chi phí vận hành trong `[§0.2]`:** canonical §1.3 chốt `docker compose up --build` dựng **5 service**. Service ML riêng = +1 container, +runtime Python, +HTTP client, +xử lý timeout/retry liên tiến trình, +versioning model — đổi lại lợi ích gần bằng 0 khi không có dữ liệu huấn luyện.
-
-**Bảng so sánh:**
-
-| Tiêu chí | Rule-based/thống kê trong Java (**chọn**) | Service ML riêng (Python) | LLM API bên ngoài |
-|---|---|---|---|
-| Chạy được với 0 dữ liệu lịch sử | ✔ | ✘ (cần tập huấn luyện) | ✔ |
-| Thỏa `[§13.2]` "rule-based", "không ML sâu" | ✔ | ✘ (vượt mức) | ✘ (vượt mức) |
-| Đảm bảo cứng "không bịa" `[§3.15]` | ✔ (kiến trúc) | ◐ | ✘ (hallucination) |
-| Giải thích được `[§9.2]` `[§9.4]` | ✔ (trọng số tường minh) | ◐ (cần XAI) | ✘ |
-| Số container thêm | 0 | +1 | 0 (nhưng phụ thuộc mạng ngoài) |
-| Độ trễ | ms (in-process) | +HTTP round-trip | +mạng ngoài, biến động |
-| Chi phí tiền | 0 | 0 | Trả theo token |
-| Hoạt động offline / khi chấm đồ án không có mạng | ✔ | ✔ | ✘ **rủi ro chí mạng** |
-| Đường nâng cấp | Thay impl sau interface (mục 12) | — | — |
-
-**Đường nâng cấp được giữ mở (`[§11.6]`):** cả 4 engine nằm **sau interface** (`SentimentAnalyzer`, `RecommendationEngine`, `ChatbotEngine`, `PriceEstimator`). Nâng cấp sang ML thật = viết impl mới (VD `PhoBertSentimentAnalyzer` gọi HTTP tới service Python) + đổi `@Primary`/config. **Không** phải sửa `CommentServiceImpl`, không phải sửa controller, không phải sửa DB. Đây chính là giá trị của việc canonical §10 chốt "interface + impl" ngay từ đầu — kiến trúc đã trả trước chi phí cho khả năng thay thế.
+`ComparableHedonicPriceEstimator` vẫn implement cùng interface để có thể được chọn bằng cấu hình
+bean/code, nhưng hiện không có cơ chế tự động chuyển sang implementation này khi `rental-api` lỗi.
+Lỗi dịch vụ ngoài được chuẩn hóa thành `AI_SERVICE_UNAVAILABLE`.
 
 ---
 
@@ -2120,7 +2047,7 @@ Hạ tầng: Redis 7.4 + `spring-boot-starter-data-redis` (Lettuce), `CacheManag
 | `home:featured` | Tin nổi bật trang chủ | `home:featured:{provinceId or 'all'}` | **5 phút** | TTL tự hết (không evict thủ công) | `[§11.11]` *"Cache trang chủ trong **thời gian ngắn**"* |
 | `home:newest` | Tin mới nhất trang chủ | `home:newest:{provinceId or 'all'}` | **5 phút** | TTL tự hết | `[§11.11]` |
 | `home:popular_areas` | Top khu vực nhiều tin | `home:popular_areas` | **1 giờ** | TTL | `[§7.1]` *"khu vực phổ biến"* |
-| `ai:recommendation` | Kết quả gợi ý | `ai:recommendation:{userId}:{source}:{contextHash}` | **15 phút** (`ai.recommendation.cache_ttl_minutes`) | Người dùng lưu tin / liên hệ tin → evict theo `userId` (hồ sơ nhu cầu vừa đổi) | `[§11.11]` *"Cache kết quả gợi ý có TTL"`, canonical §9 |
+| `ai:recommendation` | Kết quả gợi ý | `ai:recommendation:{userId}:{source}:{contextHash}` | **15 phút** (`ai.recommendation.cache_ttl_minutes`) | Người dùng lưu hoặc bỏ lưu tin → evict theo `userId` (hồ sơ nhu cầu vừa đổi) | `[§11.11]` *"Cache kết quả gợi ý có TTL"`, canonical §9 |
 | `ai:recommendation:coldstart` | Gợi ý cold start (khách) | `ai:recommendation:coldstart:{provinceId or 'all'}` | **15 phút** | TTL | `[§9.2]` |
 | `listing:related` | Tin liên quan (SRCH-09) | `listing:related:{listingId}` | **30 phút** | Tin đổi trạng thái → evict | `[§2.4]` SRCH-09 |
 | `stat:dashboard` | Số liệu dashboard | `stat:dashboard:{date}` | **10 phút** | TTL | `[§10.1]` — aggregate nặng |
@@ -2174,7 +2101,6 @@ Hạ tầng: Redis 7.4 + `spring-boot-starter-data-redis` (Lettuce), `CacheManag
 | `conversations`, `messages` | Nội dung riêng tư |
 | `notifications` | Cá nhân |
 | `payments` | Tài chính `[§11.1]` |
-| `contact_logs` | Ai liên hệ ai — nhạy cảm |
 | `reports` | Danh tính người báo cáo — lộ ra sẽ gây trả đũa |
 | `audit_logs` | Chỉ `AUDIT_LOG_VIEW` |
 
@@ -2227,7 +2153,6 @@ Hạ tầng: Redis 7.4 + `spring-boot-starter-data-redis` (Lettuce), `CacheManag
 | `idx_favorites_user_listing` (UNIQUE `uk_favorites_user_listing`) | `(user_id, listing_id)` | `[§3.9]` *"Một người dùng chỉ lưu một tin một lần"* — **unique constraint là nơi thi hành luật này**, không phải if trong service |
 | `idx_view_histories_user_created` | `(user_id, created_at)` | HIST-02 + input recommendation |
 | `idx_view_histories_listing_user_created` | `(listing_id, user_id, created_at)` | Chống đếm view trùng `view.dedup_minutes` = 30 `[§3.8]` |
-| `idx_contact_logs_listing_user_created` | `(listing_id, user_id, created_at)` | Chống trùng `contact.dedup_minutes` = 60 `[§3.10]` |
 | `idx_comments_listing_status_created` | `(listing_id, status, created_at)` | Danh sách bình luận |
 | `idx_reviews_listing_status` | `(listing_id, status)` | Danh sách đánh giá + tính `average_rating` |
 | `uk_reviews_user_listing` | UNIQUE `(user_id, listing_id)` | `[§3.12]` *"Một người dùng chỉ đánh giá một tin một lần"* |
@@ -2296,7 +2221,6 @@ Hạ tầng: Redis 7.4 + `spring-boot-starter-data-redis` (Lettuce), `CacheManag
 | Hạng mục | Quyết định |
 |---|---|
 | Connection pool | HikariCP `maximum-pool-size = ${DB_POOL_SIZE:20}`. **Không** để mặc định lớn hơn số connection MySQL cho phép |
-| Đếm view/favorite/contact | `[§6.3]` có sẵn `view_count`, `favorite_count`, `contact_count` trên `listings` — **denormalize có chủ đích**. Đếm `COUNT(*)` mỗi lần hiển thị danh sách 20 tin = 20 query aggregate. Cập nhật bằng `UPDATE listings SET view_count = view_count + 1 WHERE id = ?` (atomic, không đọc-sửa-ghi → không mất lượt khi đồng thời) |
 | Chống đếm view trùng | `view.dedup_minutes` = 30 `[§3.8]` *"Không tính nhiều lượt xem liên tục từ cùng người dùng/IP trong thời gian ngắn"* — kiểm bằng Redis key `view:dedup:{listingId}:{userId or ip}` TTL 30 phút, **rẻ hơn nhiều** so với query `view_histories` |
 | `average_rating` | Denormalize trên `listings` + `landlord_profiles`, cập nhật khi có review mới `[§8.6]` |
 | Nén HTTP | nginx `gzip on` cho JSON/JS/CSS |

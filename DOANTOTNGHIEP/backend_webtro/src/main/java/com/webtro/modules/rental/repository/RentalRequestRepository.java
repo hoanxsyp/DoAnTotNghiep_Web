@@ -54,6 +54,10 @@ public interface RentalRequestRepository extends JpaRepository<RentalRequest, Lo
     boolean existsByListingIdAndTenantIdAndStatusInAndDeletedAtIsNull(
             Long listingId, Long tenantId, Collection<RentalRequestStatus> statuses);
 
+    /** Lần thuê gần nhất của người thuê trong một phòng (qua bất kỳ tin nào của phòng). */
+    Optional<RentalRequest> findFirstByRentalUnitIdAndTenantIdAndStatusInAndDeletedAtIsNullOrderByRentedAtDesc(
+            Long rentalUnitId, Long tenantId, Collection<RentalRequestStatus> statuses);
+
     boolean existsByListingIdAndStatusAndDeletedAtIsNull(Long listingId, RentalRequestStatus status);
 
     boolean existsByTenantIdAndStatusAndDeletedAtIsNull(Long tenantId, RentalRequestStatus status);

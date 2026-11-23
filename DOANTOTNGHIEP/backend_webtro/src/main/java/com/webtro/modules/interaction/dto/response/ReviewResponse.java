@@ -27,6 +27,12 @@ public class ReviewResponse {
 
     private Long id;
     private Long listingId;
+    /** Phòng được đánh giá. */
+    private Long rentalUnitId;
+    private String rentalUnitName;
+    /** Tin mà người đánh giá đã thuê qua — để hiện "thuê qua tin tháng MM/YYYY" (RE-2). */
+    private String rentedViaListingTitle;
+    private java.time.Instant rentedViaListingCreatedAt;
     private Integer rating;
     private String content;
     private String status;

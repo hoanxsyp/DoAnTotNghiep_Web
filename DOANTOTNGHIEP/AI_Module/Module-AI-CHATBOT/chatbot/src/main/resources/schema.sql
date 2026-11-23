@@ -1,7 +1,7 @@
 -- =====================================================================
 -- Schema module Chatbot AI tìm phòng — MVP (Giai đoạn 1)
 -- Tương ứng §5.2 (poi), §8 (room + chat_log) của SPEC.
--- Chạy tự động khi khởi động (spring.sql.init.mode=always).
+-- Chạy tự động khi khởi động nếu SQL_INIT_MODE=always (mặc định never).
 -- =====================================================================
 
 -- --- Bảng ROOM ---------------------------------------------------------
@@ -60,6 +60,17 @@ CREATE TABLE IF NOT EXISTS room_view (
     room_id    BIGINT NOT NULL,
     viewed_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     KEY idx_room_view_user (user_id, viewed_at)
+);
+
+-- --- Bảng LISTING_EMBEDDING — cache vector mô tả cho semantic rerank (§12.1) ---
+-- Dùng cho CẢ phòng demo (db:<id>) lẫn tin đăng thật của web (backend:<id>), thay cho
+-- cột room.description_vector cũ (vẫn còn trong bảng room nhưng không dùng nữa).
+-- description_hash (SHA-256 mô tả) đổi -> vector được tính lại.
+CREATE TABLE IF NOT EXISTS listing_embedding (
+    listing_key      VARCHAR(40) PRIMARY KEY,
+    description_hash VARCHAR(64) NOT NULL,
+    vector           JSON        NOT NULL,
+    updated_at       TIMESTAMP   NULL
 );
 
 -- --- Bảng CHAT_LOG — §8 (đánh giá + tái huấn luyện) -------------------

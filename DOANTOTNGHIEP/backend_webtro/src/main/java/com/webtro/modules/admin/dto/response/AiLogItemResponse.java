@@ -29,6 +29,7 @@ public class AiLogItemResponse {
 
     @Schema(description = "Thời điểm ghi nhận")
     private Instant createdAt;
+    private String module;
 
     // ---- chung ----
     private Long userId;

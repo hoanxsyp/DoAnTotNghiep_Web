@@ -1,11 +1,14 @@
 package com.webtro.modules.listing.service.impl;
 
 import com.webtro.common.PageResponse;
+import com.webtro.common.event.ListingViewedEvent;
+import com.webtro.common.event.ListingWithdrawnEvent;
 import com.webtro.common.enums.CategoryCode;
 import com.webtro.common.enums.ListingStatus;
 import com.webtro.constant.ConfigKey;
 import com.webtro.constant.ErrorCode;
 import com.webtro.constant.RoleCode;
+import com.webtro.exception.BusinessException;
 import com.webtro.exception.BusinessRuleException;
 import com.webtro.exception.ConflictException;
 import com.webtro.exception.ForbiddenException;
@@ -40,6 +43,7 @@ import com.webtro.modules.listing.dto.response.RenewResponse;
 import com.webtro.modules.listing.entity.Listing;
 import com.webtro.modules.listing.entity.ListingAmenity;
 import com.webtro.modules.listing.entity.ListingImage;
+import com.webtro.modules.listing.entity.RentalUnit;
 import com.webtro.modules.listing.mapper.ListingMapper;
 import com.webtro.modules.listing.repository.ListingAmenityRepository;
 import com.webtro.modules.listing.repository.ListingImageRepository;
@@ -48,8 +52,11 @@ import com.webtro.modules.listing.service.ListingCategoryCountPublisher;
 import com.webtro.modules.listing.service.ListingOwnerStatsPublisher;
 import com.webtro.modules.listing.service.ListingService;
 import com.webtro.modules.listing.service.ListingVisibilityService;
+import com.webtro.modules.listing.service.RentalUnitSupport;
 import com.webtro.modules.listing.spi.FavoriteStatusGateway;
 import com.webtro.modules.interaction.spi.RentalEligibilityGateway;
+import com.webtro.modules.interaction.repository.FavoriteRepository;
+import com.webtro.modules.interaction.repository.ViewHistoryRepository;
 import com.webtro.modules.listing.statemachine.ListingEvent;
 import com.webtro.modules.listing.statemachine.ListingStateMachine;
 import com.webtro.modules.payment.entity.PromotionPackage;
@@ -65,6 +72,7 @@ import com.webtro.util.SlugUtil;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -82,11 +90,13 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -100,6 +110,8 @@ import java.util.Set;
 public class ListingServiceImpl implements ListingService {
 
     private static final ZoneId ZONE_VN = ZoneId.of("Asia/Ho_Chi_Minh");
+    private static final int DEFAULT_STATS_DAYS = 30;
+    private static final int MAX_STATS_DAYS = 180;
 
     private final ListingRepository listingRepository;
     private final ListingImageRepository imageRepository;
@@ -125,6 +137,10 @@ public class ListingServiceImpl implements ListingService {
     private final PromotionPackageRepository promotionPackageRepository;
     private final FavoriteStatusGateway favoriteStatusGateway;
     private final RentalEligibilityGateway rentalEligibilityGateway;
+    private final RentalUnitSupport rentalUnitSupport;
+    private final ApplicationEventPublisher eventPublisher;
+    private final ViewHistoryRepository viewHistoryRepository;
+    private final FavoriteRepository favoriteRepository;
 
     // ==================================================================
     //  CRUD
@@ -137,7 +153,6 @@ public class ListingServiceImpl implements ListingService {
 
         Category category = requireActiveCategory(req.getCategoryId());
         validateCategoryAllowedForCurrentRole(category.getCode());
-        validateLocation(req.getProvinceId(), req.getDistrictId(), req.getWardId());
         validateAmenities(req.getAmenityIds());
         validateTextLengths(req.getTitle(), req.getDescription());
         validateAvailableFrom(req.getAvailableFrom());
@@ -148,8 +163,10 @@ public class ListingServiceImpl implements ListingService {
         enforcePostingNotSuspended(userId);
 
         String title = HtmlSanitizer.stripAllHtml(req.getTitle());
-        String description = HtmlSanitizer.stripAllHtml(req.getDescription());
-        String addressDetail = HtmlSanitizer.stripAllHtml(req.getAddressDetail());
+        String description = HtmlSanitizer.stripAllHtmlKeepLines(req.getDescription());
+
+        // RU-1: mỗi tin thuộc một phòng — chọn phòng có sẵn hoặc tạo phòng mới từ địa chỉ gửi kèm.
+        RentalUnit unit = resolveUnitForNewListing(req, userId, title);
 
         Listing listing = Listing.builder()
                 .ownerId(userId)
@@ -162,10 +179,6 @@ public class ListingServiceImpl implements ListingService {
                 .depositAmount(defaultZero(req.getDepositAmount()))
                 .electricityPrice(req.getElectricityPrice())
                 .waterPrice(req.getWaterPrice())
-                .wardId(req.getWardId())
-                .addressDetail(addressDetail)
-                .latitude(req.getLatitude())
-                .longitude(req.getLongitude())
                 .roomCount(req.getRoomCount())
                 .toiletCount(req.getToiletCount())
                 .toiletType(req.getToiletType())
@@ -183,19 +196,120 @@ public class ListingServiceImpl implements ListingService {
                 .floorCount(req.getFloorCount())
                 .status(ListingStatus.DRAFT)
                 .build();
+        rentalUnitSupport.attach(listing, unit);
         listing = listingRepository.save(listing);
         ownerStatsPublisher.publishIfChanged(null, listing);
+        // Tin mới của phòng đã có đánh giá mang ngay điểm hiện tại của phòng (mục 10.3).
+        listingRepository.copyRatingFromUnit(unit.getId());
 
         replaceAmenities(listing, req.getAmenityIds());
 
-        int displayDays = config.getInt(ConfigKey.LISTING_DISPLAY_DAYS);
         String statusName = listing.getStatus().name();
-
         if (Boolean.TRUE.equals(req.getSubmitImmediately())) {
             ListingActionResponse submitResult = submit(listing.getId());
             statusName = submitResult.getStatus();
         }
+        return createdResponse(listing, statusName);
+    }
 
+    /**
+     * Phòng cho tin mới (RU-1). Có {@code rentalUnitId}: khoá phòng và kiểm tra RU-2, địa chỉ gửi
+     * kèm bị bỏ qua. Không có: tạo phòng mới từ địa chỉ gửi kèm (chặn trùng với phòng của chính
+     * chủ trọ, RU-6).
+     */
+    private RentalUnit resolveUnitForNewListing(ListingCreateRequest req, Long userId, String title) {
+        if (req.getRentalUnitId() != null) {
+            return rentalUnitSupport.lockForNewListing(req.getRentalUnitId(), userId);
+        }
+        if (req.getProvinceId() == null || req.getDistrictId() == null || req.getWardId() == null
+                || req.getAddressDetail() == null || req.getAddressDetail().isBlank()) {
+            throw new BusinessException(ErrorCode.RENTAL_UNIT_ADDRESS_REQUIRED);
+        }
+        Ward ward = validateLocation(req.getProvinceId(), req.getDistrictId(), req.getWardId());
+        if (SecurityUtils.hasRole(RoleCode.TENANT)) {
+            // Người thuê (tin ở ghép) không có màn "Phòng của tôi" để chọn phòng: đăng lại cùng địa
+            // chỉ thì tự dùng lại phòng cũ của chính họ thay vì báo trùng.
+            Optional<RentalUnit> own = rentalUnitSupport.findSameOwnerDuplicate(userId, ward.getId(),
+                    req.getAddressDetail(), req.getUnitLabel(), null);
+            if (own.isPresent()) {
+                return rentalUnitSupport.lockForNewListing(own.get().getId(), userId);
+            }
+        }
+        String unitName = req.getUnitName() == null || req.getUnitName().isBlank() ? title : req.getUnitName();
+        return rentalUnitSupport.createUnit(userId, truncate(unitName, 150),
+                new RentalUnitSupport.UnitAddress(ward, req.getAddressDetail(), req.getUnitLabel(),
+                        req.getLatitude(), req.getLongitude()));
+    }
+
+    /**
+     * Đăng lại phòng (RE-2, RU-2): tạo tin nháp mới cho phòng, sao chép nội dung, tiện ích và ảnh
+     * của tin gần nhất. Phòng phải còn dùng và không có tin sống; đánh giá của phòng tự hiện trên
+     * tin mới vì gắn với phòng.
+     */
+    @Override
+    @Transactional
+    public ListingCreateResponse relist(Long rentalUnitId) {
+        Long userId = requireCurrentUserId();
+        RentalUnit unit = rentalUnitSupport.lockForNewListing(rentalUnitId, userId);
+        Listing source = listingRepository.findAllByRentalUnit(rentalUnitId).stream().findFirst()
+                .orElseThrow(() -> new BusinessRuleException(ErrorCode.RENTAL_UNIT_NO_LISTING_TO_RELIST));
+        Category category = requireActiveCategory(source.getCategoryId());
+        validateCategoryAllowedForCurrentRole(category.getCode());
+        enforcePostingQuota(userId);
+        enforcePostingNotSuspended(userId);
+
+        LocalDate availableFrom = source.getAvailableFrom() != null
+                && source.getAvailableFrom().isBefore(LocalDate.now(ZONE_VN)) ? null : source.getAvailableFrom();
+        Listing listing = Listing.builder()
+                .ownerId(userId)
+                .categoryId(source.getCategoryId())
+                .title(source.getTitle())
+                .slug(uniqueSlug(source.getTitle()))
+                .description(source.getDescription())
+                .price(source.getPrice())
+                .area(source.getArea())
+                .depositAmount(source.getDepositAmount())
+                .electricityPrice(source.getElectricityPrice())
+                .waterPrice(source.getWaterPrice())
+                .roomCount(source.getRoomCount())
+                .toiletCount(source.getToiletCount())
+                .toiletType(source.getToiletType())
+                .maxOccupants(source.getMaxOccupants())
+                .currentOccupants(source.getCurrentOccupants())
+                .genderRequirement(source.getGenderRequirement())
+                .petAllowed(source.getPetAllowed())
+                .parkingAvailable(source.getParkingAvailable())
+                .curfewType(source.getCurfewType())
+                .furnitureStatus(source.getFurnitureStatus())
+                .availableFrom(availableFrom)
+                .floorCount(source.getFloorCount())
+                .status(ListingStatus.DRAFT)
+                .build();
+        rentalUnitSupport.attach(listing, unit);
+        listing = listingRepository.save(listing);
+        ownerStatsPublisher.publishIfChanged(null, listing);
+        listingRepository.copyRatingFromUnit(unit.getId());
+
+        replaceAmenities(listing, amenityLinkRepository.findAmenityIdsByListingIdAlive(source.getId()));
+        for (ListingImage image : imageRepository.findByListingIdAlive(source.getId())) {
+            imageRepository.save(ListingImage.builder()
+                    .listing(listing)
+                    .url(image.getUrl())
+                    .thumbnailUrl(image.getThumbnailUrl())
+                    .isPrimary(image.getIsPrimary())
+                    .displayOrder(image.getDisplayOrder())
+                    .originalName(image.getOriginalName())
+                    .fileSize(image.getFileSize())
+                    .contentType(image.getContentType())
+                    .width(image.getWidth())
+                    .height(image.getHeight())
+                    .build());
+        }
+        return createdResponse(listing, listing.getStatus().name());
+    }
+
+    private ListingCreateResponse createdResponse(Listing listing, String statusName) {
+        int displayDays = config.getInt(ConfigKey.LISTING_DISPLAY_DAYS);
         int imageCount = imageRepository.findByListingIdAlive(listing.getId()).size();
         List<String> nextSteps = new ArrayList<>();
         if (imageCount < config.getInt(ConfigKey.LISTING_IMAGE_MIN)) {
@@ -232,7 +346,11 @@ public class ListingServiceImpl implements ListingService {
 
         Category category = requireActiveCategory(req.getCategoryId());
         validateCategoryAllowedForCurrentRole(category.getCode());
-        validateLocation(req.getProvinceId(), req.getDistrictId(), req.getWardId());
+        // Địa chỉ là của phòng (RU-3): chỉ xét khi gửi đủ bộ địa chỉ; thiếu thì giữ nguyên.
+        boolean addressProvided = req.getProvinceId() != null && req.getDistrictId() != null
+                && req.getWardId() != null && req.getAddressDetail() != null && !req.getAddressDetail().isBlank();
+        Ward ward = addressProvided
+                ? validateLocation(req.getProvinceId(), req.getDistrictId(), req.getWardId()) : null;
         validateAmenities(req.getAmenityIds());
         validateTextLengths(req.getTitle(), req.getDescription());
         validateAvailableFrom(req.getAvailableFrom());
@@ -240,8 +358,8 @@ public class ListingServiceImpl implements ListingService {
                 req.getMaxOccupants(), req.getCurrentOccupants());
 
         String newTitle = HtmlSanitizer.stripAllHtml(req.getTitle());
-        String newDescription = HtmlSanitizer.stripAllHtml(req.getDescription());
-        String newAddress = HtmlSanitizer.stripAllHtml(req.getAddressDetail());
+        String newDescription = HtmlSanitizer.stripAllHtmlKeepLines(req.getDescription());
+        String newAddress = addressProvided ? HtmlSanitizer.stripAllHtml(req.getAddressDetail()).trim() : null;
 
         ListingStatus statusBefore = listing.getStatus();
         ListingCategoryCountPublisher.Snapshot categoryCountBefore = categoryCountPublisher.snapshot(listing);
@@ -251,15 +369,17 @@ public class ListingServiceImpl implements ListingService {
         // ----- Trường nhạy cảm (đổi trên tin ACTIVE → duyệt lại) -----
         detect(changes, "title", listing.getTitle(), newTitle, true);
         detect(changes, "description", listing.getDescription(), newDescription, true);
-        detect(changes, "price", str(listing.getPrice()), str(req.getPrice()), true);
-        LocationParts currentLocation = locationOf(listing.getWardId());
-        detect(changes, "provinceId", str(currentLocation.provinceId()), str(req.getProvinceId()), true);
-        detect(changes, "districtId", str(currentLocation.districtId()), str(req.getDistrictId()), true);
-        detect(changes, "wardId", str(listing.getWardId()), str(req.getWardId()), true);
-        detect(changes, "addressDetail", listing.getAddressDetail(), newAddress, true);
+        detectDecimal(changes, "price", listing.getPrice(), req.getPrice(), true);
+        if (addressProvided) {
+            LocationParts currentLocation = locationOf(listing.getWardId());
+            detect(changes, "provinceId", str(currentLocation.provinceId()), str(req.getProvinceId()), true);
+            detect(changes, "districtId", str(currentLocation.districtId()), str(req.getDistrictId()), true);
+            detect(changes, "wardId", str(listing.getWardId()), str(req.getWardId()), true);
+            detect(changes, "addressDetail", listing.getAddressDetail(), newAddress, true);
+        }
         // ----- Trường nhỏ (giữ nguyên trạng thái) -----
         detect(changes, "categoryId", str(listing.getCategoryId()), str(req.getCategoryId()), false);
-        detect(changes, "area", str(listing.getArea()), str(req.getArea()), false);
+        detectDecimal(changes, "area", listing.getArea(), req.getArea(), false);
         detect(changes, "maxOccupants", str(listing.getMaxOccupants()), str(req.getMaxOccupants()), false);
 
         // Áp dụng thay đổi
@@ -272,10 +392,15 @@ public class ListingServiceImpl implements ListingService {
         listing.setDepositAmount(defaultZero(req.getDepositAmount()));
         listing.setElectricityPrice(req.getElectricityPrice());
         listing.setWaterPrice(req.getWaterPrice());
-        listing.setWardId(req.getWardId());
-        listing.setAddressDetail(newAddress);
-        listing.setLatitude(req.getLatitude());
-        listing.setLongitude(req.getLongitude());
+        if (addressProvided) {
+            // Đổi địa chỉ phòng rồi chép sang mọi tin của phòng. Phòng đã có đánh giá thì khoá
+            // địa chỉ, kể cả khi tin đang ẩn (lỗ hổng 7) — chỉ ADMIN được đổi.
+            RentalUnit unit = rentalUnitSupport.requireAlive(listing.getRentalUnitId());
+            rentalUnitSupport.changeAddress(unit,
+                    new RentalUnitSupport.UnitAddress(ward, newAddress, req.getUnitLabel(),
+                            req.getLatitude(), req.getLongitude()),
+                    SecurityUtils.hasRole(RoleCode.ADMIN), listing);
+        }
         listing.setRoomCount(req.getRoomCount());
         listing.setToiletCount(req.getToiletCount());
         listing.setToiletType(req.getToiletType());
@@ -342,6 +467,8 @@ public class ListingServiceImpl implements ListingService {
         listingRepository.save(listing);
         categoryCountPublisher.publishIfChanged(categoryCountBefore, listing);
         ownerStatsPublisher.publishIfChanged(ownerStatsBefore, listing);
+        eventPublisher.publishEvent(new ListingWithdrawnEvent(listing.getId(), listing.getTitle(),
+                "Tin đăng đã bị xóa"));
     }
 
     // ==================================================================
@@ -448,9 +575,13 @@ public class ListingServiceImpl implements ListingService {
         ListingOwnerStatsPublisher.Snapshot ownerStatsBefore = ownerStatsPublisher.snapshot(listing);
         ListingStatus target = stateMachine.transition(before, ListingEvent.CLOSE);
         listing.setStatus(target);
+        listing.setCloseReason(req.getReason());
         listingRepository.save(listing);
         categoryCountPublisher.publishIfChanged(categoryCountBefore, listing);
         ownerStatsPublisher.publishIfChanged(ownerStatsBefore, listing);
+        // Yêu cầu thuê đang chờ của tin này không còn ý nghĩa (lỗ hổng 10).
+        eventPublisher.publishEvent(new ListingWithdrawnEvent(listing.getId(), listing.getTitle(),
+                "Tin đăng đã được chủ trọ đóng"));
 
         return ListingActionResponse.builder()
                 .id(listing.getId())
@@ -476,13 +607,16 @@ public class ListingServiceImpl implements ListingService {
 
         int displayDays = config.getInt(ConfigKey.LISTING_DISPLAY_DAYS);
         int freeLimit = config.getInt(ConfigKey.LISTING_RENEW_FREE_PER_MONTH);
-        LandlordProfile profile = landlordProfileRepository.findByUser_IdAndDeletedAtIsNull(userId)
-                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.LANDLORD_PROFILE_NOT_FOUND));
-        resetFreeRenewIfNewMonth(profile);
-        int freeUsed = nz(profile.getFreeRenewUsedThisMonth());
+        // Tenant (tin ở ghép) không có hồ sơ chủ trọ → không tính lượt, luôn gia hạn miễn phí
+        LandlordProfile profile = landlordProfileRepository.findByUser_IdAndDeletedAtIsNull(userId).orElse(null);
+        int freeUsed = 0;
+        if (profile != null) {
+            resetFreeRenewIfNewMonth(profile);
+            freeUsed = nz(profile.getFreeRenewUsedThisMonth());
+        }
 
         // ----- Chọn gói trả phí → tạo giao dịch (kích hoạt ở callback), không gia hạn ngay -----
-        if (req.getPackageId() != null) {
+        if (profile != null && req.getPackageId() != null) {
             PromotionPackage pkg = promotionPackageRepository.findByIdAndDeletedAtIsNull(req.getPackageId())
                     .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.PACKAGE_NOT_FOUND));
             if (!Boolean.TRUE.equals(pkg.getIsActive())) {
@@ -492,7 +626,7 @@ public class ListingServiceImpl implements ListingService {
         }
 
         // ----- Hết lượt miễn phí → hướng sang thanh toán (200, không phải lỗi) -----
-        if (freeUsed >= freeLimit) {
+        if (profile != null && freeUsed >= freeLimit) {
             return paymentRequiredResponse(listing, freeUsed, freeLimit,
                     promotionPackageRepository.findByIsActiveTrueAndDeletedAtIsNullOrderByDisplayOrderAsc());
         }
@@ -513,11 +647,7 @@ public class ListingServiceImpl implements ListingService {
         categoryCountPublisher.publishIfChanged(categoryCountBefore, listing);
         ownerStatsPublisher.publishIfChanged(ownerStatsBefore, listing);
 
-        profile.setFreeRenewUsedThisMonth(freeUsed + 1);
-        landlordProfileRepository.save(profile);
-
-        int used = freeUsed + 1;
-        return RenewResponse.builder()
+        RenewResponse.RenewResponseBuilder response = RenewResponse.builder()
                 .id(listing.getId())
                 .status(target.name())
                 .previousStatus(before.name())
@@ -525,10 +655,19 @@ public class ListingServiceImpl implements ListingService {
                 .expiredAt(listing.getExpiredAt())
                 .displayDays(displayDays)
                 .free(true)
+                .paymentRequired(false);
+        if (profile == null) {
+            return response.build(); // không giới hạn lượt → bỏ trống các trường freeRenew*
+        }
+
+        profile.setFreeRenewUsedThisMonth(freeUsed + 1);
+        landlordProfileRepository.save(profile);
+
+        int used = freeUsed + 1;
+        return response
                 .freeRenewUsed(used)
                 .freeRenewLimit(freeLimit)
                 .freeRenewRemaining(Math.max(0, freeLimit - used))
-                .paymentRequired(false)
                 .build();
     }
 
@@ -555,6 +694,9 @@ public class ListingServiceImpl implements ListingService {
 
         if (countView && visibilityService.publiclyVisible(listing)) {
             maybeCountView(listing, viewerId, clientIp);
+            if (!owner) {
+                eventPublisher.publishEvent(new ListingViewedEvent(listing.getId(), viewerId, clientIp));
+            }
         }
 
         boolean authenticated = viewerId != null;
@@ -621,24 +763,28 @@ public class ListingServiceImpl implements ListingService {
         if (!owner && !SecurityUtils.hasRole(RoleCode.ADMIN)) {
             throw new ForbiddenException(ErrorCode.LISTING_FORBIDDEN);
         }
-        if (from != null && to != null && to.isBefore(from)) {
-            throw new BusinessRuleException(ErrorCode.STATISTIC_RANGE_INVALID);
+        LocalDate effectiveTo = to != null ? to : LocalDate.now(ZONE_VN);
+        LocalDate effectiveFrom = from != null ? from : effectiveTo.minusDays(DEFAULT_STATS_DAYS);
+        if (effectiveTo.isBefore(effectiveFrom)) {
+            throw new BusinessRuleException(ErrorCode.STATISTIC_RANGE_INVALID,
+                    "Ngày bắt đầu phải trước ngày kết thúc");
+        }
+        if (effectiveFrom.plusDays(MAX_STATS_DAYS).isBefore(effectiveTo)) {
+            throw new BusinessRuleException(ErrorCode.STATISTIC_RANGE_INVALID,
+                    "Khoảng thống kê tối đa 180 ngày");
         }
 
-        int views = nz(listing.getViewCount());
-        int contacts = nz(listing.getContactCount());
-        BigDecimal conversion = views == 0 ? BigDecimal.ZERO
-                : BigDecimal.valueOf(contacts).multiply(BigDecimal.valueOf(100))
-                        .divide(BigDecimal.valueOf(views), 2, RoundingMode.HALF_UP);
+        Instant rangeStart = effectiveFrom.atStartOfDay(ZONE_VN).toInstant();
+        Instant rangeEnd = effectiveTo.plusDays(1).atStartOfDay(ZONE_VN).toInstant();
 
+        int views = nz(listing.getViewCount());
         ListingStatsResponse.Summary summary = ListingStatsResponse.Summary.builder()
                 .viewCount(views)
+                .uniqueViewerCount(viewHistoryRepository.countUniqueViewersByListingId(id))
                 .favoriteCount(nz(listing.getFavoriteCount()))
-                .contactCount(contacts)
                 .commentCount(nz(listing.getCommentCount()))
                 .reviewCount(nz(listing.getReviewCount()))
                 .averageRating(listing.getAverageRating())
-                .conversionRatePercent(conversion)
                 .daysActive(daysBetween(listing.getPublishedAt(), Instant.now()))
                 .daysRemaining(remainingDays(listing.getExpiredAt()))
                 .build();
@@ -656,8 +802,46 @@ public class ListingServiceImpl implements ListingService {
                 .status(listing.getStatus().name())
                 .summary(summary)
                 .promotion(promotion)
-                .timeSeries(List.of())
+                .timeSeries(buildListingTimeSeries(id, effectiveFrom, effectiveTo, rangeStart, rangeEnd))
                 .build();
+    }
+
+    private List<ListingStatsResponse.TimeSeriesPoint> buildListingTimeSeries(
+            Long listingId, LocalDate from, LocalDate to, Instant rangeStart, Instant rangeEnd) {
+        Map<LocalDate, Long> views = dailyMap(
+                viewHistoryRepository.countDailyViewsForListingBetween(listingId, rangeStart, rangeEnd));
+        Map<LocalDate, Long> favorites = dailyMap(
+                favoriteRepository.countDailyFavoritesForListingBetween(listingId, rangeStart, rangeEnd));
+        List<ListingStatsResponse.TimeSeriesPoint> result = new ArrayList<>();
+        for (LocalDate date = from; !date.isAfter(to); date = date.plusDays(1)) {
+            result.add(ListingStatsResponse.TimeSeriesPoint.builder()
+                    .date(date.toString())
+                    .views(Math.toIntExact(views.getOrDefault(date, 0L)))
+                    .favorites(Math.toIntExact(favorites.getOrDefault(date, 0L)))
+                    .build());
+        }
+        return result;
+    }
+
+    private Map<LocalDate, Long> dailyMap(List<Object[]> rows) {
+        Map<LocalDate, Long> result = new HashMap<>();
+        for (Object[] row : rows) {
+            LocalDate date = toLocalDate(row[0]);
+            if (date != null) {
+                result.put(date, ((Number) row[1]).longValue());
+            }
+        }
+        return result;
+    }
+
+    private LocalDate toLocalDate(Object value) {
+        if (value instanceof LocalDate localDate) {
+            return localDate;
+        }
+        if (value instanceof java.sql.Date sqlDate) {
+            return sqlDate.toLocalDate();
+        }
+        return value == null ? null : LocalDate.parse(value.toString());
     }
 
     // ==================================================================
@@ -889,14 +1073,6 @@ public class ListingServiceImpl implements ListingService {
         listingRepository.save(listing);
     }
 
-    @Override
-    @Transactional
-    public void incrementContactCount(Long listingId) {
-        Listing listing = loadAlive(listingId);
-        listing.setContactCount(nz(listing.getContactCount()) + 1);
-        listingRepository.save(listing);
-    }
-
     // ==================================================================
     //  Helper riêng tư
     // ==================================================================
@@ -950,22 +1126,13 @@ public class ListingServiceImpl implements ListingService {
         return category;
     }
 
-    private void validateLocation(Long provinceId, Long districtId, Long wardId) {
-        Province province = provinceRepository.findById(provinceId)
-                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.PROVINCE_NOT_FOUND));
-        if (!Boolean.TRUE.equals(province.getIsActive())) {
-            throw new BusinessRuleException(ErrorCode.AREA_NOT_SUPPORTED);
-        }
-        District district = districtRepository.findById(districtId)
-                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.DISTRICT_NOT_FOUND));
-        if (district.getProvince() == null || !Objects.equals(district.getProvince().getId(), provinceId)) {
-            throw new BusinessRuleException(ErrorCode.ADDRESS_HIERARCHY_MISMATCH);
-        }
-        Ward ward = wardRepository.findById(wardId)
-                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.WARD_NOT_FOUND));
-        if (ward.getDistrict() == null || !Objects.equals(ward.getDistrict().getId(), districtId)) {
-            throw new BusinessRuleException(ErrorCode.ADDRESS_HIERARCHY_MISMATCH);
-        }
+    private static String truncate(String value, int max) {
+        String v = value == null ? "" : value.trim();
+        return v.length() <= max ? v : v.substring(0, max);
+    }
+
+    private Ward validateLocation(Long provinceId, Long districtId, Long wardId) {
+        return rentalUnitSupport.resolveWard(provinceId, districtId, wardId);
     }
 
     private LocationParts locationOf(Long wardId) {
@@ -1038,8 +1205,12 @@ public class ListingServiceImpl implements ListingService {
                 cb.greaterThanOrEqualTo(root.get("createdAt"), startOfDay));
         long todayCount = listingRepository.count(spec);
 
-        if (todayCount >= config.getInt(ConfigKey.SPAM_LISTING_DAILY)) {
-            throw new BusinessRuleException(ErrorCode.LISTING_QUOTA_DAILY);
+        int limit = config.getInt(ConfigKey.SPAM_LISTING_DAILY);
+        if (todayCount >= limit) {
+            // Lấy đúng số trong cấu hình (admin đổi được), không ghi cứng trong thông báo.
+            throw new BusinessRuleException(ErrorCode.LISTING_QUOTA_DAILY,
+                    "Bạn đã đạt giới hạn " + limit + " tin mỗi ngày (tính cả tin nháp và tin đã xoá). "
+                            + "Vui lòng thử lại vào ngày mai.");
         }
     }
 
@@ -1148,17 +1319,33 @@ public class ListingServiceImpl implements ListingService {
         }
     }
 
+    /**
+     * Đặt tập tiện ích của tin bằng cách chỉ đổi phần khác biệt: giữ liên kết còn dùng, xoá mềm liên
+     * kết bị bỏ, khôi phục liên kết đã xoá mềm khi gắn lại. Không chèn trùng vì khoá unique
+     * {@code (listing_id, amenity_id)} áp cho cả dòng đã xoá mềm (trước đây xoá mềm hết rồi chèn lại
+     * nên mọi lần sửa tin có tiện ích đều lỗi 500).
+     */
     private void replaceAmenities(Listing listing, List<Long> amenityIds) {
-        List<ListingAmenity> existing = amenityLinkRepository.findByListingIdAlive(listing.getId());
+        Set<Long> desired = amenityIds == null
+                ? Set.of()
+                : new java.util.LinkedHashSet<>(amenityIds);
+        List<ListingAmenity> existing = amenityLinkRepository
+                .findByListingIdIncludingDeleted(listing.getId());
+        Set<Long> existingIds = new HashSet<>();
         existing.forEach(link -> {
-            link.softDelete();
-            amenityLinkRepository.save(link);
+            existingIds.add(link.getAmenityId());
+            if (desired.contains(link.getAmenityId())) {
+                link.restore();
+            } else {
+                link.softDelete();
+            }
         });
-        if (amenityIds == null) {
-            return;
-        }
-        Set<Long> distinct = new java.util.LinkedHashSet<>(amenityIds);
-        for (Long amenityId : distinct) {
+        amenityLinkRepository.saveAll(existing);
+
+        for (Long amenityId : desired) {
+            if (existingIds.contains(amenityId)) {
+                continue;
+            }
             ListingAmenity link = ListingAmenity.builder()
                     .listing(listing)
                     .amenityId(amenityId)
@@ -1171,7 +1358,9 @@ public class ListingServiceImpl implements ListingService {
         String base = SlugUtil.toSlug(title);
         String candidate = base;
         int suffix = 1;
-        while (listingRepository.existsBySlugAndDeletedAtIsNull(candidate)) {
+        // Kiểm tra cả tin đã xoá mềm: uk_listings_slug áp cho mọi dòng, nên dùng lại slug của tin
+        // đã xoá sẽ lỗi trùng khoá (gặp khi đăng lại phòng có tin cũ đã bị xoá).
+        while (listingRepository.existsBySlug(candidate)) {
             suffix++;
             candidate = base + "-" + suffix;
         }
@@ -1190,6 +1379,15 @@ public class ListingServiceImpl implements ListingService {
                         boolean sensitive) {
         if (!Objects.equals(oldValue, newValue)) {
             changes.add(new Change(field, oldValue, newValue, sensitive));
+        }
+    }
+
+    private void detectDecimal(List<Change> changes, String field, BigDecimal oldValue,
+                               BigDecimal newValue, boolean sensitive) {
+        boolean equal = oldValue == null ? newValue == null
+                : newValue != null && oldValue.compareTo(newValue) == 0;
+        if (!equal) {
+            changes.add(new Change(field, str(oldValue), str(newValue), sensitive));
         }
     }
 

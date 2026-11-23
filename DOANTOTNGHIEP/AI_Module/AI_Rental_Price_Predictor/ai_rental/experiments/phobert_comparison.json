@@ -1,0 +1,84 @@
+{
+  "model": "vinai/phobert-base-v2",
+  "method": "word-segmented structured features; last transformer layers and regression head fine-tuned",
+  "features": [
+    "area_m2",
+    "number_of_amenities",
+    "distance_to_center_km",
+    "floor",
+    "posted_month",
+    "listing_age_days",
+    "latitude",
+    "longitude",
+    "population_density_km2",
+    "market_unit_price_million_m2",
+    "market_price_million",
+    "market_sample_count",
+    "market_frecency_score",
+    "market_freshness_days",
+    "market_scope_level",
+    "district",
+    "ward",
+    "room_type",
+    "has_dieu_hoa",
+    "has_khep_kin",
+    "has_ban_cong",
+    "has_thang_may",
+    "has_full_do",
+    "has_gac",
+    "has_may_giat",
+    "has_nong_lanh",
+    "has_wifi",
+    "has_de_xe",
+    "has_coordinates"
+  ],
+  "dataset_rows": 5175,
+  "train_rows": 4206,
+  "test_rows": 969,
+  "fit_rows": 3742,
+  "validation_rows": 464,
+  "split": "GroupShuffleSplit(test_size=0.2, random_state=42) by listing_group",
+  "inner_split": "GroupShuffleSplit(test_size=0.1, random_state=43) within training groups",
+  "lightgbm": {
+    "MAE": 0.44877688135698657,
+    "RMSE": 0.6638621670882068,
+    "R2": 0.7487463247959503,
+    "MAPE": 15.226685894929142
+  },
+  "lightgbm_same_fit": {
+    "MAE": 0.4579436581688788,
+    "RMSE": 0.668705213967244,
+    "R2": 0.7450670312750185,
+    "MAPE": 15.54458597506432
+  },
+  "phobert": {
+    "MAE": 0.8484572340048089,
+    "RMSE": 1.136308986035775,
+    "R2": 0.26387856041546875,
+    "MAPE": 32.269629541749055
+  },
+  "epochs": 3,
+  "best_epoch": 3,
+  "batch_size": 8,
+  "max_length": 160,
+  "train_last_layers": 2,
+  "truncated_rows": 0,
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 0.9607739232353165,
+      "validation_MAE": 1.062390443257836
+    },
+    {
+      "epoch": 2,
+      "train_loss": 0.9208010149657981,
+      "validation_MAE": 0.9940053927250287
+    },
+    {
+      "epoch": 3,
+      "train_loss": 0.8244619575432606,
+      "validation_MAE": 0.8683618157245093
+    }
+  ],
+  "seconds": 3167.6
+}

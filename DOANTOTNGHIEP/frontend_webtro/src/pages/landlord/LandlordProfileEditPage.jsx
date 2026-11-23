@@ -15,10 +15,20 @@ import notify from '@/utils/toast';
 const schema = yup.object({
   contactName: yup.string().trim().required('Vui lòng nhập tên liên hệ').min(2, 'Tối thiểu 2 ký tự').max(100),
   contactPhone: yup.string().trim().required('Vui lòng nhập số điện thoại').matches(/^0\d{9}$/, 'Số điện thoại không hợp lệ'),
-  contactZalo: yup.string().trim().matches(/^(0\d{9})?$/, 'Zalo không hợp lệ'),
+  contactEmail: yup.string().trim().email('Email liên hệ không hợp lệ').max(190),
+  displayName: yup.string().trim().max(100),
   businessName: yup.string().max(150),
   businessAddress: yup.string().max(255),
-  description: yup.string().max(1000),
+});
+
+const profileToForm = (data) => ({
+  contactName: data?.contactName || '',
+  contactPhone: data?.contactPhone || '',
+  contactEmail: data?.contactEmail || '',
+  displayName: data?.displayName || '',
+  businessName: data?.businessName || '',
+  businessAddress: data?.businessAddress || '',
+  chatEnabled: data?.chatEnabled ?? true,
 });
 
 const VERIFY_META = {
@@ -37,7 +47,7 @@ const LandlordProfileEditPage = () => {
     control, handleSubmit, reset, formState: { errors, isSubmitting, isDirty },
   } = useForm({
     resolver: yupResolver(schema),
-    defaultValues: { contactName: '', contactPhone: '', contactZalo: '', businessName: '', businessAddress: '', description: '', chatEnabled: true },
+    defaultValues: profileToForm(null),
   });
 
   const load = useCallback(async () => {
@@ -45,15 +55,7 @@ const LandlordProfileEditPage = () => {
     try {
       const data = await userApi.getLandlordProfile();
       setProfile(data);
-      reset({
-        contactName: data?.contactName || '',
-        contactPhone: data?.contactPhone || '',
-        contactZalo: data?.contactZalo || '',
-        businessName: data?.businessName || '',
-        businessAddress: data?.businessAddress || '',
-        description: data?.description || '',
-        chatEnabled: data?.chatEnabled ?? true,
-      });
+      reset(profileToForm(data));
     } catch (e) {
       notify.apiError(e, 'Không tải được hồ sơ chủ trọ');
     } finally {
@@ -68,14 +70,15 @@ const LandlordProfileEditPage = () => {
       const payload = {
         contactName: values.contactName.trim(),
         contactPhone: values.contactPhone.trim(),
-        contactZalo: values.contactZalo?.trim() || undefined,
+        contactEmail: values.contactEmail?.trim() || null,
+        displayName: values.displayName?.trim() || null,
         businessName: values.businessName?.trim() || undefined,
         businessAddress: values.businessAddress?.trim() || undefined,
-        description: values.description?.trim() || undefined,
         chatEnabled: values.chatEnabled,
       };
       const updated = await userApi.updateLandlordProfile(payload);
       setProfile(updated);
+      reset(profileToForm(updated));
       notify.success('Đã cập nhật hồ sơ chủ trọ');
     } catch (e) {
       notify.apiError(e, 'Cập nhật hồ sơ thất bại');
@@ -108,7 +111,8 @@ const LandlordProfileEditPage = () => {
 
       {profile?.postingSuspended && (
         <Alert severity="error" sx={{ mb: 3 }}>
-          Tài khoản đang tạm bị hạn chế đăng tin do có {profile.warningCountLast30Days} cảnh báo vi phạm trong 30 ngày qua.
+          Tài khoản đang tạm bị hạn chế đăng tin do vi phạm quy định
+          {profile.warningCount != null ? ` (${profile.warningCount} cảnh báo)` : ''}.
         </Alert>
       )}
 
@@ -155,8 +159,13 @@ const LandlordProfileEditPage = () => {
                   )} />
                 </Grid>
                 <Grid item xs={12} sm={6}>
-                  <Controller name="contactZalo" control={control} render={({ field }) => (
-                    <TextField {...field} label="Zalo (tùy chọn)" fullWidth error={!!errors.contactZalo} helperText={errors.contactZalo?.message} />
+                  <Controller name="contactEmail" control={control} render={({ field }) => (
+                    <TextField {...field} label="Email liên hệ (tùy chọn)" fullWidth error={!!errors.contactEmail} helperText={errors.contactEmail?.message} />
+                  )} />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Controller name="displayName" control={control} render={({ field }) => (
+                    <TextField {...field} label="Tên hiển thị công khai" fullWidth error={!!errors.displayName} helperText={errors.displayName?.message} />
                   )} />
                 </Grid>
                 <Grid item xs={12} sm={6}>
@@ -167,11 +176,6 @@ const LandlordProfileEditPage = () => {
                 <Grid item xs={12}>
                   <Controller name="businessAddress" control={control} render={({ field }) => (
                     <TextField {...field} label="Địa chỉ cơ sở" fullWidth error={!!errors.businessAddress} helperText={errors.businessAddress?.message} />
-                  )} />
-                </Grid>
-                <Grid item xs={12}>
-                  <Controller name="description" control={control} render={({ field }) => (
-                    <TextField {...field} label="Giới thiệu" fullWidth multiline minRows={3} error={!!errors.description} helperText={errors.description?.message || 'Tối đa 1000 ký tự'} />
                   )} />
                 </Grid>
                 <Grid item xs={12}>

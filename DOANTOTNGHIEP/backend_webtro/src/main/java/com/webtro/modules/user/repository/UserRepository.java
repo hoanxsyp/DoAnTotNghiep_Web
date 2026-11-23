@@ -4,6 +4,8 @@ import com.webtro.modules.user.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.stereotype.Repository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.Collection;
 import java.util.List;
@@ -40,4 +42,9 @@ public interface UserRepository extends JpaRepository<User, Long>, JpaSpecificat
      * bộ nhân sự vận hành (ADMIN + MODERATOR) mà không phải quét cả bảng.
      */
     List<User> findByRole_CodeInAndDeletedAtIsNull(Collection<String> roleCodes);
+
+    @Query("SELECT u.id FROM User u WHERE u.deletedAt IS NULL AND "
+            + "(LOWER(u.fullName) LIKE LOWER(CONCAT('%', :keyword, '%')) "
+            + "OR LOWER(u.email) LIKE LOWER(CONCAT('%', :keyword, '%')))")
+    List<Long> findActiveIdsByNameOrEmail(@Param("keyword") String keyword);
 }

@@ -17,7 +17,10 @@ import BarChartIcon from '@mui/icons-material/BarChart';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import SendIcon from '@mui/icons-material/Send';
 import AddBoxIcon from '@mui/icons-material/AddBox';
+import ReplayIcon from '@mui/icons-material/Replay';
+import MeetingRoomOutlinedIcon from '@mui/icons-material/MeetingRoomOutlined';
 import listingApi from '@/api/listingApi';
+import rentalUnitApi from '@/api/rentalUnitApi';
 import PageHeader from '@/components/dashboard/PageHeader';
 import LoadingSkeleton from '@/components/common/LoadingSkeleton';
 import EmptyState from '@/components/common/EmptyState';
@@ -38,6 +41,7 @@ const ACTION_META = {
   RENEW: { label: 'Gia hạn', icon: <AutorenewIcon fontSize="small" /> },
   PROMOTE: { label: 'Đẩy tin', icon: <CampaignIcon fontSize="small" /> },
   VIEW_STATS: { label: 'Xem thống kê', icon: <BarChartIcon fontSize="small" /> },
+  RELIST: { label: 'Đăng lại phòng này', icon: <ReplayIcon fontSize="small" /> },
   DELETE: { label: 'Xóa tin', icon: <DeleteOutlineIcon fontSize="small" />, danger: true },
 };
 
@@ -58,6 +62,7 @@ const MyListingsPage = () => {
   const [total, setTotal] = useState(0);
   const [statusCounts, setStatusCounts] = useState({});
   const [status, setStatus] = useState(searchParams.get('status') || '');
+  const expiringWithinDays = Number(searchParams.get('expiringWithinDays')) || null;
   const [keyword, setKeyword] = useState('');
   const [search, setSearch] = useState('');
 
@@ -72,6 +77,7 @@ const MyListingsPage = () => {
       const params = { page, size, sort: 'updatedAt,desc' };
       if (status) params.status = status;
       if (search) params.keyword = search;
+      if (expiringWithinDays) params.expiringWithinDays = expiringWithinDays;
       const data = await listingApi.getMyListings(params);
       setItems(data?.items || []);
       setTotal(data?.totalElements || 0);
@@ -81,14 +87,23 @@ const MyListingsPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, size, status, search]);
+  }, [page, size, status, search, expiringWithinDays]);
 
   useEffect(() => { load(); }, [load]);
 
   const changeStatus = (val) => {
     setStatus(val);
     setPage(0);
-    setSearchParams(val ? { status: val } : {}, { replace: true });
+    const next = new URLSearchParams(searchParams);
+    if (val) next.set('status', val); else next.delete('status');
+    setSearchParams(next, { replace: true });
+  };
+
+  const clearExpiringFilter = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete('expiringWithinDays');
+    setPage(0);
+    setSearchParams(next, { replace: true });
   };
 
   const openMenu = (e, row) => { setMenuAnchor(e.currentTarget); setMenuRow(row); };
@@ -103,6 +118,13 @@ const MyListingsPage = () => {
       else if (action === 'SUBMIT') await listingApi.submit(row.id);
       else if (action === 'CLOSE') await listingApi.close(row.id, payload);
       else if (action === 'DELETE') await listingApi.remove(row.id);
+      else if (action === 'RELIST') {
+        // Tạo tin nháp mới cho phòng (giữ đánh giá của phòng) rồi mở để chỉnh sửa.
+        const created = await rentalUnitApi.relist(row.rentalUnitId);
+        notify.success('Đã tạo tin nháp mới cho phòng. Hãy kiểm tra lại rồi gửi duyệt.');
+        navigate(`/quan-ly/tin-dang/${created.id}/sua`);
+        return;
+      }
       notify.success('Thao tác thành công');
       setConfirm(null);
       load();
@@ -131,14 +153,25 @@ const MyListingsPage = () => {
       />
 
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 2 }} alignItems={{ md: 'center' }} justifyContent="space-between">
-        <ToggleButtonGroup value={status} exclusive size="small" onChange={(_, v) => v !== null && changeStatus(v)} sx={{ flexWrap: 'wrap' }}>
-          {STATUS_TABS.map((s) => (
-            <ToggleButton key={s || 'all'} value={s}>
-              {s ? LISTING_STATUS_META[s]?.label : 'Tất cả'}
-              {s && statusCounts[s] != null ? ` (${statusCounts[s]})` : ''}
-            </ToggleButton>
-          ))}
-        </ToggleButtonGroup>
+        <Stack spacing={1} alignItems="flex-start">
+          <ToggleButtonGroup value={status} exclusive size="small" onChange={(_, v) => v !== null && changeStatus(v)} sx={{ flexWrap: 'wrap' }}>
+            {STATUS_TABS.map((s) => (
+              <ToggleButton key={s || 'all'} value={s}>
+                {s ? LISTING_STATUS_META[s]?.label : 'Tất cả'}
+                {s && statusCounts[s] != null ? ` (${statusCounts[s]})` : ''}
+              </ToggleButton>
+            ))}
+          </ToggleButtonGroup>
+          {expiringWithinDays && (
+            <Chip
+              size="small"
+              color="warning"
+              variant="outlined"
+              label={`Sắp hết hạn trong ${expiringWithinDays} ngày`}
+              onDelete={clearExpiringFilter}
+            />
+          )}
+        </Stack>
         <TextField
           size="small" placeholder="Tìm theo tiêu đề…" value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
@@ -157,16 +190,15 @@ const MyListingsPage = () => {
                 <TableCell>Trạng thái</TableCell>
                 <TableCell align="center">Xem</TableCell>
                 <TableCell align="center">Lưu</TableCell>
-                <TableCell align="center">Liên hệ</TableCell>
                 <TableCell>Hết hạn</TableCell>
                 <TableCell align="right">Hành động</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={7} sx={{ py: 3 }}><LoadingSkeleton variant="table" columns={7} count={6} /></TableCell></TableRow>
+                <TableRow><TableCell colSpan={6} sx={{ py: 3 }}><LoadingSkeleton variant="table" columns={6} count={6} /></TableCell></TableRow>
               ) : items.length === 0 ? (
-                <TableRow><TableCell colSpan={7} sx={{ border: 0 }}>
+                <TableRow><TableCell colSpan={6} sx={{ border: 0 }}>
                   <EmptyState
                     title="Không có tin đăng"
                     description="Chưa có tin nào khớp bộ lọc hiện tại."
@@ -185,6 +217,16 @@ const MyListingsPage = () => {
                         >
                           {row.title}
                         </Typography>
+                        {row.rentalUnitName && (
+                          <Typography
+                            component={RouterLink} to={`/quan-ly/phong/${row.rentalUnitId}`}
+                            variant="caption" color="text.secondary"
+                            sx={{ display: 'flex', alignItems: 'center', gap: 0.5, textDecoration: 'none', maxWidth: 320, '&:hover': { color: 'primary.main' } }}
+                            noWrap
+                          >
+                            <MeetingRoomOutlinedIcon sx={{ fontSize: 14 }} /> {row.rentalUnitName}
+                          </Typography>
+                        )}
                         <Typography variant="caption" color="primary" sx={{ fontWeight: 600 }}>{formatPrice(row.price)}</Typography>
                         {row.promoted && <Chip size="small" color="secondary" label="Nổi bật" sx={{ ml: 1, height: 18 }} />}
                         {row.status === 'REJECTED' && row.rejectReason && (
@@ -198,7 +240,6 @@ const MyListingsPage = () => {
                   <TableCell><StatusChip status={row.status} /></TableCell>
                   <TableCell align="center">{row.viewCount ?? 0}</TableCell>
                   <TableCell align="center">{row.favoriteCount ?? 0}</TableCell>
-                  <TableCell align="center">{row.contactCount ?? 0}</TableCell>
                   <TableCell>
                     {row.expiredAt ? (
                       <Typography variant="caption" color={row.expiringSoon ? 'error' : 'text.secondary'}>
@@ -262,7 +303,7 @@ const MyListingsPage = () => {
         requireReason
         reasonLabel="Lý do đóng tin"
         reasonOptions={CLOSE_REASONS}
-        onConfirm={({ reason, note }) => runAction('CLOSE', confirm.row, { closeReason: reason, note })}
+        onConfirm={({ reason, note }) => runAction('CLOSE', confirm.row, { reason, note })}
         onCancel={() => setConfirm(null)}
       />
     </Box>

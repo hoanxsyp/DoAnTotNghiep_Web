@@ -31,7 +31,7 @@ public interface PaymentService {
 
     /** Bộ lọc danh sách giao dịch phía quản trị. */
     record AdminPaymentFilter(List<PaymentStatus> statuses, List<PaymentMethod> methods, Long userId,
-                              Long listingId, Long packageId, String transactionCode,
+                              Long listingId, Long packageId, String transactionCode, String keyword,
                               BigDecimal amountFrom, BigDecimal amountTo, LocalDate from, LocalDate to) {
     }
 

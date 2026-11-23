@@ -1,7 +1,7 @@
 # DOANTOTNGHIEP — Website quảng cáo và tìm kiếm phòng trọ
 
 Hệ thống website trung gian kết nối **chủ trọ** với **người thuê**, hỗ trợ đăng tin, tìm kiếm,
-lọc, lưu tin, liên hệ, bình luận, đánh giá, báo cáo vi phạm, thanh toán đẩy tin và kiểm duyệt —
+lọc, lưu tin, nhắn tin, bình luận, đánh giá, báo cáo vi phạm, thanh toán đẩy tin và kiểm duyệt —
 kèm **3 module AI**: gợi ý tin đăng, chatbot tìm trọ và dự đoán giá thuê.
 
 > **Đã loại khỏi hệ thống:**

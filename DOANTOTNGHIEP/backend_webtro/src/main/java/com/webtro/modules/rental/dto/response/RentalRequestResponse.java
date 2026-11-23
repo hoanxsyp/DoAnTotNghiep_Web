@@ -13,6 +13,10 @@ import java.time.LocalDate;
 public class RentalRequestResponse {
     private Long id;
     private Long listingId;
+    /** Phòng của yêu cầu thuê (rental_units.id). */
+    private Long rentalUnitId;
+    /** Tên phòng để người thuê/chủ trọ phân biệt các phòng cùng toà nhà. */
+    private String rentalUnitName;
     private String listingTitle;
     private String listingSlug;
     private String listingThumbnailUrl;

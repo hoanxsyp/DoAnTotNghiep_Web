@@ -5,10 +5,10 @@ import com.roomfinder.chat.domain.Poi;
 import com.roomfinder.chat.domain.Room;
 import com.roomfinder.chat.geocoding.GeocodeResult;
 import com.roomfinder.chat.geocoding.GeocodingClient;
+import com.roomfinder.chat.listing.RoomSource;
 import com.roomfinder.chat.model.Filters;
 import com.roomfinder.chat.model.RetrievalResult;
 import com.roomfinder.chat.repository.PoiRepository;
-import com.roomfinder.chat.repository.RoomRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -18,24 +18,24 @@ import java.text.Normalizer;
 import java.util.List;
 
 /**
- * Tầng Retrieval — §5. Filter cứng bằng SQL (giá/diện tích/bán kính),
- * hỗ trợ truy vấn "gần POI" bằng ST_Distance_Sphere, và chiến lược nới lỏng
- * khi 0 kết quả (§5.3) — không bao giờ trả "không tìm thấy" rồi dừng.
+ * Tầng Retrieval — §5. Filter cứng (giá/diện tích/tiện ích/bán kính) qua {@link RoomSource}
+ * (DB demo của chatbot hoặc tin đăng thật của web), hỗ trợ truy vấn "gần POI", và chiến lược
+ * nới lỏng khi 0 kết quả (§5.3) — không bao giờ trả "không tìm thấy" rồi dừng.
  */
 @Service
 public class RetrievalService {
 
     private static final Logger log = LoggerFactory.getLogger(RetrievalService.class);
 
-    private final RoomRepository roomRepo;
+    private final RoomSource roomSource;
     private final PoiRepository poiRepo;
     private final GeocodingClient geocodingClient;
     private final int topK;
     private final int defaultRadius;
 
-    public RetrievalService(RoomRepository roomRepo, PoiRepository poiRepo,
+    public RetrievalService(RoomSource roomSource, PoiRepository poiRepo,
                              GeocodingClient geocodingClient, ChatProperties props) {
-        this.roomRepo = roomRepo;
+        this.roomSource = roomSource;
         this.poiRepo = poiRepo;
         this.geocodingClient = geocodingClient;
         this.topK = props.getTopK();
@@ -97,12 +97,13 @@ public class RetrievalService {
         List<Room> fallback;
         String note;
         if (poi != null) {
-            fallback = roomRepo.searchByGeo(null, null, null, null, null, null, null, null,
-                    poi.getLatitude().doubleValue(), poi.getLongitude().doubleValue(), 50_000, 3);
+            fallback = runQuery(new Filters(), poi, 50_000, 3);
             attachDistance(fallback, poi);
             note = "gợi ý phòng gần " + f.getPoi() + " nhất (đã bỏ các ràng buộc khác)";
         } else {
-            fallback = roomRepo.searchByFilters(null, null, f.getLocation(), null, null, null, null, null, null, 3);
+            Filters onlyLocation = new Filters();
+            onlyLocation.setLocation(f.getLocation());
+            fallback = runQuery(onlyLocation, null, 0, 3);
             note = "gợi ý vài phòng cùng khu vực (đã bỏ các ràng buộc khác)";
         }
         return RetrievalResult.relaxed(fallback, note);
@@ -111,18 +112,22 @@ public class RetrievalService {
     // --- Helpers ---------------------------------------------------------
 
     private List<Room> runQuery(Filters f, Poi poi, double radius, int limit) {
-        Boolean hasAc = f.hasUtility("air_conditioner") ? Boolean.TRUE : null;
-        Boolean hasParking = f.hasUtility("parking") ? Boolean.TRUE : null;
-        Boolean hasWifi = f.hasUtility("wifi") ? Boolean.TRUE : null;
-        Boolean hasWashing = f.hasUtility("washing_machine") ? Boolean.TRUE : null;
-
         if (poi != null) {
-            return roomRepo.searchByGeo(f.getPriceMin(), f.getPriceMax(), f.getAreaMin(),
-                    hasAc, hasParking, hasWifi, hasWashing, f.getRoomType(),
-                    poi.getLatitude().doubleValue(), poi.getLongitude().doubleValue(), radius, limit);
+            return roomSource.search(f, poi.getLatitude().doubleValue(), poi.getLongitude().doubleValue(),
+                    radius, limit);
         }
-        return roomRepo.searchByFilters(f.getPriceMin(), f.getPriceMax(), f.getLocation(),
-                f.getAreaMin(), hasAc, hasParking, hasWifi, hasWashing, f.getRoomType(), limit);
+        return roomSource.search(f, null, null, 0, limit);
+    }
+
+    /**
+     * Span có phải điểm mốc ĐÃ BIẾT trong bảng poi không (chỉ tra bảng, KHÔNG geocode). NER hay gán
+     * "Bách Khoa", "PTIT" là LOCATION khi thiếu chữ "gần" rõ ràng — orchestrator dùng hàm này để
+     * chuyển sang tìm theo bán kính thay vì tìm theo từ khóa khu vực.
+     */
+    public boolean isKnownPoi(String span) {
+        if (span == null || span.isBlank()) return false;
+        String needle = strip(span);
+        return poiRepo.findAll().stream().anyMatch(p -> matchesPoi(p, needle));
     }
 
     /**

@@ -1,4 +1,4 @@
-"""Tách DỮ LIỆU THẬT (đã đánh nhãn) thành train/test cho intent.
+"""Tách DỮ LIỆU THẬT (đã đánh nhãn) thành train/test cho intent VÀ NER.
 
 Nguồn (data thật thu thập từ post/chat, KHÁC với intent_train.jsonl synthetic):
   - intent_data_md_labeled.jsonl   (56 câu, toàn search_room)
@@ -7,6 +7,14 @@ Nguồn (data thật thu thập từ post/chat, KHÁC với intent_train.jsonl s
 Xuất:
   intent_train_real.jsonl  -> phần train (nối vào synthetic khi train)
   intent_test_gold.jsonl   -> tập test THẬT held-out (đánh giá model)
+  ner_train_real.jsonl     -> phần train NER
+  ner_test_gold.jsonl      -> tập test NER THẬT held-out
+
+NER dùng CHUNG tập câu GOLD với intent (nguồn NER: `ner_data_md_labeled.jsonl` +
+`ner_data2_labeled.jsonl`, cùng câu với 2 file intent): câu nào nằm trong
+`intent_test_gold.jsonl` thì vào `ner_test_gold.jsonl`, còn lại vào train. Nhờ vậy
+một câu thật hoặc là test cho CẢ HAI model, hoặc là train — không có câu nào vừa
+test intent vừa train NER, và NER cũng được đóng băng theo GOLD intent.
 
 ## TẬP GOLD ĐƯỢC "ĐÓNG BĂNG" (mặc định)
 
@@ -32,6 +40,9 @@ HERE = Path(__file__).parent
 SOURCES = ["intent_data_md_labeled.jsonl", "intent_data2_labeled.jsonl"]
 GOLD_PATH = HERE / "intent_test_gold.jsonl"
 TRAIN_PATH = HERE / "intent_train_real.jsonl"
+NER_SOURCES = ["ner_data_md_labeled.jsonl", "ner_data2_labeled.jsonl"]
+NER_GOLD_PATH = HERE / "ner_test_gold.jsonl"
+NER_TRAIN_PATH = HERE / "ner_train_real.jsonl"
 TEST_RATIO = 0.20
 SEED = 42
 
@@ -47,11 +58,32 @@ def write_jsonl(path, rows):
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
 
-def load_sources():
+def load_sources(names=SOURCES):
     rows = []
-    for name in SOURCES:
+    for name in names:
         rows += load_jsonl(HERE / name)
     return rows
+
+
+def split_ner(gold_rows):
+    """NER theo cùng tập câu GOLD với intent (xem docstring đầu file)."""
+    missing = [n for n in NER_SOURCES if not (HERE / n).exists()]
+    if missing:
+        print(f"[CANH BAO] Thieu {missing} -> bo qua tach NER.")
+        return
+    rows = load_sources(NER_SOURCES)
+    gold_texts = {r["text"] for r in gold_rows}
+    gold = [r for r in rows if r["text"] in gold_texts]
+    train = [r for r in rows if r["text"] not in gold_texts]
+    write_jsonl(NER_GOLD_PATH, gold)
+    write_jsonl(NER_TRAIN_PATH, train)
+
+    def n_ent(rs):
+        return sum(len(r["entities"]) for r in rs)
+
+    print(f"NER that: {len(rows)} cau -> train {len(train)} ({n_ent(train)} entity) "
+          f"| gold {len(gold)} ({n_ent(gold)} entity)")
+    print("NER gold theo nhan:", dict(Counter(e["label"] for r in gold for e in r["entities"])))
 
 
 def stratified_split(rows):
@@ -112,6 +144,8 @@ def main(refreeze):
     print(f"Tong data that: {len(rows)}  ->  train {len(train)} | gold {len(gold)}")
     print("Train theo intent:", dict(Counter(r['intent'] for r in train)))
     print("Gold  theo intent:", dict(Counter(r['intent'] for r in gold)))
+
+    split_ner(gold)
 
 
 if __name__ == "__main__":

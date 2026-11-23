@@ -20,6 +20,9 @@ public class RoomCardDto {
     private String address;
     private Double distanceM;      // null nếu không tìm theo POI
     private String thumbnail;
+    /** Slug tin trên web; null với phòng demo (nguồn db). */
+    private String slug;
+    /** Link trang tin: web dùng {@code /tin/{slug}-{id}}, phòng demo dùng {@code /rooms/{id}}. */
     private String url;
 
     public static RoomCardDto from(Room r) {
@@ -33,7 +36,8 @@ public class RoomCardDto {
                 .distanceM(r.getDistanceM() == null ? null
                         : Math.round(r.getDistanceM() * 10.0) / 10.0)
                 .thumbnail(r.getThumbnail())
-                .url("/rooms/" + r.getId())
+                .slug(r.getSlug())
+                .url(r.getSlug() != null ? "/tin/" + r.getSlug() + "-" + r.getId() : "/rooms/" + r.getId())
                 .build();
     }
 }

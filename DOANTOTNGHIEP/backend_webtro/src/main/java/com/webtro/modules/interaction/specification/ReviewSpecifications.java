@@ -2,7 +2,7 @@ package com.webtro.modules.interaction.specification;
 
 import com.webtro.common.enums.ReviewStatus;
 import com.webtro.modules.interaction.entity.Review;
-import com.webtro.modules.listing.entity.Listing;
+import com.webtro.modules.listing.entity.RentalUnit;
 import jakarta.persistence.criteria.Root;
 import jakarta.persistence.criteria.Subquery;
 import org.springframework.data.jpa.domain.Specification;
@@ -36,15 +36,20 @@ public final class ReviewSpecifications {
         return (root, q, cb) -> cb.equal(root.get("listingId"), listingId);
     }
 
-    /** Lọc đánh giá về một chủ trọ. */
+    /** Lọc đánh giá của một phòng. */
+    public static Specification<Review> rentalUnitIdEq(Long rentalUnitId) {
+        return (root, q, cb) -> cb.equal(root.get("rentalUnitId"), rentalUnitId);
+    }
+
+    /** Lọc đánh giá về một chủ trọ (mọi phòng của chủ trọ, kể cả phòng có tin đã đóng/xoá). */
     public static Specification<Review> landlordIdEq(Long landlordId) {
         return (root, q, cb) -> {
             Subquery<Long> sub = q.subquery(Long.class);
-            Root<Listing> listing = sub.from(Listing.class);
-            sub.select(listing.get("id"));
+            Root<RentalUnit> unit = sub.from(RentalUnit.class);
+            sub.select(unit.get("id"));
             sub.where(
-                    cb.equal(listing.get("id"), root.get("listingId")),
-                    cb.equal(listing.get("ownerId"), landlordId));
+                    cb.equal(unit.get("id"), root.get("rentalUnitId")),
+                    cb.equal(unit.get("ownerId"), landlordId));
             return cb.exists(sub);
         };
     }

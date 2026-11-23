@@ -41,16 +41,17 @@ public class AdminReviewController {
     @GetMapping
     @PreAuthorize("hasAnyRole('MODERATOR','ADMIN')")
     @Operation(summary = "Danh sách đánh giá (kiểm duyệt)",
-            description = "Lọc theo trạng thái, số sao, tin, chủ trọ và từ khóa nội dung; phân trang.")
+            description = "Lọc theo trạng thái, số sao, tin, phòng, chủ trọ và từ khóa nội dung; phân trang.")
     public ResponseEntity<ApiResponse<PageResponse<AdminReviewResponse>>> list(
             @RequestParam(required = false) ReviewStatus status,
             @RequestParam(required = false) Integer rating,
             @RequestParam(required = false) Long listingId,
+            @RequestParam(required = false) Long rentalUnitId,
             @RequestParam(required = false) Long landlordId,
             @RequestParam(required = false) String keyword,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         PageResponse<AdminReviewResponse> data = reviewService.adminListReviews(
-                status, rating, listingId, landlordId, keyword, pageable);
+                status, rating, listingId, rentalUnitId, landlordId, keyword, pageable);
         return ResponseEntity.ok(ApiResponse.success(data, "Lấy danh sách đánh giá thành công"));
     }
 

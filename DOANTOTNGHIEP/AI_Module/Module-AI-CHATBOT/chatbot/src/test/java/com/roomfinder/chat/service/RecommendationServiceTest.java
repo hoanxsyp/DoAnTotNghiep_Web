@@ -3,7 +3,7 @@ package com.roomfinder.chat.service;
 import com.roomfinder.chat.config.RecommendationProperties;
 import com.roomfinder.chat.domain.Room;
 import com.roomfinder.chat.domain.RoomView;
-import com.roomfinder.chat.repository.RoomRepository;
+import com.roomfinder.chat.listing.RoomSource;
 import com.roomfinder.chat.repository.RoomViewRepository;
 import org.junit.jupiter.api.Test;
 
@@ -20,10 +20,10 @@ import static org.mockito.Mockito.when;
 /** Kiểm thử Recommendation Engine (§12.2, GĐ3) — feature vector + rank thuần logic. */
 class RecommendationServiceTest {
 
-    private final RoomRepository roomRepo = mock(RoomRepository.class);
+    private final RoomSource roomSource = mock(RoomSource.class);
     private final RoomViewRepository viewRepo = mock(RoomViewRepository.class);
     private final RecommendationProperties props = new RecommendationProperties();
-    private final RecommendationService service = new RecommendationService(roomRepo, viewRepo, props);
+    private final RecommendationService service = new RecommendationService(roomSource, viewRepo, props);
 
     private Room room(long id, long price, double area, double lat, double lng, boolean ac, boolean parking) {
         Room r = new Room();
@@ -62,8 +62,7 @@ class RecommendationServiceTest {
         Room cheapAcCandidate = room(3, 2_100_000, 19, 21.00, 105.80, true, true);   // giống phòng đã xem
         Room expensiveCandidate = room(4, 5_800_000, 38, 21.05, 105.85, false, false); // giống phòng còn lại
 
-        List<Room> allRooms = List.of(cheapAc, expensiveNoAc, cheapAcCandidate, expensiveCandidate);
-        when(roomRepo.findAll()).thenReturn(allRooms);
+        when(roomSource.findByIds(List.of(1L))).thenReturn(List.of(cheapAc));
 
         RoomView v1 = new RoomView(42L, 1L);
         v1.setViewedAt(Instant.now().minus(1, ChronoUnit.DAYS));

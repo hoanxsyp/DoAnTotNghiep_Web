@@ -1,6 +1,5 @@
 package com.webtro.modules.user.adapter;
 
-import com.webtro.common.enums.VerificationStatus;
 import com.webtro.constant.ErrorCode;
 import com.webtro.exception.ResourceNotFoundException;
 import com.webtro.modules.interaction.spi.UserGateway;
@@ -22,7 +21,7 @@ import java.util.Optional;
 /**
  * Adapter (module {@code user}) hiện thực {@link UserGateway} mà module {@code interaction} cần —
  * canonical luật 4. Bọc {@link UserRepository} + {@link LandlordProfileRepository}: cung cấp thông
- * tin hiển thị tác giả bình luận/đánh giá, thông tin liên hệ chủ trọ, cờ hạn chế bình luận/liên hệ,
+ * tin hiển thị tác giả bình luận/đánh giá, cờ hạn chế bình luận/nhắn tin,
  * và tổng hợp đánh giá chủ trọ.
  */
 @Component
@@ -31,27 +30,6 @@ public class UserGatewayAdapter implements UserGateway {
 
     private final UserRepository userRepository;
     private final LandlordProfileRepository landlordProfileRepository;
-
-    /** Thông tin liên hệ công khai của chủ trọ; ném {@code USER_NOT_FOUND} nếu không có hồ sơ chủ trọ. */
-    @Override
-    @Transactional(readOnly = true)
-    public LandlordContactInfo getLandlordContactInfo(Long landlordId) {
-        LandlordProfile lp = landlordProfileRepository.findByUser_IdAndDeletedAtIsNull(landlordId)
-                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.USER_NOT_FOUND));
-        User user = lp.getUser();
-        String landlordName = lp.getDisplayName() != null && !lp.getDisplayName().isBlank()
-                ? lp.getDisplayName()
-                : (user != null ? user.getFullName() : null);
-        // Schema landlord_profiles chưa có cột Zalo riêng → trả trùng số liên hệ (canonical 4.6.1).
-        return new LandlordContactInfo(
-                landlordId,
-                landlordName,
-                lp.getContactName(),
-                lp.getContactPhone(),
-                lp.getContactPhone(),
-                Boolean.TRUE.equals(lp.getAllowChat()),
-                lp.getVerificationStatus() == VerificationStatus.VERIFIED);
-    }
 
     /** Thông tin người dùng còn sống; ném {@code USER_NOT_FOUND} nếu không có. */
     @Override
@@ -88,13 +66,19 @@ public class UserGatewayAdapter implements UserGateway {
         return result;
     }
 
-    /** Chủ trọ có bật chat không; false nếu không có hồ sơ chủ trọ. */
+    /** Người đăng tin có bật chat không; không có hồ sơ chủ trọ (tenant đăng tin ở ghép) thì mặc định bật. */
     @Override
     @Transactional(readOnly = true)
     public boolean isLandlordChatEnabled(Long landlordId) {
         return landlordProfileRepository.findByUser_IdAndDeletedAtIsNull(landlordId)
                 .map(lp -> Boolean.TRUE.equals(lp.getAllowChat()))
-                .orElse(false);
+                .orElse(true);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean hasLandlordProfile(Long userId) {
+        return landlordProfileRepository.findByUser_IdAndDeletedAtIsNull(userId).isPresent();
     }
 
     /** Đang bị hạn chế liên hệ không ({@code users.contact_restricted_until} còn hiệu lực). */
@@ -130,11 +114,15 @@ public class UserGatewayAdapter implements UserGateway {
     @Override
     @Transactional
     public void updateLandlordReviewAggregate(Long landlordId, BigDecimal averageRating, int reviewCount) {
-        LandlordProfile lp = landlordProfileRepository.findByUser_IdAndDeletedAtIsNull(landlordId)
-                .orElseThrow(() -> new ResourceNotFoundException(ErrorCode.USER_NOT_FOUND));
-        lp.setAverageRating(averageRating != null ? averageRating : BigDecimal.ZERO);
-        lp.setReviewCount(reviewCount);
-        landlordProfileRepository.save(lp);
+        landlordProfileRepository.applyRating(landlordId,
+                averageRating != null ? averageRating : BigDecimal.ZERO, Math.max(0, reviewCount));
+    }
+
+    /** Khoá hồ sơ chủ trọ (nếu có) trước khi tính lại điểm chủ trọ. */
+    @Override
+    @Transactional
+    public boolean lockLandlordProfile(Long landlordId) {
+        return landlordProfileRepository.findAliveByUserIdForUpdate(landlordId).isPresent();
     }
 
     private UserBrief toBrief(User user) {

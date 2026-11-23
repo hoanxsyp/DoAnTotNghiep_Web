@@ -63,8 +63,11 @@ public class RuleBasedNluService implements NluService {
             Long price = PriceNormalizer.normalize(pm.group(2));
             if (price != null) {
                 String before = pm.group(1);
+                // "rẻ hơn 3 củ"/"thấp hơn 3tr" có chữ "hơn" nhưng là giá tối ĐA
+                boolean cheaperThan = "hơn".equals(before)
+                        && lower.substring(0, pm.start(1)).matches("(?s).*(?:rẻ|thấp|nhỏ|ít|kém)\\s*$");
                 boolean min = "trở lên".equals(pm.group(3))
-                        || (before != null && PRICE_MIN_CUES.contains(before));
+                        || (before != null && PRICE_MIN_CUES.contains(before) && !cheaperThan);
                 if (min) f.setPriceMin(price);
                 else     f.setPriceMax(price);   // mặc định: coi số là ngân sách tối đa
             }
@@ -94,7 +97,8 @@ public class RuleBasedNluService implements NluService {
      * "so sánh phòng 1 và 2" → [1, 2]. Chỉ nhận số nối tiếp NGAY SAU ref đầu
      * (qua "và"/"với"/","), tránh vơ số ở mệnh đề khác của câu.
      */
-    private List<Integer> detectRoomRefs(String s) {
+    /** Dùng chung với LocalNluServiceImpl làm dự phòng khi NER bỏ sót ROOM_REF. Cần chuỗi đã lowercase. */
+    static List<Integer> detectRoomRefs(String s) {
         Set<Integer> refs = new LinkedHashSet<>();
         Matcher m = ROOM_REF.matcher(s);
         if (m.find()) {

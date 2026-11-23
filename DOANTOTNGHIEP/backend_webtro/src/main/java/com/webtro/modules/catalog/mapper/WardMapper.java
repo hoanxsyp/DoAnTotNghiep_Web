@@ -23,6 +23,8 @@ public class WardMapper {
                 .slug(entity.getSlug())
                 .type(entity.getType())
                 .supported(entity.getIsActive())
+                .latitude(entity.getLatitude())
+                .longitude(entity.getLongitude())
                 .listingCount(entity.getListingCount())
                 .build();
     }

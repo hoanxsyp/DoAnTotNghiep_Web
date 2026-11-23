@@ -3,6 +3,7 @@ package com.webtro.modules.admin.service.impl;
 import com.webtro.common.BulkActionResponse;
 import com.webtro.common.PageResponse;
 import com.webtro.common.enums.AuditAction;
+import com.webtro.common.enums.CategoryCode;
 import com.webtro.common.enums.ListingStatus;
 import com.webtro.common.enums.ModerationActionType;
 import com.webtro.common.enums.ModerationResult;
@@ -27,6 +28,8 @@ import com.webtro.modules.admin.service.AdminListingService;
 import com.webtro.modules.admin.service.AuditLogService;
 import com.webtro.modules.admin.service.SystemConfigService;
 import com.webtro.modules.admin.specification.AdminListingSpecifications;
+import com.webtro.modules.catalog.entity.Category;
+import com.webtro.modules.catalog.repository.CategoryRepository;
 import com.webtro.modules.listing.entity.Listing;
 import com.webtro.modules.listing.repository.ListingRepository;
 import com.webtro.modules.listing.service.ListingCategoryCountPublisher;
@@ -38,6 +41,8 @@ import com.webtro.modules.moderation.repository.ModerationActionRepository;
 import com.webtro.modules.moderation.repository.ReportRepository;
 import com.webtro.modules.moderation.spi.ListingModerationGateway;
 import com.webtro.modules.notification.service.NotificationService;
+import com.webtro.modules.user.entity.User;
+import com.webtro.modules.user.repository.UserRepository;
 import com.webtro.util.HtmlSanitizer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -49,7 +54,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Cài đặt {@link AdminListingService}. Mọi chuyển trạng thái đi qua {@link ListingStateMachine};
@@ -73,6 +82,8 @@ public class AdminListingServiceImpl implements AdminListingService {
     private final ApplicationEventPublisher eventPublisher;
     private final ListingCategoryCountPublisher categoryCountPublisher;
     private final ListingOwnerStatsPublisher ownerStatsPublisher;
+    private final CategoryRepository categoryRepository;
+    private final UserRepository userRepository;
 
     /**
      * Tự tham chiếu qua proxy để mỗi phần tử trong thao tác hàng loạt chạy trong một giao dịch
@@ -88,14 +99,21 @@ public class AdminListingServiceImpl implements AdminListingService {
     @Override
     @Transactional(readOnly = true)
     public PageResponse<AdminListingResponse> searchListings(List<ListingStatus> statuses, String keyword,
-                                                             Long ownerId, Long categoryId, Long provinceId,
+                                                             Long ownerId, Long categoryId, CategoryCode categoryCode,
+                                                             Long provinceId,
                                                              Long districtId, Long wardId,
                                                              Boolean priceDeviationFlagged,
                                                              Instant from, Instant to, Pageable pageable) {
+        Long effectiveCategoryId = categoryId;
+        if (effectiveCategoryId == null && categoryCode != null) {
+            effectiveCategoryId = categoryRepository.findByCode(categoryCode)
+                    .map(Category::getId)
+                    .orElse(-1L);
+        }
         Page<Listing> page = listingRepository.findAll(
-                AdminListingSpecifications.filter(statuses, keyword, ownerId, categoryId, provinceId,
+                AdminListingSpecifications.filter(statuses, keyword, ownerId, effectiveCategoryId, provinceId,
                         districtId, wardId, priceDeviationFlagged, from, to), pageable);
-        return PageResponse.from(page, l -> adminListingMapper.toResponse(l, reportCount(l.getId())));
+        return mapPage(page);
     }
 
     private Long reportCount(Long listingId) {
@@ -107,14 +125,13 @@ public class AdminListingServiceImpl implements AdminListingService {
 
     @Override
     @Transactional(readOnly = true)
-    public PageResponse<AdminListingResponse> moderationQueue(Pageable pageable) {
-        // Tin chờ xử lý: PENDING (chờ duyệt) + NEED_REVIEW (bị gắn cờ). Ưu tiên tin cũ trước do
-        // controller đặt sort mặc định createdAt ASC.
-        List<ListingStatus> statuses = List.of(ListingStatus.PENDING, ListingStatus.NEED_REVIEW);
-        Page<Listing> page = listingRepository.findAll(
-                AdminListingSpecifications.filter(statuses, null, null, null, null, null, null,
-                        null, null, null), pageable);
-        return PageResponse.from(page, l -> adminListingMapper.toResponse(l, reportCount(l.getId())));
+    public PageResponse<AdminListingResponse> moderationQueue(ListingStatus status, Pageable pageable) {
+        if (status != ListingStatus.PENDING && status != ListingStatus.NEED_REVIEW) {
+            throw new BusinessException(ErrorCode.VALIDATION_FAILED,
+                    "Trạng thái hàng đợi chỉ chấp nhận PENDING hoặc NEED_REVIEW");
+        }
+        Page<Listing> page = listingRepository.findByStatusAndDeletedAtIsNull(status, pageable);
+        return mapPage(page);
     }
 
     // ============================ Chi tiết ============================
@@ -123,7 +140,42 @@ public class AdminListingServiceImpl implements AdminListingService {
     @Transactional(readOnly = true)
     public AdminListingResponse getListingDetail(Long id) {
         Listing listing = getAnyListing(id);
-        return adminListingMapper.toResponse(listing, reportCount(id));
+        AdminListingResponse response = adminListingMapper.toResponse(listing, reportCount(id));
+        enrichMetadata(List.of(response));
+        return response;
+    }
+
+    private PageResponse<AdminListingResponse> mapPage(Page<Listing> page) {
+        PageResponse<AdminListingResponse> response = PageResponse.from(
+                page, listing -> adminListingMapper.toResponse(listing, reportCount(listing.getId())));
+        enrichMetadata(response.getItems());
+        return response;
+    }
+
+    private void enrichMetadata(List<AdminListingResponse> responses) {
+        Set<Long> categoryIds = responses.stream()
+                .map(AdminListingResponse::getCategoryId)
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toSet());
+        Set<Long> ownerIds = responses.stream()
+                .map(AdminListingResponse::getOwnerId)
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        Map<Long, Category> categories = new HashMap<>();
+        categoryRepository.findAllById(categoryIds).forEach(category -> categories.put(category.getId(), category));
+        Map<Long, User> owners = new HashMap<>();
+        userRepository.findAllById(ownerIds).forEach(owner -> owners.put(owner.getId(), owner));
+
+        for (AdminListingResponse response : responses) {
+            Category category = categories.get(response.getCategoryId());
+            if (category != null) {
+                response.setCategoryCode(category.getCode() == null ? null : category.getCode().name());
+                response.setCategoryName(category.getName());
+            }
+            User owner = owners.get(response.getOwnerId());
+            response.setOwnerName(owner == null ? null : owner.getFullName());
+        }
     }
 
     // ============================ Duyệt ============================
