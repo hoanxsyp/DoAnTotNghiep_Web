@@ -38,7 +38,10 @@ const adminApi = {
   getModerationQueue: (params) => unwrap(axiosClient.get('/admin/moderation-queue', { params })),
 
   // ----- Báo cáo (REPORT_RESOLVE) -----
-  getReports: (params) => unwrap(axiosClient.get('/admin/reports', { params })),
+  getReports: async (params) => {
+    const data = await unwrap(axiosClient.get('/admin/reports', { params }));
+    return params?.groupBy === 'TARGET' ? data : data?.page;
+  },
   resolveReport: (id, payload) => unwrap(axiosClient.put(`/admin/reports/${id}/resolve`, payload)),
   resolveReportGroup: (payload) => unwrap(axiosClient.put('/admin/reports/resolve-group', payload)),
 
