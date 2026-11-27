@@ -13,8 +13,9 @@ sys.stdout = open(sys.stdout.fileno(), mode="w", encoding="utf-8", buffering=1)
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
-from app.recommender.indexer import get_index
-from app.reranker.trainer import generate_training_data, train_model, save_model
+from app.recommender.faiss.indexer import get_index
+from app.reranker.dataset import generate_training_data
+from app.reranker.lightgbm.trainer import train_model, save_model
 
 DATA_DIR = ROOT / "data"
 

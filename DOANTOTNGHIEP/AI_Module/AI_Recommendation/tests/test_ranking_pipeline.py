@@ -2,7 +2,7 @@ import unittest
 
 from app.features.extractor import get_extractor
 from app.reranker.features import AMENITIES, CITIES, FEATURE_DIM, ROOM_TYPES
-from app.reranker.trainer import _temporal_split
+from app.reranker.dataset import temporal_split
 
 
 class RankingPipelineTests(unittest.TestCase):
@@ -30,7 +30,7 @@ class RankingPipelineTests(unittest.TestCase):
             "occurred_at": "2026-09-16T09:00:00+00:00",
         })
 
-        train_events, test_events = _temporal_split(events)
+        train_events, test_events = temporal_split(events)
         train_rooms = {event["room_id"] for event in train_events}
         test_rooms = {event["room_id"] for event in test_events}
         self.assertFalse(train_rooms & test_rooms)

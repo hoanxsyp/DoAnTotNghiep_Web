@@ -16,10 +16,10 @@ from pathlib import Path
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
-from app.recommender.indexer import get_index
+from app.recommender.faiss.indexer import get_index
 from app.recommender.interactions import aggregate_interactions, relevance_label
 from app.reranker.ranker import rerank
-from app.reranker.trainer import _temporal_split
+from app.reranker.dataset import temporal_split
 
 
 DATA_DIR = ROOT / "data"
@@ -29,7 +29,7 @@ MIN_INTERACTIONS = 5
 CANDIDATE_K = 80
 
 
-def _relevance_map(events: list[dict]) -> dict[str, int]:
+def relevance_map(events: list[dict]) -> dict[str, int]:
     return {
         room_id: relevance_label(interaction)
         for room_id, interaction in aggregate_interactions(events).items()
@@ -86,8 +86,8 @@ def evaluate() -> dict:
     started = time.perf_counter()
 
     for user in eligible:
-        train_events, test_events = _temporal_split(events_by_user[user["id"]])
-        relevance = _relevance_map(test_events)
+        train_events, test_events = temporal_split(events_by_user[user["id"]])
+        relevance = relevance_map(test_events)
         if not relevance:
             continue
 

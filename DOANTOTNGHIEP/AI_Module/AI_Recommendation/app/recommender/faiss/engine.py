@@ -15,13 +15,14 @@ Re-rank:
 
 import json
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
 import faiss
 import numpy as np
 
-from app.recommender.indexer import IndexBundle, get_index
+from app.recommender.faiss.indexer import IndexBundle, get_index
 from app.recommender.profile import build_user_profile
 
 # ─── Config ───────────────────────────────────────────────────────────────────
@@ -41,6 +42,28 @@ class RecommendResult:
 
 
 # ─── Core engine ──────────────────────────────────────────────────────────────
+
+def retrieve_candidates(
+    profile: np.ndarray | None,
+    bundle: IndexBundle,
+    excluded_room_ids: set[str],
+    fetch_k: int,
+) -> Iterator[tuple[dict, float]]:
+    """Yield available, unseen rooms in FAISS retrieval order."""
+    if profile is None:
+        return
+
+    query = profile.reshape(1, -1).astype(np.float32)
+    faiss.normalize_L2(query)
+    scores, positions = bundle.index.search(query, fetch_k)
+    for position, score in zip(positions[0], scores[0]):
+        if position == -1:
+            continue
+        room_id = bundle.id_map[position]
+        room = bundle.room_cache.get(room_id)
+        if room is not None and room_id not in excluded_room_ids and room.get("is_available", True):
+            yield room, float(score)
+
 
 def _popular_rooms(bundle: IndexBundle, k: int, city: str | None = None) -> list[RecommendResult]:
     """
@@ -97,37 +120,15 @@ def recommend(
 
     is_cold = len(view_history) == 0
 
-    # ── Bước 2: FAISS search ──────────────────────────────────────────────────
-    query = profile.reshape(1, -1).astype(np.float32)
-    faiss.normalize_L2(query)   # đảm bảo đã normalize dù profile đã normalize
-
     fetch_k = min(k * FETCH_MULTIPLIER, len(bundle))
-    scores, positions = bundle.index.search(query, fetch_k)
-    scores    = scores[0]     # (fetch_k,)
-    positions = positions[0]  # (fetch_k,)
-
-    # ── Bước 3: Filter ────────────────────────────────────────────────────────
     viewed_ids  = {e["room_id"] for e in view_history}
     user_city   = user.get("city")
 
     results: list[RecommendResult] = []
 
-    for pos, score in zip(positions, scores):
-        if pos == -1:       # FAISS trả -1 nếu index chưa đủ k kết quả
-            continue
-
-        room_id = bundle.id_map[pos]
-        room    = bundle.room_cache.get(room_id)
-
-        if room is None:
-            continue
-        if room_id in viewed_ids:           # đã xem → bỏ
-            continue
-        if not room.get("is_available", True):  # hết phòng → bỏ
-            continue
-
+    for room, score in retrieve_candidates(profile, bundle, viewed_ids, fetch_k):
         # ── Bước 4: Re-rank ───────────────────────────────────────────────────
-        final_score = float(score)
+        final_score = score
 
         # Bonus nhẹ nếu cùng city với user (tránh cross-city recommendation)
         if user_city and room.get("city") == user_city:
@@ -163,7 +164,7 @@ if __name__ == "__main__":
     import sys
     sys.stdout = open(sys.stdout.fileno(), mode="w", encoding="utf-8", buffering=1)
 
-    DATA_DIR = Path(__file__).parent.parent.parent / "data"
+    DATA_DIR = Path(__file__).resolve().parents[3] / "data"
     users    = json.loads((DATA_DIR / "users.json").read_text(encoding="utf-8"))
     history  = json.loads((DATA_DIR / "view_history.json").read_text(encoding="utf-8"))
     bundle   = get_index()

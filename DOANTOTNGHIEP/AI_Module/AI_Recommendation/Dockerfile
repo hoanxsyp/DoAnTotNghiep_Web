@@ -22,7 +22,7 @@ RUN mkdir -p /app/storage && chown appuser:appuser /app/storage
 USER appuser
 
 # Binary artifacts are reproducibly generated from the committed JSON data.
-RUN python -m app.recommender.indexer \
+RUN python -m app.recommender.faiss.indexer \
     && python scripts/train_reranker.py
 
 EXPOSE 8000

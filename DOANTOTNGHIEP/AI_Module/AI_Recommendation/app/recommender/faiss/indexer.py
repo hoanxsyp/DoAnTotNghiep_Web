@@ -23,7 +23,9 @@ from app.features.extractor import get_extractor
 
 # ─── Paths ────────────────────────────────────────────────────────────────────
 
-STORAGE_DIR  = Path(__file__).parent.parent.parent / "storage"
+MODULE_ROOT  = Path(__file__).resolve().parents[3]
+STORAGE_DIR  = MODULE_ROOT / "storage"
+ROOMS_PATH   = MODULE_ROOT / "data" / "rooms.json"
 INDEX_PATH   = STORAGE_DIR / "rooms.index"
 ID_MAP_PATH  = STORAGE_DIR / "id_map.pkl"       # list[str]: position → room_id
 CACHE_PATH   = STORAGE_DIR / "rooms_cache.pkl"  # dict[room_id → room dict]
@@ -213,7 +215,7 @@ def build_and_save(data_path: Path | None = None) -> IndexBundle:
     Đây là hàm được gọi bởi background job rebuild định kỳ.
     """
     if data_path is None:
-        data_path = Path(__file__).parent.parent.parent / "data" / "rooms.json"
+        data_path = ROOMS_PATH
 
     print(f"[Indexer] Loading rooms from {data_path.name}...")
     rooms = json.loads(data_path.read_text(encoding="utf-8"))
@@ -329,10 +331,7 @@ if __name__ == "__main__":
     print("=" * 50)
     # Lấy vector của phòng đầu tiên làm query
     extractor = get_extractor()
-    sample_room = json.loads(
-        (Path(__file__).parent.parent.parent / "data" / "rooms.json")
-        .read_text(encoding="utf-8")
-    )[0]
+    sample_room = json.loads(ROOMS_PATH.read_text(encoding="utf-8"))[0]
     query_vec = extractor.extract(sample_room).reshape(1, -1)
     faiss.normalize_L2(query_vec)
 

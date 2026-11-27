@@ -1,0 +1,7 @@
+﻿split,method,evaluated_users,ndcg_at_10,recall_at_10,mean_latency_ms
+validation,FAISS,30,0.004913,0.013095,0.718367
+validation,FAISS + LightGBM,30,0.003951,0.004762,1.739880
+validation,FAISS + XGBoost,30,0.004936,0.013095,2.657997
+validation,FAISS + CatBoost,30,0.014174,0.026984,2.437503
+test,FAISS,30,0.007961,0.025595,0.908410
+test,FAISS + CatBoost,30,0.007510,0.020370,2.927197

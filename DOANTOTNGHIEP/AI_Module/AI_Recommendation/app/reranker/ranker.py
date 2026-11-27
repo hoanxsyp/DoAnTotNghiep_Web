@@ -8,13 +8,13 @@ import time
 import warnings
 from dataclasses import dataclass
 
-import faiss
 import numpy as np
 import pandas as pd
 
 from app.reranker.features import compute_user_stats, compute_features, get_feature_names
-from app.reranker.trainer import get_model
-from app.recommender.indexer import IndexBundle, get_index
+from app.reranker.lightgbm.trainer import get_model
+from app.recommender.faiss.engine import retrieve_candidates
+from app.recommender.faiss.indexer import IndexBundle, get_index
 from app.recommender.interactions import aggregate_interactions, interaction_count
 from app.recommender.profile import build_user_profile
 
@@ -62,30 +62,7 @@ def rerank(
     if profile is None:
         return _popular_fallback(bundle, k, user.get("city"))
 
-    query = profile.reshape(1, -1).astype(np.float32)
-    faiss.normalize_L2(query)
-
-    scores, positions = bundle.index.search(query, CANDIDATE_FETCH)
-    scores    = scores[0]
-    positions = positions[0]
-
-    # ── Filter cơ bản ─────────────────────────────────────────────────────────
-    viewed_ids  = set(interactions)
-    user_stats  = compute_user_stats(view_history, bundle.room_cache)
-    user_district = user.get("district")
-
-    candidates = []
-    for pos, faiss_score in zip(positions, scores):
-        if pos == -1:
-            continue
-        room_id = bundle.id_map[pos]
-        room    = bundle.room_cache.get(room_id)
-        if room is None or room_id in viewed_ids:
-            continue
-        if not room.get("is_available", True):
-            continue
-        candidates.append((room, float(faiss_score)))
-
+    candidates = list(retrieve_candidates(profile, bundle, set(interactions), CANDIDATE_FETCH))
     if not candidates:
         return _popular_fallback(bundle, k, user.get("city"))
 
@@ -104,6 +81,8 @@ def rerank(
         ]
 
     # ── Tầng 2: LightGBM scoring ──────────────────────────────────────────────
+    user_stats = compute_user_stats(view_history, bundle.room_cache)
+    user_district = user.get("district")
     raw_matrix = np.stack([
         compute_features(user_stats, room, faiss_score, user_district)
         for room, faiss_score in candidates

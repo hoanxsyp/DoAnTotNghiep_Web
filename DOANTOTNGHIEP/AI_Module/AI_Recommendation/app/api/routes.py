@@ -7,11 +7,11 @@ from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
 from app.data.mock_provider import get_provider
 from app.models.room import Room, RoomRecommendation
 from app.models.user import InteractionEvent, User, ViewEvent
-from app.recommender.indexer import get_index, build_and_save, reload_index
+from app.recommender.faiss.indexer import get_index, build_and_save, reload_index
 from app.recommender.interactions import aggregate_interactions, interaction_count
 from app.reranker.ranker import rerank
 from app.reranker.features import compute_user_stats
-from app.reranker.trainer import load_model
+from app.reranker.lightgbm.trainer import load_model
 
 router = APIRouter()
 
@@ -332,8 +332,8 @@ def _retrain_task():
     from pathlib import Path
     ROOT = Path(__file__).parent.parent.parent
     sys.path.insert(0, str(ROOT))
-    from app.reranker.trainer import (
-        generate_training_data,
+    from app.reranker.dataset import generate_training_data
+    from app.reranker.lightgbm.trainer import (
         reload_model,
         save_model,
         train_model,
