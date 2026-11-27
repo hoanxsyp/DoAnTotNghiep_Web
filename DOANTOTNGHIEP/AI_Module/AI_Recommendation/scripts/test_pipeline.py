@@ -12,8 +12,8 @@ sys.stdout = open(sys.stdout.fileno(), mode="w", encoding="utf-8", buffering=1)
 ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
-from app.recommender.engine import recommend as faiss_recommend
-from app.recommender.indexer import get_index
+from app.recommender.faiss.engine import recommend as faiss_recommend
+from app.recommender.faiss.indexer import get_index
 from app.reranker.ranker import rerank as lgbm_rerank
 
 DATA_DIR = ROOT / "data"

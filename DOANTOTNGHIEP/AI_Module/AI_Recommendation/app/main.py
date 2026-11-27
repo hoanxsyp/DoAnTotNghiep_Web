@@ -11,8 +11,8 @@ from fastapi.staticfiles import StaticFiles
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.api.routes import router
-from app.recommender.indexer import get_index
-from app.reranker.trainer import get_model
+from app.recommender.faiss.indexer import get_index
+from app.reranker.lightgbm.trainer import get_model
 
 
 @asynccontextmanager

@@ -227,7 +227,7 @@ if __name__ == "__main__":
     import sys
     sys.stdout = open(sys.stdout.fileno(), mode="w", encoding="utf-8", buffering=1)
 
-    from app.recommender.indexer import load_index
+    from app.recommender.faiss.indexer import load_index
 
     DATA_DIR = Path(__file__).parent.parent.parent / "data"
     users   = json.loads((DATA_DIR / "users.json").read_text(encoding="utf-8"))

@@ -11,6 +11,9 @@ build/
 .pytest_cache/
 storage/*.index
 storage/*.pkl
+storage/experiments/*/*.ubj
+storage/experiments/*/*.cbm
+storage/experiments/*/model.txt
 *.faiss
 
 # Personal working documents

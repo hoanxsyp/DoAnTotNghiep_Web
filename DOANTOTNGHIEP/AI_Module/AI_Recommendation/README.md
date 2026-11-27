@@ -40,8 +40,12 @@ app/
   data/            Data provider đọc dữ liệu JSON
   features/        Trích xuất đặc trưng phòng
   models/          Pydantic models
-  recommender/     User profile và FAISS retrieval
-  reranker/        LightGBM training và re-ranking
+  recommender/     Hồ sơ sở thích và tổng hợp tương tác
+    faiss/         Xây chỉ mục và truy xuất ứng viên bằng FAISS
+  reranker/        Dữ liệu, đặc trưng và luồng xếp hạng dùng chung
+    lightgbm/      Huấn luyện và lưu/nạp mô hình LightGBM
+    xgboost/       Huấn luyện mô hình xếp hạng XGBoost
+    catboost/      Huấn luyện mô hình xếp hạng CatBoost
 data/
   rooms.json       Dữ liệu phòng
   users.json       Dữ liệu người dùng
@@ -167,7 +171,7 @@ pip install -r requirements.txt
 Dựng index và huấn luyện model:
 
 ```bash
-python -m app.recommender.indexer
+python -m app.recommender.faiss.indexer
 python scripts/train_reranker.py
 ```
 
@@ -176,6 +180,24 @@ Khởi động API:
 ```bash
 uvicorn app.main:app --reload
 ```
+
+## Thực nghiệm các mô hình xếp hạng
+
+Chạy các lệnh dưới đây từ thư mục `AI_Recommendation`.
+
+```bash
+python -m pip install -r requirements-experiments.txt
+python scripts/train_xgboost.py
+python scripts/train_catboost.py --split-from storage/experiments/xgboost/training_meta.json
+python scripts/train_lightgbm_experiment.py --split-from storage/experiments/xgboost/training_meta.json
+python scripts/compare_rankers.py
+```
+
+Script chia người dùng theo tỷ lệ 70/15/15. Cờ `--split-from` tái sử dụng nguyên danh sách người dùng của một lần chạy trước. Mỗi người dùng vẫn được chia lịch sử theo thời gian để tạo hồ sơ và nhãn. XGBoost dùng `rank:ndcg`, CatBoost dùng `YetiRank` ở chế độ NDCG@10 và LightGBM dùng `lambdarank`. Cả ba mô hình học từ nhãn 0–3 và chọn vòng huấn luyện theo NDCG@10 trên các mẫu xác thực.
+
+Kết quả huấn luyện được lưu dưới `storage/experiments/`, mỗi mô hình một thư mục, kèm file `training_meta.json`. Điểm xác thực khi huấn luyện được tính trên mẫu có bổ sung phòng mục tiêu.
+
+`compare_rankers.py` lấy tối đa 80 ứng viên FAISS cho mỗi người dùng và áp dụng bộ lọc phòng đã tương tác hoặc hết chỗ. Tất cả cấu hình dùng chung tập ứng viên. Người dùng có dưới 5 tín hiệu trong phần lịch sử dùng thứ tự FAISS cho mọi cấu hình. Script chọn theo NDCG@10 trên tập xác thực, sau đó chỉ chấm cấu hình được chọn và mốc FAISS trên tập kiểm thử. Thời gian trung bình gồm dựng hồ sơ, truy xuất và xử lý xếp hạng trong bộ nhớ. Kết quả nằm trong `storage/experiments/comparison/` dưới dạng CSV và JSON. Dùng `--output-dir` để lưu lần chạy tiếp theo vào thư mục mới.
 
 ## Các API chính
 
