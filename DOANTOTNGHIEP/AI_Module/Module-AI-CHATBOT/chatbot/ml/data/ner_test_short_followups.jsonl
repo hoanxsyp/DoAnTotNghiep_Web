@@ -1,0 +1,32 @@
+{"text": "giờ giấc tự do", "entities": [{"start": 0, "end": 14, "label": "UTILITY"}]}
+{"text": "giờ giấc tự do được không", "entities": [{"start": 0, "end": 14, "label": "UTILITY"}]}
+{"text": "có giờ giấc tự do thì tốt", "entities": [{"start": 3, "end": 17, "label": "UTILITY"}]}
+{"text": "gio giac tu do", "entities": [{"start": 0, "end": 14, "label": "UTILITY"}]}
+{"text": "ưu tiên không quản giờ giấc", "entities": [{"start": 8, "end": 27, "label": "UTILITY"}]}
+{"text": "miễn được ra vào 24/24", "entities": [{"start": 5, "end": 22, "label": "UTILITY"}]}
+{"text": "không có giờ đóng cổng ấy", "entities": [{"start": 0, "end": 22, "label": "UTILITY"}]}
+{"text": "chọn chỗ tự do ra vào", "entities": [{"start": 9, "end": 21, "label": "UTILITY"}]}
+{"text": "thêm chỗ đỗ ô tô đi", "entities": [{"start": 5, "end": 16, "label": "UTILITY"}]}
+{"text": "cần máy lạnh cơ", "entities": [{"start": 4, "end": 12, "label": "UTILITY"}]}
+{"text": "cửa sổ lớn nha chị", "entities": [{"start": 0, "end": 10, "label": "UTILITY"}]}
+{"text": "ưu tiên ban công riêng", "entities": [{"start": 8, "end": 22, "label": "UTILITY"}]}
+{"text": "có nồi nước nóng với", "entities": [{"start": 3, "end": 16, "label": "UTILITY"}]}
+{"text": "bếp nấu riêng là ổn", "entities": [{"start": 0, "end": 13, "label": "UTILITY"}]}
+{"text": "có bãi gửi xe càng tốt", "entities": [{"start": 3, "end": 13, "label": "UTILITY"}]}
+{"text": "mình cần nhà tắm riêng", "entities": [{"start": 9, "end": 22, "label": "UTILITY"}]}
+{"text": "nuôi được chó ạ", "entities": [{"start": 0, "end": 13, "label": "UTILITY"}]}
+{"text": "dưới 3tr8 thôi", "entities": [{"start": 5, "end": 9, "label": "PRICE_MAX"}]}
+{"text": "2 triệu 9 đổ về", "entities": [{"start": 0, "end": 9, "label": "PRICE_MAX"}]}
+{"text": "tối thiểu 4tr2 ạ", "entities": [{"start": 10, "end": 14, "label": "PRICE_MIN"}]}
+{"text": "24m2 trở lên ạ", "entities": [{"start": 0, "end": 4, "label": "AREA_MIN"}]}
+{"text": "bên Hoàng Mai ấy", "entities": [{"start": 4, "end": 13, "label": "LOCATION"}]}
+{"text": "qua Cầu Giấy xem sao", "entities": [{"start": 4, "end": 12, "label": "LOCATION"}]}
+{"text": "thử loại căn hộ dịch vụ", "entities": [{"start": 9, "end": 23, "label": "ROOM_TYPE"}]}
+{"text": "lúc nào cũng được", "entities": []}
+{"text": "hẹn khi khác nhé", "entities": []}
+{"text": "rẻ nữa đi", "entities": []}
+{"text": "mình phải đi bây giờ", "entities": []}
+{"text": "giờ mới thấy tin", "entities": []}
+{"text": "có phòng nào nữa không", "entities": []}
+{"text": "cho xem ảnh nhé", "entities": []}
+{"text": "cảm ơn bạn", "entities": []}

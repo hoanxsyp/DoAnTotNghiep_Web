@@ -3,7 +3,7 @@
 # ml/*.py — xem service `chatbot-nlu` trong DOANTOTNGHIEP/docker-compose.yml:
 #   build: { context: ./AI_Module/Module-AI-CHATBOT/chatbot,
 #            dockerfile: nlu-service/Dockerfile }
-# Model đã fine-tune (~515MB/cái) KHÔNG bake vào image — mount volume ./ml/out-*.
+# Docker Compose mounts the fine-tuned checkpoints at runtime.
 FROM python:3.12-slim
 
 # VnCoreNLP là jar Java, gọi qua pyjnius -> cần JRE + JAVA_HOME.

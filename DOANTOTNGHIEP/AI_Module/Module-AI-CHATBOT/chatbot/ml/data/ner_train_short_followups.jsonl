@@ -1,0 +1,146 @@
+{"text": "giờ giấc thoải mái", "entities": [{"start": 0, "end": 18, "label": "UTILITY"}]}
+{"text": "giờ giấc thoải mái nhé", "entities": [{"start": 0, "end": 18, "label": "UTILITY"}]}
+{"text": "thêm giờ giấc thoải mái", "entities": [{"start": 5, "end": 23, "label": "UTILITY"}]}
+{"text": "ưu tiên giờ giấc thoải mái", "entities": [{"start": 8, "end": 26, "label": "UTILITY"}]}
+{"text": "giờ tự do", "entities": [{"start": 0, "end": 9, "label": "UTILITY"}]}
+{"text": "giờ tự do nhé", "entities": [{"start": 0, "end": 9, "label": "UTILITY"}]}
+{"text": "thêm giờ tự do", "entities": [{"start": 5, "end": 14, "label": "UTILITY"}]}
+{"text": "ưu tiên giờ tự do", "entities": [{"start": 8, "end": 17, "label": "UTILITY"}]}
+{"text": "tự do giờ giấc", "entities": [{"start": 0, "end": 14, "label": "UTILITY"}]}
+{"text": "tự do giờ giấc nhé", "entities": [{"start": 0, "end": 14, "label": "UTILITY"}]}
+{"text": "thêm tự do giờ giấc", "entities": [{"start": 5, "end": 19, "label": "UTILITY"}]}
+{"text": "ưu tiên tự do giờ giấc", "entities": [{"start": 8, "end": 22, "label": "UTILITY"}]}
+{"text": "không giới nghiêm", "entities": [{"start": 0, "end": 17, "label": "UTILITY"}]}
+{"text": "không giới nghiêm nhé", "entities": [{"start": 0, "end": 17, "label": "UTILITY"}]}
+{"text": "thêm không giới nghiêm", "entities": [{"start": 5, "end": 22, "label": "UTILITY"}]}
+{"text": "ưu tiên không giới nghiêm", "entities": [{"start": 8, "end": 25, "label": "UTILITY"}]}
+{"text": "ra vào tự do", "entities": [{"start": 0, "end": 12, "label": "UTILITY"}]}
+{"text": "ra vào tự do nhé", "entities": [{"start": 0, "end": 12, "label": "UTILITY"}]}
+{"text": "thêm ra vào tự do", "entities": [{"start": 5, "end": 17, "label": "UTILITY"}]}
+{"text": "ưu tiên ra vào tự do", "entities": [{"start": 8, "end": 20, "label": "UTILITY"}]}
+{"text": "ra vào bất cứ lúc nào", "entities": [{"start": 0, "end": 21, "label": "UTILITY"}]}
+{"text": "ra vào bất cứ lúc nào nhé", "entities": [{"start": 0, "end": 21, "label": "UTILITY"}]}
+{"text": "thêm ra vào bất cứ lúc nào", "entities": [{"start": 5, "end": 26, "label": "UTILITY"}]}
+{"text": "ưu tiên ra vào bất cứ lúc nào", "entities": [{"start": 8, "end": 29, "label": "UTILITY"}]}
+{"text": "không khóa cổng ban đêm", "entities": [{"start": 0, "end": 23, "label": "UTILITY"}]}
+{"text": "không khóa cổng ban đêm nhé", "entities": [{"start": 0, "end": 23, "label": "UTILITY"}]}
+{"text": "thêm không khóa cổng ban đêm", "entities": [{"start": 5, "end": 28, "label": "UTILITY"}]}
+{"text": "ưu tiên không khóa cổng ban đêm", "entities": [{"start": 8, "end": 31, "label": "UTILITY"}]}
+{"text": "chìa khóa riêng", "entities": [{"start": 0, "end": 15, "label": "UTILITY"}]}
+{"text": "chìa khóa riêng nhé", "entities": [{"start": 0, "end": 15, "label": "UTILITY"}]}
+{"text": "thêm chìa khóa riêng", "entities": [{"start": 5, "end": 20, "label": "UTILITY"}]}
+{"text": "ưu tiên chìa khóa riêng", "entities": [{"start": 8, "end": 23, "label": "UTILITY"}]}
+{"text": "điều hòa", "entities": [{"start": 0, "end": 8, "label": "UTILITY"}]}
+{"text": "điều hòa nhé", "entities": [{"start": 0, "end": 8, "label": "UTILITY"}]}
+{"text": "thêm điều hòa", "entities": [{"start": 5, "end": 13, "label": "UTILITY"}]}
+{"text": "ưu tiên điều hòa", "entities": [{"start": 8, "end": 16, "label": "UTILITY"}]}
+{"text": "máy giặt chung", "entities": [{"start": 0, "end": 14, "label": "UTILITY"}]}
+{"text": "máy giặt chung nhé", "entities": [{"start": 0, "end": 14, "label": "UTILITY"}]}
+{"text": "thêm máy giặt chung", "entities": [{"start": 5, "end": 19, "label": "UTILITY"}]}
+{"text": "ưu tiên máy giặt chung", "entities": [{"start": 8, "end": 22, "label": "UTILITY"}]}
+{"text": "bình nóng lạnh", "entities": [{"start": 0, "end": 14, "label": "UTILITY"}]}
+{"text": "bình nóng lạnh nhé", "entities": [{"start": 0, "end": 14, "label": "UTILITY"}]}
+{"text": "thêm bình nóng lạnh", "entities": [{"start": 5, "end": 19, "label": "UTILITY"}]}
+{"text": "ưu tiên bình nóng lạnh", "entities": [{"start": 8, "end": 22, "label": "UTILITY"}]}
+{"text": "tủ lạnh", "entities": [{"start": 0, "end": 7, "label": "UTILITY"}]}
+{"text": "tủ lạnh nhé", "entities": [{"start": 0, "end": 7, "label": "UTILITY"}]}
+{"text": "thêm tủ lạnh", "entities": [{"start": 5, "end": 12, "label": "UTILITY"}]}
+{"text": "ưu tiên tủ lạnh", "entities": [{"start": 8, "end": 15, "label": "UTILITY"}]}
+{"text": "wifi", "entities": [{"start": 0, "end": 4, "label": "UTILITY"}]}
+{"text": "wifi nhé", "entities": [{"start": 0, "end": 4, "label": "UTILITY"}]}
+{"text": "thêm wifi", "entities": [{"start": 5, "end": 9, "label": "UTILITY"}]}
+{"text": "ưu tiên wifi", "entities": [{"start": 8, "end": 12, "label": "UTILITY"}]}
+{"text": "thang máy", "entities": [{"start": 0, "end": 9, "label": "UTILITY"}]}
+{"text": "thang máy nhé", "entities": [{"start": 0, "end": 9, "label": "UTILITY"}]}
+{"text": "thêm thang máy", "entities": [{"start": 5, "end": 14, "label": "UTILITY"}]}
+{"text": "ưu tiên thang máy", "entities": [{"start": 8, "end": 17, "label": "UTILITY"}]}
+{"text": "gác lửng", "entities": [{"start": 0, "end": 8, "label": "UTILITY"}]}
+{"text": "gác lửng nhé", "entities": [{"start": 0, "end": 8, "label": "UTILITY"}]}
+{"text": "thêm gác lửng", "entities": [{"start": 5, "end": 13, "label": "UTILITY"}]}
+{"text": "ưu tiên gác lửng", "entities": [{"start": 8, "end": 16, "label": "UTILITY"}]}
+{"text": "cửa sổ", "entities": [{"start": 0, "end": 6, "label": "UTILITY"}]}
+{"text": "cửa sổ nhé", "entities": [{"start": 0, "end": 6, "label": "UTILITY"}]}
+{"text": "thêm cửa sổ", "entities": [{"start": 5, "end": 11, "label": "UTILITY"}]}
+{"text": "ưu tiên cửa sổ", "entities": [{"start": 8, "end": 14, "label": "UTILITY"}]}
+{"text": "ban công", "entities": [{"start": 0, "end": 8, "label": "UTILITY"}]}
+{"text": "ban công nhé", "entities": [{"start": 0, "end": 8, "label": "UTILITY"}]}
+{"text": "thêm ban công", "entities": [{"start": 5, "end": 13, "label": "UTILITY"}]}
+{"text": "ưu tiên ban công", "entities": [{"start": 8, "end": 16, "label": "UTILITY"}]}
+{"text": "chỗ gửi xe", "entities": [{"start": 0, "end": 10, "label": "UTILITY"}]}
+{"text": "chỗ gửi xe nhé", "entities": [{"start": 0, "end": 10, "label": "UTILITY"}]}
+{"text": "thêm chỗ gửi xe", "entities": [{"start": 5, "end": 15, "label": "UTILITY"}]}
+{"text": "ưu tiên chỗ gửi xe", "entities": [{"start": 8, "end": 18, "label": "UTILITY"}]}
+{"text": "nhà vệ sinh riêng", "entities": [{"start": 0, "end": 17, "label": "UTILITY"}]}
+{"text": "nhà vệ sinh riêng nhé", "entities": [{"start": 0, "end": 17, "label": "UTILITY"}]}
+{"text": "thêm nhà vệ sinh riêng", "entities": [{"start": 5, "end": 22, "label": "UTILITY"}]}
+{"text": "ưu tiên nhà vệ sinh riêng", "entities": [{"start": 8, "end": 25, "label": "UTILITY"}]}
+{"text": "vskk", "entities": [{"start": 0, "end": 4, "label": "UTILITY"}]}
+{"text": "vskk nhé", "entities": [{"start": 0, "end": 4, "label": "UTILITY"}]}
+{"text": "thêm vskk", "entities": [{"start": 5, "end": 9, "label": "UTILITY"}]}
+{"text": "ưu tiên vskk", "entities": [{"start": 8, "end": 12, "label": "UTILITY"}]}
+{"text": "bếp riêng", "entities": [{"start": 0, "end": 9, "label": "UTILITY"}]}
+{"text": "bếp riêng nhé", "entities": [{"start": 0, "end": 9, "label": "UTILITY"}]}
+{"text": "thêm bếp riêng", "entities": [{"start": 5, "end": 14, "label": "UTILITY"}]}
+{"text": "ưu tiên bếp riêng", "entities": [{"start": 8, "end": 17, "label": "UTILITY"}]}
+{"text": "được nuôi mèo", "entities": [{"start": 0, "end": 13, "label": "UTILITY"}]}
+{"text": "được nuôi mèo nhé", "entities": [{"start": 0, "end": 13, "label": "UTILITY"}]}
+{"text": "thêm được nuôi mèo", "entities": [{"start": 5, "end": 18, "label": "UTILITY"}]}
+{"text": "ưu tiên được nuôi mèo", "entities": [{"start": 8, "end": 21, "label": "UTILITY"}]}
+{"text": "đủ nội thất", "entities": [{"start": 0, "end": 11, "label": "UTILITY"}]}
+{"text": "đủ nội thất nhé", "entities": [{"start": 0, "end": 11, "label": "UTILITY"}]}
+{"text": "thêm đủ nội thất", "entities": [{"start": 5, "end": 16, "label": "UTILITY"}]}
+{"text": "ưu tiên đủ nội thất", "entities": [{"start": 8, "end": 19, "label": "UTILITY"}]}
+{"text": "không chung chủ", "entities": [{"start": 0, "end": 15, "label": "UTILITY"}]}
+{"text": "không chung chủ nhé", "entities": [{"start": 0, "end": 15, "label": "UTILITY"}]}
+{"text": "thêm không chung chủ", "entities": [{"start": 5, "end": 20, "label": "UTILITY"}]}
+{"text": "ưu tiên không chung chủ", "entities": [{"start": 8, "end": 23, "label": "UTILITY"}]}
+{"text": "chỗ để xe máy", "entities": [{"start": 0, "end": 13, "label": "UTILITY"}]}
+{"text": "chỗ để xe máy nhé", "entities": [{"start": 0, "end": 13, "label": "UTILITY"}]}
+{"text": "thêm chỗ để xe máy", "entities": [{"start": 5, "end": 18, "label": "UTILITY"}]}
+{"text": "ưu tiên chỗ để xe máy", "entities": [{"start": 8, "end": 21, "label": "UTILITY"}]}
+{"text": "khóa vân tay", "entities": [{"start": 0, "end": 12, "label": "UTILITY"}]}
+{"text": "khóa vân tay nhé", "entities": [{"start": 0, "end": 12, "label": "UTILITY"}]}
+{"text": "thêm khóa vân tay", "entities": [{"start": 5, "end": 17, "label": "UTILITY"}]}
+{"text": "ưu tiên khóa vân tay", "entities": [{"start": 8, "end": 20, "label": "UTILITY"}]}
+{"text": "dưới 2tr7", "entities": [{"start": 5, "end": 9, "label": "PRICE_MAX"}]}
+{"text": "tối đa 2tr7 nhé", "entities": [{"start": 7, "end": 11, "label": "PRICE_MAX"}]}
+{"text": "không quá 4 triệu rưỡi", "entities": [{"start": 10, "end": 22, "label": "PRICE_MAX"}]}
+{"text": "giá tới 4 triệu rưỡi thôi", "entities": [{"start": 8, "end": 20, "label": "PRICE_MAX"}]}
+{"text": "3,2 triệu đổ lại", "entities": [{"start": 0, "end": 9, "label": "PRICE_MAX"}]}
+{"text": "rẻ hơn 3,2 triệu", "entities": [{"start": 7, "end": 16, "label": "PRICE_MAX"}]}
+{"text": "từ 3tr5 trở lên", "entities": [{"start": 3, "end": 7, "label": "PRICE_MIN"}]}
+{"text": "ít nhất 3tr5", "entities": [{"start": 8, "end": 12, "label": "PRICE_MIN"}]}
+{"text": "trên 2 triệu", "entities": [{"start": 5, "end": 12, "label": "PRICE_MIN"}]}
+{"text": "2 triệu trở lên", "entities": [{"start": 0, "end": 7, "label": "PRICE_MIN"}]}
+{"text": "trên 23m2", "entities": [{"start": 5, "end": 9, "label": "AREA_MIN"}]}
+{"text": "ít nhất 23m2 nhé", "entities": [{"start": 8, "end": 12, "label": "AREA_MIN"}]}
+{"text": "19 mét vuông trở lên", "entities": [{"start": 0, "end": 12, "label": "AREA_MIN"}]}
+{"text": "rộng tối thiểu 19 mét vuông", "entities": [{"start": 15, "end": 27, "label": "AREA_MIN"}]}
+{"text": "bên Thanh Xuân", "entities": [{"start": 4, "end": 14, "label": "LOCATION"}]}
+{"text": "Thanh Xuân nhé", "entities": [{"start": 0, "end": 10, "label": "LOCATION"}]}
+{"text": "ở Hà Đông", "entities": [{"start": 2, "end": 9, "label": "LOCATION"}]}
+{"text": "qua Hà Đông đi", "entities": [{"start": 4, "end": 11, "label": "LOCATION"}]}
+{"text": "khu Đống Đa", "entities": [{"start": 4, "end": 11, "label": "LOCATION"}]}
+{"text": "sang Đống Đa cũng được", "entities": [{"start": 5, "end": 12, "label": "LOCATION"}]}
+{"text": "chung cư mini thôi", "entities": [{"start": 0, "end": 13, "label": "ROOM_TYPE"}]}
+{"text": "đổi qua chung cư mini", "entities": [{"start": 8, "end": 21, "label": "ROOM_TYPE"}]}
+{"text": "chỉ lấy nhà nguyên căn", "entities": [{"start": 8, "end": 22, "label": "ROOM_TYPE"}]}
+{"text": "nhà nguyên căn nhé", "entities": [{"start": 0, "end": 14, "label": "ROOM_TYPE"}]}
+{"text": "căn studio", "entities": [{"start": 4, "end": 10, "label": "ROOM_TYPE"}]}
+{"text": "đổi sang studio", "entities": [{"start": 9, "end": 15, "label": "ROOM_TYPE"}]}
+{"text": "đổi ý rồi", "entities": []}
+{"text": "khu khác đi", "entities": []}
+{"text": "gửi thêm đi ạ", "entities": []}
+{"text": "xin chào", "entities": []}
+{"text": "xem ảnh với", "entities": []}
+{"text": "còn phòng không", "entities": []}
+{"text": "để mai nhắn", "entities": []}
+{"text": "mình đang rảnh", "entities": []}
+{"text": "giờ nói tiếp nhé", "entities": []}
+{"text": "tự do lựa chọn", "entities": []}
+{"text": "giá sao", "entities": []}
+{"text": "lúc nãy hỏi rồi", "entities": []}
+{"text": "được đấy", "entities": []}
+{"text": "có không", "entities": []}
+{"text": "bỏ hết tiêu chí cũ", "entities": []}
+{"text": "còn xa quá", "entities": []}

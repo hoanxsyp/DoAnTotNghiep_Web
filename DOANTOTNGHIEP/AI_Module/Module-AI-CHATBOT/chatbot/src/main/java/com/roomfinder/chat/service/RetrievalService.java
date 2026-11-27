@@ -8,6 +8,7 @@ import com.roomfinder.chat.geocoding.GeocodingClient;
 import com.roomfinder.chat.listing.RoomSource;
 import com.roomfinder.chat.model.Filters;
 import com.roomfinder.chat.model.RetrievalResult;
+import com.roomfinder.chat.normalizer.UtilityNormalizer;
 import com.roomfinder.chat.repository.PoiRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,6 +54,10 @@ public class RetrievalService {
      *              cắt lại còn topK sau khi rank.
      */
     public RetrievalResult search(Filters f, int limit) {
+        return search(f, limit, List.of());
+    }
+
+    RetrievalResult search(Filters f, int limit, List<String> currentUtilities) {
         Poi poi = f.getPoi() != null ? resolvePoi(f.getPoi()) : null;
         double radius = f.getRadiusM() != null ? f.getRadiusM() : defaultRadius;
 
@@ -83,11 +88,20 @@ public class RetrievalService {
                 return RetrievalResult.relaxed(l, "mở rộng bán kính lên " + (int) (radius * 2) + "m");
             }
         }
-        // 3) Bỏ yêu cầu tiện ích
+        // 3) Thử giữ tiện ích người dùng vừa yêu cầu trước khi bỏ toàn bộ tiện ích.
         if (f.getUtilities() != null && !f.getUtilities().isEmpty()) {
             Filters r = f.copy();
+            double relaxedRadius = poi != null ? radius * 2 : radius;
+            if (!currentUtilities.isEmpty() && r.getUtilities().retainAll(currentUtilities)) {
+                List<Room> matching = runQuery(r, poi, relaxedRadius, limit);
+                if (!matching.isEmpty()) {
+                    attachDistance(matching, poi);
+                    String kept = String.join(", ", r.getUtilities().stream().map(UtilityNormalizer::label).toList());
+                    return RetrievalResult.relaxed(matching, "bỏ bớt tiện ích từ các lượt trước, vẫn giữ " + kept);
+                }
+            }
             r.getUtilities().clear();
-            List<Room> l = runQuery(r, poi, poi != null ? radius * 2 : radius, limit);
+            List<Room> l = runQuery(r, poi, relaxedRadius, limit);
             if (!l.isEmpty()) {
                 attachDistance(l, poi);
                 return RetrievalResult.relaxed(l, "bỏ bớt yêu cầu tiện ích");

@@ -287,8 +287,18 @@ services:
     container_name: webtro-chatbot-nlu
     restart: unless-stopped
     volumes:
-      - ./AI_Module/Module-AI-CHATBOT/chatbot/ml/out-intent:/app/ml/out-intent:ro
-      - ./AI_Module/Module-AI-CHATBOT/chatbot/ml/out-ner:/app/ml/out-ner:ro
+      - type: bind
+        source: ${CHATBOT_INTENT_CHECKPOINT:-./AI_Module/Module-AI-CHATBOT/chatbot/ml/cmp-runs/intent-focused-v1/model}
+        target: /app/ml/cmp-runs/intent-focused-v1/model
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CHATBOT_NER_CHECKPOINT:-./AI_Module/Module-AI-CHATBOT/chatbot/ml/cmp-runs/ner-focused-v1/model}
+        target: /app/ml/cmp-runs/ner-focused-v1/model
+        read_only: true
+        bind:
+          create_host_path: false
     ports:
       - "${CHATBOT_NLU_EXPOSED_PORT:-8003}:8000"
     healthcheck:

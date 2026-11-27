@@ -1,6 +1,6 @@
 """NLU service (FastAPI) — SPEC §11 bước 2.3.
 
-Bọc 2 model PhoBERT đã train ở GĐ2 (`ml/out-intent`, `ml/out-ner`) thành HTTP
+Bọc hai model PhoBERT đã fine-tune cho đồ án thành HTTP
 service cho Spring Boot gọi qua `LocalNluServiceImpl` (bước 2.4). Hợp đồng:
 
     POST /nlu  {"text": "tìm phòng tầm 2tr ở cầu giấy"}
@@ -20,7 +20,7 @@ encode đọc từ `config.json` của model (khoá `nlu_max_length`, `nlu_encod
 `train_*.py` ghi) — model không khớp `nlu_encoding` (vd. ViSoBERT cũ) bị từ chối
 lúc startup thay vì âm thầm ra kết quả rác.
 
-Nếu nạp model lỗi (vd. `ml/out-*` còn trống vì chưa train), service vẫn LÊN nhưng
+Nếu nạp model lỗi, service vẫn LÊN nhưng
 `GET /health` trả `status: "degraded"` kèm `startup_error`, và `/nlu` + `/embed` trả
 **503**. Spring bắt lỗi này như mọi lỗi khác → fallback LLM → rule-based.
 
@@ -28,8 +28,8 @@ Chạy:
     uvicorn app:app --host 0.0.0.0 --port 8000
 Biến môi trường (mặc định chạy được ngay từ repo):
     NLU_ML_DIR         (mặc định ../ml)   — nơi có nlu_encoding.py
-    NLU_INTENT_MODEL   (mặc định $NLU_ML_DIR/out-intent)
-    NLU_NER_MODEL      (mặc định $NLU_ML_DIR/out-ner)
+    NLU_INTENT_MODEL   (mặc định $NLU_ML_DIR/cmp-runs/intent-focused-v1/model)
+    NLU_NER_MODEL      (mặc định $NLU_ML_DIR/cmp-runs/ner-focused-v1/model)
     NLU_MAX_LENGTH     ghi đè max_length cho CẢ 2 model
     VNCORENLP_DIR      nơi có VnCoreNLP-1.2.jar + models/ (mặc định $NLU_ML_DIR/vncorenlp;
                        thiếu thì tự tải). Đường dẫn KHÔNG được có dấu cách.
@@ -46,8 +46,8 @@ from pydantic import BaseModel
 
 ROOT = Path(__file__).parent
 ML_DIR = Path(os.environ.get("NLU_ML_DIR", ROOT.parent / "ml"))
-INTENT_DIR = os.environ.get("NLU_INTENT_MODEL", str(ML_DIR / "out-intent"))
-NER_DIR = os.environ.get("NLU_NER_MODEL", str(ML_DIR / "out-ner"))
+INTENT_DIR = os.environ.get("NLU_INTENT_MODEL", str(ML_DIR / "cmp-runs" / "intent-focused-v1" / "model"))
+NER_DIR = os.environ.get("NLU_NER_MODEL", str(ML_DIR / "cmp-runs" / "ner-focused-v1" / "model"))
 # Embedding cho semantic rerank (GĐ3, SPEC §12.1) — SBERT tự tokenize theo BPE
 # riêng, độc lập với model NLU.
 EMBED_MODEL = os.environ.get("NLU_EMBED_MODEL", "keepitreal/vietnamese-sbert")
@@ -66,7 +66,6 @@ async def lifespan(app: FastAPI):
 
     # Nạp trong try/except: thiếu/hỏng model thì service vẫn LÊN nhưng ở trạng
     # thái "degraded" (mọi request trả 503 kèm lý do) thay vì chết lúc startup.
-    # Quan trọng vì `ml/out-*` có thể còn trống khi chưa train.
     try:
         torch.set_num_threads(max(1, (os.cpu_count() or 4) // 2))
         _M["intent_model"] = AutoModelForSequenceClassification.from_pretrained(INTENT_DIR).eval()

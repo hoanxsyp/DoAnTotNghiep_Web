@@ -238,7 +238,7 @@ public class ChatOrchestrator {
                 ? props.getTopK() * recommendationProps.getCandidatePoolMultiplier()
                 : props.getTopK();
 
-        RetrievalResult rr = retrievalService.search(af, poolLimit);
+        RetrievalResult rr = retrievalService.search(af, poolLimit, nlu.getEntities().getUtilities());
         List<Room> pool = rr.getRooms();
 
         String rankedBy = af.getPoi() != null ? "distance" : "price";

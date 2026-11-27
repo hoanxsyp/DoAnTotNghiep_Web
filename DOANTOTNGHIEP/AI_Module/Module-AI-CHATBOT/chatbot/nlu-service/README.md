@@ -1,6 +1,8 @@
 # nlu-service — NLU (PhoBERT) qua FastAPI (SPEC §11 bước 2.3)
 
-Bọc 2 model đã train ở GĐ2 (`ml/out-intent`, `ml/out-ner`) thành HTTP service.
+Bọc hai model PhoBERT đã fine-tune cho đồ án thành HTTP service.
+Mặc định Intent nạp `ml/cmp-runs/intent-focused-v1/model` và NER nạp
+`ml/cmp-runs/ner-focused-v1/model`.
 Spring Boot gọi qua `LocalNluServiceImpl` (bước 2.4, @Primary): RestClient
 timeout 300ms, service chết → fallback `LlmNluServiceImpl` → rule-based.
 Cấu hình phía Spring: khối `roomfinder.nlu` trong `application.yml`
@@ -58,8 +60,9 @@ cd nlu-service
 **Cần Java (JRE/JDK) + `JAVA_HOME`** — PhoBERT cần word-segment bằng VnCoreNLP
 (jar Java, gọi qua pyjnius; jar + model tự tải lần đầu vào `ml/vncorenlp`, hoặc
 `%LOCALAPPDATA%ncorenlp` nếu đường dẫn repo có dấu cách). Khởi động mất ~20s
-(nạp 2 model + SBERT + JVM). Docker image đã cài sẵn JRE và tải sẵn VnCoreNLP. Yêu cầu `ml/out-intent`, `ml/out-ner` đã train
-xong (xem `ml/README.md`).
+(nạp 2 model + SBERT + JVM). Docker image có JRE và VnCoreNLP. Cần có hai
+checkpoint ở các thư mục trên vì repo bỏ qua trọng số trong Git.
+Xem phần fine-tune tập trung trong [báo cáo chatbot](../BAO_CAO_CHATBOT_WEBTRO.md).
 
 Trỏ sang thư mục model khác (vd. bản smoke test) bằng biến môi trường:
 
@@ -72,12 +75,11 @@ NLU_INTENT_MODEL=../ml/out-intent-smoke NLU_NER_MODEL=../ml/out-ner-smoke uvicor
 ```bash
 # Compose đã gom về root repo; service tên `chatbot-nlu` (cổng ngoài 8003 → 8000)
 cd ../../../..            # tới DOANTOTNGHIEP/ (nơi có docker-compose.yml)
-docker compose up chatbot-nlu
+docker compose up -d --build chatbot-nlu
 ```
 
-Model mount qua volume `./ml/out-*` (không bake vào image — ~390MB/model). Image
-có JRE để VnCoreNLP word-segment hoạt động; `ml/out-*` đã chứa `tokenizer.json` dạng fast do
-`tokenizer.save_pretrained()` lúc train ghi ra.
+Compose mount hai checkpoint ở chế độ chỉ đọc. Có thể chỉ định đường dẫn trên máy
+host bằng `CHATBOT_INTENT_CHECKPOINT` và `CHATBOT_NER_CHECKPOINT`.
 
 Sau khi khởi động, kiểm tra riêng liveness, chẩn đoán và readiness:
 
@@ -90,9 +92,5 @@ curl -i http://localhost:8003/ready
 Khi hai thư mục model còn trống, `/live` và `/health` vẫn trả HTTP 200, còn `/ready` trả HTTP 503;
 đây là trạng thái mong đợi để monitoring báo chưa sẵn sàng mà không làm mất fallback chatbot.
 
-## Smoke test — CHƯA CHẠY
-
-Model chưa được train (`ml/out-*` còn trống) nên service chưa khởi động được.
-Sau khi train (xem `ml/README.md`), chạy 10 câu tay viết đủ 8 intent rồi ghi lại:
-tỉ lệ intent đúng + confidence, entity có bắt đúng câu không dấu ("ha dong",
-"2tr5") hay không, và latency/request trên CPU.
+Gửi thử một câu vào `POST /nlu` sau khi `/ready` trả HTTP 200. Đối chiếu trường
+`intent` và kiểm tra `text[start:end]` khớp với `entities[].text` trên câu đầu vào.

@@ -1,0 +1,219 @@
+{
+  "dataset": "nlu_test_synthetic_500.jsonl",
+  "dataset_sha256": "a2bd249fe5b5273fb95044c1908000f92bf85459da4946895ef718b9b428135c",
+  "models": {
+    "intent": "out-intent",
+    "ner": "out-ner"
+  },
+  "intent": {
+    "sentences": 460,
+    "correct": 353,
+    "accuracy": 0.7673913043478261,
+    "macro_f1": 0.73182132274375,
+    "labels": {
+      "book_appointment": {
+        "precision": 0.9142857142857143,
+        "recall": 0.9846153846153847,
+        "f1-score": 0.9481481481481482,
+        "support": 65.0
+      },
+      "compare_rooms": {
+        "precision": 0.8194444444444444,
+        "recall": 0.9076923076923077,
+        "f1-score": 0.8613138686131386,
+        "support": 65.0
+      },
+      "out_of_scope": {
+        "precision": 0.9166666666666666,
+        "recall": 0.16923076923076924,
+        "f1-score": 0.2857142857142857,
+        "support": 65.0
+      },
+      "refine_search": {
+        "precision": 0.75,
+        "recall": 0.75,
+        "f1-score": 0.75,
+        "support": 80.0
+      },
+      "room_detail": {
+        "precision": 0.5193798449612403,
+        "recall": 0.8933333333333333,
+        "f1-score": 0.6568627450980392,
+        "support": 75.0
+      },
+      "search_room": {
+        "precision": 0.9484536082474226,
+        "recall": 0.8363636363636363,
+        "f1-score": 0.8888888888888888,
+        "support": 110.0
+      }
+    },
+    "confusion_labels": [
+      "book_appointment",
+      "compare_rooms",
+      "out_of_scope",
+      "refine_search",
+      "room_detail",
+      "search_room"
+    ],
+    "confusion_matrix": [
+      [
+        64,
+        0,
+        0,
+        0,
+        1,
+        0
+      ],
+      [
+        0,
+        59,
+        0,
+        1,
+        5,
+        0
+      ],
+      [
+        4,
+        0,
+        11,
+        3,
+        47,
+        0
+      ],
+      [
+        1,
+        9,
+        0,
+        60,
+        5,
+        5
+      ],
+      [
+        0,
+        4,
+        0,
+        4,
+        67,
+        0
+      ],
+      [
+        1,
+        0,
+        1,
+        12,
+        4,
+        92
+      ]
+    ],
+    "multi_intent": {
+      "sentences": 40,
+      "at_least_one_correct": 34
+    }
+  },
+  "ner": {
+    "sentences": 500,
+    "exact_sentences": 206,
+    "strict_span": {
+      "tp": 650,
+      "fp": 426,
+      "fn": 201,
+      "support": 851,
+      "precision": 0.604089219330855,
+      "recall": 0.763807285546416,
+      "f1": 0.6746237675142709
+    },
+    "labels": {
+      "AREA_MIN": {
+        "tp": 32,
+        "fp": 3,
+        "fn": 3,
+        "support": 35,
+        "precision": 0.9142857142857143,
+        "recall": 0.9142857142857143,
+        "f1": 0.9142857142857143
+      },
+      "DATETIME": {
+        "tp": 87,
+        "fp": 37,
+        "fn": 13,
+        "support": 100,
+        "precision": 0.7016129032258065,
+        "recall": 0.87,
+        "f1": 0.7767857142857143
+      },
+      "LOCATION": {
+        "tp": 78,
+        "fp": 43,
+        "fn": 7,
+        "support": 85,
+        "precision": 0.6446280991735537,
+        "recall": 0.9176470588235294,
+        "f1": 0.7572815533980582
+      },
+      "POI": {
+        "tp": 21,
+        "fp": 14,
+        "fn": 44,
+        "support": 65,
+        "precision": 0.6,
+        "recall": 0.3230769230769231,
+        "f1": 0.42
+      },
+      "PRICE_MAX": {
+        "tp": 51,
+        "fp": 26,
+        "fn": 4,
+        "support": 55,
+        "precision": 0.6623376623376623,
+        "recall": 0.9272727272727272,
+        "f1": 0.7727272727272727
+      },
+      "PRICE_MIN": {
+        "tp": 0,
+        "fp": 0,
+        "fn": 15,
+        "support": 15,
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0
+      },
+      "RADIUS": {
+        "tp": 14,
+        "fp": 13,
+        "fn": 16,
+        "support": 30,
+        "precision": 0.5185185185185185,
+        "recall": 0.4666666666666667,
+        "f1": 0.49122807017543857
+      },
+      "ROOM_REF": {
+        "tp": 258,
+        "fp": 85,
+        "fn": 37,
+        "support": 295,
+        "precision": 0.7521865889212828,
+        "recall": 0.8745762711864407,
+        "f1": 0.8087774294670846
+      },
+      "ROOM_TYPE": {
+        "tp": 42,
+        "fp": 47,
+        "fn": 43,
+        "support": 85,
+        "precision": 0.47191011235955055,
+        "recall": 0.49411764705882355,
+        "f1": 0.4827586206896552
+      },
+      "UTILITY": {
+        "tp": 67,
+        "fp": 158,
+        "fn": 19,
+        "support": 86,
+        "precision": 0.29777777777777775,
+        "recall": 0.7790697674418605,
+        "f1": 0.43086816720257237
+      }
+    }
+  }
+}

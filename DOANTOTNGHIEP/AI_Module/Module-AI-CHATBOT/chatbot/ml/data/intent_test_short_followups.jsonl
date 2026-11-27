@@ -1,0 +1,57 @@
+{"text": "gio giac tu do", "intent": "refine_search"}
+{"text": "khong co gio dong cong nha", "intent": "refine_search"}
+{"text": "ra vo 24/24", "intent": "refine_search"}
+{"text": "mien khong quan gio", "intent": "refine_search"}
+{"text": "co ban cong rieng nua", "intent": "refine_search"}
+{"text": "can may lanh co", "intent": "refine_search"}
+{"text": "phong tren 24m2 thoi", "intent": "refine_search"}
+{"text": "giam xuong 3tr8", "intent": "refine_search"}
+{"text": "duoi 3tr8 thoi", "intent": "refine_search"}
+{"text": "tu 4tr2 tro len nhe", "intent": "refine_search"}
+{"text": "doi sang khu nhan hoa", "intent": "refine_search"}
+{"text": "thu hep quanh cau giay", "intent": "refine_search"}
+{"text": "tim re hon hoi nay", "intent": "refine_search"}
+{"text": "cho de o to nua", "intent": "refine_search"}
+{"text": "chi lay can duoi 4 trieu", "intent": "refine_search"}
+{"text": "bo dieu kien cua so", "intent": "refine_search"}
+{"text": "o khu thanh xuan co khong", "intent": "search_room"}
+{"text": "tim phong tro hoang mai", "intent": "search_room"}
+{"text": "co nha cho thue gan cho khong", "intent": "search_room"}
+{"text": "cho tim phong duoi hai trieu", "intent": "search_room"}
+{"text": "tim tro moi quanh cau giay", "intent": "search_room"}
+{"text": "kiem phong o khu vinh hung", "intent": "search_room"}
+{"text": "tim nha thue gio giac tu do", "intent": "search_room"}
+{"text": "tim studio quanh my dinh", "intent": "search_room"}
+{"text": "phong 2 co gio giac tu do khong", "intent": "room_detail"}
+{"text": "can dau cho ve muon khong", "intent": "room_detail"}
+{"text": "phong nay co bep rieng khong", "intent": "room_detail"}
+{"text": "cai phong kia co gac khong", "intent": "room_detail"}
+{"text": "can 4 tien coc sao", "intent": "room_detail"}
+{"text": "cho dia chi can 5", "intent": "room_detail"}
+{"text": "can tren cho nuoi meo chu", "intent": "room_detail"}
+{"text": "phong kia con trong a", "intent": "room_detail"}
+{"text": "so can 2 va can 5", "intent": "compare_rooms"}
+{"text": "can 1 hay 3 tien hon", "intent": "compare_rooms"}
+{"text": "so hai can gia 4 trieu", "intent": "compare_rooms"}
+{"text": "giua can 1 va 2 thi cai nao thoang", "intent": "compare_rooms"}
+{"text": "phong nao tu do gio hon trong hai phong", "intent": "compare_rooms"}
+{"text": "so phong cuoi voi phong dau", "intent": "compare_rooms"}
+{"text": "hai can chenh nhau bao nhieu", "intent": "compare_rooms"}
+{"text": "can nao co gia tot hon trong hai can do", "intent": "compare_rooms"}
+{"text": "hen xem can cuoi sang mai", "intent": "book_appointment"}
+{"text": "dat lich phong 3 toi nay", "intent": "book_appointment"}
+{"text": "em qua xem duoc luc 9h khong", "intent": "book_appointment"}
+{"text": "hen chu phong 4 chieu nay", "intent": "book_appointment"}
+{"text": "toi coi can so 2 thu nam", "intent": "book_appointment"}
+{"text": "cho coi phong cuoi trua mai", "intent": "book_appointment"}
+{"text": "doi lich xem sang chu nhat", "intent": "book_appointment"}
+{"text": "xep lich xem nha sang thu sau", "intent": "book_appointment"}
+{"text": "tu do ngon luan", "intent": "out_of_scope"}
+{"text": "cach chinh gio lam", "intent": "out_of_scope"}
+{"text": "tin thoi tiet toi nay", "intent": "out_of_scope"}
+{"text": "tu do lam viec tai nha", "intent": "out_of_scope"}
+{"text": "che do ban dem dieu hoa la gi", "intent": "out_of_scope"}
+{"text": "mo khoa cong thong minh the nao", "intent": "out_of_scope"}
+{"text": "gio dong cua buu dien", "intent": "out_of_scope"}
+{"text": "lam sao de doi mat khau wifi", "intent": "out_of_scope"}
+{"text": "bai tap toan lop 9", "intent": "out_of_scope"}
